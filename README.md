@@ -167,7 +167,7 @@ Requirements:
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
-> Graphiti works best with LLM services that support Structured Output (such as OpenAI and Gemini).
+> Graphiti works best with LLM services that support Structured Output (such as OpenAI, Anthropic, and Gemini).
 > Using other services may result in incorrect output schemas and ingestion failures. This is particularly
 > problematic when using smaller models.
 
@@ -270,9 +270,10 @@ performance.
 > [!IMPORTANT]
 > Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your
 > environment.
-> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers — including local servers such
-> as Ollama and vLLM — may be used via OpenAI-compatible APIs; see
-> [Using Graphiti with Ollama, vLLM, and other OpenAI-compatible endpoints](#using-graphiti-with-ollama-vllm-and-other-openai-compatible-endpoints).
+> Support for Anthropic, Gemini, and Groq is available, too. Other LLM providers — both hosted OpenAI-compatible APIs
+> (DeepSeek, Together, OpenRouter, …) and local servers (Ollama, vLLM, llama.cpp, LM Studio) — may be used via their
+> OpenAI-compatible endpoints; see
+> [Using Graphiti with OpenAI-compatible providers and local LLMs](#using-graphiti-with-openai-compatible-providers-and-local-llms).
 
 For a complete working example, see the [Quickstart Example](examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
@@ -473,46 +474,6 @@ graphiti = Graphiti(
 
 Make sure to replace the placeholder values with your actual Azure OpenAI credentials and deployment names.
 
-## Using Graphiti with Ollama, vLLM, and other OpenAI-compatible endpoints
-
-Any OpenAI-compatible `/v1` endpoint — Ollama, vLLM, llama.cpp, LM Studio, DeepSeek, Together, etc. — can be used for
-LLM inference via `OpenAIGenericClient` (see `graphiti_core/llm_client/openai_generic_client.py`). Point it at the
-endpoint's `base_url`:
-
-```python
-from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
-
-llm_client = OpenAIGenericClient(
-    config=LLMConfig(
-        api_key="ollama",  # any non-empty string for keyless local servers
-        model="qwen3:8b",
-        base_url="http://localhost:11434/v1",  # e.g. Ollama's OpenAI-compatible endpoint
-    ),
-    # structured_output_mode="json_object",  # see "Structured output and small models" below
-)
-```
-
-### Structured output and small models
-
-Graphiti depends on structured (JSON) output for entity/edge extraction and deduplication, and works best with models
-and providers that reliably honor it (OpenAI, Gemini). Reliability varies on smaller or local models, so
-`OpenAIGenericClient` exposes a `structured_output_mode`:
-
-- `"json_schema"` (default): requests native structured output via `response_format`. Best on capable models and
-  servers that enforce the schema via constrained decoding.
-- `"json_object"`: requests plain-JSON mode and injects the schema into the prompt instead. Use this for
-  providers/models that don't reliably honor `json_schema`. In practice some local servers accept the `json_schema`
-  request but don't actually constrain output to it, so `json_object` can be *more* reliable there.
-
-When using smaller or local models:
-
-- Prefer the most capable model you can run. Very small models frequently emit JSON that doesn't match the requested
-  schema, which surfaces as extraction failures.
-- Responses wrapped in Markdown ` ```json ` code fences are stripped automatically.
-- Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
-  servers typically have limited concurrency.
-
 ## Using Graphiti with Google Gemini
 
 Graphiti supports Google's Gemini models for LLM inference, embeddings, and cross-encoding/reranking. To use Gemini,
@@ -569,14 +530,15 @@ The Gemini reranker uses the `gemini-2.5-flash-lite` model by default, which is 
 cost-effective and low-latency classification tasks. It uses the same boolean classification approach as the OpenAI
 reranker, leveraging Gemini's log probabilities feature to rank passage relevance.
 
-## Using Graphiti with Ollama (Local LLM)
+## Using Graphiti with OpenAI-compatible providers and local LLMs
 
-Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal
-for privacy-focused applications or when you want to avoid API costs.
+Graphiti can use any OpenAI-compatible `/v1` endpoint for LLM inference via `OpenAIGenericClient` — both **hosted
+providers** (DeepSeek, Together, OpenRouter, Fireworks, etc.) and **local servers** (Ollama, vLLM, llama.cpp, LM
+Studio). Local servers are ideal for privacy-focused applications or avoiding API costs. The example below uses Ollama;
+for any other provider, point `base_url` at its endpoint and set the appropriate `api_key` and `model`.
 
-**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for Ollama and other OpenAI-compatible providers like LM
-Studio. The `OpenAIGenericClient` is optimized for local models with a higher default max token limit (16K vs 8K) and
-full support for structured outputs.
+**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for these endpoints. It is optimized for local models with a
+higher default max token limit (16K vs 8K) and handles structured outputs across compatible providers.
 
 Install the models:
 
@@ -623,6 +585,26 @@ graphiti = Graphiti(
 ```
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
+
+### Structured output and small models
+
+Graphiti depends on structured (JSON) output for entity/edge extraction and deduplication, and works best with models
+and providers that reliably honor it (OpenAI, Anthropic, Gemini). Reliability varies across OpenAI-compatible providers and
+especially on smaller or local models, so `OpenAIGenericClient` exposes a `structured_output_mode`:
+
+- `"json_schema"` (default): requests native structured output via `response_format`. Best on capable models and
+  providers that enforce the schema via constrained decoding.
+- `"json_object"`: requests plain-JSON mode and injects the schema into the prompt instead. Use this for
+  providers/models that don't reliably honor `json_schema` — including some local servers that accept the `json_schema`
+  request but don't actually constrain output to it, where `json_object` can be *more* reliable.
+
+When using smaller or local models:
+
+- Prefer the most capable model you can run. Very small models frequently emit JSON that doesn't match the requested
+  schema, which surfaces as extraction failures.
+- Responses wrapped in Markdown ` ```json ` code fences are stripped automatically.
+- Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
+  servers and some providers have limited concurrency.
 
 ## Documentation
 
