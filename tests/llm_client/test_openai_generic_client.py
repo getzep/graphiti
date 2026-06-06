@@ -126,12 +126,22 @@ async def test_rate_limit_error_is_translated():
 
 @pytest.mark.asyncio
 async def test_empty_content_raises_empty_response_error():
-    # Empty body (refusal / length cutoff / flaky endpoint) must raise a clear error,
-    # not a cryptic JSONDecodeError from json.loads('').
+    # Empty body (flaky endpoint / refusal / length cutoff) must raise a clear error,
+    # not a cryptic JSONDecodeError from json.loads(''). Asserted at _generate_response
+    # level: EmptyResponseError is retryable, so generate_response would invoke the real
+    # backoff retry and slow this unit test.
     client, _ = _make_client(content='')
 
     with pytest.raises(EmptyResponseError):
-        await client.generate_response(_messages(), response_model=ResponseModel)
+        await client._generate_response(_messages(), response_model=ResponseModel)
+
+
+def test_empty_response_error_is_retryable():
+    # An empty body is treated as a transient provider hiccup (common on local/compatible
+    # endpoints), so the base retry wrapper retries it rather than failing on first try.
+    from graphiti_core.llm_client.client import is_server_or_retry_error
+
+    assert is_server_or_retry_error(EmptyResponseError('empty')) is True
 
 
 @pytest.mark.asyncio

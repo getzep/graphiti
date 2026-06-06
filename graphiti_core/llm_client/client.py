@@ -28,7 +28,7 @@ from ..prompts.models import Message
 from ..tracer import NoOpTracer, Tracer
 from .cache import LLMCache
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
-from .errors import RateLimitError
+from .errors import EmptyResponseError, RateLimitError
 from .token_tracker import TokenUsageTracker
 
 DEFAULT_TEMPERATURE = 0
@@ -60,7 +60,11 @@ logger = logging.getLogger(__name__)
 
 
 def is_server_or_retry_error(exception):
-    if isinstance(exception, RateLimitError | json.decoder.JSONDecodeError):
+    # EmptyResponseError is treated as transient: an empty body is most often a flaky
+    # provider/endpoint hiccup (common on the OpenAI-compatible/local servers the generic
+    # client targets), which a retry can recover from. A persistent empty response still
+    # fails after the bounded retries with a clear error.
+    if isinstance(exception, RateLimitError | EmptyResponseError | json.decoder.JSONDecodeError):
         return True
 
     return (
