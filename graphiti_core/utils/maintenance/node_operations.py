@@ -42,6 +42,7 @@ from graphiti_core.prompts.extract_nodes import (
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import node_similarity_search
 from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.maintenance.attribute_utils import apply_capped_attributes
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
     DedupResolutionState,
@@ -757,9 +758,10 @@ async def extract_attributes_from_nodes(
         ]
     )
 
-    # Apply attributes to nodes
+    # _extract_entity_attributes returns the already-merged attribute dict
+    # (overlay of prior + cap-kept fields), so direct assignment is the merge.
     for node, attributes in zip(nodes, attribute_results, strict=True):
-        node.attributes.update(attributes)
+        node.attributes = attributes
 
     # Extract summaries in batch
     await _extract_entity_summaries_batch(
@@ -805,12 +807,27 @@ async def _extract_entity_attributes(
         model_size=ModelSize.small,
         group_id=node.group_id,
         prompt_name='extract_nodes.extract_attributes',
+        attribute_extraction=True,
     )
 
-    # validate response
-    entity_type(**llm_response)
+    # Overlay merge: cap-dropped or LLM-omitted fields keep prior values.
+    # See attribute_utils for the merge_mode contract; the edge path uses 'replace'.
+    merged, _ = apply_capped_attributes(
+        llm_response,
+        entity_type,
+        node.attributes,
+        merge_mode='overlay',
+        prompt_name='extract_nodes.extract_attributes',
+        entity_uuid=node.uuid,
+        group_id=node.group_id,
+    )
 
-    return llm_response
+    # Shape validation only — we discard the validated instance because returning
+    # `model_dump()` would expand defaults across all fields and clobber prior
+    # values that the merge above just preserved.
+    entity_type(**merged)
+
+    return merged
 
 
 async def _extract_entity_summaries_batch(

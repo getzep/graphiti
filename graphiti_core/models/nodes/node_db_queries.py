@@ -357,13 +357,14 @@ def get_saga_node_save_query(provider: GraphProvider) -> str:
                     n.summary = $summary,
                     n.first_episode_uuid = $first_episode_uuid,
                     n.last_episode_uuid = $last_episode_uuid,
-                    n.last_summarized_at = $last_summarized_at
+                    n.last_summarized_at = $last_summarized_at,
+                    n.last_summarized_episode_valid_at = $last_summarized_episode_valid_at
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j, FalkorDB, Neptune
             return """
                 MERGE (n:Saga {uuid: $uuid})
-                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at, summary: $summary, first_episode_uuid: $first_episode_uuid, last_episode_uuid: $last_episode_uuid, last_summarized_at: $last_summarized_at}
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at, summary: $summary, first_episode_uuid: $first_episode_uuid, last_episode_uuid: $last_episode_uuid, last_summarized_at: $last_summarized_at, last_summarized_episode_valid_at: $last_summarized_episode_valid_at}
                 RETURN n.uuid AS uuid
             """
 
@@ -376,7 +377,8 @@ SAGA_NODE_RETURN = """
     s.summary AS summary,
     s.first_episode_uuid AS first_episode_uuid,
     s.last_episode_uuid AS last_episode_uuid,
-    s.last_summarized_at AS last_summarized_at
+    s.last_summarized_at AS last_summarized_at,
+    s.last_summarized_episode_valid_at AS last_summarized_episode_valid_at
 """
 
 SAGA_NODE_RETURN_NEPTUNE = """
@@ -387,5 +389,6 @@ SAGA_NODE_RETURN_NEPTUNE = """
     s.summary AS summary,
     s.first_episode_uuid AS first_episode_uuid,
     s.last_episode_uuid AS last_episode_uuid,
-    s.last_summarized_at AS last_summarized_at
+    s.last_summarized_at AS last_summarized_at,
+    s.last_summarized_episode_valid_at AS last_summarized_episode_valid_at
 """

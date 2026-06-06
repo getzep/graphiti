@@ -383,18 +383,27 @@ class GraphOperationsInterface(BaseModel):
         saga_uuid: str,
         since: Any | None = None,
         limit: int = 200,
-    ) -> list[str]:
-        """Retrieve episode content strings from a saga for summarization.
+    ) -> list[tuple[str, Any]]:
+        """Retrieve episode content + reference timestamp from a saga for summarization.
 
         Args:
             driver: GraphDriver instance
             saga_uuid: UUID of the saga
-            since: Optional datetime. If provided, only returns episodes with
-                created_at after this timestamp. If None, returns all episodes.
+            since: Optional datetime compared against episode ``created_at``
+                (ingestion time). If provided, only returns episodes added
+                after this timestamp; if None, returns all episodes. Filtering
+                by ingestion time (not ``valid_at``) keeps backfilled episodes
+                with historical reference times reachable on subsequent runs.
             limit: Maximum number of episodes to return
 
         Returns:
-            list[str]: Episode content strings in chronological order
+            list[tuple[str, datetime | None]]: (content, valid_at) pairs in
+            chronological order by ``valid_at``. The ``valid_at`` value is the
+            originating episode's reference time and is used by the caller to
+            advance the saga's ``last_summarized_episode_valid_at`` field
+            (the public/temporal watermark, distinct from
+            ``last_summarized_at`` which is wall-clock and used as the
+            ingestion-time filter watermark).
         """
         raise NotImplementedError
 
