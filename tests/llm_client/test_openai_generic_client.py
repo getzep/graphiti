@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.llm_client.errors import RateLimitError
+from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.prompts.models import Message
 
@@ -118,6 +118,16 @@ async def test_rate_limit_error_is_translated():
     client, _ = _make_client(error=rate_limit)
 
     with pytest.raises(RateLimitError):
+        await client.generate_response(_messages(), response_model=ResponseModel)
+
+
+@pytest.mark.asyncio
+async def test_empty_content_raises_empty_response_error():
+    # Empty body (refusal / length cutoff / flaky endpoint) must raise a clear error,
+    # not a cryptic JSONDecodeError from json.loads('').
+    client, _ = _make_client(content='')
+
+    with pytest.raises(EmptyResponseError):
         await client.generate_response(_messages(), response_model=ResponseModel)
 
 

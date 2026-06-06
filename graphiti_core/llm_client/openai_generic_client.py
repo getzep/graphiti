@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from ..prompts.models import Message
 from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
-from .errors import RateLimitError
+from .errors import EmptyResponseError, RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +140,10 @@ class OpenAIGenericClient(LLMClient):
                 response_format=self._build_response_format(response_model),  # type: ignore[arg-type]
             )
             result = response.choices[0].message.content or ''
+            # An empty body (refusal, length finish_reason, or a flaky endpoint) would make
+            # json.loads raise a cryptic JSONDecodeError; surface a clear error instead.
+            if not result:
+                raise EmptyResponseError('LLM returned an empty response')
             return json.loads(result)
         except openai.RateLimitError as e:
             raise RateLimitError from e
