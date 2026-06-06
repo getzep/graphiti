@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import re
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
@@ -93,6 +94,17 @@ def _sanitize(query: str) -> str:
     return ' '.join(sanitized.split())
 
 
+def _escape_fulltext_group_id(group_id: str) -> str:
+    """Escape non-alphanumeric characters in a group_id for RediSearch fulltext.
+
+    RediSearch treats characters like '_' and '-' as token separators/operators,
+    so an unescaped group_id (e.g. the default '_') causes a parse error or fails
+    to match. group_ids are restricted to ``[a-zA-Z0-9_-]`` by ``validate_group_id``,
+    so escaping every non-alphanumeric char makes them match as literals.
+    """
+    return re.sub(r'([^a-zA-Z0-9])', r'\\\1', group_id)
+
+
 def _build_falkor_fulltext_query(
     query: str,
     group_ids: list[str] | None = None,
@@ -102,7 +114,7 @@ def _build_falkor_fulltext_query(
     if group_ids is None or len(group_ids) == 0:
         group_filter = ''
     else:
-        escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+        escaped_group_ids = [f'"{_escape_fulltext_group_id(gid)}"' for gid in group_ids]
         group_values = '|'.join(escaped_group_ids)
         group_filter = f'(@group_id:{group_values})'
 
