@@ -58,6 +58,7 @@ from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
 )
+from graphiti_core.write_path_hooks import get_write_path_context
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,43 @@ DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 128
+
+
+def _write_path_config(name: str, default: Any = None) -> Any:
+    context = get_write_path_context()
+    if context is None:
+        return default
+    return context.config.get(name, default)
+
+
+def _increment_write_path_stat(name: str, amount: int = 1) -> None:
+    context = get_write_path_context()
+    if context is None:
+        return
+    context.stats[name] = int(context.stats.get(name, 0) or 0) + amount
+
+
+def _provider_is_neo4j(driver: GraphDriver) -> bool:
+    provider = getattr(driver, 'provider', None)
+    value = str(getattr(provider, 'value', provider) or '').lower()
+    name = str(getattr(provider, 'name', '') or '').lower()
+    return 'neo4j' in {value, name}
+
+
+def _vector_top_k(prefix: str, limit: int) -> int:
+    min_top_k = max(1, int(_write_path_config(f'{prefix}_min_top_k', 200) or 200))
+    multiplier = max(1, int(_write_path_config(f'{prefix}_top_k_multiplier', 50) or 50))
+    max_top_k = max(min_top_k, int(_write_path_config(f'{prefix}_max_top_k', 1000) or 1000))
+    return min(max(limit * multiplier, min_top_k), max_top_k)
+
+
+def _search_filter_data(search_filter: SearchFilters | None) -> dict[str, Any]:
+    if search_filter is None:
+        return {}
+    try:
+        return search_filter.model_dump()
+    except Exception:
+        return vars(search_filter)
 
 
 def calculate_cosine_similarity(vector1: list[float], vector2: list[float]) -> float:
@@ -318,6 +356,60 @@ async def edge_similarity_search(
             limit,
             min_score,
         )
+
+    if bool(_write_path_config('vector_edge_search_enabled', True)) and _provider_is_neo4j(driver):
+        filter_data = _search_filter_data(search_filter)
+        has_unsupported_filter = any(
+            value not in (None, [], {}, '')
+            for key, value in filter_data.items()
+            if key != 'edge_uuids'
+        )
+        if (
+            source_node_uuid is None
+            and target_node_uuid is None
+            and not filter_data.get('edge_uuids')
+            and not has_unsupported_filter
+        ):
+            index_name = str(
+                _write_path_config('vector_edge_index_name', 'relates_to_fact_embedding_vector')
+            )
+            top_k = _vector_top_k('vector_edge_search', int(limit or RELEVANT_SCHEMA_LIMIT))
+            query = (
+                """
+                CALL db.index.vector.queryRelationships($index_name, $top_k, $search_vector)
+                YIELD relationship AS rel, score
+                MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+                WHERE score > $min_score
+                  AND ($group_ids IS NULL OR e.group_id IN $group_ids)
+                RETURN
+                """
+                + get_entity_edge_return_query(driver.provider)
+                + """
+                ORDER BY score DESC
+                LIMIT $limit
+                """
+            )
+            try:
+                records, _, _ = await driver.execute_query(
+                    query,
+                    index_name=index_name,
+                    top_k=top_k,
+                    search_vector=search_vector,
+                    group_ids=group_ids if group_ids else None,
+                    limit=limit,
+                    min_score=min_score,
+                    routing_='r',
+                )
+                edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
+                _increment_write_path_stat('vector_edge_search_count')
+                _increment_write_path_stat('vector_edge_search_result_count', len(edges))
+                _increment_write_path_stat('vector_edge_search_top_k_total', top_k)
+                return edges
+            except Exception as exc:
+                _increment_write_path_stat('vector_edge_search_fallback_count')
+                logger.debug('vector edge similarity search fallback: %s', exc, exc_info=True)
+        else:
+            _increment_write_path_stat('vector_edge_search_filter_fallback_count')
 
     match_query = """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
@@ -681,6 +773,51 @@ async def node_similarity_search(
         return await driver.search_interface.node_similarity_search(
             driver, search_vector, search_filter, group_ids, limit, min_score
         )
+
+    if (
+        bool(_write_path_config('vector_search_enabled', True))
+        and _provider_is_neo4j(driver)
+        and not any(
+            value not in (None, [], {}, '')
+            for key, value in _search_filter_data(search_filter).items()
+            if key != 'node_labels'
+        )
+    ):
+        index_name = str(_write_path_config('vector_entity_index_name', 'entity_name_embedding_vector'))
+        top_k = _vector_top_k('vector_search', int(limit or RELEVANT_SCHEMA_LIMIT))
+        query = (
+            """
+            CALL db.index.vector.queryNodes($index_name, $top_k, $search_vector)
+            YIELD node AS n, score
+            WHERE score > $min_score
+              AND ($group_ids IS NULL OR n.group_id IN $group_ids)
+            RETURN
+            """
+            + get_entity_node_return_query(driver.provider)
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+        try:
+            records, _, _ = await driver.execute_query(
+                query,
+                index_name=index_name,
+                top_k=top_k,
+                search_vector=search_vector,
+                group_ids=group_ids if group_ids else None,
+                limit=limit,
+                min_score=min_score,
+                routing_='r',
+            )
+            nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
+            _increment_write_path_stat('vector_node_search_count')
+            _increment_write_path_stat('vector_node_search_result_count', len(nodes))
+            _increment_write_path_stat('vector_node_search_top_k_total', top_k)
+            return nodes
+        except Exception as exc:
+            _increment_write_path_stat('vector_node_search_fallback_count')
+            logger.debug('vector node similarity search fallback: %s', exc, exc_info=True)
 
     filter_queries, filter_params = node_search_filter_query_constructor(
         search_filter, driver.provider
