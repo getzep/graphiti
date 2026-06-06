@@ -132,7 +132,7 @@ jobs:
 
       - name: Run PR Triage
         if: steps.check_size.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@ba026a3e56b9f646ae3b1be02dd9c0812aa2f8ae # v1
+        uses: anthropics/claude-code-action@64de744025ca9e24df2b88204b4f1e968f39f009 # v1.0.139
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Use this token for GitHub API calls instead of exchanging the OIDC token for a
@@ -265,7 +265,7 @@ jobs:
 
       - name: Batch triage
         if: steps.prs.outputs.pr_numbers != ''
-        uses: anthropics/claude-code-action@ba026a3e56b9f646ae3b1be02dd9c0812aa2f8ae # v1
+        uses: anthropics/claude-code-action@64de744025ca9e24df2b88204b4f1e968f39f009 # v1.0.139
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Use this token for GitHub API calls instead of exchanging the OIDC token for a
