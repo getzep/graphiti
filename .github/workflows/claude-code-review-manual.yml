@@ -39,7 +39,10 @@ jobs:
           # Claude GitHub App token (that exchange 401s — we use our own anthropic_api_key,
           # not the official Claude App). See claude-code-action docs / issue #873.
           github_token: ${{ github.token }}
-          use_sticky_comment: true
+          # track_progress creates/manages the tracking comment the review is posted into
+          # (updated via mcp__github_comment__update_claude_comment). Agent mode +
+          # use_sticky_comment does not create a comment for the review to land in.
+          track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ inputs.pr_number }}
