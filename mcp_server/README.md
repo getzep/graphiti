@@ -189,6 +189,13 @@ embedder:
 
 Make sure Ollama is running locally with: `ollama serve`
 
+> [!IMPORTANT]
+> Graphiti relies on structured (JSON) output for entity/edge extraction and deduplication, and reliability varies on
+> small or local models. Prefer the most capable model your hardware can run — very small models frequently emit JSON
+> that doesn't match the expected schema, which surfaces as ingestion failures. For background and the
+> `structured_output_mode` (`json_schema` vs `json_object`) trade-off, see the core README's
+> [Structured output and small models](../README.md#structured-output-and-small-models) section.
+
 ### Entity Types
 
 Graphiti MCP Server includes built-in entity types for structured knowledge extraction. These entity types are always enabled and configured via the `entity_types` section in your `config.yaml`:
