@@ -17,7 +17,7 @@ limitations under the License.
 import json
 import logging
 import typing
-from typing import Any, ClassVar
+from typing import Any, Literal
 
 import openai
 from openai import AsyncOpenAI
@@ -27,11 +27,13 @@ from pydantic import BaseModel
 from ..prompts.models import Message
 from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
-from .errors import RateLimitError, RefusalError
+from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gpt-4.1-mini'
+
+StructuredOutputMode = Literal['json_schema', 'json_object']
 
 
 class OpenAIGenericClient(LLMClient):
@@ -41,22 +43,18 @@ class OpenAIGenericClient(LLMClient):
     This class extends the LLMClient and provides methods to initialize the client,
     get an embedder, and generate responses from the language model.
 
+    This client targets any OpenAI-compatible ``/chat/completions`` endpoint (OpenAI,
+    vLLM, llama.cpp, Ollama, DeepSeek, Together, etc.). It defaults to native
+    ``json_schema`` structured output (constrained decoding) and can fall back to
+    ``json_object`` for the minority of providers that do not support ``json_schema``.
+
     Attributes:
         client (AsyncOpenAI): The OpenAI client used to interact with the API.
         model (str): The model name to use for generating responses.
         temperature (float): The temperature to use for generating responses.
         max_tokens (int): The maximum number of tokens to generate in a response.
-
-    Methods:
-        __init__(config: LLMConfig | None = None, cache: bool = False, client: typing.Any = None):
-            Initializes the OpenAIClient with the provided configuration, cache setting, and client.
-
-        _generate_response(messages: list[Message]) -> dict[str, typing.Any]:
-            Generates a response from the language model based on the provided messages.
+        structured_output_mode (StructuredOutputMode): How structured output is requested.
     """
-
-    # Class-level constants
-    MAX_RETRIES: ClassVar[int] = 2
 
     def __init__(
         self,
@@ -64,6 +62,7 @@ class OpenAIGenericClient(LLMClient):
         cache: bool = False,
         client: typing.Any = None,
         max_tokens: int = 16384,
+        structured_output_mode: StructuredOutputMode = 'json_schema',
     ):
         """
         Initialize the OpenAIGenericClient with the provided configuration, cache setting, and client.
@@ -73,6 +72,12 @@ class OpenAIGenericClient(LLMClient):
             cache (bool): Whether to use caching for responses. Defaults to False.
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
             max_tokens (int): The maximum number of tokens to generate. Defaults to 16384 (16K) for better compatibility with local models.
+            structured_output_mode (StructuredOutputMode): Whether to request structured
+                output via native ``json_schema`` (the default, uses constrained decoding)
+                or to fall back to ``json_object``. Set to ``'json_object'`` for providers
+                that do not support the ``json_schema`` response format (e.g. DeepSeek); in
+                that mode the schema is injected into the prompt instead of being enforced
+                by the API.
 
         """
         # removed caching to simplify the `generate_response` override
@@ -86,11 +91,31 @@ class OpenAIGenericClient(LLMClient):
 
         # Override max_tokens to support higher limits for local models
         self.max_tokens = max_tokens
+        self.structured_output_mode: StructuredOutputMode = structured_output_mode
 
         if client is None:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
         else:
             self.client = client
+
+    def _build_response_format(self, response_model: type[BaseModel] | None) -> dict[str, Any]:
+        """Build the ``response_format`` payload for the chat completion request.
+
+        Uses native ``json_schema`` when a response model is provided and the client is in
+        ``json_schema`` mode; otherwise falls back to ``json_object``. In ``json_object``
+        mode the schema is not enforced by the API — ``generate_response`` injects it into
+        the prompt instead.
+        """
+        if response_model is None or self.structured_output_mode == 'json_object':
+            return {'type': 'json_object'}
+
+        return {
+            'type': 'json_schema',
+            'json_schema': {
+                'name': getattr(response_model, '__name__', 'structured_response'),
+                'schema': response_model.model_json_schema(),
+            },
+        }
 
     async def _generate_response(
         self,
@@ -107,25 +132,12 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            # Prepare response format
-            response_format: dict[str, Any] = {'type': 'json_object'}
-            if response_model is not None:
-                schema_name = getattr(response_model, '__name__', 'structured_response')
-                json_schema = response_model.model_json_schema()
-                response_format = {
-                    'type': 'json_schema',
-                    'json_schema': {
-                        'name': schema_name,
-                        'schema': json_schema,
-                    },
-                }
-
             response = await self.client.chat.completions.create(
                 model=self.model or DEFAULT_MODEL,
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                response_format=response_format,  # type: ignore[arg-type]
+                response_format=self._build_response_format(response_model),  # type: ignore[arg-type]
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)
@@ -150,6 +162,17 @@ class OpenAIGenericClient(LLMClient):
         if max_tokens is None:
             max_tokens = self.max_tokens
 
+        # In json_object fallback mode the API does not enforce the schema, so embed it in
+        # the prompt to guide the model. In json_schema mode the schema is enforced via
+        # response_format, so no prompt injection is needed.
+        if response_model is not None and self.structured_output_mode == 'json_object':
+            serialized_model = json.dumps(response_model.model_json_schema())
+            messages[
+                -1
+            ].content += (
+                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
+            )
+
         # Add multilingual extraction instructions
         messages[0].content += get_extraction_language_instruction(group_id)
 
@@ -164,54 +187,11 @@ class OpenAIGenericClient(LLMClient):
                 attributes['prompt.name'] = prompt_name
             span.add_attributes(attributes)
 
-            retry_count = 0
-            last_error = None
-
-            while retry_count <= self.MAX_RETRIES:
-                try:
-                    response = await self._generate_response(
-                        messages, response_model, max_tokens=max_tokens, model_size=model_size
-                    )
-                    return response
-                except (RateLimitError, RefusalError):
-                    # These errors should not trigger retries
-                    span.set_status('error', str(last_error))
-                    raise
-                except (
-                    openai.APITimeoutError,
-                    openai.APIConnectionError,
-                    openai.InternalServerError,
-                ):
-                    # Let OpenAI's client handle these retries
-                    span.set_status('error', str(last_error))
-                    raise
-                except Exception as e:
-                    last_error = e
-
-                    # Don't retry if we've hit the max retries
-                    if retry_count >= self.MAX_RETRIES:
-                        logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
-                        span.set_status('error', str(e))
-                        span.record_exception(e)
-                        raise
-
-                    retry_count += 1
-
-                    # Construct a detailed error message for the LLM
-                    error_context = (
-                        f'The previous response attempt was invalid. '
-                        f'Error type: {e.__class__.__name__}. '
-                        f'Error details: {str(e)}. '
-                        f'Please try again with a valid response, ensuring the output matches '
-                        f'the expected format and constraints.'
-                    )
-
-                    error_message = Message(role='user', content=error_context)
-                    messages.append(error_message)
-                    logger.warning(
-                        f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
-                    )
-
-            # If we somehow get here, raise the last error
-            span.set_status('error', str(last_error))
-            raise last_error or Exception('Max retries exceeded with no specific error')
+            try:
+                return await self._generate_response(
+                    messages, response_model, max_tokens=max_tokens, model_size=model_size
+                )
+            except Exception as e:
+                span.set_status('error', str(e))
+                span.record_exception(e)
+                raise
