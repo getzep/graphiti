@@ -92,6 +92,7 @@ async def _apply_edge_similarity_search_hook(
     source_node_uuid: str | None,
     target_node_uuid: str | None,
     search_filter: SearchFilters,
+    record_scores: dict[str, float | None] | None = None,
 ) -> list[EntityEdge]:
     context = get_write_path_context()
     hook = get_hook('edge_similarity_search') if context is not None else None
@@ -104,9 +105,36 @@ async def _apply_edge_similarity_search_hook(
             source_node_uuid=source_node_uuid,
             target_node_uuid=target_node_uuid,
             search_filter=search_filter,
+            record_scores=record_scores,
             context=context,
         )
     return edges
+
+
+def _edge_record_scores(records: Any) -> dict[str, float | None]:
+    scores: dict[str, float | None] = {}
+    for record in records or []:
+        try:
+            uuid = str(record.get('uuid') or '')
+        except AttributeError:
+            try:
+                uuid = str(record['uuid'] or '')
+            except Exception:
+                uuid = ''
+        if not uuid:
+            continue
+        try:
+            raw_score = record.get('score')
+        except AttributeError:
+            try:
+                raw_score = record['score']
+            except Exception:
+                raw_score = None
+        try:
+            scores[uuid] = float(raw_score) if raw_score is not None else None
+        except (TypeError, ValueError):
+            scores[uuid] = None
+    return scores
 
 
 def _provider_is_neo4j(driver: GraphDriver) -> bool:
@@ -411,6 +439,7 @@ async def edge_similarity_search(
                 """
                 + get_entity_edge_return_query(driver.provider)
                 + """
+                , score AS score
                 ORDER BY score DESC
                 LIMIT $limit
                 """
@@ -438,6 +467,7 @@ async def edge_similarity_search(
                     source_node_uuid=source_node_uuid,
                     target_node_uuid=target_node_uuid,
                     search_filter=search_filter,
+                    record_scores=_edge_record_scores(records),
                 )
             except Exception as exc:
                 _increment_write_path_stat('vector_edge_search_fallback_count')
@@ -524,7 +554,8 @@ async def edge_similarity_search(
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at,
-                    properties(r) AS attributes
+                    properties(r) AS attributes,
+                    i.score AS score
                 ORDER BY i.score DESC
                 LIMIT $limit
                     """
@@ -552,6 +583,7 @@ async def edge_similarity_search(
             """
             + get_entity_edge_return_query(driver.provider)
             + """
+            , score AS score
             ORDER BY score DESC
             LIMIT $limit
             """
@@ -576,6 +608,7 @@ async def edge_similarity_search(
         source_node_uuid=source_node_uuid,
         target_node_uuid=target_node_uuid,
         search_filter=search_filter,
+        record_scores=_edge_record_scores(records),
     )
 
 

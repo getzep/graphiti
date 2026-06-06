@@ -104,8 +104,9 @@ async def test_edge_resolution_hook_wraps_resolve_extracted_edge() -> None:
 
 
 class EdgeSimilaritySearchHook:
-    async def filter_edges(self, edges, *, context, **kwargs):
+    async def filter_edges(self, edges, *, context, record_scores=None, **kwargs):
         context.stats['edge_similarity_search_hook_called'] = True
+        context.stats['edge_similarity_record_score'] = (record_scores or {}).get(edges[0].uuid)
         return edges[:1]
 
 
@@ -142,9 +143,11 @@ async def test_edge_similarity_search_hook_filters_results() -> None:
             source_node_uuid=None,
             target_node_uuid=None,
             search_filter=cast(Any, SimpleNamespace()),
+            record_scores={edge_a.uuid: 0.91, edge_b.uuid: 0.2},
         )
 
         assert result == [edge_a]
         assert stats['edge_similarity_search_hook_called'] is True
+        assert stats['edge_similarity_record_score'] == 0.91
     finally:
         reset_write_path_context(token)

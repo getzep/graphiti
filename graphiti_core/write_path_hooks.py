@@ -163,6 +163,7 @@ class EdgeSimilaritySearchHook(Protocol):
         source_node_uuid: str | None,
         target_node_uuid: str | None,
         search_filter: Any,
+        record_scores: dict[str, float | None] | None,
         context: WritePathContext,
     ) -> list[Any]:
         """Filter/rank edge similarity search results before they reach dedupe."""
