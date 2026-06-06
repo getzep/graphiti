@@ -117,8 +117,11 @@ async def test_rate_limit_error_is_translated():
     )
     client, _ = _make_client(error=rate_limit)
 
+    # Assert translation at the _generate_response level. Going through generate_response
+    # would invoke the inherited tenacity retry wrapper (RateLimitError is retryable), which
+    # adds real backoff sleeps and would make this unit test slow.
     with pytest.raises(RateLimitError):
-        await client.generate_response(_messages(), response_model=ResponseModel)
+        await client._generate_response(_messages(), response_model=ResponseModel)
 
 
 @pytest.mark.asyncio
@@ -132,8 +135,11 @@ async def test_empty_content_raises_empty_response_error():
 
 
 @pytest.mark.asyncio
-async def test_errors_propagate_without_retry():
-    # A single create call should be made — the re-prompt retry loop has been removed.
+async def test_non_retryable_error_is_not_retried():
+    # The old hand-rolled re-prompt loop is gone. Retry is now delegated to the base
+    # tenacity wrapper, which only retries transient errors (RateLimitError /
+    # JSONDecodeError). A non-retryable error (e.g. ValueError) propagates after a
+    # single create call.
     client, completions = _make_client(error=ValueError('bad response'))
 
     with pytest.raises(ValueError):

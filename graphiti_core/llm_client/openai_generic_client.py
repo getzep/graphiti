@@ -109,6 +109,11 @@ class OpenAIGenericClient(LLMClient):
         if response_model is None or self.structured_output_mode == 'json_object':
             return {'type': 'json_object'}
 
+        # Native json_schema. We intentionally omit "strict": true — strict mode requires
+        # the schema to meet OpenAI's strict subset (additionalProperties: false, every
+        # field required), which raw model_json_schema() routinely violates (that's why the
+        # dedicated OpenAIClient uses responses.parse() instead). So adherence is best-effort
+        # on OpenAI-proper; constrained-decoding servers (vLLM, llama.cpp) still enforce it.
         return {
             'type': 'json_schema',
             'json_schema': {
@@ -136,7 +141,7 @@ class OpenAIGenericClient(LLMClient):
                 model=self.model or DEFAULT_MODEL,
                 messages=openai_messages,
                 temperature=self.temperature,
-                max_tokens=self.max_tokens,
+                max_tokens=max_tokens,
                 response_format=self._build_response_format(response_model),  # type: ignore[arg-type]
             )
             result = response.choices[0].message.content or ''
@@ -192,7 +197,12 @@ class OpenAIGenericClient(LLMClient):
             span.add_attributes(attributes)
 
             try:
-                return await self._generate_response(
+                # Delegate to the base tenacity wrapper so transient JSONDecodeError /
+                # RateLimitError get backoff-retried (4 attempts) — most relevant in the
+                # json_object fallback path for less-reliable providers. This is the clean
+                # retry mechanism (same pattern as Gliner2Client); the old hand-rolled
+                # re-prompt loop is intentionally not reinstated.
+                return await self._generate_response_with_retry(
                     messages, response_model, max_tokens=max_tokens, model_size=model_size
                 )
             except Exception as e:
