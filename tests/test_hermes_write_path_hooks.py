@@ -5,6 +5,7 @@ import pytest
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
+from graphiti_core.search import search_utils
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import edge_operations, node_operations
 from graphiti_core.write_path_hooks import (
@@ -98,5 +99,52 @@ async def test_edge_resolution_hook_wraps_resolve_extracted_edge() -> None:
         assert invalidated == []
         assert duplicates == []
         assert stats['edge_resolution_hook_called'] is True
+    finally:
+        reset_write_path_context(token)
+
+
+class EdgeSimilaritySearchHook:
+    async def filter_edges(self, edges, *, context, **kwargs):
+        context.stats['edge_similarity_search_hook_called'] = True
+        return edges[:1]
+
+
+@pytest.mark.asyncio
+async def test_edge_similarity_search_hook_filters_results() -> None:
+    stats = {}
+    token = set_write_path_context(stats=stats)
+    try:
+        register_hook('edge_similarity_search', EdgeSimilaritySearchHook())
+        edge_a = EntityEdge(
+            source_node_uuid='source',
+            target_node_uuid='target',
+            name='RELATES_TO',
+            group_id='g',
+            fact='Alice knows Bob',
+            created_at=utc_now(),
+            episodes=[],
+        )
+        edge_b = EntityEdge(
+            source_node_uuid='source',
+            target_node_uuid='target',
+            name='RELATES_TO',
+            group_id='g',
+            fact='Alice dislikes Bob',
+            created_at=utc_now(),
+            episodes=[],
+        )
+
+        result = await search_utils._apply_edge_similarity_search_hook(
+            [edge_a, edge_b],
+            driver=cast(Any, SimpleNamespace()),
+            search_vector=[1.0],
+            group_ids=['g'],
+            source_node_uuid=None,
+            target_node_uuid=None,
+            search_filter=cast(Any, SimpleNamespace()),
+        )
+
+        assert result == [edge_a]
+        assert stats['edge_similarity_search_hook_called'] is True
     finally:
         reset_write_path_context(token)

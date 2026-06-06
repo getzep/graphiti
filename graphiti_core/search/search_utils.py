@@ -58,7 +58,7 @@ from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
 )
-from graphiti_core.write_path_hooks import get_write_path_context
+from graphiti_core.write_path_hooks import get_hook, get_write_path_context
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,32 @@ def _increment_write_path_stat(name: str, amount: int = 1) -> None:
     if context is None:
         return
     context.stats[name] = int(context.stats.get(name, 0) or 0) + amount
+
+
+async def _apply_edge_similarity_search_hook(
+    edges: list[EntityEdge],
+    *,
+    driver: GraphDriver,
+    search_vector: list[float],
+    group_ids: list[str] | None,
+    source_node_uuid: str | None,
+    target_node_uuid: str | None,
+    search_filter: SearchFilters,
+) -> list[EntityEdge]:
+    context = get_write_path_context()
+    hook = get_hook('edge_similarity_search') if context is not None else None
+    if hook is not None and hasattr(hook, 'filter_edges'):
+        return await hook.filter_edges(
+            edges,
+            driver=driver,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            source_node_uuid=source_node_uuid,
+            target_node_uuid=target_node_uuid,
+            search_filter=search_filter,
+            context=context,
+        )
+    return edges
 
 
 def _provider_is_neo4j(driver: GraphDriver) -> bool:
@@ -404,7 +430,15 @@ async def edge_similarity_search(
                 _increment_write_path_stat('vector_edge_search_count')
                 _increment_write_path_stat('vector_edge_search_result_count', len(edges))
                 _increment_write_path_stat('vector_edge_search_top_k_total', top_k)
-                return edges
+                return await _apply_edge_similarity_search_hook(
+                    edges,
+                    driver=driver,
+                    search_vector=search_vector,
+                    group_ids=group_ids,
+                    source_node_uuid=source_node_uuid,
+                    target_node_uuid=target_node_uuid,
+                    search_filter=search_filter,
+                )
             except Exception as exc:
                 _increment_write_path_stat('vector_edge_search_fallback_count')
                 logger.debug('vector edge similarity search fallback: %s', exc, exc_info=True)
@@ -534,7 +568,15 @@ async def edge_similarity_search(
 
     edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
 
-    return edges
+    return await _apply_edge_similarity_search_hook(
+        edges,
+        driver=driver,
+        search_vector=search_vector,
+        group_ids=group_ids,
+        source_node_uuid=source_node_uuid,
+        target_node_uuid=target_node_uuid,
+        search_filter=search_filter,
+    )
 
 
 async def edge_bfs_search(

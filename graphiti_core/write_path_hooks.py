@@ -149,3 +149,21 @@ class EdgeResolutionHook(Protocol):
         **kwargs: Any,
     ) -> Any:
         """Resolve an extracted edge, delegating to original when appropriate."""
+
+
+@runtime_checkable
+class EdgeSimilaritySearchHook(Protocol):
+    async def filter_edges(
+        self,
+        edges: list[Any],
+        *,
+        driver: Any,
+        search_vector: Any,
+        group_ids: list[str] | None,
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        search_filter: Any,
+        context: WritePathContext,
+    ) -> list[Any]:
+        """Filter/rank edge similarity search results before they reach dedupe."""
+        ...
