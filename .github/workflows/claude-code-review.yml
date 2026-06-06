@@ -5,9 +5,11 @@ on:
   # have access to secrets (ANTHROPIC_API_KEY). This is safe because we NEVER
   # check out the fork's code — we only read diffs via the GitHub API.
   pull_request_target:
-    # No `synchronize`: avoid re-reviewing on every push on a high-volume public
-    # repo. `labeled` lets a maintainer opt a PR in with the `needs-review` label.
-    types: [opened, ready_for_review, reopened, labeled]
+    # `labeled` lets a maintainer opt an external PR in with the `needs-review` label.
+    # `synchronize` re-reviews on push. The author/label gate on the job (not the
+    # trigger) is the cost control, so unlabeled external PRs still never auto-review;
+    # concurrency:cancel-in-progress dedupes rapid pushes.
+    types: [opened, ready_for_review, reopened, labeled, synchronize]
 
 # Prevent concurrent reviews from conflicting on comments
 concurrency:
