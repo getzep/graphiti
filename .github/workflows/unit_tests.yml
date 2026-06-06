@@ -78,10 +78,11 @@ jobs:
       - name: Wait for FalkorDB
         # Use 127.0.0.1 (not localhost): on the Depot runner localhost resolves to IPv6
         # ::1, where the published service-container port is unreachable and redis-cli
-        # hangs on connect until `timeout` kills it (exit 124). -t 2 fails a connect fast
-        # so the loop retries instead of consuming the whole window.
+        # hangs on connect until `timeout` kills it (exit 124). Wrap each attempt in
+        # `timeout 3` (coreutils, version-agnostic) so a hung connect fails fast and the
+        # loop retries — redis-tools 6.0.x has no redis-cli -t connect-timeout flag.
         run: |
-          timeout 60 bash -c 'until redis-cli -h 127.0.0.1 -p 6379 -t 2 ping; do sleep 1; done'
+          timeout 60 bash -c 'until timeout 3 redis-cli -h 127.0.0.1 -p 6379 ping; do sleep 1; done'
       - name: Wait for Neo4j
         run: |
           timeout 60 bash -c 'until wget -O /dev/null http://127.0.0.1:7474 >/dev/null 2>&1; do sleep 1; done'
