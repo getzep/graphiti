@@ -135,6 +135,10 @@ jobs:
         uses: anthropics/claude-code-action@ba026a3e56b9f646ae3b1be02dd9c0812aa2f8ae # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Use this token for GitHub API calls instead of exchanging the OIDC token for a
+          # Claude GitHub App token (that exchange 401s — we use our own anthropic_api_key,
+          # not the official Claude App). See claude-code-action docs / issue #873.
+          github_token: ${{ github.token }}
           use_sticky_comment: true
           prompt: |
             You are triaging PR #${{ steps.pr.outputs.number }} for the getzep/graphiti repository.
@@ -264,6 +268,10 @@ jobs:
         uses: anthropics/claude-code-action@ba026a3e56b9f646ae3b1be02dd9c0812aa2f8ae # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Use this token for GitHub API calls instead of exchanging the OIDC token for a
+          # Claude GitHub App token (that exchange 401s — we use our own anthropic_api_key,
+          # not the official Claude App). See claude-code-action docs / issue #873.
+          github_token: ${{ github.token }}
           use_sticky_comment: false
           prompt: |
             You need to triage the following open PRs for the getzep/graphiti repository:
