@@ -145,6 +145,18 @@ def test_empty_response_error_is_retryable():
 
 
 @pytest.mark.asyncio
+async def test_strips_markdown_code_fence_before_parsing():
+    # Local/compatible models (e.g. Ollama/gemma) often wrap JSON in a ```json fence even
+    # under a structured response_format; the client must strip it before json.loads.
+    fenced = '```json\n{"foo": "bar"}\n```'
+    client, _ = _make_client(content=fenced)
+
+    result = await client.generate_response(_messages(), response_model=ResponseModel)
+
+    assert result == {'foo': 'bar'}
+
+
+@pytest.mark.asyncio
 async def test_non_retryable_error_is_not_retried():
     # The old hand-rolled re-prompt loop is gone. Retry is now delegated to the base
     # tenacity wrapper, which only retries transient errors (RateLimitError /

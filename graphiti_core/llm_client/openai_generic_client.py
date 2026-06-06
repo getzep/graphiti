@@ -16,6 +16,7 @@ limitations under the License.
 
 import json
 import logging
+import re
 import typing
 from typing import Any, Literal
 
@@ -122,6 +123,20 @@ class OpenAIGenericClient(LLMClient):
             },
         }
 
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        """Strip a wrapping markdown code fence from a JSON payload.
+
+        OpenAI-compatible models served via Ollama/llama.cpp etc. frequently wrap their
+        output in a ```json … ``` fence even when a json_schema/json_object response_format
+        is requested, which breaks a bare ``json.loads``. No-op when there is no fence.
+        """
+        stripped = text.strip()
+        if stripped.startswith('```'):
+            stripped = re.sub(r'^```[a-zA-Z0-9_-]*[ \t]*\r?\n?', '', stripped)
+            stripped = re.sub(r'\r?\n?```[ \t]*$', '', stripped)
+        return stripped.strip()
+
     async def _generate_response(
         self,
         messages: list[Message],
@@ -149,7 +164,9 @@ class OpenAIGenericClient(LLMClient):
             # json.loads raise a cryptic JSONDecodeError; surface a clear error instead.
             if not result:
                 raise EmptyResponseError('LLM returned an empty response')
-            return json.loads(result)
+            # Many OpenAI-compatible/local models wrap JSON in a ```json fence even under a
+            # structured response_format; strip it before parsing.
+            return json.loads(self._strip_code_fences(result))
         except openai.RateLimitError as e:
             raise RateLimitError from e
         except Exception as e:
