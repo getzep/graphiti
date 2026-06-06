@@ -76,18 +76,22 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
       - name: Wait for FalkorDB
+        # Use 127.0.0.1 (not localhost): on the Depot runner localhost resolves to IPv6
+        # ::1, where the published service-container port is unreachable and redis-cli
+        # hangs on connect until `timeout` kills it (exit 124). -t 2 fails a connect fast
+        # so the loop retries instead of consuming the whole window.
         run: |
-          timeout 60 bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
+          timeout 60 bash -c 'until redis-cli -h 127.0.0.1 -p 6379 -t 2 ping; do sleep 1; done'
       - name: Wait for Neo4j
         run: |
-          timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
+          timeout 60 bash -c 'until wget -O /dev/null http://127.0.0.1:7474 >/dev/null 2>&1; do sleep 1; done'
       - name: Run database integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-          NEO4J_URI: bolt://localhost:7687
+          NEO4J_URI: bolt://127.0.0.1:7687
           NEO4J_USER: neo4j
           NEO4J_PASSWORD: testpass
-          FALKORDB_HOST: localhost
+          FALKORDB_HOST: 127.0.0.1
           FALKORDB_PORT: 6379
           DISABLE_NEPTUNE: 1
         run: |
