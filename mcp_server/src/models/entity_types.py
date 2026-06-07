@@ -212,14 +212,14 @@ class Document(BaseModel):
     )
 
 
-ENTITY_TYPES: dict[str, BaseModel] = {
-    'Requirement': Requirement,  # type: ignore
-    'Preference': Preference,  # type: ignore
-    'Procedure': Procedure,  # type: ignore
-    'Location': Location,  # type: ignore
-    'Event': Event,  # type: ignore
-    'Object': Object,  # type: ignore
-    'Topic': Topic,  # type: ignore
-    'Organization': Organization,  # type: ignore
-    'Document': Document,  # type: ignore
+ENTITY_TYPES: dict[str, type[BaseModel]] = {
+    'Requirement': Requirement,
+    'Preference': Preference,
+    'Procedure': Procedure,
+    'Location': Location,
+    'Event': Event,
+    'Object': Object,
+    'Topic': Topic,
+    'Organization': Organization,
+    'Document': Document,
 }
