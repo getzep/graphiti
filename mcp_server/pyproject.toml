@@ -5,9 +5,9 @@ description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
-    "mcp>=1.9.4",
+    "mcp>=1.27.2,<2",
     "openai>=1.91.0",
-    "graphiti-core[falkordb]>=0.28.2",
+    "graphiti-core[falkordb]>=0.29.1",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
     "typing-extensions>=4.0.0",
@@ -22,7 +22,7 @@ providers = [
     "anthropic>=0.49.0",
     "groq>=1.2.0",
     "voyageai>=0.3.7",
-    "sentence-transformers>=2.0.0",
+    "sentence-transformers>=3.2.1",
 ]
 
 [tool.pyright]

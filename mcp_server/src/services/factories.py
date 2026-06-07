@@ -136,7 +136,9 @@ class LLMClientFactory:
                     api_key=api_key,
                     model=config.model,
                     small_model=small_model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                     base_url=config.providers.openai.api_url,
                 )
@@ -201,7 +203,9 @@ class LLMClientFactory:
                     api_key=api_key,
                     base_url=base_url,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
 
@@ -225,7 +229,9 @@ class LLMClientFactory:
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
                 return AnthropicClient(config=llm_config)
@@ -242,7 +248,9 @@ class LLMClientFactory:
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
                 return GeminiClient(config=llm_config)
@@ -260,7 +268,9 @@ class LLMClientFactory:
                     api_key=api_key,
                     base_url=config.providers.groq.api_url,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
                 return GroqClient(config=llm_config)
