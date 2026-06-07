@@ -89,9 +89,11 @@ class OpenAIClient(BaseOpenAIClient):
         if temperature_value is not None:
             request_kwargs['temperature'] = temperature_value
 
-        # Only include reasoning and verbosity parameters for reasoning models
-        if is_reasoning_model and reasoning is not None:
-            request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+        # Only include reasoning and verbosity parameters for reasoning models.
+        # 'auto' is resolved to a per-model effort (e.g. 'none' for gpt-5.5).
+        effort = self._resolve_reasoning_effort(model, reasoning)
+        if is_reasoning_model and effort is not None:
+            request_kwargs['reasoning'] = {'effort': effort}  # type: ignore
 
         if is_reasoning_model and verbosity is not None:
             request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore

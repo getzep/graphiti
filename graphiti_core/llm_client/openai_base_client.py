@@ -31,9 +31,11 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4.1-mini'
+DEFAULT_MODEL = 'gpt-5.5'
 DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
-DEFAULT_REASONING = 'minimal'
+# 'auto' is a sentinel meaning "pick a reasoning effort based on the model"
+# (resolved by _resolve_reasoning_effort); it is never sent to the API.
+DEFAULT_REASONING = 'auto'
 DEFAULT_VERBOSITY = 'low'
 
 
@@ -112,6 +114,30 @@ class BaseOpenAIClient(LLMClient):
             return self.small_model or DEFAULT_SMALL_MODEL
         else:
             return self.model or DEFAULT_MODEL
+
+    @staticmethod
+    def _resolve_reasoning_effort(model: str, reasoning: str | None) -> str | None:
+        """Resolve the reasoning effort to send for a reasoning model.
+
+        The sentinel ``'auto'`` (the default) is resolved per-model:
+
+        * ``gpt-5.5`` and newer use ``'none'`` — reasoning off, the cheapest and
+          fastest setting, which gives comparable extraction quality at far lower
+          cost and latency for Graphiti's structured-output workload.
+        * Any other reasoning model resolves to ``None`` (the parameter is
+          omitted and the API applies its own default). We deliberately do not
+          guess a floor, because the lowest valid effort differs by snapshot —
+          e.g. ``gpt-5.0`` accepts ``'minimal'``, ``gpt-5.4-mini`` requires
+          ``'low'``, and ``gpt-5.5`` uses ``'none'``. Pin one with ``reasoning=``.
+
+        Any non-sentinel value (including ``None``) is returned unchanged, so an
+        explicit caller override always wins.
+        """
+        if reasoning != 'auto':
+            return reasoning
+        if model.startswith('gpt-5.5'):
+            return 'none'
+        return None
 
     def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing and validation.
