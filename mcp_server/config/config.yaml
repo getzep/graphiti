@@ -109,3 +109,24 @@ graphiti:
       description: "Subject of conversation, interest, or knowledge domain (use as last resort)"
     - name: "Object"
       description: "Physical items, tools, devices, or possessions (use as last resort)"
+
+  # Optional edge (fact) types. When a name matches a model registered in
+  # src/models/edge_types.py the rich Pydantic model is used; otherwise a
+  # documentation-only model is built from the description below. Leave this
+  # list empty to keep graphiti-core's default edge extraction behavior.
+  # edge_types:
+  #   - name: "WorksFor"
+  #     description: "Employment or membership of a person in an organization"
+  #   - name: "LocatedAt"
+  #     description: "An entity is situated at or within a location"
+
+  # Optional constraint on which edge types may connect which entity types.
+  # 'Entity' acts as a wildcard for either endpoint. Mirrors graphiti-core's
+  # edge_type_map. Leave empty to allow any configured edge type anywhere.
+  # edge_type_map:
+  #   - source: "Organization"
+  #     target: "Person"
+  #     edge_types: ["WorksFor"]
+  #   - source: "Entity"
+  #     target: "Location"
+  #     edge_types: ["LocatedAt"]
