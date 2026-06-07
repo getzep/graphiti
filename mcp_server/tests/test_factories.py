@@ -68,3 +68,29 @@ class TestLLMClientFactoryRouting:
     def test_ollama_uses_generic_client(self):
         client = LLMClientFactory.create(self._config('http://localhost:11434/v1'))
         assert isinstance(client, OpenAIGenericClient)
+
+
+class TestLLMClientReasoningEffort:
+    """The OpenAI factory selects reasoning effort by model family."""
+
+    @staticmethod
+    def _config(model: str) -> LLMConfig:
+        return LLMConfig(
+            provider='openai',
+            model=model,
+            providers=LLMProvidersConfig(
+                openai=OpenAIProviderConfig(api_key='test-key', api_url='https://api.openai.com/v1')
+            ),
+        )
+
+    def test_gpt_5_5_uses_reasoning_none(self):
+        """gpt-5.5 (the default) runs with reasoning off."""
+        client = LLMClientFactory.create(self._config('gpt-5.5'))
+        assert isinstance(client, OpenAIClient)
+        assert client.reasoning == 'none'
+
+    def test_earlier_reasoning_model_uses_minimal(self):
+        """Earlier gpt-5 reasoning models keep the historical 'minimal' floor."""
+        client = LLMClientFactory.create(self._config('gpt-5'))
+        assert isinstance(client, OpenAIClient)
+        assert client.reasoning == 'minimal'
