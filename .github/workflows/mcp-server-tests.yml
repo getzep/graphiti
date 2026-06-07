@@ -20,10 +20,18 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same ref so repeated pushes don't keep paying for
+# real OpenAI calls.
+concurrency:
+  group: mcp-server-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   live-mcp-tests:
     runs-on: depot-ubuntu-22.04
     environment: development
+    # Insurance against a hung stdio subprocess / uv sync.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Set up Python

@@ -17,8 +17,8 @@ is reachable:
 - CI: ``OPENAI_API_KEY`` comes from the GitHub environment and FalkorDB runs as a
   container (see .github/workflows/mcp-server-tests.yml).
 
-The model is taken from ``MODEL_NAME`` (CI pins a cost-efficient model); falling
-back to the server's configured default otherwise.
+The model is taken from ``MODEL_NAME``; CI sets it to ``gpt-5.5`` (the server's
+default model), and it falls back to the server's configured default otherwise.
 """
 
 import asyncio
@@ -86,6 +86,16 @@ def _unique_group_id() -> str:
     return f'livetest{int(time.time())}{os.getpid()}'
 
 
+def _raise_on_error(tool: str, resp: Any) -> None:
+    """Surface a tool's error response immediately instead of masking it as empty.
+
+    Otherwise a real server/LLM/schema error only shows up as a generic
+    'not processed within the timeout' after the full poll, hiding the cause.
+    """
+    if isinstance(resp, dict) and resp.get('error'):
+        raise AssertionError(f'{tool} returned an error: {resp["error"]}')
+
+
 class LiveMCPClient:
     """Spawns the MCP server over stdio (FalkorDB backend) and calls its tools."""
 
@@ -140,6 +150,7 @@ class LiveMCPClient:
             resp = await self.call(
                 'get_episodes', {'group_ids': [self.group_id], 'max_episodes': 50}
             )
+            _raise_on_error('get_episodes', resp)
             episodes = resp.get('episodes', []) if isinstance(resp, dict) else []
             if len(episodes) >= expected:
                 return episodes
@@ -158,6 +169,7 @@ class LiveMCPClient:
         results: list[Any] = []
         for _ in range(attempts):
             resp = await self.call(tool, arguments)
+            _raise_on_error(tool, resp)
             results = resp.get(key, []) if isinstance(resp, dict) else []
             if results:
                 return results
@@ -190,51 +202,59 @@ async def test_server_lists_core_tools():
 async def test_end_to_end_add_search_delete_clear():
     group = _unique_group_id()
     async with LiveMCPClient(group) as client:
-        # 1. Add an episode with clearly-extractable entities and a relationship.
-        add = await client.call(
-            'add_memory',
-            {
-                'name': 'Live Test Episode',
-                'episode_body': (
-                    'Alice is a software engineer at Acme Corporation. '
-                    'She works on the Graphiti project.'
-                ),
-                'source': 'text',
-                'source_description': 'live integration test',
-                'group_id': group,
-            },
-        )
-        assert isinstance(add, dict) and 'message' in add, f'unexpected add_memory response: {add}'
+        try:
+            # 1. Add an episode with clearly-extractable entities and a relationship.
+            add = await client.call(
+                'add_memory',
+                {
+                    'name': 'Live Test Episode',
+                    'episode_body': (
+                        'Alice is a software engineer at Acme Corporation. '
+                        'She works on the Graphiti project.'
+                    ),
+                    'source': 'text',
+                    'source_description': 'live integration test',
+                    'group_id': group,
+                },
+            )
+            assert isinstance(add, dict) and 'message' in add, (
+                f'unexpected add_memory response: {add}'
+            )
 
-        # 2. Wait for async processing to persist the episode (and its graph).
-        episodes = await client.wait_for_episodes(expected=1)
-        assert episodes, 'episode was not processed within the timeout'
-        assert any(e.get('group_id') == group for e in episodes)
-        episode_uuid = episodes[0]['uuid']
+            # 2. Wait for async processing to persist the episode (and its graph).
+            episodes = await client.wait_for_episodes(expected=1)
+            assert episodes, 'episode was not processed within the timeout'
+            assert any(e.get('group_id') == group for e in episodes)
+            episode_uuid = episodes[0]['uuid']
 
-        # 3. At least one entity was extracted and is searchable.
-        nodes = await client.search_until(
-            'search_nodes',
-            {'query': 'Alice Acme Graphiti', 'group_ids': [group], 'max_nodes': 10},
-            key='nodes',
-        )
-        assert nodes, 'expected at least one extracted entity node'
+            # 3. At least one entity was extracted and is searchable.
+            nodes = await client.search_until(
+                'search_nodes',
+                {'query': 'Alice Acme Graphiti', 'group_ids': [group], 'max_nodes': 10},
+                key='nodes',
+            )
+            assert nodes, 'expected at least one extracted entity node'
 
-        # 4. At least one fact (edge) was extracted and is searchable.
-        facts = await client.search_until(
-            'search_memory_facts',
-            {'query': 'Alice Acme Corporation', 'group_ids': [group], 'max_facts': 10},
-            key='facts',
-        )
-        assert facts, 'expected at least one extracted fact'
+            # 4. At least one fact (edge) was extracted and is searchable.
+            facts = await client.search_until(
+                'search_memory_facts',
+                {'query': 'Alice Acme Corporation', 'group_ids': [group], 'max_facts': 10},
+                key='facts',
+            )
+            assert facts, 'expected at least one extracted fact'
 
-        # 5. Status reports a healthy FalkorDB connection.
-        status = await client.call('get_status', {})
-        assert isinstance(status, dict) and status.get('status') == 'ok', f'status: {status}'
+            # 5. Status reports a healthy FalkorDB connection.
+            status = await client.call('get_status', {})
+            assert isinstance(status, dict) and status.get('status') == 'ok', f'status: {status}'
 
-        # 6. Delete the episode, then clear the test group.
-        deleted = await client.call('delete_episode', {'uuid': episode_uuid})
-        assert isinstance(deleted, dict) and 'message' in deleted, f'delete_episode: {deleted}'
+            # 6. Delete the episode, then clear the test group.
+            deleted = await client.call('delete_episode', {'uuid': episode_uuid})
+            assert isinstance(deleted, dict) and 'message' in deleted, f'delete_episode: {deleted}'
 
-        cleared = await client.call('clear_graph', {'group_ids': [group]})
-        assert isinstance(cleared, dict) and 'message' in cleared, f'clear_graph: {cleared}'
+            cleared = await client.call('clear_graph', {'group_ids': [group]})
+            assert isinstance(cleared, dict) and 'message' in cleared, f'clear_graph: {cleared}'
+        finally:
+            # Always remove this run's data, even if an assertion above failed, so a
+            # long-lived local FalkorDB doesn't accumulate orphaned test groups.
+            with suppress(Exception):
+                await client.call('clear_graph', {'group_ids': [group]})
