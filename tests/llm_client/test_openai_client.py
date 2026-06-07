@@ -51,9 +51,9 @@ def test_default_model_and_reasoning_sentinel():
 @pytest.mark.parametrize(
     ('model', 'reasoning', 'expected'),
     [
-        # gpt-5.5 family: 'auto' -> reasoning off
+        # gpt-5.5 -> reasoning off; the dated snapshot must match the prefix too
         ('gpt-5.5', 'auto', 'none'),
-        ('gpt-5.5-mini', 'auto', 'none'),
+        ('gpt-5.5-2026-04-23', 'auto', 'none'),
         # every other model: 'minimal' (cheapest tier, prior default) — NOT None,
         # so non-gpt-5.5 reasoning models don't regress to the API's medium default
         ('gpt-5', 'auto', 'minimal'),
