@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -319,6 +319,23 @@ class GraphitiService:
         return self.client
 
 
+def _parse_reference_time(reference_time: str) -> datetime:
+    """Parse an ISO-8601 ``reference_time``, coercing naive values to UTC.
+
+    Accepts a trailing ``Z``. A timezone-naive input (e.g. ``2026-05-14T19:00:00``
+    or a date-only ``2026-05-14``) is assumed to be UTC so the resulting
+    ``valid_at`` is always timezone-aware — the graph backends compare it against
+    timezone-aware timestamps, and a naive value would corrupt temporal ordering.
+
+    Raises:
+        ValueError: if ``reference_time`` is not a valid ISO-8601 string.
+    """
+    parsed = datetime.fromisoformat(reference_time.replace('Z', '+00:00'))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 @mcp.tool()
 async def add_memory(
     name: str,
@@ -398,13 +415,11 @@ async def add_memory(
                 logger.warning(f"Unknown source type '{source}', using 'text' as default")
                 episode_type = EpisodeType.text
 
-        # Parse reference_time from ISO-8601 string. Accept trailing 'Z' for UTC.
+        # Parse reference_time from ISO-8601 string (naive values are assumed UTC).
         parsed_reference_time: datetime | None = None
         if reference_time:
             try:
-                parsed_reference_time = datetime.fromisoformat(
-                    reference_time.replace('Z', '+00:00')
-                )
+                parsed_reference_time = _parse_reference_time(reference_time)
             except ValueError as parse_err:
                 return ErrorResponse(
                     error=f'Invalid reference_time {reference_time!r}: must be ISO-8601 ({parse_err})'
