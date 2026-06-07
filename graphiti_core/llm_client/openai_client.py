@@ -116,10 +116,14 @@ class OpenAIClient(BaseOpenAIClient):
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
-        return await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature if not is_reasoning_model else None,
-            max_tokens=max_tokens,
-            response_format={'type': 'json_object'},
-        )
+        request_kwargs = {
+            'model': model,
+            'messages': messages,
+            'max_tokens': max_tokens,
+            'response_format': {'type': 'json_object'},
+        }
+
+        if not is_reasoning_model and temperature is not None:
+            request_kwargs['temperature'] = temperature
+
+        return await self.client.chat.completions.create(**request_kwargs)
