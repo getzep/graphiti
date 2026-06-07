@@ -8,7 +8,7 @@ server:
 
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: ${MODEL_NAME:gpt-4.1-mini}
+  model: ${MODEL_NAME:gpt-5.5}
   max_tokens: 4096
 
   providers:

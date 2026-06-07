@@ -158,7 +158,11 @@ class LLMClientFactory:
 
                     # Only pass reasoning/verbosity parameters for reasoning models
                     if is_reasoning_model:
-                        return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                        # gpt-5.5+ uses 'none' (reasoning off) for lower cost/latency,
+                        # which we've found gives comparable extraction quality; earlier
+                        # reasoning models keep the historical 'minimal' floor.
+                        effort = 'none' if config.model.startswith('gpt-5.5') else 'minimal'
+                        return OpenAIClient(config=llm_config, reasoning=effort, verbosity='low')
                     else:
                         # For non-reasoning models, don't pass reasoning/verbosity parameters
                         return OpenAIClient(config=llm_config)
