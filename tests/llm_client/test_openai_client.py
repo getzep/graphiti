@@ -140,3 +140,23 @@ async def test_non_reasoning_model_omits_reasoning_and_keeps_temperature():
     assert call_args.get('temperature') == 0.4
     assert 'reasoning' not in call_args
     assert 'text' not in call_args
+
+
+@pytest.mark.asyncio
+async def test_empty_string_reasoning_is_not_sent():
+    # A stray reasoning='' must not produce an invalid {'effort': ''} on the wire.
+    dummy = DummyOpenAIClient()
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+
+    await client._create_structured_completion(
+        model='gpt-5.5',
+        messages=[],
+        temperature=None,
+        max_tokens=64,
+        response_model=DummyResponseModel,
+        reasoning='',
+        verbosity='low',
+    )
+
+    call_args = dummy.responses.parse_calls[0]
+    assert 'reasoning' not in call_args

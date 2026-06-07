@@ -91,8 +91,10 @@ class OpenAIClient(BaseOpenAIClient):
 
         # Only include reasoning and verbosity parameters for reasoning models.
         # 'auto' is resolved to a per-model effort (e.g. 'none' for gpt-5.5).
+        # Truthiness guard (matches the Azure client) skips both None and an
+        # empty string, so a stray reasoning='' never sends an invalid effort.
         effort = self._resolve_reasoning_effort(model, reasoning)
-        if is_reasoning_model and effort is not None:
+        if is_reasoning_model and effort:
             request_kwargs['reasoning'] = {'effort': effort}  # type: ignore
 
         if is_reasoning_model and verbosity is not None:

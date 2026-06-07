@@ -121,9 +121,11 @@ class BaseOpenAIClient(LLMClient):
 
         The sentinel ``'auto'`` (the default) is resolved per-model:
 
-        * ``gpt-5.5`` and newer use ``'none'`` — reasoning off, the cheapest and
+        * The ``gpt-5.5`` family uses ``'none'`` — reasoning off, the cheapest and
           fastest setting, which gives comparable extraction quality at far lower
-          cost and latency for Graphiti's structured-output workload.
+          cost and latency for Graphiti's structured-output workload. (Matched by
+          prefix; a future ``gpt-5.6``/``gpt-6`` falls through to the branch below
+          until added here, since newer snapshots may not accept ``'none'``.)
         * Any other reasoning model resolves to ``None`` (the parameter is
           omitted and the API applies its own default). We deliberately do not
           guess a floor, because the lowest valid effort differs by snapshot —
