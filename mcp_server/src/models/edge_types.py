@@ -12,7 +12,7 @@ edge. Only use information present in the episode to populate them.
 from pydantic import BaseModel, Field
 
 
-class RelatesToNode(BaseModel):
+class RelatesTo(BaseModel):
     """A generic, untyped relationship between two entities.
 
     Use this only when no more specific edge type applies. Captures that two
@@ -68,7 +68,7 @@ class Requires(BaseModel):
 
 
 EDGE_TYPES: dict[str, type[BaseModel]] = {
-    'RelatesToNode': RelatesToNode,
+    'RelatesTo': RelatesTo,
     'MentionedIn': MentionedIn,
     'WorksFor': WorksFor,
     'LocatedAt': LocatedAt,

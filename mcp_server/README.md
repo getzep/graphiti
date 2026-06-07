@@ -207,6 +207,7 @@ Graphiti MCP Server includes built-in entity types for structured knowledge extr
 - **Procedure**: Standard operating procedures and sequential instructions
 - **Location**: Physical or virtual places where activities occur
 - **Event**: Time-bound activities, occurrences, or experiences
+- **Person**: An individual human referenced in the content
 - **Organization**: Companies, institutions, groups, or formal entities
 - **Document**: Information content in various forms (books, articles, reports, videos, etc.)
 - **Topic**: Subject of conversation, interest, or knowledge domain (used as a fallback)
@@ -225,6 +226,8 @@ graphiti:
 ```
 
 The MCP server automatically uses these entity types during episode ingestion to extract and structure information from conversations and documents.
+
+> **Upgrade note:** These built-in types are now registered as rich models with typed attributes (e.g. a `description`), so extraction stores those attributes on entities. The shipped default `config.yaml` enables them, so an existing deployment on the default config switches from attribute-free to rich-attribute extraction. To keep the previous behavior, set `graphiti.entity_types` to an empty list (or remove the entries).
 
 ### Environment Variables
 

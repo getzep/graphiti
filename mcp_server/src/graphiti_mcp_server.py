@@ -513,12 +513,20 @@ async def search_nodes(
             node_labels=entity_types,
         )
 
-        # Use the search_ method with node search config
-        from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
+        # center_node_uuid is only honored by the node_distance reranker, so select
+        # that recipe when a center node is given (mirroring core's Graphiti.search);
+        # otherwise use RRF.
+        from graphiti_core.search.search_config_recipes import (
+            NODE_HYBRID_SEARCH_NODE_DISTANCE,
+            NODE_HYBRID_SEARCH_RRF,
+        )
 
+        node_config = (
+            NODE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else NODE_HYBRID_SEARCH_RRF
+        )
         results = await client.search_(
             query=query,
-            config=NODE_HYBRID_SEARCH_RRF,
+            config=node_config,
             group_ids=effective_group_ids,
             center_node_uuid=center_node_uuid,
             search_filter=search_filters,
@@ -916,6 +924,8 @@ async def add_triplet(
         client = await graphiti_service.get_client()
 
         effective_group_id = group_id or config.graphiti.group_id
+        if not effective_group_id:
+            return ErrorResponse(error='No group_id provided and no default group_id is configured')
         now = datetime.now(timezone.utc)
 
         source_node = EntityNode(

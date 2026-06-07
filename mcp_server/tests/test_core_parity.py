@@ -111,12 +111,12 @@ class TestBuildEdgeTypeMap:
     def test_entries_become_tuple_keyed_map(self):
         entries = [
             EdgeTypeMapEntry(source='Person', target='Organization', edge_types=['WorksFor']),
-            EdgeTypeMapEntry(edge_types=['RelatesToNode']),  # defaults to Entity/Entity
+            EdgeTypeMapEntry(edge_types=['RelatesTo']),  # defaults to Entity/Entity
         ]
         result = build_edge_type_map(entries)
         assert result == {
             ('Person', 'Organization'): ['WorksFor'],
-            ('Entity', 'Entity'): ['RelatesToNode'],
+            ('Entity', 'Entity'): ['RelatesTo'],
         }
 
 
