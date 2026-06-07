@@ -107,6 +107,8 @@ graphiti:
       description: "Information content in various forms (books, articles, reports, etc.)"
     - name: "Topic"
       description: "Subject of conversation, interest, or knowledge domain (use as last resort)"
+    - name: "Person"
+      description: "An individual human referenced in the content"
     - name: "Object"
       description: "Physical items, tools, devices, or possessions (use as last resort)"
 
@@ -124,8 +126,8 @@ graphiti:
   # 'Entity' acts as a wildcard for either endpoint. Mirrors graphiti-core's
   # edge_type_map. Leave empty to allow any configured edge type anywhere.
   # edge_type_map:
-  #   - source: "Organization"
-  #     target: "Person"
+  #   - source: "Person"
+  #     target: "Organization"
   #     edge_types: ["WorksFor"]
   #   - source: "Entity"
   #     target: "Location"

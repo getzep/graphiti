@@ -16,7 +16,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EntityNode, EpisodeType
+from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
@@ -769,14 +769,21 @@ async def get_episodes(
 
 
 @mcp.tool()
-async def summarize_saga(saga_id: str) -> SagaSummaryResponse | ErrorResponse:
+async def summarize_saga(
+    saga_name: str, group_id: str | None = None
+) -> SagaSummaryResponse | ErrorResponse:
     """Summarize a saga: an ordered group of related episodes.
 
     Generates (or refreshes) a running summary of the saga's narrative across its
-    episodes and returns the resulting saga node's name and summary text.
+    episodes and returns the saga's name and summary text.
+
+    Sagas are keyed by (name, group_id): pass the same ``saga`` name you used with
+    add_memory. This tool resolves that name to the saga within the group and
+    summarizes it.
 
     Args:
-        saga_id: Name/id of the saga to summarize (the same value passed as ``saga`` to add_memory)
+        saga_name: The saga name — the same value passed as ``saga`` to add_memory.
+        group_id: Optional group ID the saga belongs to. Falls back to the default group.
     """
     global graphiti_service
 
@@ -786,10 +793,24 @@ async def summarize_saga(saga_id: str) -> SagaSummaryResponse | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
-        saga_node = await client.summarize_saga(saga_id)
+        effective_group_id = group_id or config.graphiti.group_id
+        if not effective_group_id:
+            return ErrorResponse(error='No group_id provided and no default group_id is configured')
+
+        # add_memory takes a saga *name*; core keys sagas by (name, group_id) and
+        # assigns its own UUID, while summarize_saga requires that UUID. Resolve the
+        # name to its UUID within the group before delegating to core.
+        sagas = await SagaNode.get_by_group_ids(client.driver, [effective_group_id])
+        match = next((saga for saga in sagas if saga.name == saga_name), None)
+        if match is None:
+            return ErrorResponse(
+                error=f"No saga named '{saga_name}' found in group '{effective_group_id}'"
+            )
+
+        saga_node = await client.summarize_saga(match.uuid)
 
         return SagaSummaryResponse(
-            message=f"Saga '{saga_id}' summarized successfully",
+            message=f"Saga '{saga_name}' summarized successfully",
             uuid=saga_node.uuid,
             name=saga_node.name,
             summary=saga_node.summary,

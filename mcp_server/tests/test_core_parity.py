@@ -247,6 +247,18 @@ class TestCoreSignatureCompatibility:
         }
         assert sent <= params
 
+    def test_core_exposes_parity_methods(self):
+        # The new tools depend on these methods; guard against being pointed at a
+        # graphiti-core too old to support them (e.g. pre-0.29 lacks summarize_saga).
+        for method in (
+            'remove_episode',
+            'summarize_saga',
+            'build_communities',
+            'add_triplet',
+            'get_nodes_and_edges_by_episode',
+        ):
+            assert hasattr(Graphiti, method), f'graphiti-core is missing {method}'
+
     def test_triplet_objects_construct(self):
         """The shapes add_triplet builds must satisfy EntityNode/EntityEdge."""
         now = datetime.now(timezone.utc)

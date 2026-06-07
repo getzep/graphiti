@@ -166,6 +166,26 @@ class Topic(BaseModel):
     )
 
 
+class Person(BaseModel):
+    """A Person represents an individual human referenced in the content.
+
+    Instructions for identifying and extracting people:
+    1. Look for named individuals (full names, first names, usernames, or handles)
+    2. Capture their role or relationship when stated (colleague, author, manager)
+    3. Prefer a specific, named person over a generic reference ("the engineer")
+    4. Only record attributes that are present in the context
+    """
+
+    name: str = Field(
+        ...,
+        description='The name or identifier of the person',
+    )
+    description: str = Field(
+        ...,
+        description='Brief description of the person. Only use information mentioned in the context.',
+    )
+
+
 class Organization(BaseModel):
     """An Organization represents a company, institution, group, or formal entity.
 
@@ -220,6 +240,7 @@ ENTITY_TYPES: dict[str, type[BaseModel]] = {
     'Event': Event,
     'Object': Object,
     'Topic': Topic,
+    'Person': Person,
     'Organization': Organization,
     'Document': Document,
 }
