@@ -15,9 +15,17 @@ name: Lint with Ruff
 #     executed.
 #   * ruff only statically parses the code (check + format --check); it never
 #     imports or executes it.
+#   * ALL tooling-install steps (setup-python, pip install) run BEFORE the
+#     untrusted PR code is checked out, so no cache-writing ("poisonable") step
+#     ever runs with attacker-controlled files on disk. This is what prevents
+#     cache poisoning of the default branch (CodeQL
+#     actions/cache-poisoning/poisonable-step). Only ruff runs after checkout,
+#     and ruff writes no GitHub Actions cache.
 #
 # DO NOT add to this job: secrets, write permissions, an `environment:`, a
-# `uv sync`/dependency install, `pytest`, or any step that executes PR code.
+# `uv sync`/dependency install, `pytest`, or any step that executes PR code. Do
+# NOT move setup-python / pip install after the checkout, and do NOT add a
+# cache-writing step (e.g. `cache:` on setup-python, actions/cache) after it.
 # Type checking (pyright) and tests install/execute code and must stay on the
 # approval-gated `pull_request` trigger in their own workflows.
 on:
@@ -33,13 +41,7 @@ jobs:
   ruff:
     runs-on: depot-ubuntu-22.04
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          # pull_request_target checks out the base ref by default; explicitly
-          # check out the PR head so we lint the contributor's changes.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
-          persist-credentials: false
+      # Install tooling BEFORE checking out untrusted PR code (see SECURITY note).
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -48,6 +50,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "ruff>0.1.7"
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # pull_request_target checks out the base ref by default; explicitly
+          # check out the PR head so we lint the contributor's changes.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
       - name: Run Ruff linting
         run: ruff check --output-format=github
       - name: Run Ruff format check
