@@ -126,20 +126,22 @@ class BaseOpenAIClient(LLMClient):
           cost and latency for Graphiti's structured-output workload. (Matched by
           prefix; a future ``gpt-5.6``/``gpt-6`` falls through to the branch below
           until added here, since newer snapshots may not accept ``'none'``.)
-        * Any other reasoning model resolves to ``None`` (the parameter is
-          omitted and the API applies its own default). We deliberately do not
-          guess a floor, because the lowest valid effort differs by snapshot —
-          e.g. ``gpt-5.0`` accepts ``'minimal'``, ``gpt-5.4-mini`` requires
-          ``'low'``, and ``gpt-5.5`` uses ``'none'``. Pin one with ``reasoning=``.
+        * Every other model uses ``'minimal'`` — the cheapest broadly-supported
+          reasoning tier and the long-standing default. Returning ``'minimal'``
+          (rather than omitting the parameter) is deliberate: it keeps non-gpt-5.5
+          reasoning models from silently jumping to the API's more expensive
+          default effort. Models whose lowest valid tier differs (e.g.
+          ``gpt-5.4-mini`` requires ``'low'``) should set ``reasoning=`` explicitly.
 
         Any non-sentinel value (including ``None``) is returned unchanged, so an
-        explicit caller override always wins.
+        explicit caller override always wins. The result is only sent for
+        reasoning models — non-reasoning models ignore it.
         """
         if reasoning != 'auto':
             return reasoning
         if model.startswith('gpt-5.5'):
             return 'none'
-        return None
+        return 'minimal'
 
     def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing and validation.

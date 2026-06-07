@@ -54,12 +54,13 @@ def test_default_model_and_reasoning_sentinel():
         # gpt-5.5 family: 'auto' -> reasoning off
         ('gpt-5.5', 'auto', 'none'),
         ('gpt-5.5-mini', 'auto', 'none'),
-        # other reasoning models: don't guess a floor, let the API default
-        ('gpt-5', 'auto', None),
-        ('gpt-5.4-mini', 'auto', None),
-        ('o1', 'auto', None),
-        # non-reasoning model: irrelevant (caller won't send it), still resolves safely
-        ('gpt-4.1', 'auto', None),
+        # every other model: 'minimal' (cheapest tier, prior default) — NOT None,
+        # so non-gpt-5.5 reasoning models don't regress to the API's medium default
+        ('gpt-5', 'auto', 'minimal'),
+        ('gpt-5.4-mini', 'auto', 'minimal'),
+        ('o1', 'auto', 'minimal'),
+        # non-reasoning model: value is ignored by the caller (not a reasoning model)
+        ('gpt-4.1', 'auto', 'minimal'),
         # explicit values always pass through unchanged
         ('gpt-5.5', 'high', 'high'),
         ('gpt-5', 'low', 'low'),
@@ -160,3 +161,61 @@ async def test_empty_string_reasoning_is_not_sent():
 
     call_args = dummy.responses.parse_calls[0]
     assert 'reasoning' not in call_args
+
+
+@pytest.mark.asyncio
+async def test_non_5_5_reasoning_model_defaults_to_minimal_not_api_default():
+    # Regression guard: non-gpt-5.5 reasoning models must keep the cheap 'minimal'
+    # effort (the prior default), not fall through to the API's medium default.
+    dummy = DummyOpenAIClient()
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+
+    await client._create_structured_completion(
+        model='gpt-5',
+        messages=[],
+        temperature=0.5,
+        max_tokens=64,
+        response_model=DummyResponseModel,
+        reasoning=DEFAULT_REASONING,  # 'auto'
+        verbosity='low',
+    )
+
+    call_args = dummy.responses.parse_calls[0]
+    assert call_args['reasoning'] == {'effort': 'minimal'}
+    assert 'temperature' not in call_args
+
+
+@pytest.mark.asyncio
+async def test_create_completion_omits_temperature_for_reasoning_model():
+    # The JSON-object fallback path must not send temperature (not even None) to
+    # a reasoning model.
+    dummy = DummyOpenAIClient()
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+
+    await client._create_completion(
+        model='gpt-5.5',
+        messages=[],
+        temperature=0.5,
+        max_tokens=64,
+    )
+
+    assert len(dummy.chat.completions.create_calls) == 1
+    call_args = dummy.chat.completions.create_calls[0]
+    assert 'temperature' not in call_args
+    assert call_args['response_format'] == {'type': 'json_object'}
+
+
+@pytest.mark.asyncio
+async def test_create_completion_keeps_temperature_for_non_reasoning_model():
+    dummy = DummyOpenAIClient()
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+
+    await client._create_completion(
+        model='gpt-4.1',
+        messages=[],
+        temperature=0.4,
+        max_tokens=64,
+    )
+
+    call_args = dummy.chat.completions.create_calls[0]
+    assert call_args['temperature'] == 0.4
