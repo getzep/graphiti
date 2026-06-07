@@ -34,6 +34,12 @@ on:
   pull_request_target:
     branches: ["main"]
 
+# Cancel superseded lint runs on the same PR/branch to save runner time now that
+# every fork push triggers a run automatically.
+concurrency:
+  group: lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -45,7 +51,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
       - name: Install Ruff
-        run: uv tool install "ruff>0.1.7"
+        # Pin to the version locked in uv.lock so this job matches what
+        # `make lint` / `make format` produce locally. Bump in lockstep with
+        # uv.lock when ruff is upgraded.
+        run: uv tool install "ruff==0.14.11"
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # pull_request_target checks out the base ref by default; explicitly
