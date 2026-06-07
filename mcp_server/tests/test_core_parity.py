@@ -274,3 +274,20 @@ class TestCoreSignatureCompatibility:
         )
         assert edge.source_node_uuid == 's'
         assert edge.target_node_uuid == 't'
+
+
+class TestEntityTypeRegistration:
+    """Configured entity types must be registerable with graphiti-core."""
+
+    def test_configured_entity_types_avoid_reserved_field_names(self):
+        # graphiti-core rejects custom entity-type fields that collide with
+        # EntityNode's own fields (e.g. 'name'); such a clash silently fails every
+        # episode ingest. Guard the registered models against reintroducing one.
+        from models.entity_types import ENTITY_TYPES
+
+        reserved = set(EntityNode.model_fields.keys())
+        for type_name, model in ENTITY_TYPES.items():
+            clashes = set(model.model_fields.keys()) & reserved
+            assert not clashes, (
+                f'entity type {type_name} uses reserved EntityNode field(s): {sorted(clashes)}'
+            )

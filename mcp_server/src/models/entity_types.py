@@ -80,10 +80,6 @@ class Location(BaseModel):
     7. Note any significant activities or events associated with the location
     """
 
-    name: str = Field(
-        ...,
-        description='The name or identifier of the location',
-    )
     description: str = Field(
         ...,
         description='Brief description of the location and its significance. Only use information mentioned in the context.',
@@ -104,10 +100,6 @@ class Event(BaseModel):
     8. Extract both recurring events and one-time occurrences
     """
 
-    name: str = Field(
-        ...,
-        description='The name or title of the event',
-    )
     description: str = Field(
         ...,
         description='Brief description of the event. Only use information mentioned in the context.',
@@ -130,10 +122,6 @@ class Object(BaseModel):
     7. Avoid extracting objects that are better classified as Documents or other types
     """
 
-    name: str = Field(
-        ...,
-        description='The name or identifier of the object',
-    )
     description: str = Field(
         ...,
         description='Brief description of the object. Only use information mentioned in the context.',
@@ -156,10 +144,6 @@ class Topic(BaseModel):
     7. Avoid extracting topics that are better classified as Events, Documents, or Organizations
     """
 
-    name: str = Field(
-        ...,
-        description='The name or identifier of the topic',
-    )
     description: str = Field(
         ...,
         description='Brief description of the topic and its context. Only use information mentioned in the context.',
@@ -176,10 +160,6 @@ class Person(BaseModel):
     4. Only record attributes that are present in the context
     """
 
-    name: str = Field(
-        ...,
-        description='The name or identifier of the person',
-    )
     description: str = Field(
         ...,
         description='Brief description of the person. Only use information mentioned in the context.',
@@ -199,10 +179,6 @@ class Organization(BaseModel):
     7. Extract both large entities and small groups if formally organized
     """
 
-    name: str = Field(
-        ...,
-        description='The name of the organization',
-    )
     description: str = Field(
         ...,
         description='Brief description of the organization. Only use information mentioned in the context.',
