@@ -431,7 +431,7 @@ async def search_nodes(
 
         # Normalize group_ids parameter (handles str, list[str], or None)
         normalized_group_ids = normalize_group_ids(group_ids)
-        
+
         # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             normalized_group_ids
@@ -519,7 +519,7 @@ async def search_memory_facts(
 
         # Normalize group_ids parameter (handles str, list[str], or None)
         normalized_group_ids = normalize_group_ids(group_ids)
-        
+
         # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             normalized_group_ids
@@ -648,7 +648,7 @@ async def get_episodes(
 
         # Normalize group_ids parameter (handles str, list[str], or None)
         normalized_group_ids = normalize_group_ids(group_ids)
-        
+
         # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             normalized_group_ids
@@ -717,7 +717,7 @@ async def clear_graph(group_ids: str | list[str] | None = None) -> SuccessRespon
 
         # Normalize group_ids parameter (handles str, list[str], or None)
         normalized_group_ids = normalize_group_ids(group_ids)
-        
+
         # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             normalized_group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []

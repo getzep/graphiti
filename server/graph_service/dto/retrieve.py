@@ -6,30 +6,24 @@ from graph_service.dto.common import Message
 
 
 class SearchQuery(BaseModel):
-    group_ids: str | list[str] | None = Field(
-        None, description='The group id or list of group ids for the memories to search. Can be a string (single group ID) or list of strings.'
+    group_ids: list[str] | None = Field(
+        None,
+        description='The group ids for the memories to search. A single group id string is accepted and normalized to a one-element list.',
     )
     query: str
     max_facts: int = Field(default=10, description='The maximum number of facts to retrieve')
-    
-    @field_validator('group_ids')
+
+    @field_validator('group_ids', mode='before')
     @classmethod
-    def normalize_group_ids(cls, v: str | list[str] | None) -> list[str] | None:
-        """Normalize group_ids parameter to list[str] | None.
-        
-        Accepts str | list[str] | None and returns list[str] | None.
-        - Returns None if input is None
-        - Converts string to single-element list
-        - Returns list as-is
+    def _coerce_scalar_group_id(cls, v: str | list[str] | None) -> list[str] | None:
+        """Accept a single group_id string and normalize it to a one-element list.
+
+        Runs before validation so the field keeps the static type ``list[str] | None``
+        (a scalar ``str`` is widened to ``[str]`` here), which keeps downstream callers
+        such as the ``/search`` router type-correct.
         """
-        if v is None:
-            return None
-        
-        # Convert string to single-element list
         if isinstance(v, str):
             return [v]
-        
-        # Already a list, return as-is
         return v
 
 

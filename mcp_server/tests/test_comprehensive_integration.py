@@ -355,10 +355,10 @@ class TestSearchOperations:
                     'group_id': client.test_group_id,
                 },
             )
-            
+
             # Wait for processing
             await client.wait_for_episode_processing()
-            
+
             # Test 1: search_memory_facts with scalar string group_ids
             result1, metric1 = await client.call_tool_with_metrics(
                 'search_memory_facts',
@@ -368,8 +368,10 @@ class TestSearchOperations:
                     'max_facts': 5,
                 },
             )
-            assert metric1.success, f"search_memory_facts failed with scalar group_ids: {metric1.details}"
-            
+            assert metric1.success, (
+                f'search_memory_facts failed with scalar group_ids: {metric1.details}'
+            )
+
             # Test 2: search_memory_facts with list group_ids
             result2, metric2 = await client.call_tool_with_metrics(
                 'search_memory_facts',
@@ -379,8 +381,10 @@ class TestSearchOperations:
                     'max_facts': 5,
                 },
             )
-            assert metric2.success, f"search_memory_facts failed with list group_ids: {metric2.details}"
-            
+            assert metric2.success, (
+                f'search_memory_facts failed with list group_ids: {metric2.details}'
+            )
+
             # Test 3: search_memory_facts with None group_ids
             result3, metric3 = await client.call_tool_with_metrics(
                 'search_memory_facts',
@@ -390,29 +394,31 @@ class TestSearchOperations:
                     'max_facts': 5,
                 },
             )
-            assert metric3.success, f"search_memory_facts failed with None group_ids: {metric3.details}"
-            
-            # Test 4: search_memory_nodes with scalar string group_ids
+            assert metric3.success, (
+                f'search_memory_facts failed with None group_ids: {metric3.details}'
+            )
+
+            # Test 4: search_nodes with scalar string group_ids
             result4, metric4 = await client.call_tool_with_metrics(
-                'search_memory_nodes',
+                'search_nodes',
                 {
                     'query': 'test data',
                     'group_ids': client.test_group_id,  # Scalar string
                     'max_nodes': 5,
                 },
             )
-            assert metric4.success, f"search_memory_nodes failed with scalar group_ids: {metric4.details}"
-            
-            # Test 5: search_memory_nodes with list group_ids
+            assert metric4.success, f'search_nodes failed with scalar group_ids: {metric4.details}'
+
+            # Test 5: search_nodes with list group_ids
             result5, metric5 = await client.call_tool_with_metrics(
-                'search_memory_nodes',
+                'search_nodes',
                 {
                     'query': 'test data',
                     'group_ids': [client.test_group_id],  # List
                     'max_nodes': 5,
                 },
             )
-            assert metric5.success, f"search_memory_nodes failed with list group_ids: {metric5.details}"
+            assert metric5.success, f'search_nodes failed with list group_ids: {metric5.details}'
 
 
 class TestEpisodeManagement:
@@ -462,9 +468,9 @@ class TestEpisodeManagement:
                         'group_id': client.test_group_id,
                     },
                 )
-            
+
             await client.wait_for_episode_processing(expected_count=3)
-            
+
             # Test 1: get_episodes with scalar string group_ids
             result1, metric1 = await client.call_tool_with_metrics(
                 'get_episodes',
@@ -473,8 +479,8 @@ class TestEpisodeManagement:
                     'max_episodes': 5,
                 },
             )
-            assert metric1.success, f"get_episodes failed with scalar group_ids: {metric1.details}"
-            
+            assert metric1.success, f'get_episodes failed with scalar group_ids: {metric1.details}'
+
             # Test 2: get_episodes with list group_ids
             result2, metric2 = await client.call_tool_with_metrics(
                 'get_episodes',
@@ -483,8 +489,8 @@ class TestEpisodeManagement:
                     'max_episodes': 5,
                 },
             )
-            assert metric2.success, f"get_episodes failed with list group_ids: {metric2.details}"
-            
+            assert metric2.success, f'get_episodes failed with list group_ids: {metric2.details}'
+
             # Test 3: get_episodes with None group_ids
             result3, metric3 = await client.call_tool_with_metrics(
                 'get_episodes',
@@ -495,7 +501,7 @@ class TestEpisodeManagement:
             )
             # Note: get_episodes with None group_ids might return empty results or use default
             # We just verify it doesn't crash
-            assert metric3.success, f"get_episodes failed with None group_ids: {metric3.details}"
+            assert metric3.success, f'get_episodes failed with None group_ids: {metric3.details}'
 
     @pytest.mark.asyncio
     async def test_delete_episode(self):
@@ -577,9 +583,9 @@ class TestEntityAndEdgeOperations:
                     'group_id': client.test_group_id,
                 },
             )
-            
+
             await client.wait_for_episode_processing()
-            
+
             # Test 1: clear_graph with scalar string group_ids
             result1, metric1 = await client.call_tool_with_metrics(
                 'clear_graph',
@@ -587,8 +593,8 @@ class TestEntityAndEdgeOperations:
                     'group_ids': client.test_group_id,  # Scalar string
                 },
             )
-            assert metric1.success, f"clear_graph failed with scalar group_ids: {metric1.details}"
-            
+            assert metric1.success, f'clear_graph failed with scalar group_ids: {metric1.details}'
+
             # Test 2: clear_graph with list group_ids
             # First add more data since we just cleared it
             await client.call_tool_with_metrics(
@@ -601,17 +607,17 @@ class TestEntityAndEdgeOperations:
                     'group_id': client.test_group_id,
                 },
             )
-            
+
             await client.wait_for_episode_processing()
-            
+
             result2, metric2 = await client.call_tool_with_metrics(
                 'clear_graph',
                 {
                     'group_ids': [client.test_group_id],  # List
                 },
             )
-            assert metric2.success, f"clear_graph failed with list group_ids: {metric2.details}"
-            
+            assert metric2.success, f'clear_graph failed with list group_ids: {metric2.details}'
+
             # Test 3: clear_graph with None group_ids
             # This should clear the default group or return an error
             result3, metric3 = await client.call_tool_with_metrics(
@@ -622,7 +628,7 @@ class TestEntityAndEdgeOperations:
             )
             # Note: clear_graph with None group_ids might clear default group or return error
             # We just verify it doesn't crash
-            assert metric3.success, f"clear_graph failed with None group_ids: {metric3.details}"
+            assert metric3.success, f'clear_graph failed with None group_ids: {metric3.details}'
 
     @pytest.mark.asyncio
     async def test_delete_entity_edge(self):
@@ -661,12 +667,17 @@ class TestErrorHandling:
                 },
             )
             # This should fail with validation error
-            assert not metric1.success, "search_memory_facts should fail with invalid scalar group_ids"
-            assert 'invalid' in str(metric1.details).lower() or 'validation' in str(metric1.details).lower()
-            
+            assert not metric1.success, (
+                'search_memory_facts should fail with invalid scalar group_ids'
+            )
+            assert (
+                'invalid' in str(metric1.details).lower()
+                or 'validation' in str(metric1.details).lower()
+            )
+
             # Test invalid group_ids with special characters (in list)
             result2, metric2 = await client.call_tool_with_metrics(
-                'search_memory_nodes',
+                'search_nodes',
                 {
                     'query': 'test',
                     'group_ids': ['valid_group', 'invalid@group!id'],  # List with one invalid
@@ -674,9 +685,12 @@ class TestErrorHandling:
                 },
             )
             # This should also fail with validation error
-            assert not metric2.success, "search_memory_nodes should fail with invalid group_ids in list"
-            assert 'invalid' in str(metric2.details).lower() or 'validation' in str(metric2.details).lower()
-            
+            assert not metric2.success, 'search_nodes should fail with invalid group_ids in list'
+            assert (
+                'invalid' in str(metric2.details).lower()
+                or 'validation' in str(metric2.details).lower()
+            )
+
             # Test empty string group_ids (scalar) - should be valid based on validate_group_id
             result3, metric3 = await client.call_tool_with_metrics(
                 'get_episodes',
@@ -687,7 +701,7 @@ class TestErrorHandling:
             )
             # Empty string should be valid (validate_group_id returns True for empty string)
             # We just verify it doesn't crash with validation error
-            
+
             # Test invalid group_ids with clear_graph
             result4, metric4 = await client.call_tool_with_metrics(
                 'clear_graph',
@@ -696,8 +710,11 @@ class TestErrorHandling:
                 },
             )
             # This should fail with validation error
-            assert not metric4.success, "clear_graph should fail with invalid scalar group_ids"
-            assert 'invalid' in str(metric4.details).lower() or 'validation' in str(metric4.details).lower()
+            assert not metric4.success, 'clear_graph should fail with invalid scalar group_ids'
+            assert (
+                'invalid' in str(metric4.details).lower()
+                or 'validation' in str(metric4.details).lower()
+            )
 
     @pytest.mark.asyncio
     async def test_timeout_handling(self):
