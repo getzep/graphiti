@@ -17,8 +17,9 @@ is reachable:
 - CI: ``OPENAI_API_KEY`` comes from the GitHub environment and FalkorDB runs as a
   container (see .github/workflows/mcp-server-tests.yml).
 
-The model is taken from ``MODEL_NAME``; CI sets it to ``gpt-5.5`` (the server's
-default model), and it falls back to the server's configured default otherwise.
+The model is taken from ``MODEL_NAME`` (CI pins a lighter, broadly-available model
+for speed/reliability; gpt-5.5 is the server's runtime default but needs a
+key with fast gpt-5.5 access), falling back to the server's configured default.
 """
 
 import asyncio

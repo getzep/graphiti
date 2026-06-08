@@ -64,8 +64,10 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FALKORDB_URI: redis://localhost:6379
-          # Exercise the server's default model: gpt-5.5 (reasoning effort 'none').
-          MODEL_NAME: gpt-5.5
+          # gpt-5.5 is the server's runtime default, but it requires a key/account
+          # with fast gpt-5.5 access; CI pins a lighter, broadly-available model so
+          # the live test stays fast and reliable. It exercises the same pipeline.
+          MODEL_NAME: gpt-4.1-mini
           # Raise episode/LLM-call concurrency so the live episode processes quickly.
           SEMAPHORE_LIMIT: "20"
         run: uv run pytest tests/test_live_falkordb_int.py -m integration -p no:cacheprovider
