@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -77,8 +78,10 @@ def _free_port() -> int:
 
 
 def _unique_token() -> str:
-    # Alphanumeric only: safe as both a FalkorDB graph name and a group_id.
-    return f'srvtest{int(time.time())}{os.getpid()}'
+    # Alphanumeric only: safe as both a FalkorDB graph name and a group_id. A uuid
+    # (not a timestamp+pid) guarantees a distinct graph per fixture even for tests
+    # set up within the same second or run under pytest-xdist.
+    return f'srvtest{uuid.uuid4().hex}'
 
 
 def _wait_for_health(proc: subprocess.Popen, base_url: str, log, timeout: float = 90.0) -> None:
@@ -153,15 +156,28 @@ def _wait_for_episodes(
     timeout: float = 180.0,
     poll: float = 3.0,
 ) -> list:
+    """Poll GET /episodes until ``expected`` episodes are persisted.
+
+    /episodes is only called after /healthcheck has passed, so the server is
+    fully up: a 5xx here is a real error (e.g. a FalkorDB query failure) and is
+    surfaced immediately rather than masked as a slow generic timeout. Any other
+    non-200 is remembered and reported if the wait ultimately times out.
+    """
     deadline = time.monotonic() + timeout
+    last_error: str | None = None
     while time.monotonic() < deadline:
         resp = client.get(f'/episodes/{group_id}', params={'last_n': 50})
         if resp.status_code == 200:
             episodes = resp.json()
             if isinstance(episodes, list) and len(episodes) >= expected:
                 return episodes
+        elif resp.status_code >= 500:
+            raise AssertionError(f'/episodes returned {resp.status_code}: {resp.text[:500]}')
+        else:
+            last_error = f'{resp.status_code} {resp.text[:500]}'
         time.sleep(poll)
-    return []
+    detail = f'; last non-200 from /episodes: {last_error}' if last_error else ''
+    raise AssertionError(f'episode was not processed within {timeout:.0f}s{detail}')
 
 
 def _search_until(
@@ -213,9 +229,9 @@ def test_ingest_search_delete_e2e(live_server: tuple[str, str]) -> None:
             )
             assert add.status_code == 202, f'add /messages failed: {add.status_code} {add.text}'
 
-            # 2. Wait for the async worker to persist the episode.
+            # 2. Wait for the async worker to persist the episode (raises with
+            # detail on a server error or timeout).
             episodes = _wait_for_episodes(client, group_id)
-            assert episodes, 'episode was not processed within the timeout'
             assert any(e.get('group_id') == group_id for e in episodes)
 
             # 3. At least one fact (edge) was extracted and is searchable.
