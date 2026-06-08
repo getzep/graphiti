@@ -76,11 +76,13 @@ jobs:
           SEMAPHORE_LIMIT: "20"
         # pytest exits 5 when no tests are collected. The legitimate case is a fork
         # PR with no OPENAI_API_KEY: the suite self-skips at module level. When the
-        # key IS present (same-repo run), FalkorDB is already up — the prior step
-        # gates on it — so exit 5 instead means a broken test selection (the
-        # `integration` marker or the test file was renamed) and must fail loudly,
-        # rather than reporting a green build that tested nothing. Import errors
-        # (exit 2) and real test failures (exit 1) always fail the job.
+        # key IS present (same-repo run) exit 5 is unexpected — the live suite should
+        # have run — so fail loudly rather than report a green build that tested
+        # nothing. Likely causes: FalkorDB became unreachable (the suite also skips at
+        # module level when it can't connect, even though the prior step gated it), or
+        # the `integration` marker was renamed/removed so the selection matches
+        # nothing. Real failures (exit 1), import errors (exit 2), and usage errors
+        # such as a renamed test-file path (exit 4) always fail the job too.
         run: |
           set +e
           uv run pytest tests/test_live_falkordb_int.py -m integration -p no:cacheprovider
@@ -90,7 +92,7 @@ jobs:
               echo 'No live tests ran (no OPENAI_API_KEY — fork PR self-skip); treating as success.'
               exit 0
             fi
-            echo 'pytest collected no tests but OPENAI_API_KEY is set — likely a broken test selection (renamed marker/file). Failing.' >&2
+            echo 'pytest collected no tests but OPENAI_API_KEY is set — the live suite should have run. FalkorDB likely became unreachable, or the integration test selection broke (renamed marker). Failing.' >&2
             exit 1
           fi
           exit "$code"
