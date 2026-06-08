@@ -1019,9 +1019,13 @@ async def clear_graph(
         client = await graphiti_service.get_client()
 
         # Accept a scalar group_id or a list; fall back to the default when omitted.
+        # (Parenthesized so an explicit group_ids isn't dropped when the configured
+        # default group_id is unset — `or` binds tighter than the ternary.)
         group_ids = coerce_group_ids(group_ids)
         effective_group_ids = (
-            group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
+            group_ids
+            if group_ids is not None
+            else ([config.graphiti.group_id] if config.graphiti.group_id else [])
         )
 
         if not effective_group_ids:
