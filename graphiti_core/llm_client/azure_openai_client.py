@@ -80,8 +80,9 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
                 'text_format': response_model,  # type: ignore
             }
 
-            if reasoning:
-                request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+            effort = self._resolve_reasoning_effort(model, reasoning)
+            if effort:
+                request_kwargs['reasoning'] = {'effort': effort}  # type: ignore
 
             if verbosity:
                 request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
