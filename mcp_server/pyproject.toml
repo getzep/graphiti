@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 azure = [
-    "azure-identity>=1.21.0",
+    "azure-identity>=1.25.3",
 ]
 providers = [
     "google-genai>=1.72.0",
