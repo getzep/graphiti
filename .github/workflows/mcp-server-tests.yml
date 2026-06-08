@@ -70,4 +70,16 @@ jobs:
           MODEL_NAME: gpt-4.1-mini
           # Raise episode/LLM-call concurrency so the live episode processes quickly.
           SEMAPHORE_LIMIT: "20"
-        run: uv run pytest tests/test_live_falkordb_int.py -m integration -p no:cacheprovider
+        # pytest exits 5 when no tests are collected — which happens when the suite
+        # self-skips (a fork PR has no OPENAI_API_KEY, or FalkorDB is unreachable).
+        # Treat that as success rather than a CI failure; any real test failure
+        # (exit 1) still fails the job.
+        run: |
+          set +e
+          uv run pytest tests/test_live_falkordb_int.py -m integration -p no:cacheprovider
+          code=$?
+          if [ "$code" -eq 5 ]; then
+            echo 'No live tests ran (suite self-skipped — no OpenAI key / FalkorDB); treating as success.'
+            exit 0
+          fi
+          exit "$code"
