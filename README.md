@@ -162,8 +162,8 @@ particularly suitable for applications requiring real-time interaction and preci
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
-  OpenSearch Serverless collection (serves as the full text search backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
+  Serverless collection (serves as the full text search backend) / Kuzu 0.11.2 (**deprecated**, see below)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -210,6 +210,11 @@ uv add graphiti-core[falkordblite]
 ```
 
 ### Installing with Kuzu Support
+
+> [!WARNING]
+> **Kuzu is deprecated** and will be removed in a future release — the upstream Kuzu project is no longer
+> maintained. New projects should use Neo4j or FalkorDB. The driver still ships for now but emits a
+> `DeprecationWarning`.
 
 If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
 
@@ -391,6 +396,10 @@ graphiti = Graphiti(graph_driver=driver)
 ```
 
 #### Kuzu
+
+> [!WARNING]
+> Kuzu is **deprecated** (upstream project unmaintained) and will be removed in a future release. Prefer Neo4j or
+> FalkorDB.
 
 ```python
 from graphiti_core import Graphiti

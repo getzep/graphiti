@@ -51,7 +51,7 @@ class LLMConfig:
                                                 This is required for making authorized requests.
 
                 model (str, optional): The specific LLM model to use for generating responses.
-                                                                Defaults to "gpt-4.1-mini".
+                                                                Defaults to "gpt-5.5".
 
                 base_url (str, optional): The base URL of the LLM API service.
                                                                         Defaults to "https://api.openai.com", which is OpenAI's standard API endpoint.
