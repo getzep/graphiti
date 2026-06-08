@@ -49,6 +49,18 @@ def parse_reference_time(value: str | None) -> datetime | None:
     return parsed
 
 
+def coerce_group_ids(group_ids: str | list[str] | None) -> list[str] | None:
+    """Normalize a ``group_ids`` argument that may be given as a scalar string.
+
+    MCP tools accept either a single group_id string or a list of them, while
+    graphiti-core expects ``list[str] | None``. A lone string becomes a
+    one-element list; lists and ``None`` pass through unchanged.
+    """
+    if isinstance(group_ids, str):
+        return [group_ids]
+    return group_ids
+
+
 def _doc_only_model(name: str, description: str) -> type[BaseModel]:
     """Build a documentation-only Pydantic model with no fields.
 

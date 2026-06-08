@@ -34,6 +34,7 @@ from utils.type_config import (  # noqa: E402
     build_edge_types,
     build_entity_types,
     build_fact_search_filters,
+    coerce_group_ids,
     parse_reference_time,
 )
 
@@ -291,3 +292,16 @@ class TestEntityTypeRegistration:
             assert not clashes, (
                 f'entity type {type_name} uses reserved EntityNode field(s): {sorted(clashes)}'
             )
+
+
+class TestCoerceGroupIds:
+    """Read tools accept a scalar group_id or a list (graphiti-core wants a list)."""
+
+    def test_scalar_string_becomes_one_element_list(self):
+        assert coerce_group_ids('g1') == ['g1']
+
+    def test_list_passes_through(self):
+        assert coerce_group_ids(['g1', 'g2']) == ['g1', 'g2']
+
+    def test_none_passes_through(self):
+        assert coerce_group_ids(None) is None
