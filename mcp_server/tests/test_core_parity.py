@@ -305,3 +305,7 @@ class TestCoerceGroupIds:
 
     def test_none_passes_through(self):
         assert coerce_group_ids(None) is None
+
+    def test_blank_string_is_treated_as_omitted(self):
+        # A blank scalar falls back to the default group (not group '').
+        assert coerce_group_ids('') is None

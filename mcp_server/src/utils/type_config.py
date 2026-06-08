@@ -53,11 +53,14 @@ def coerce_group_ids(group_ids: str | list[str] | None) -> list[str] | None:
     """Normalize a ``group_ids`` argument that may be given as a scalar string.
 
     MCP tools accept either a single group_id string or a list of them, while
-    graphiti-core expects ``list[str] | None``. A lone string becomes a
-    one-element list; lists and ``None`` pass through unchanged.
+    graphiti-core expects ``list[str] | None``. A non-empty string becomes a
+    one-element list; a blank string is treated as omitted (``None``) so it falls
+    back to the configured default group rather than operating on group ``''``
+    (which matters for the destructive ``clear_graph``). Lists and ``None`` pass
+    through unchanged.
     """
     if isinstance(group_ids, str):
-        return [group_ids]
+        return [group_ids] if group_ids else None
     return group_ids
 
 
