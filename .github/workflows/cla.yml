@@ -16,17 +16,27 @@ jobs:
   CLAAssistant:
     runs-on: ubuntu-latest
     steps:
+      # Mint a short-lived GitHub App installation token (≈1h, auto-revoked at job
+      # end) instead of a long-lived personal PAT. The App must be installed on this
+      # repo and added to main's branch-protection bypass list so it can commit the
+      # signature file. Requires repo secrets/vars CLA_APP_ID and CLA_APP_PRIVATE_KEY.
+      - name: Generate CLA app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.CLA_APP_ID }}
+          private-key: ${{ secrets.CLA_APP_PRIVATE_KEY }}
+
       - name: "CLA Assistant"
         if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
-        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
+        # Maintained node24 fork of the (archived) contributor-assistant/github-action.
+        # Pinned to a commit SHA because the fork publishes no semver tags.
+        uses: SiliconLabsSoftware/action-cla-assistant@89980ac6cfe974ea7703b4ccfbaeb1b2cc6065d2 # silabs_flavour_v2 (node24)
         env:
-          # the default github token does not have branch protection override permissions
-          # the repo secrets will need to be updated when the token expires.
-          GITHUB_TOKEN: ${{ secrets.DANIEL_PAT }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           path-to-signatures: "signatures/version1/cla.json"
           path-to-document: "https://github.com/getzep/graphiti/blob/main/Zep-CLA.md" # e.g. a CLA or a DCO document
-          # branch should not be protected unless a personal PAT is used
           branch: "main"
           allowlist: paul-paliychuk,prasmussen15,danielchalef,dependabot[bot],ellipsis-dev,Claude[bot],claude[bot]
 

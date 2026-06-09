@@ -107,6 +107,15 @@ class QueueService:
         episode_type: Any,
         entity_types: Any,
         uuid: str | None,
+        reference_time: datetime | None = None,
+        edge_types: Any = None,
+        edge_type_map: Any = None,
+        excluded_entity_types: list[str] | None = None,
+        previous_episode_uuids: list[str] | None = None,
+        custom_extraction_instructions: str | None = None,
+        update_communities: bool = False,
+        saga: str | None = None,
+        saga_previous_episode_uuid: str | None = None,
     ) -> int:
         """Add an episode for processing.
 
@@ -118,6 +127,21 @@ class QueueService:
             episode_type: Type of the episode
             entity_types: Entity types for extraction
             uuid: Episode UUID
+            reference_time: Event occurrence time for the episode. Defaults to
+                the current UTC time when not provided (bi-temporal model).
+            edge_types: Optional mapping of edge (fact) type name to Pydantic model
+            edge_type_map: Optional mapping of (source, target) entity type pairs to
+                allowed edge type names
+            excluded_entity_types: Optional list of entity type names to exclude
+                from extraction
+            previous_episode_uuids: Optional explicit list of prior episode UUIDs to
+                use as context (overrides automatic retrieval)
+            custom_extraction_instructions: Optional extra natural-language
+                instructions for the extraction LLM
+            update_communities: Whether to incrementally update communities after
+                ingestion
+            saga: Optional saga name/id to attach this episode to
+            saga_previous_episode_uuid: Optional UUID of the prior episode in the saga
 
         Returns:
             The position in the queue
@@ -137,8 +161,16 @@ class QueueService:
                     source_description=source_description,
                     source=episode_type,
                     group_id=group_id,
-                    reference_time=datetime.now(timezone.utc),
+                    reference_time=reference_time or datetime.now(timezone.utc),
                     entity_types=entity_types,
+                    edge_types=edge_types,
+                    edge_type_map=edge_type_map,
+                    excluded_entity_types=excluded_entity_types,
+                    previous_episode_uuids=previous_episode_uuids,
+                    custom_extraction_instructions=custom_extraction_instructions,
+                    update_communities=update_communities,
+                    saga=saga,
+                    saga_previous_episode_uuid=saga_previous_episode_uuid,
                     uuid=uuid,
                 )
 

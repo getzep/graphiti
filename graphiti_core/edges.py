@@ -362,7 +362,9 @@ class EntityEdge(Edge):
                 **edge_data,
             )
         else:
-            edge_data.update(self.attributes or {})
+            for k, v in (self.attributes or {}).items():
+                if k not in edge_data:
+                    edge_data[k] = v
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
                 edge_data=edge_data,

@@ -25,6 +25,7 @@ from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
     _extract_entity_summaries_batch,
+    _truncate_type_description,
     extract_nodes,
 )
 
@@ -81,7 +82,7 @@ class TestExtractNodesSmallInput:
         # Small content (below threshold)
         episode = _make_episode(content='Alice talked to Bob.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -115,7 +116,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice works at Acme Corp.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -151,7 +152,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice created Project X.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -178,7 +179,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice is here.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -215,7 +216,7 @@ class TestExtractNodesSmallInput:
             source=EpisodeType.message,
         )
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -599,3 +600,62 @@ class TestExtractEntitySummariesBatch:
 
         # Should match despite case difference
         assert node.summary == 'Alice summary from LLM.'
+
+
+class TestTruncateTypeDescription:
+    def test_single_sentence_passes_through(self):
+        assert (
+            _truncate_type_description('A human person who interacts with the system.')
+            == 'A human person who interacts with the system.'
+        )
+
+    def test_stops_at_first_blank_line(self):
+        doc = 'A human person.\n\nGOOD: Alice, Bob\nBAD: happiness'
+        assert _truncate_type_description(doc) == 'A human person.'
+
+    def test_caps_at_3_sentences(self):
+        doc = 'First. Second. Third. Fourth should be dropped.'
+        assert _truncate_type_description(doc) == 'First. Second. Third.'
+
+    def test_first_paragraph_with_multiple_sentences(self):
+        doc = 'A specific thing. It has properties. Use it wisely.\n\nGOOD: example'
+        assert (
+            _truncate_type_description(doc) == 'A specific thing. It has properties. Use it wisely.'
+        )
+
+    def test_skips_leading_blank_lines(self):
+        doc = '\n\nA location.\n\nGOOD: New York'
+        assert _truncate_type_description(doc) == 'A location.'
+
+    def test_joins_multiline_first_paragraph(self):
+        doc = 'A specific, named subject\nor knowledge domain.\n\nGOOD: cooking'
+        assert _truncate_type_description(doc) == 'A specific, named subject or knowledge domain.'
+
+    def test_empty_string(self):
+        assert _truncate_type_description('') == ''
+
+    def test_no_sentence_ending_punctuation(self):
+        assert (
+            _truncate_type_description('A human person who interacts with the system')
+            == 'A human person who interacts with the system'
+        )
+
+    def test_realistic_preference_docstring(self):
+        doc = (
+            'A specific thing that a speaker likes, dislikes, wants, '
+            'or has expressed an opinion about.\n\n'
+            'GOOD: "sushi"\nBAD: do not use\n\n'
+            'Trigger patterns: "I love X"'
+        )
+        assert _truncate_type_description(doc) == (
+            'A specific thing that a speaker likes, dislikes, wants, '
+            'or has expressed an opinion about.'
+        )
+
+    def test_preserves_abbreviations(self):
+        doc = "An entity used in e.g. medical contexts. It tracks Dr. Smith's patients."
+        assert _truncate_type_description(doc) == doc
+
+    def test_preserves_decimals(self):
+        doc = 'Requires version 2.0 or higher. Must be certified.'
+        assert _truncate_type_description(doc) == doc
