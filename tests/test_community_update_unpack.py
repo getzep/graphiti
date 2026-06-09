@@ -12,9 +12,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-"""
 
-"""
 Regression test for: semaphore_gather unpack bug in add_episode with update_communities=True.
 
 Previously, `semaphore_gather` returned a list of (communities, edges) tuples — one per
@@ -26,7 +24,7 @@ This raised ValueError for any episode that extracted at least one node.
 """
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -81,6 +79,7 @@ async def test_semaphore_gather_community_results_flatten():
 @pytest.mark.asyncio
 async def test_semaphore_gather_unpack_raises_without_fix():
     """Demonstrate that the old unpack pattern fails — confirms the bug existed."""
+
     async def mock_update_community(*args):
         return ([MagicMock(spec=CommunityNode)], [MagicMock(spec=CommunityEdge)])
 
