@@ -1111,8 +1111,8 @@ def get_saga_node_from_record(record: Any) -> SagaNode:
 
 
 async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[EntityNode]):
-    # filter out falsey values from nodes
-    filtered_nodes = [node for node in nodes if node.name]
+    # Only compute embeddings for nodes that need them (have a name but no existing embedding)
+    filtered_nodes = [node for node in nodes if node.name and node.name_embedding is None]
 
     if not filtered_nodes:
         return
