@@ -90,6 +90,30 @@ def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     return api_key
 
 
+def _build_graphiti_llm_config(
+    *,
+    api_key: str,
+    model: str,
+    max_tokens: int,
+    temperature: float | None,
+    base_url: str | None = None,
+) -> GraphitiLLMConfig:
+    """Build a core LLMConfig, omitting temperature/base_url when unset.
+
+    The MCP ``temperature`` defaults to ``None``. Unlike the OpenAI client, the
+    Anthropic/Gemini/Groq clients pass ``config.temperature`` to their provider
+    APIs verbatim, so a ``None`` would be sent as ``temperature: null`` and
+    rejected (e.g. the Anthropic 400 in #1103). Omitting the kwarg lets core's
+    LLMConfig default (1.0) apply instead, while an explicit value is preserved.
+    """
+    kwargs: dict = {'api_key': api_key, 'model': model, 'max_tokens': max_tokens}
+    if temperature is not None:
+        kwargs['temperature'] = temperature
+    if base_url is not None:
+        kwargs['base_url'] = base_url
+    return GraphitiLLMConfig(**kwargs)
+
+
 def is_non_openai_provider(base_url: str | None) -> bool:
     """
     Detect if the base_url points to a non-OpenAI provider.
@@ -240,12 +264,12 @@ class LLMClientFactory:
                 api_key = config.providers.anthropic.api_key
                 _validate_api_key('Anthropic', api_key, logger)
 
-                llm_config = GraphitiLLMConfig(
+                # Omit temperature when unset: AnthropicClient passes it to the API
+                # verbatim, so a None would be rejected (#1103). Core's default applies.
+                llm_config = _build_graphiti_llm_config(
                     api_key=api_key,
                     model=config.model,
-                    # None is intentional for reasoning models; core LLMConfig stores it
-                    # verbatim and downstream clients omit temperature when it is None.
-                    temperature=config.temperature,  # type: ignore[arg-type]
+                    temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
                 return AnthropicClient(config=llm_config)
@@ -259,12 +283,12 @@ class LLMClientFactory:
                 api_key = config.providers.gemini.api_key
                 _validate_api_key('Gemini', api_key, logger)
 
-                llm_config = GraphitiLLMConfig(
+                # Omit temperature when unset: GeminiClient passes it to the API
+                # verbatim, so a None would be rejected. Core's default applies.
+                llm_config = _build_graphiti_llm_config(
                     api_key=api_key,
                     model=config.model,
-                    # None is intentional for reasoning models; core LLMConfig stores it
-                    # verbatim and downstream clients omit temperature when it is None.
-                    temperature=config.temperature,  # type: ignore[arg-type]
+                    temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
                 return GeminiClient(config=llm_config)
@@ -278,13 +302,13 @@ class LLMClientFactory:
                 api_key = config.providers.groq.api_key
                 _validate_api_key('Groq', api_key, logger)
 
-                llm_config = GraphitiLLMConfig(
+                # Omit temperature when unset: GroqClient passes it to the API
+                # verbatim, so a None would be rejected. Core's default applies.
+                llm_config = _build_graphiti_llm_config(
                     api_key=api_key,
                     base_url=config.providers.groq.api_url,
                     model=config.model,
-                    # None is intentional for reasoning models; core LLMConfig stores it
-                    # verbatim and downstream clients omit temperature when it is None.
-                    temperature=config.temperature,  # type: ignore[arg-type]
+                    temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
                 return GroqClient(config=llm_config)
