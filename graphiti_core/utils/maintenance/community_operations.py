@@ -28,7 +28,9 @@ class Neighbor(BaseModel):
 
 
 async def get_community_clusters(
-    driver: GraphDriver, group_ids: list[str] | None
+    driver: GraphDriver,
+    group_ids: list[str] | None,
+    max_coroutines: int | None = None,
 ) -> list[list[EntityNode]]:
     if driver.graph_operations_interface:
         try:
@@ -82,7 +84,8 @@ async def get_community_clusters(
         community_clusters.extend(
             list(
                 await semaphore_gather(
-                    *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
+                    *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids],
+                    max_coroutines=max_coroutines,
                 )
             )
         )
@@ -172,7 +175,9 @@ async def generate_summary_description(llm_client: LLMClient, summary: str) -> s
 
 
 async def build_community(
-    llm_client: LLMClient, community_cluster: list[EntityNode]
+    llm_client: LLMClient,
+    community_cluster: list[EntityNode],
+    max_coroutines: int | None = None,
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     summaries = [entity.summary for entity in community_cluster]
     length = len(summaries)
@@ -188,7 +193,8 @@ async def build_community(
                     for left_summary, right_summary in zip(
                         summaries[: int(length / 2)], summaries[int(length / 2) :], strict=False
                     )
-                ]
+                ],
+                max_coroutines=max_coroutines,
             )
         )
         if odd_one_out is not None:
@@ -217,18 +223,22 @@ async def build_communities(
     driver: GraphDriver,
     llm_client: LLMClient,
     group_ids: list[str] | None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
-    community_clusters = await get_community_clusters(driver, group_ids)
+    community_clusters = await get_community_clusters(
+        driver, group_ids, max_coroutines=max_coroutines
+    )
 
     semaphore = asyncio.Semaphore(MAX_COMMUNITY_BUILD_CONCURRENCY)
 
     async def limited_build_community(cluster):
         async with semaphore:
-            return await build_community(llm_client, cluster)
+            return await build_community(llm_client, cluster, max_coroutines=max_coroutines)
 
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
         await semaphore_gather(
-            *[limited_build_community(cluster) for cluster in community_clusters]
+            *[limited_build_community(cluster) for cluster in community_clusters],
+            max_coroutines=max_coroutines,
         )
     )
 

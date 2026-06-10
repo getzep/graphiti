@@ -35,7 +35,16 @@ load_dotenv()
 SAFE_CYPHER_IDENTIFIER_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
-SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
+
+# Default cap on the number of coroutines that can run concurrently inside
+# `semaphore_gather`. This is a *fallback* default — callers should pass
+# `max_coroutines` explicitly (typically sourced from
+# `Graphiti(max_coroutines=...)` or `GraphitiClients.max_coroutines`) to override
+# it on a per-instance basis. The `SEMAPHORE_LIMIT` environment variable is
+# still respected for backwards compatibility, but is no longer the primary way
+# to configure concurrency.
+DEFAULT_SEMAPHORE_LIMIT = 20
+SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', DEFAULT_SEMAPHORE_LIMIT))
 DEFAULT_PAGE_LIMIT = 20
 
 # Content chunking configuration for entity extraction

@@ -29,5 +29,6 @@ class GraphitiClients(BaseModel):
     embedder: EmbedderClient
     cross_encoder: CrossEncoderClient
     tracer: Tracer
+    max_coroutines: int | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
