@@ -4,7 +4,26 @@ import pytest
 
 from graphiti_core.nodes import EntityNode
 from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import hybrid_node_search
+from graphiti_core.search.search_utils import episode_mentions_reranker, hybrid_node_search
+
+
+class _MentionCountDriver:
+    search_interface = None
+
+    def __init__(self, mention_counts: dict[str, int]) -> None:
+        self.mention_counts = mention_counts
+
+    async def execute_query(self, _query: str, **kwargs):
+        node_uuids = kwargs['node_uuids']
+        return (
+            [
+                {'uuid': node_uuid, 'score': self.mention_counts[node_uuid]}
+                for node_uuid in node_uuids
+                if node_uuid in self.mention_counts
+            ],
+            None,
+            None,
+        )
 
 
 @pytest.mark.asyncio
@@ -161,3 +180,40 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         mock_similarity_search.assert_called_with(
             mock_driver, [0.1, 0.2, 0.3], SearchFilters(), ['1'], 4
         )
+
+
+@pytest.mark.asyncio
+async def test_episode_mentions_reranker_orders_by_highest_mention_count():
+    driver = _MentionCountDriver(
+        {
+            'node-a': 20,
+            'node-b': 5,
+            'node-c': 1,
+        }
+    )
+
+    ranked_uuids, scores = await episode_mentions_reranker(
+        driver,
+        [['node-c', 'node-b', 'node-a']],
+    )
+
+    assert ranked_uuids == ['node-a', 'node-b', 'node-c']
+    assert scores == [20, 5, 1]
+
+
+@pytest.mark.asyncio
+async def test_episode_mentions_reranker_keeps_zero_mention_nodes_last():
+    driver = _MentionCountDriver(
+        {
+            'node-a': 2,
+            'node-b': 1,
+        }
+    )
+
+    ranked_uuids, scores = await episode_mentions_reranker(
+        driver,
+        [['node-c', 'node-b', 'node-a']],
+    )
+
+    assert ranked_uuids == ['node-a', 'node-b', 'node-c']
+    assert scores == [2, 1, 0]
