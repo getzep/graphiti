@@ -322,17 +322,24 @@ class FalkorDriver(GraphDriver):
 
     def clone(self, database: str) -> 'GraphDriver':
         """
-        Returns a shallow copy of this driver with a different default database.
-        Reuses the same connection (e.g. FalkorDB, Neo4j).
-        """
-        if database == self._database:
-            cloned = self
-        elif database == self.default_group_id:
-            cloned = FalkorDriver(falkor_db=self.client)
-        else:
-            # Create a new instance of FalkorDriver with the same connection but a different database
-            cloned = FalkorDriver(falkor_db=self.client, database=database)
+        Returns a driver bound to ``database``, reusing this driver's connection.
 
+        Constructed drivers are memoized per database. FalkorDriver.__init__
+        schedules build_indices_and_constraints() on every construction, which is
+        load-bearing exactly once per group (a new group's graph needs its indices
+        built) but pure churn on every subsequent read. Caching keeps the
+        once-per-group index build while removing the per-call constructor cost
+        that single-group reads would otherwise incur on every query.
+        """
+        target = 'default_db' if database == self.default_group_id else database
+        if target == self._database:
+            return self
+
+        cache = self.__dict__.setdefault('_clone_cache', {})
+        cloned = cache.get(target)
+        if cloned is None:
+            cloned = FalkorDriver(falkor_db=self.client, database=target)
+            cache[target] = cloned
         return cloned
 
     async def health_check(self) -> None:
