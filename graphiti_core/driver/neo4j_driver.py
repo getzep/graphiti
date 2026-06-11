@@ -161,15 +161,17 @@ class Neo4jDriver(GraphDriver):
                 raise
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
-        # Check if database_ is provided in kwargs.
-        # If not populated, set the value to retain backwards compatibility
+        # Extract params from kwargs; pass database_ as a connection-level parameter
+        # (not inside parameters_ which would make it a Cypher query parameter)
         params = kwargs.pop('params', None)
         if params is None:
             params = {}
-        params.setdefault('database_', self._database)
+        database = kwargs.pop('database_', self._database)
 
         try:
-            result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
+            result = await self.client.execute_query(
+                cypher_query_, parameters_=params, database_=database, **kwargs
+            )
         except Exception as e:
             logger.error(f'Error executing Neo4j query: {e}\n{cypher_query_}\n{params}')
             raise
