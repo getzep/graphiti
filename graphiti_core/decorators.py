@@ -44,13 +44,18 @@ def handle_multiple_group_ids(func: F) -> F:
         if group_ids is None and group_ids_pos is not None and len(args) > group_ids_pos:
             group_ids = args[group_ids_pos]
 
-        # Only handle FalkorDB with multiple group_ids
+        # FalkorDB stores each group_id in its own graph, so reads must clone the
+        # driver onto the group's graph. This applies to a single group_id too: the
+        # base driver points at default_db, so an unrouted single-group read finds
+        # nothing (writes mutate self.driver and masked this in same-process tests).
+        # Blank/None entries mean "unspecified" (mirrors search()'s `!= ['']` rule),
+        # so filter them out rather than routing onto an empty graph name.
+        routable_group_ids = [gid for gid in group_ids if gid] if group_ids else []
         if (
             hasattr(self, 'clients')
             and hasattr(self.clients, 'driver')
             and self.clients.driver.provider == GraphProvider.FALKORDB
-            and group_ids
-            and len(group_ids) > 1
+            and routable_group_ids
         ):
             # Execute for each group_id concurrently
             driver = self.clients.driver
@@ -68,7 +73,7 @@ def handle_multiple_group_ids(func: F) -> F:
                 )
 
             results = await semaphore_gather(
-                *[execute_for_group(gid) for gid in group_ids],
+                *[execute_for_group(gid) for gid in routable_group_ids],
                 max_coroutines=getattr(self, 'max_coroutines', None),
             )
 
