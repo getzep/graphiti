@@ -76,6 +76,55 @@ def test_falkordb_fulltext_query_rejects_invalid_group_ids():
         FalkorDriver.build_fulltext_query(driver, 'test', ['bad"group'])
 
 
+def test_falkordb_fulltext_query_strips_backticks():
+    """Backtick characters should be sanitized to prevent RediSearch syntax errors."""
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    result = _build_falkor_fulltext_query('`add_episode`', ['group1'])
+    # Backticks should be removed; remaining tokens joined with OR
+    assert '`' not in result
+    assert result != ''
+
+
+def test_falkordb_fulltext_query_returns_empty_on_stopwords_only():
+    """When all tokens are stopwords, return empty string instead of malformed query."""
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    result = _build_falkor_fulltext_query('the and is', ['group1'])
+    assert result == ''
+
+
+def test_falkordb_fulltext_query_returns_empty_on_punctuation_only():
+    """When input is all special characters, return empty string."""
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    result = _build_falkor_fulltext_query('!!!...???', ['group1'])
+    assert result == ''
+
+
+def test_falkordb_driver_build_fulltext_query_strips_backticks():
+    """FalkorDriver.build_fulltext_query should also strip backticks."""
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    driver = MagicMock(spec=FalkorDriver)
+    driver.sanitize = FalkorDriver.sanitize.__get__(driver, FalkorDriver)
+
+    result = FalkorDriver.build_fulltext_query(driver, '`add_episode`', ['group1'])
+    assert '`' not in result
+    assert result != ''
+
+
+def test_falkordb_driver_build_fulltext_query_returns_empty_on_stopwords_only():
+    """FalkorDriver.build_fulltext_query returns empty on stopword-only input."""
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    driver = MagicMock(spec=FalkorDriver)
+    driver.sanitize = FalkorDriver.sanitize.__get__(driver, FalkorDriver)
+
+    result = FalkorDriver.build_fulltext_query(driver, 'the and is', ['group1'])
+    assert result == ''
+
+
 @pytest.mark.asyncio
 async def test_shared_search_rejects_invalid_group_ids():
     clients = SimpleNamespace(
