@@ -733,6 +733,7 @@ async def extract_attributes_from_nodes(
     edges: list[EntityEdge] | None = None,
     skip_fact_appending: bool = False,
     include_type_descriptions: bool = False,
+    custom_extraction_instructions: str | None = None,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -773,6 +774,7 @@ async def extract_attributes_from_nodes(
         edges_by_node,
         skip_fact_appending=skip_fact_appending,
         entity_types=entity_types if include_type_descriptions else None,
+        custom_extraction_instructions=custom_extraction_instructions,
     )
 
     await create_entity_node_embeddings(embedder, nodes)
@@ -840,6 +842,7 @@ async def _extract_entity_summaries_batch(
     *,
     skip_fact_appending: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> None:
     """Extract summaries for multiple entities in batched LLM calls.
 
@@ -904,6 +907,7 @@ async def _extract_entity_summaries_batch(
                 previous_episodes,
                 use_episode_prompt=skip_fact_appending,
                 entity_types=entity_types,
+                custom_extraction_instructions=custom_extraction_instructions,
             )
             for flight in node_flights
         ]
@@ -918,6 +922,7 @@ async def _process_summary_flight(
     *,
     use_episode_prompt: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> None:
     """Process a single flight of nodes for batch summarization."""
     # Build entity type descriptions from docstrings, stripping GOOD/BAD
@@ -961,6 +966,7 @@ async def _process_summary_flight(
             else []
         ),
         'entity_type_descriptions': entity_type_descriptions,
+        'custom_extraction_instructions': (custom_extraction_instructions or ''),
     }
 
     # Get group_id from the first node (all nodes in a batch should have same group_id)
