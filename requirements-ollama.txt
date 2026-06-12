@@ -1,0 +1,22 @@
+# FastAPI and server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+httpx==0.25.0
+
+# Graphiti dependencies
+pydantic==2.5.0
+redis==5.0.1
+neo4j==5.14.0
+numpy==1.24.3
+scipy==1.11.4
+
+# Async support
+asyncio==3.4.3
+aiohttp==3.9.0
+
+# Utilities
+python-dotenv==1.0.0
+python-multipart==0.0.6
+
+# Graphiti core (if not included as source)
+# graphiti-core==0.1.0
