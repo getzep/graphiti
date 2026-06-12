@@ -51,7 +51,11 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import Transaction
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.graph_queries import (
+    get_fulltext_indices,
+    get_neo4j_expected_index_names,
+    get_range_indices,
+)
 from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
@@ -74,6 +78,7 @@ class Neo4jDriver(GraphDriver):
             auth=(user or '', password or ''),
         )
         self._database = database
+        self._indices_verified: bool = False
 
         # Instantiate Neo4j operations
         self._entity_node_ops = Neo4jEntityNodeOperations()
@@ -203,9 +208,32 @@ class Neo4jDriver(GraphDriver):
                 return None
             raise
 
+    async def _get_existing_index_names(self) -> set[str]:
+        """Return the set of index names currently present in Neo4j."""
+        result = await self.execute_query('SHOW INDEXES YIELD name RETURN name')
+        return {record['name'] for record in result.records}
+
     async def build_indices_and_constraints(self, delete_existing: bool = False):
         if delete_existing:
+            self._indices_verified = False
             await self.delete_all_indexes()
+        elif self._indices_verified:
+            return
+
+        # Fast path: check if all expected indices already exist (1 query)
+        if not delete_existing:
+            try:
+                existing = await self._get_existing_index_names()
+                expected = get_neo4j_expected_index_names()
+                if expected.issubset(existing):
+                    logger.debug('All expected indices already exist, skipping creation')
+                    self._indices_verified = True
+                    return
+            except Exception:
+                logger.debug(
+                    'SHOW INDEXES failed, falling through to individual index creation',
+                    exc_info=True,
+                )
 
         range_indices: list[LiteralString] = get_range_indices(self.provider)
 
@@ -214,6 +242,7 @@ class Neo4jDriver(GraphDriver):
         index_queries: list[LiteralString] = range_indices + fulltext_indices
 
         await semaphore_gather(*[self._execute_index_query(query) for query in index_queries])
+        self._indices_verified = True
 
     async def health_check(self) -> None:
         """Check Neo4j connectivity by running the driver's verify_connectivity method."""
