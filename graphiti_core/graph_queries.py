@@ -140,6 +140,42 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
     ]
 
 
+def get_vector_indices(provider: GraphProvider, embedding_dim: int = 1024) -> list[LiteralString]:
+    """Return vector index creation queries for the given provider."""
+    if provider == GraphProvider.FALKORDB:
+        from typing import cast
+
+        return cast(
+            list[LiteralString],
+            [
+                f"""CALL db.idx.vector.createNodeIndex(
+                    {{label: 'Entity', attribute: 'name_embedding',
+                     dim: {embedding_dim}, similarityFunction: 'cosine'}})""",
+                f"""CALL db.idx.vector.createNodeIndex(
+                    {{label: 'Community', attribute: 'name_embedding',
+                     dim: {embedding_dim}, similarityFunction: 'cosine'}})""",
+                f"""CALL db.idx.vector.createRelationshipIndex(
+                    {{relationshipType: 'RELATES_TO', attribute: 'fact_embedding',
+                     dim: {embedding_dim}, similarityFunction: 'cosine'}})""",
+            ],
+        )
+
+    if provider == GraphProvider.NEO4J:
+        return [
+            f"""CREATE VECTOR INDEX entity_name_embedding IF NOT EXISTS
+            FOR (n:Entity) ON (n.name_embedding)
+            OPTIONS {{indexConfig: {{`vector.dimensions`: {embedding_dim}, `vector.similarity_function`: 'cosine'}}}}""",
+            f"""CREATE VECTOR INDEX community_name_embedding IF NOT EXISTS
+            FOR (n:Community) ON (n.name_embedding)
+            OPTIONS {{indexConfig: {{`vector.dimensions`: {embedding_dim}, `vector.similarity_function`: 'cosine'}}}}""",
+            f"""CREATE VECTOR INDEX edge_fact_embedding IF NOT EXISTS
+            FOR ()-[e:RELATES_TO]-() ON (e.fact_embedding)
+            OPTIONS {{indexConfig: {{`vector.dimensions`: {embedding_dim}, `vector.similarity_function`: 'cosine'}}}}""",
+        ]
+
+    return []
+
+
 def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) -> str:
     if provider == GraphProvider.FALKORDB:
         label = NEO4J_TO_FALKORDB_MAPPING[name]
