@@ -1,21 +1,23 @@
-name: MCP Server Tests
+name: Server Tests
 
-# Live end-to-end tests for the Graphiti MCP server against FalkorDB (the default
-# database) and a real OpenAI model. Runs on PRs and pushes to main that touch the
-# MCP server. The OpenAI key comes from the `development` GitHub environment; fork
-# PRs receive no secrets, so the suite skips itself there (the test module skips
-# when OPENAI_API_KEY is unset).
+# Live end-to-end regression tests for the Graphiti graph_service (REST API)
+# against FalkorDB and a real OpenAI model. Spawns the FastAPI server as a
+# subprocess and exercises the public API end to end (ingest -> async process ->
+# search -> delete). Runs on PRs and pushes to main that touch the server. The
+# OpenAI key comes from the `development` GitHub environment; fork PRs receive no
+# secrets, so the suite skips itself there (the test module skips when
+# OPENAI_API_KEY is unset).
 on:
   push:
     branches: [main]
     paths:
-      - "mcp_server/**"
-      - ".github/workflows/mcp-server-tests.yml"
+      - "server/**"
+      - ".github/workflows/server-tests.yml"
   pull_request:
     branches: [main]
     paths:
-      - "mcp_server/**"
-      - ".github/workflows/mcp-server-tests.yml"
+      - "server/**"
+      - ".github/workflows/server-tests.yml"
 
 permissions:
   contents: read
@@ -23,14 +25,14 @@ permissions:
 # Cancel superseded runs on the same ref so repeated pushes don't keep paying for
 # real OpenAI calls.
 concurrency:
-  group: mcp-server-tests-${{ github.event.pull_request.number || github.ref }}
+  group: server-tests-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  live-mcp-tests:
+  live-server-tests:
     runs-on: depot-ubuntu-22.04
     environment: development
-    # Insurance against a hung stdio subprocess / uv sync.
+    # Insurance against a hung server subprocess / uv sync.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -48,8 +50,8 @@ jobs:
         # published service-container ports. Readiness is checked via `docker exec`.
         run: docker run -d --name falkordb --network host falkordb/falkordb:latest
       - name: Install dependencies
-        working-directory: mcp_server
-        run: uv sync
+        working-directory: server
+        run: uv sync --extra dev
       - name: Wait for FalkorDB
         run: |
           for i in $(seq 1 30); do
@@ -59,12 +61,14 @@ jobs:
             if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
             sleep 1
           done
-      - name: Run live MCP integration tests
-        working-directory: mcp_server
+      - name: Run live server integration tests
+        working-directory: server
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          FALKORDB_URI: redis://localhost:6379
-          # gpt-5.5 is the server's runtime default, but it requires a key/account
+          DB_BACKEND: falkordb
+          FALKORDB_HOST: localhost
+          FALKORDB_PORT: "6379"
+          # gpt-5.5 is the graphiti-core default, but it requires a key/account
           # with fast gpt-5.5 access; CI pins a lighter, broadly-available model so
           # the live test stays fast and reliable. It exercises the same pipeline.
           MODEL_NAME: gpt-4.1-mini
