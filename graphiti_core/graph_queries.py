@@ -26,6 +26,59 @@ INDEX_TO_LABEL_KUZU_MAPPING = {
 
 
 def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
+    if provider == GraphProvider.ARCADEDB:
+        # ArcadeDB uses SQL DDL for index creation. The Bolt protocol accepts SQL statements.
+        # Type creation is needed before index creation.
+        from typing import cast
+
+        return cast(
+            list[LiteralString],
+            [
+                # Create vertex and edge types
+                'CREATE VERTEX TYPE Entity IF NOT EXISTS',
+                'CREATE VERTEX TYPE Episodic IF NOT EXISTS',
+                'CREATE VERTEX TYPE Community IF NOT EXISTS',
+                'CREATE VERTEX TYPE Saga IF NOT EXISTS',
+                'CREATE EDGE TYPE RELATES_TO IF NOT EXISTS',
+                'CREATE EDGE TYPE MENTIONS IF NOT EXISTS',
+                'CREATE EDGE TYPE HAS_MEMBER IF NOT EXISTS',
+                'CREATE EDGE TYPE HAS_EPISODE IF NOT EXISTS',
+                'CREATE EDGE TYPE NEXT_EPISODE IF NOT EXISTS',
+                # Entity indexes
+                'CREATE INDEX IF NOT EXISTS ON Entity (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Entity (group_id) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Entity (name) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Entity (created_at) NOTUNIQUE',
+                # Episodic indexes
+                'CREATE INDEX IF NOT EXISTS ON Episodic (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Episodic (group_id) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Episodic (created_at) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Episodic (valid_at) NOTUNIQUE',
+                # Community indexes
+                'CREATE INDEX IF NOT EXISTS ON Community (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Community (group_id) NOTUNIQUE',
+                # Saga indexes
+                'CREATE INDEX IF NOT EXISTS ON Saga (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Saga (group_id) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON Saga (name) NOTUNIQUE',
+                # Edge indexes
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (group_id) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (name) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (created_at) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (expired_at) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (valid_at) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (invalid_at) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON MENTIONS (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON MENTIONS (group_id) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON HAS_MEMBER (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON HAS_EPISODE (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON HAS_EPISODE (group_id) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON NEXT_EPISODE (uuid) NOTUNIQUE',
+                'CREATE INDEX IF NOT EXISTS ON NEXT_EPISODE (group_id) NOTUNIQUE',
+            ],
+        )
+
     if provider == GraphProvider.FALKORDB:
         return [
             # Entity node
@@ -83,6 +136,20 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
 
 
 def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
+    if provider == GraphProvider.ARCADEDB:
+        from typing import cast
+
+        # ArcadeDB uses Lucene-based fulltext indexes via SQL DDL
+        return cast(
+            list[LiteralString],
+            [
+                'CREATE INDEX IF NOT EXISTS ON Episodic (content, source, source_description, group_id) FULL_TEXT ENGINE LUCENE',
+                'CREATE INDEX IF NOT EXISTS ON Entity (name, summary, group_id) FULL_TEXT ENGINE LUCENE',
+                'CREATE INDEX IF NOT EXISTS ON Community (name, group_id) FULL_TEXT ENGINE LUCENE',
+                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (name, fact, group_id) FULL_TEXT ENGINE LUCENE',
+            ],
+        )
+
     if provider == GraphProvider.FALKORDB:
         from typing import cast
 
