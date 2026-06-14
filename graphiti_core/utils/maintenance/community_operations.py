@@ -18,6 +18,7 @@ from graphiti_core.utils.maintenance.edge_operations import build_community_edge
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
+LABEL_PROPAGATION_MAX_ITERATION_FACTOR = 10
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +99,10 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
     # 4. Continue until no communities change during propagation
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
+    max_iterations = max(len(projection) * LABEL_PROPAGATION_MAX_ITERATION_FACTOR, 1)
 
-    while True:
-        no_change = True
-        new_community_map: dict[str, int] = {}
+    for _ in range(max_iterations):
+        changed_count = 0
 
         for uuid, neighbors in projection.items():
             curr_community = community_map[uuid]
@@ -120,15 +121,20 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             else:
                 new_community = max(community_candidate, curr_community)
 
-            new_community_map[uuid] = new_community
-
             if new_community != curr_community:
-                no_change = False
+                changed_count += 1
+                community_map[uuid] = new_community
 
-        if no_change:
+        if changed_count == 0:
             break
-
-        community_map = new_community_map
+    else:
+        logger.warning(
+            'Label propagation stopped before convergence',
+            extra={
+                'node_count': len(projection),
+                'max_iterations': max_iterations,
+            },
+        )
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():
