@@ -12,7 +12,7 @@ server:
   
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
+  model: ${MODEL_NAME:gpt-5.5}
   max_tokens: 4096
   
   providers:
@@ -44,7 +44,7 @@ llm:
 
 embedder:
   provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-3-small"
+  model: ${EMBEDDER_MODEL:text-embedding-3-small}
   dimensions: 1536
   
   providers:
@@ -107,5 +107,28 @@ graphiti:
       description: "Information content in various forms (books, articles, reports, etc.)"
     - name: "Topic"
       description: "Subject of conversation, interest, or knowledge domain (use as last resort)"
+    - name: "Person"
+      description: "An individual human referenced in the content"
     - name: "Object"
       description: "Physical items, tools, devices, or possessions (use as last resort)"
+
+  # Optional edge (fact) types. When a name matches a model registered in
+  # src/models/edge_types.py the rich Pydantic model is used; otherwise a
+  # documentation-only model is built from the description below. Leave this
+  # list empty to keep graphiti-core's default edge extraction behavior.
+  # edge_types:
+  #   - name: "WorksFor"
+  #     description: "Employment or membership of a person in an organization"
+  #   - name: "LocatedAt"
+  #     description: "An entity is situated at or within a location"
+
+  # Optional constraint on which edge types may connect which entity types.
+  # 'Entity' acts as a wildcard for either endpoint. Mirrors graphiti-core's
+  # edge_type_map. Leave empty to allow any configured edge type anywhere.
+  # edge_type_map:
+  #   - source: "Person"
+  #     target: "Organization"
+  #     edge_types: ["WorksFor"]
+  #   - source: "Entity"
+  #     target: "Location"
+  #     edge_types: ["LocatedAt"]

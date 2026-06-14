@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -72,6 +73,18 @@ from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 logger = logging.getLogger(__name__)
 
 
+def _strip_nul_bytes(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace('\x00', '')
+    if isinstance(value, dict):
+        return {key: _strip_nul_bytes(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_strip_nul_bytes(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_strip_nul_bytes(item) for item in value)
+    return value
+
+
 class FalkorDriverSession(GraphDriverSession):
     provider = GraphProvider.FALKORDB
 
@@ -98,10 +111,12 @@ class FalkorDriverSession(GraphDriverSession):
         if isinstance(query, list):
             for cypher, params in query:
                 params = convert_datetimes_to_strings(params)
+                params = _strip_nul_bytes(params)
                 await self.graph.query(str(cypher), params)  # type: ignore[reportUnknownArgumentType]
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
+            params = _strip_nul_bytes(params)
             await self.graph.query(str(query), params)  # type: ignore[reportUnknownArgumentType]
         # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
         return None
@@ -109,7 +124,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
-    default_group_id: str = '\\_'
+    default_group_id: str = '_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
     aoss_client: None = None
 
@@ -225,6 +240,7 @@ class FalkorDriver(GraphDriver):
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
         params = convert_datetimes_to_strings(dict(kwargs))
+        params = _strip_nul_bytes(params)
 
         try:
             result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
@@ -403,9 +419,14 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+            # Quote group_ids and escape non-alphanumeric chars (e.g. '_' in the
+            # default group_id, or hyphens). RediSearch treats these as token
+            # separators/operators, which otherwise causes a syntax error or a
+            # failure to match. group_ids are restricted to [a-zA-Z0-9_-] by
+            # validate_group_ids above.
+            escaped_group_ids = [
+                '"' + re.sub(r'([^a-zA-Z0-9])', r'\\\1', gid) + '"' for gid in group_ids
+            ]
             group_values = '|'.join(escaped_group_ids)
             group_filter = f'(@group_id:{group_values})'
 

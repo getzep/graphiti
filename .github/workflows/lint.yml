@@ -1,27 +1,68 @@
 name: Lint with Ruff
 
+# SECURITY: this workflow uses `pull_request_target` so that ruff lint/format runs
+# automatically on outside-contributor (fork) PRs WITHOUT the "approve and run"
+# gate that `pull_request` imposes for first-time contributors.
+#
+# `pull_request_target` runs in the BASE-branch context, which can carry write
+# tokens and secrets. That is dangerous in general, but this job is deliberately
+# privilege-stripped so a malicious PR has nothing to steal or abuse:
+#   * permissions: contents: read only (no write scopes).
+#   * no `environment:`, so no environment secrets are exposed.
+#   * no repository/organization secrets are referenced anywhere in the job.
+#   * ruff is installed standalone via uv (`uv tool install`); we never run
+#     `uv sync` or install the PR's dependencies, so no PR-controlled build
+#     hooks or package metadata are executed.
+#   * ruff only statically parses the code (check + format --check); it never
+#     imports or executes it.
+#   * ALL tooling-install steps (setup-uv, uv tool install) run BEFORE the
+#     untrusted PR code is checked out, so no cache-writing ("poisonable") step
+#     ever runs with attacker-controlled files on disk. This is what prevents
+#     cache poisoning of the default branch (CodeQL
+#     actions/cache-poisoning/poisonable-step). Only ruff runs after checkout,
+#     and ruff writes no GitHub Actions cache.
+#
+# DO NOT add to this job: secrets, write permissions, an `environment:`, a
+# `uv sync`/dependency install, `pytest`, or any step that executes PR code. Do
+# NOT move the tooling-install steps after the checkout, and do NOT add a
+# cache-writing step (e.g. actions/cache, `enable-cache` on setup-uv) after it.
+# Type checking (pyright) and tests install/execute code and must stay on the
+# approval-gated `pull_request` trigger in their own workflows.
 on:
   push:
     branches: ["main"]
-  pull_request:
+  pull_request_target:
     branches: ["main"]
+
+# Cancel superseded lint runs on the same PR/branch to save runner time now that
+# every fork push triggers a run automatically.
+concurrency:
+  group: lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   ruff:
-    environment: development
     runs-on: depot-ubuntu-22.04
     steps:
+      # Install tooling BEFORE checking out untrusted PR code (see SECURITY note).
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
+      - name: Install Ruff
+        # Pin to the version locked in uv.lock so this job matches what
+        # `make lint` / `make format` produce locally. Bump in lockstep with
+        # uv.lock when ruff is upgraded.
+        run: uv tool install "ruff==0.14.11"
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.10"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install "ruff>0.1.7"
+          # pull_request_target checks out the base ref by default; explicitly
+          # check out the PR head so we lint the contributor's changes.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
       - name: Run Ruff linting
-        run: ruff check --output-format=github
+        run: uv tool run ruff check --output-format=github
+      - name: Run Ruff format check
+        run: uv tool run ruff format --check
