@@ -20,7 +20,7 @@ azure = [
 providers = [
     "google-genai>=2.8.0",
     "anthropic>=0.107.1",
-    "groq>=1.2.0",
+    "groq>=1.4.0",
     "voyageai>=0.3.7",
     "sentence-transformers>=3.2.1",
 ]
