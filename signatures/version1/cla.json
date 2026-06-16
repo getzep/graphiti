@@ -875,6 +875,16 @@
       "created_at": "2026-06-16T11:21:23Z",
       "repoId": 840056306,
       "pullRequestNo": 1589
+    },
+    {
+      "name": "aasc77",
+      "email": "angel.s@me.com",
+      "accountType": "personal",
+      "id": 291580,
+      "comment_id": 4722135726,
+      "created_at": "2026-06-16T18:40:50Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1590
     }
   ]
 }
