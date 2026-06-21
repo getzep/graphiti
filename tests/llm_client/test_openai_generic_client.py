@@ -47,10 +47,15 @@ def _messages() -> list[Message]:
     ]
 
 
-def _make_client(content: str = '{"foo": "bar"}', error: Exception | None = None, **kwargs):
+def _make_client(
+    content: str = '{"foo": "bar"}',
+    error: Exception | None = None,
+    config: 'LLMConfig | None' = None,
+    **kwargs,
+):
     completions = DummyChatCompletions(content=content, error=error)
     client = OpenAIGenericClient(
-        config=LLMConfig(api_key='test', model='test-model'),
+        config=config or LLMConfig(api_key='test', model='test-model'),
         client=DummyClient(completions),
         **kwargs,
     )
@@ -168,3 +173,27 @@ async def test_non_retryable_error_is_not_retried():
         await client.generate_response(_messages(), response_model=ResponseModel)
 
     assert len(completions.create_calls) == 1
+
+
+def test_max_tokens_from_config_is_respected():
+    """LLMConfig.max_tokens must be used when no constructor override is given."""
+    config = LLMConfig(max_tokens=32000)
+    client, _ = _make_client(config=config)
+
+    assert client.max_tokens == 32000
+
+
+def test_constructor_max_tokens_overrides_config():
+    """An explicit max_tokens constructor arg takes precedence over config."""
+    config = LLMConfig(max_tokens=32000)
+    client, _ = _make_client(config=config, max_tokens=8192)
+
+    assert client.max_tokens == 8192
+
+
+def test_default_max_tokens_when_neither_is_set():
+    """When neither config nor constructor arg is specified, the config default is used."""
+    from graphiti_core.llm_client.config import DEFAULT_MAX_TOKENS
+
+    client, _ = _make_client()
+    assert client.max_tokens == DEFAULT_MAX_TOKENS
