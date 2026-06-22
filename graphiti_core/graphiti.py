@@ -995,6 +995,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
+        skip_extraction: bool = False,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1042,6 +1043,14 @@ class Graphiti:
             query to find the most recent episode. Useful for efficiently adding multiple episodes
             to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
             as this parameter for the next episode.
+        skip_extraction : bool, optional
+            If True, bypass all LLM-driven entity/edge extraction. The episode
+            body is stored verbatim as an Episodic node and remains queryable
+            via fulltext episode search, but no entities, attributes, or
+            relations are extracted from it. Use this path for canonical /
+            pre-curated content (design docs, ADRs, RFCs, large markdown
+            references) where LLM extraction would be impractically slow
+            on a rate-limited endpoint. Defaults to False.
 
         Returns
         -------
@@ -1083,6 +1092,54 @@ class Graphiti:
 
         with self.tracer.start_span('add_episode') as span:
             try:
+                if skip_extraction:
+                    episode = (
+                        await EpisodicNode.get_by_uuid(self.driver, uuid)
+                        if uuid is not None
+                        else EpisodicNode(
+                            name=name,
+                            group_id=group_id,
+                            labels=[],
+                            source=source,
+                            content=episode_body,
+                            source_description=source_description,
+                            created_at=now,
+                            valid_at=reference_time,
+                        )
+                    )
+                    episodic_edges, episode = await self._process_episode_data(
+                        episode,
+                        nodes=[],
+                        entity_edges=[],
+                        now=now,
+                        group_id=group_id,
+                        saga=saga,
+                        saga_previous_episode_uuid=saga_previous_episode_uuid,
+                        node_episode_index_map={},
+                    )
+                    end = time()
+                    span.add_attributes(
+                        {
+                            'episode.uuid': episode.uuid,
+                            'episode.source': source.value,
+                            'episode.reference_time': reference_time.isoformat(),
+                            'group_id': group_id,
+                            'skip_extraction': True,
+                            'duration_ms': (end - start) * 1000,
+                        }
+                    )
+                    logger.info(
+                        f'Completed add_episode (skip_extraction) in {(end - start) * 1000} ms'
+                    )
+                    return AddEpisodeResults(
+                        episode=episode,
+                        episodic_edges=episodic_edges,
+                        nodes=[],
+                        edges=[],
+                        communities=[],
+                        community_edges=[],
+                    )
+
                 # Retrieve previous episodes for context
                 previous_episodes = (
                     await self.retrieve_episodes(

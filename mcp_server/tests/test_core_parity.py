@@ -182,6 +182,7 @@ class TestQueueServiceThreading:
             update_communities=True,
             saga='my-saga',
             saga_previous_episode_uuid='saga-prev',
+            skip_extraction=True,
         )
 
         # The worker runs the queued coroutine in the background; wait for it.
@@ -198,6 +199,7 @@ class TestQueueServiceThreading:
         assert kwargs['update_communities'] is True
         assert kwargs['saga'] == 'my-saga'
         assert kwargs['saga_previous_episode_uuid'] == 'saga-prev'
+        assert kwargs['skip_extraction'] is True
         assert kwargs['uuid'] == 'ep-uuid'
 
     @pytest.mark.asyncio
@@ -245,6 +247,7 @@ class TestCoreSignatureCompatibility:
             'saga',
             'saga_previous_episode_uuid',
             'uuid',
+            'skip_extraction',
         }
         assert sent <= params
 
