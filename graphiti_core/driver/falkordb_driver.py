@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -109,7 +110,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
-    default_group_id: str = '\\_'
+    default_group_id: str = '_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
     aoss_client: None = None
 
@@ -403,9 +404,14 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+            # Quote group_ids and escape non-alphanumeric chars (e.g. '_' in the
+            # default group_id, or hyphens). RediSearch treats these as token
+            # separators/operators, which otherwise causes a syntax error or a
+            # failure to match. group_ids are restricted to [a-zA-Z0-9_-] by
+            # validate_group_ids above.
+            escaped_group_ids = [
+                '"' + re.sub(r'([^a-zA-Z0-9])', r'\\\1', gid) + '"' for gid in group_ids
+            ]
             group_values = '|'.join(escaped_group_ids)
             group_filter = f'(@group_id:{group_values})'
 
