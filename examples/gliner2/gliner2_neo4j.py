@@ -83,8 +83,8 @@ entity_types: dict[str, type[BaseModel]] = {
 #################################################
 # GLiNER2 is a lightweight extraction model
 # (205M-340M params) that runs locally on CPU.
-# It handles entity extraction (NER), while an
-# OpenAI client handles edge/fact extraction,
+# It handles entity extraction (NER), while the
+# LLM client handles edge/fact extraction,
 # deduplication, summarization, and reasoning.
 #################################################
 
@@ -116,7 +116,7 @@ async def main():
     #################################################
     # Set up a hybrid LLM client: GLiNER2 handles
     # entity extraction locally using custom entity
-    # types as labels, while OpenAI handles edge/fact
+    # types as labels, while Gemini handles edge/fact
     # extraction, deduplication, and summarization.
     #################################################
 
@@ -161,7 +161,7 @@ async def main():
         # handled by GLiNER2 locally using the custom
         # entity types as labels. Edge/fact extraction,
         # deduplication, and summarization are delegated
-        # to OpenAI.
+        # to Gemini.
         #################################################
 
         episodes = [
