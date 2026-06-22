@@ -447,7 +447,17 @@ async def edge_search(
         reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 
         if config.reranker == EdgeReranker.episode_mentions:
-            reranked_edges.sort(reverse=True, key=lambda edge: len(edge.episodes))
+            # Re-sort edges and their scores together so each returned edge keeps
+            # its own reranker score. Sorting only reranked_edges left edge_scores
+            # in the prior rrf order, so the parallel slices returned below paired
+            # every edge with a neighbour's score.
+            paired = sorted(
+                zip(reranked_edges, edge_scores, strict=True),
+                reverse=True,
+                key=lambda pair: len(pair[0].episodes),
+            )
+            reranked_edges = [edge for edge, _ in paired]
+            edge_scores = [score for _, score in paired]
 
         span.add_attributes(
             {
