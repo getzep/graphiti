@@ -116,6 +116,7 @@ class QueueService:
         update_communities: bool = False,
         saga: str | None = None,
         saga_previous_episode_uuid: str | None = None,
+        skip_extraction: bool = False,
     ) -> int:
         """Add an episode for processing.
 
@@ -142,6 +143,8 @@ class QueueService:
                 ingestion
             saga: Optional saga name/id to attach this episode to
             saga_previous_episode_uuid: Optional UUID of the prior episode in the saga
+            skip_extraction: If True, bypass LLM-driven entity/edge extraction.
+                The episode body is stored verbatim as an Episodic node.
 
         Returns:
             The position in the queue
@@ -172,6 +175,7 @@ class QueueService:
                     saga=saga,
                     saga_previous_episode_uuid=saga_previous_episode_uuid,
                     uuid=uuid,
+                    skip_extraction=skip_extraction,
                 )
 
                 logger.info(f'Successfully processed episode {uuid} for group {group_id}')
