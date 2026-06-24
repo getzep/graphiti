@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import json
+from datetime import date, datetime
 from typing import Any
 
 DO_NOT_ESCAPE_UNICODE = '\nDo not escape unicode characters.\n'
@@ -37,4 +38,10 @@ def to_prompt_json(data: Any, ensure_ascii: bool = False, indent: int | None = N
         are preserved in their original form in the prompt, making them readable
         in LLM logs and improving model understanding.
     """
-    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+
+    def default_serializer(obj: Any) -> str:
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return str(obj)
+
+    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent, default=default_serializer)
