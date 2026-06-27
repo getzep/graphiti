@@ -81,7 +81,10 @@ async def test_structured_completion_strips_reasoning_for_unsupported_models():
     call_args = dummy_client.beta.chat.completions.parse_calls[0]
     assert call_args['model'] == 'gpt-4.1'
     assert call_args['messages'] == []
-    assert call_args['max_tokens'] == 64
+    # Newer Azure OpenAI API versions reject `max_tokens`; must use
+    # `max_completion_tokens` instead (issue #1496).
+    assert call_args['max_completion_tokens'] == 64
+    assert 'max_tokens' not in call_args
     assert call_args['response_format'] is DummyResponseModel
     assert call_args['temperature'] == 0.4
     # Reasoning and verbosity parameters should not be passed for non-reasoning models
@@ -124,3 +127,60 @@ async def test_reasoning_fields_forwarded_for_supported_models():
 
     create_args = dummy_client.chat.completions.create_calls[0]
     assert 'temperature' not in create_args
+
+
+@pytest.mark.asyncio
+async def test_create_completion_uses_max_completion_tokens():
+    """The plain JSON completion path must send `max_completion_tokens`, not the
+    `max_tokens` rejected by newer Azure OpenAI API versions (issue #1496)."""
+    dummy_client = DummyAzureClient()
+    client = AzureOpenAILLMClient(azure_client=dummy_client, config=LLMConfig())
+
+    await client._create_completion(
+        model='gpt-4.1',
+        messages=[],
+        temperature=0.4,
+        max_tokens=64,
+    )
+
+    create_args = dummy_client.chat.completions.create_calls[0]
+    assert create_args['max_completion_tokens'] == 64
+    assert 'max_tokens' not in create_args
+
+
+def _make_client() -> AzureOpenAILLMClient:
+    return AzureOpenAILLMClient(azure_client=DummyAzureClient(), config=LLMConfig())
+
+
+def test_handle_structured_response_returns_tuple_for_parsed_chat_completion():
+    """`beta.chat.completions.parse` results must unpack to
+    (parsed, input_tokens, output_tokens) — previously the override returned a
+    bare dict, causing 'not enough values to unpack (expected 3, got 1)' (issue #1496)."""
+    client = _make_client()
+    message = SimpleNamespace(parsed=DummyResponseModel(foo='bar'))
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=message)],
+        usage=SimpleNamespace(prompt_tokens=11, completion_tokens=7),
+    )
+
+    parsed, input_tokens, output_tokens = client._handle_structured_response(response)
+
+    assert parsed == {'foo': 'bar'}
+    assert input_tokens == 11
+    assert output_tokens == 7
+
+
+def test_handle_structured_response_returns_tuple_for_responses_parse():
+    """The reasoning-model (`responses.parse`) shape must also unpack to a 3-tuple,
+    reading the responses-API usage fields (input_tokens / output_tokens)."""
+    client = _make_client()
+    response = SimpleNamespace(
+        output_text='{"foo": "baz"}',
+        usage=SimpleNamespace(input_tokens=13, output_tokens=5),
+    )
+
+    parsed, input_tokens, output_tokens = client._handle_structured_response(response)
+
+    assert parsed == {'foo': 'baz'}
+    assert input_tokens == 13
+    assert output_tokens == 5

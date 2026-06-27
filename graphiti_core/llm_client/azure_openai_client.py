@@ -95,7 +95,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             request_kwargs = {
                 'model': model,
                 'messages': messages,
-                'max_tokens': max_tokens,
+                'max_completion_tokens': max_tokens,
                 'response_format': response_model,  # Structured output
             }
 
@@ -118,7 +118,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         request_kwargs = {
             'model': model,
             'messages': messages,
-            'max_tokens': max_tokens,
+            'max_completion_tokens': max_tokens,
             'response_format': {'type': 'json_object'},
         }
 
@@ -128,33 +128,48 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
 
         return await self.client.chat.completions.create(**request_kwargs)
 
-    def _handle_structured_response(self, response: Any) -> dict[str, Any]:
+    def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing for both reasoning and non-reasoning models.
 
-        For reasoning models (responses.parse): uses response.output_text
-        For regular models (beta.chat.completions.parse): uses response.choices[0].message.parsed
+        For reasoning models (responses.parse): uses response.output_text and the
+        responses-API usage fields (input_tokens / output_tokens).
+        For regular models (beta.chat.completions.parse): uses
+        response.choices[0].message.parsed and the chat-completions usage fields
+        (prompt_tokens / completion_tokens).
+
+        Returns:
+            tuple: (parsed_response, input_tokens, output_tokens)
         """
-        # Check if this is a ParsedChatCompletion (from beta.chat.completions.parse)
+        from graphiti_core.llm_client.errors import RefusalError
+
+        # Standard ParsedChatCompletion format (beta.chat.completions.parse)
         if hasattr(response, 'choices') and response.choices:
-            # Standard ParsedChatCompletion format
+            input_tokens = 0
+            output_tokens = 0
+            if hasattr(response, 'usage') and response.usage:
+                input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
+                output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
+
             message = response.choices[0].message
             if hasattr(message, 'parsed') and message.parsed:
                 # The parsed object is already a Pydantic model, convert to dict
-                return message.parsed.model_dump()
+                return message.parsed.model_dump(), input_tokens, output_tokens
             elif hasattr(message, 'refusal') and message.refusal:
-                from graphiti_core.llm_client.errors import RefusalError
-
                 raise RefusalError(message.refusal)
             else:
                 raise Exception(f'Invalid response from LLM: {response.model_dump()}')
+        # Reasoning model response format (responses.parse)
         elif hasattr(response, 'output_text'):
-            # Reasoning model response format (responses.parse)
+            input_tokens = 0
+            output_tokens = 0
+            if hasattr(response, 'usage') and response.usage:
+                input_tokens = getattr(response.usage, 'input_tokens', 0) or 0
+                output_tokens = getattr(response.usage, 'output_tokens', 0) or 0
+
             response_object = response.output_text
             if response_object:
-                return json.loads(response_object)
+                return json.loads(response_object), input_tokens, output_tokens
             elif hasattr(response, 'refusal') and response.refusal:
-                from graphiti_core.llm_client.errors import RefusalError
-
                 raise RefusalError(response.refusal)
             else:
                 raise Exception(f'Invalid response from LLM: {response.model_dump()}')
