@@ -79,6 +79,20 @@ class TestLLMClientFactoryRouting:
         client = LLMClientFactory.create(self._config('http://localhost:11434/v1'))
         assert isinstance(client, OpenAIGenericClient)
 
+    def test_generic_client_uses_default_structured_output_mode(self):
+        client = LLMClientFactory.create(self._config('http://localhost:11434/v1'))
+        assert isinstance(client, OpenAIGenericClient)
+        assert client.structured_output_mode == 'json_schema'
+
+    def test_generic_client_uses_configured_structured_output_mode(self):
+        config = self._config('http://localhost:11434/v1')
+        config.structured_output_mode = 'json_object'
+
+        client = LLMClientFactory.create(config)
+
+        assert isinstance(client, OpenAIGenericClient)
+        assert client.structured_output_mode == 'json_object'
+
 
 class TestLLMClientReasoningEffort:
     """The OpenAI factory selects reasoning effort by model family."""
