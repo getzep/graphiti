@@ -6,8 +6,9 @@ from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
+from graph_service.config import get_settings
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
-from graph_service.zep_graphiti import ZepGraphitiDep
+from graph_service.zep_graphiti import ZepGraphitiDep, build_graphiti
 
 
 class AsyncWorker:
@@ -23,6 +24,9 @@ class AsyncWorker:
                 await job()
             except asyncio.CancelledError:
                 break
+            except Exception as e:
+                # A failing job must not kill the worker loop.
+                print(f'Error processing job: {e!r}')
 
     async def start(self):
         self.task = asyncio.create_task(self.worker())
@@ -54,15 +58,22 @@ async def add_messages(
     graphiti: ZepGraphitiDep,
 ):
     async def add_messages_task(m: Message):
-        await graphiti.add_episode(
-            uuid=m.uuid,
-            group_id=request.group_id,
-            name=m.name,
-            episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
-            reference_time=m.timestamp,
-            source=EpisodeType.message,
-            source_description=m.source_description,
-        )
+        # The request-scoped `graphiti` dependency is closed as soon as this
+        # endpoint returns (202), long before this queued job runs. Build a
+        # dedicated client for the background task and close it when done.
+        client = build_graphiti(get_settings())
+        try:
+            await client.add_episode(
+                uuid=m.uuid,
+                group_id=request.group_id,
+                name=m.name,
+                episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
+                reference_time=m.timestamp,
+                source=EpisodeType.message,
+                source_description=m.source_description,
+            )
+        finally:
+            await client.close()
 
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
