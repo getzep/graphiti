@@ -16,19 +16,25 @@ limitations under the License.
 
 import os
 import unittest
+import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 try:
+    from graphiti_core.driver.falkordb.operations.episode_node_ops import (
+        FalkorEpisodeNodeOperations,
+    )
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
 
     HAS_FALKORDB = True
 except ImportError:
     FalkorDriver = None
+    FalkorEpisodeNodeOperations = None
     HAS_FALKORDB = False
 
 
@@ -179,6 +185,50 @@ class TestFalkorDriver:
         call_args = mock_graph.query.call_args[0]
         assert call_args[1]['content'] == 'Seamless Recruiting  Onboarding'
         assert call_args[1]['nested'] == {'values': ['ok', 'clean']}
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_retrieve_episodes_projects_valid_at_filter_before_where(self):
+        executor = MagicMock()
+        executor.execute_query = AsyncMock(return_value=([], [], None))
+
+        assert FalkorEpisodeNodeOperations is not None
+        ops = FalkorEpisodeNodeOperations()
+        await ops.retrieve_episodes(
+            executor,
+            datetime(2024, 2, 1, tzinfo=timezone.utc),
+            group_ids=['group-a'],
+            source='text',
+        )
+
+        query = executor.execute_query.call_args[0][0]
+        assert 'WITH e, e.valid_at <= $reference_time AS valid_at_ok' in query
+        assert 'WHERE valid_at_ok' in query
+        assert 'WHERE e.valid_at <= $reference_time' not in query
+        assert '\nAND e.group_id IN $group_ids' in query
+        assert '\nAND e.source = $source' in query
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_retrieve_episodes_saga_projects_valid_at_filter_before_where(self):
+        executor = MagicMock()
+        executor.execute_query = AsyncMock(return_value=([], [], None))
+
+        assert FalkorEpisodeNodeOperations is not None
+        ops = FalkorEpisodeNodeOperations()
+        await ops.retrieve_episodes(
+            executor,
+            datetime(2024, 2, 1, tzinfo=timezone.utc),
+            group_ids=['group-a'],
+            source='text',
+            saga='saga-a',
+        )
+
+        query = executor.execute_query.call_args[0][0]
+        assert 'WITH e, e.valid_at <= $reference_time AS valid_at_ok' in query
+        assert 'WHERE valid_at_ok' in query
+        assert 'WHERE e.valid_at <= $reference_time' not in query
+        assert '\nAND e.source = $source' in query
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_session_creation(self):
@@ -429,3 +479,62 @@ class TestFalkorDriverIntegration:
 
         except Exception as e:
             pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_retrieve_episodes_respects_reference_time_with_real_falkordb(self):
+        pytest.importorskip('falkordb')
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+        database = f'test_retrieve_episodes_{uuid.uuid4().hex}'
+        group_id = 'test-reference-time'
+        created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+        try:
+            assert FalkorDriver is not None
+            driver = FalkorDriver(host=falkor_host, port=int(falkor_port), database=database)
+            await driver.build_indices_and_constraints()
+            await driver.episode_node_ops.save(
+                driver,
+                EpisodicNode(
+                    uuid=str(uuid.uuid4()),
+                    name='past episode',
+                    group_id=group_id,
+                    source=EpisodeType.text,
+                    source_description='test',
+                    content='past',
+                    created_at=created_at,
+                    valid_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                ),
+            )
+            await driver.episode_node_ops.save(
+                driver,
+                EpisodicNode(
+                    uuid=str(uuid.uuid4()),
+                    name='future episode',
+                    group_id=group_id,
+                    source=EpisodeType.text,
+                    source_description='test',
+                    content='future',
+                    created_at=created_at,
+                    valid_at=datetime(2024, 3, 1, tzinfo=timezone.utc),
+                ),
+            )
+
+            episodes = await driver.episode_node_ops.retrieve_episodes(
+                driver,
+                datetime(2024, 2, 1, tzinfo=timezone.utc),
+                last_n=10,
+                group_ids=[group_id],
+            )
+
+            assert [episode.name for episode in episodes] == ['past episode']
+
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+        finally:
+            if 'driver' in locals():
+                await driver.execute_query('MATCH (n) DETACH DELETE n')
+                await driver.close()
