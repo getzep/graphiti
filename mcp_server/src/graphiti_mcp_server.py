@@ -22,6 +22,7 @@ from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -197,10 +198,29 @@ When searching, use specific queries and consider filtering by group_id, type, o
 server requires a configured database and valid API keys for language-model operations.
 """
 
+# Configure transport security for DNS rebinding protection.
+# FastMCP auto-enables this with a localhost-only allowlist when constructed with the
+# default 127.0.0.1 host. When MCP_HOSTNAMES is set (comma-separated), add each entry to
+# the allowed hosts so non-localhost connections (e.g. from LAN clients or alternative
+# DNS names) are accepted; otherwise fall back to FastMCP's localhost-only defaults.
+def _build_transport_security(raw: str) -> TransportSecuritySettings | None:
+    hostnames = [h.strip() for h in raw.split(',') if h.strip()]
+    if not hostnames:
+        return None  # fall back to FastMCP localhost-only defaults
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[f'{h}:*' for h in hostnames]
+        + ['127.0.0.1:*', 'localhost:*', '[::1]:*'],
+    )
+
+
+_transport_security = _build_transport_security(os.environ.get('MCP_HOSTNAMES', ''))
+
 # MCP server instance
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    transport_security=_transport_security,
 )
 
 # Global services

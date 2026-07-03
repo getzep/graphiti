@@ -249,6 +249,7 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `USE_AZURE_AD`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 - `MCP_API_KEY`: Optional Bearer token for MCP endpoint authentication. When set, clients must send `Authorization: Bearer <token>` header. The `/health` endpoint remains unauthenticated.
+- `MCP_HOSTNAMES`: Comma-separated list of server hostnames to allow for DNS rebinding protection (e.g. `myserver.local` or `myserver.local,mem.example.com`). Required when clients connect via a non-localhost hostname, otherwise requests will receive a 421 error. Localhost variants (`127.0.0.1`, `localhost`, `[::1]`) are always allowed.
 
 You can set these variables in a `.env` file in the project directory.
 
