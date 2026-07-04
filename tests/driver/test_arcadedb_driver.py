@@ -101,7 +101,17 @@ class TestArcadeDBDriver:
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
     async def test_execute_query_success(self):
-        """Test successful query execution."""
+        """Test successful query execution.
+
+        Regression test: `database_` must be passed as a real kwarg to the
+        underlying `neo4j` driver call (`execute_query(..., database_=...)`),
+        NOT stuffed inside `parameters_` (a Cypher query parameter, which the
+        neo4j driver's own `execute_query()` never reads to route the request).
+        The previous version of this test asserted the buggy behaviour
+        (`parameters_={'database_': 'graphiti'}`), which caused a real
+        cross-tenant data leak: `execute_query()` always hit the driver's
+        default database regardless of `with_database(...)`.
+        """
         mock_result = MagicMock()
         self.mock_client.execute_query = AsyncMock(return_value=mock_result)
 
@@ -109,7 +119,8 @@ class TestArcadeDBDriver:
 
         self.mock_client.execute_query.assert_called_once_with(
             'MATCH (n) RETURN n',
-            parameters_={'database_': 'graphiti'},
+            parameters_={},
+            database_='graphiti',
             param1='value1',
         )
         assert result is mock_result
@@ -117,7 +128,13 @@ class TestArcadeDBDriver:
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
     async def test_execute_query_with_params(self):
-        """Test query execution with explicit params dict."""
+        """Test query execution with explicit params dict.
+
+        Regression test: query parameters (`params`) must stay in
+        `parameters_` (they are real Cypher bind variables), while
+        `database_` must be passed separately as a kwarg -- see
+        `test_execute_query_success` for the full explanation.
+        """
         mock_result = MagicMock()
         self.mock_client.execute_query = AsyncMock(return_value=mock_result)
 
@@ -128,7 +145,26 @@ class TestArcadeDBDriver:
 
         self.mock_client.execute_query.assert_called_once_with(
             'MATCH (n) WHERE n.uuid = $uuid RETURN n',
-            parameters_={'uuid': 'test-uuid', 'database_': 'graphiti'},
+            parameters_={'uuid': 'test-uuid'},
+            database_='graphiti',
+        )
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
+    async def test_execute_query_routes_to_cloned_database(self):
+        """Regression test for the cross-tenant leak: a driver obtained via
+        `with_database(tenant_db)` must route execute_query() to that
+        database, not to the original driver's database."""
+        mock_result = MagicMock()
+        self.mock_client.execute_query = AsyncMock(return_value=mock_result)
+
+        tenant_driver = self.driver.with_database('tenant_b')
+        await tenant_driver.execute_query('MATCH (n) RETURN n')
+
+        self.mock_client.execute_query.assert_called_once_with(
+            'MATCH (n) RETURN n',
+            parameters_={},
+            database_='tenant_b',
         )
 
     @pytest.mark.asyncio
@@ -228,6 +264,38 @@ class TestArcadeDBDriver:
 
         # Should not raise despite some queries failing
         await self.driver.build_indices_and_constraints()
+
+    @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
+    def test_range_indices_use_valid_cypher_syntax(self):
+        """Regression test: get_range_indices(ARCADEDB) previously generated
+        ArcadeDB SQL DDL (`CREATE VERTEX TYPE ... IF NOT EXISTS`,
+        `CREATE INDEX ... NOTUNIQUE`) sent over the Cypher/Bolt channel, which
+        rejects it entirely (verified: all 28 original statements failed with
+        'mismatched input TYPE/ON' syntax errors against a real ArcadeDB
+        instance). Cypher's `CREATE INDEX <name> IF NOT EXISTS FOR (n:Label)
+        ON (n.prop)` syntax is what ArcadeDB's Bolt plugin actually accepts."""
+        from graphiti_core.driver.driver import GraphProvider
+        from graphiti_core.graph_queries import get_range_indices
+
+        indices = get_range_indices(GraphProvider.ARCADEDB)
+
+        assert len(indices) > 0
+        for query in indices:
+            assert 'VERTEX TYPE' not in query
+            assert 'EDGE TYPE' not in query
+            assert 'NOTUNIQUE' not in query
+            assert 'FOR (' in query or 'FOR ()-' in query
+
+    @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
+    def test_fulltext_indices_empty_for_arcadedb(self):
+        """ArcadeDB does not support FULLTEXT indexes via the Bolt/Cypher
+        channel regardless of syntax (verified). graphiti-core already runs
+        without BM25/fulltext search enabled, so no fulltext index DDL should
+        be generated at all -- avoids doomed-to-fail statements."""
+        from graphiti_core.driver.driver import GraphProvider
+        from graphiti_core.graph_queries import get_fulltext_indices
+
+        assert get_fulltext_indices(GraphProvider.ARCADEDB) == []
 
     @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
     def test_operations_properties(self):
