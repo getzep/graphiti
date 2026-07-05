@@ -27,57 +27,46 @@ INDEX_TO_LABEL_KUZU_MAPPING = {
 
 def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
     if provider == GraphProvider.ARCADEDB:
-        # ArcadeDB uses SQL DDL for index creation. The Bolt protocol accepts SQL statements.
-        # Type creation is needed before index creation.
-        from typing import cast
-
-        return cast(
-            list[LiteralString],
-            [
-                # Create vertex and edge types
-                'CREATE VERTEX TYPE Entity IF NOT EXISTS',
-                'CREATE VERTEX TYPE Episodic IF NOT EXISTS',
-                'CREATE VERTEX TYPE Community IF NOT EXISTS',
-                'CREATE VERTEX TYPE Saga IF NOT EXISTS',
-                'CREATE EDGE TYPE RELATES_TO IF NOT EXISTS',
-                'CREATE EDGE TYPE MENTIONS IF NOT EXISTS',
-                'CREATE EDGE TYPE HAS_MEMBER IF NOT EXISTS',
-                'CREATE EDGE TYPE HAS_EPISODE IF NOT EXISTS',
-                'CREATE EDGE TYPE NEXT_EPISODE IF NOT EXISTS',
-                # Entity indexes
-                'CREATE INDEX IF NOT EXISTS ON Entity (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Entity (group_id) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Entity (name) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Entity (created_at) NOTUNIQUE',
-                # Episodic indexes
-                'CREATE INDEX IF NOT EXISTS ON Episodic (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Episodic (group_id) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Episodic (created_at) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Episodic (valid_at) NOTUNIQUE',
-                # Community indexes
-                'CREATE INDEX IF NOT EXISTS ON Community (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Community (group_id) NOTUNIQUE',
-                # Saga indexes
-                'CREATE INDEX IF NOT EXISTS ON Saga (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Saga (group_id) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON Saga (name) NOTUNIQUE',
-                # Edge indexes
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (group_id) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (name) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (created_at) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (expired_at) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (valid_at) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (invalid_at) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON MENTIONS (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON MENTIONS (group_id) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON HAS_MEMBER (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON HAS_EPISODE (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON HAS_EPISODE (group_id) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON NEXT_EPISODE (uuid) NOTUNIQUE',
-                'CREATE INDEX IF NOT EXISTS ON NEXT_EPISODE (group_id) NOTUNIQUE',
-            ],
-        )
+        # Corregido (03/07/2026): la version original generaba DDL en sintaxis SQL
+        # de ArcadeDB (CREATE VERTEX TYPE ..., CREATE INDEX ... ON X (prop) NOTUNIQUE)
+        # pero la enviaba por el canal Cypher/Bolt, que la rechaza integramente con
+        # "Syntax error ... mismatched input 'TYPE'/'ON'" -- verificado que las 28
+        # sentencias originales fallaban al 100%. No hace falta declarar tipos de
+        # vertice/arista explicitamente: ArcadeDB los crea de forma implicita al
+        # primer MERGE/CREATE (comportamiento schemaless ya verificado en esta
+        # migracion). Los indices SI son creables via Cypher estandar (ArcadeDB
+        # soporta indices "standard, RANGE y TEXT" via Bolt, solo rechaza FULLTEXT
+        # -- ver get_fulltext_indices), asi que se reescriben con la misma sintaxis
+        # Cypher que ya usa el caso por defecto (Neo4j) mas abajo en este archivo.
+        return [
+            'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
+            'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
+            'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
+            'CREATE INDEX saga_uuid IF NOT EXISTS FOR (n:Saga) ON (n.uuid)',
+            'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
+            'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
+            'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
+            'CREATE INDEX has_episode_uuid IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.uuid)',
+            'CREATE INDEX next_episode_uuid IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.uuid)',
+            'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
+            'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
+            'CREATE INDEX community_group_id IF NOT EXISTS FOR (n:Community) ON (n.group_id)',
+            'CREATE INDEX saga_group_id IF NOT EXISTS FOR (n:Saga) ON (n.group_id)',
+            'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
+            'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
+            'CREATE INDEX has_episode_group_id IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.group_id)',
+            'CREATE INDEX next_episode_group_id IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.group_id)',
+            'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
+            'CREATE INDEX saga_name IF NOT EXISTS FOR (n:Saga) ON (n.name)',
+            'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
+            'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
+            'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
+            'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
+            'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
+            'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
+            'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
+            'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
+        ]
 
     if provider == GraphProvider.FALKORDB:
         return [
@@ -137,18 +126,15 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
 
 def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
     if provider == GraphProvider.ARCADEDB:
-        from typing import cast
-
-        # ArcadeDB uses Lucene-based fulltext indexes via SQL DDL
-        return cast(
-            list[LiteralString],
-            [
-                'CREATE INDEX IF NOT EXISTS ON Episodic (content, source, source_description, group_id) FULL_TEXT ENGINE LUCENE',
-                'CREATE INDEX IF NOT EXISTS ON Entity (name, summary, group_id) FULL_TEXT ENGINE LUCENE',
-                'CREATE INDEX IF NOT EXISTS ON Community (name, group_id) FULL_TEXT ENGINE LUCENE',
-                'CREATE INDEX IF NOT EXISTS ON RELATES_TO (name, fact, group_id) FULL_TEXT ENGINE LUCENE',
-            ],
-        )
+        # Corregido (03/07/2026): igual que get_range_indices, la sintaxis SQL
+        # 'FULL_TEXT ENGINE LUCENE' enviada por Cypher/Bolt falla siempre (ArcadeDB
+        # solo acepta CREATE INDEX estandar/RANGE/TEXT via Bolt, no FULLTEXT --
+        # verificado repetidamente en esta migracion). graphiti-core ya se usa con
+        # BM25/fulltext desactivado (search_config sin EdgeSearchMethod.bm25 /
+        # NodeSearchMethod.bm25 -- ver parche de compatibilidad en main.py), asi
+        # que no hace falta ningun indice fulltext real; devolver lista vacia,
+        # igual que ya hace el caso KUZU mas abajo en este archivo.
+        return []
 
     if provider == GraphProvider.FALKORDB:
         from typing import cast
