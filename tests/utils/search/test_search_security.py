@@ -267,3 +267,25 @@ async def test_entity_edge_rejects_unsafe_group_id_on_save():
     )
     with pytest.raises(GroupIdValidationError, match='must contain only alphanumeric'):
         await edge.save(MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_non_entity_node_also_rejects_unsafe_group_id_on_save():
+    # Every concrete save() guards group_id at the write boundary via the shared
+    # Node._validate_for_write(), not just EntityNode — a direct EpisodicNode(...).save()
+    # with a non-conforming group_id must not create an unreachable record.
+    from datetime import datetime
+
+    from graphiti_core.nodes import EpisodeType, EpisodicNode
+
+    node = EpisodicNode(
+        name='ep',
+        group_id='bad"group',
+        source=EpisodeType.text,
+        source_description='',
+        content='',
+        valid_at=datetime(2024, 1, 1),
+        entity_edges=[],
+    )
+    with pytest.raises(GroupIdValidationError, match='must contain only alphanumeric'):
+        await node.save(MagicMock())
