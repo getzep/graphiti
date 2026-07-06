@@ -32,7 +32,7 @@ from graphiti_core.driver.driver import (
 )
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date, validate_node_labels
+from graphiti_core.helpers import parse_db_date, validate_group_id, validate_node_labels
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     COMMUNITY_NODE_RETURN_NEPTUNE,
@@ -103,6 +103,12 @@ class Node(BaseModel, ABC):
     @classmethod
     def validate_labels(cls, value: list[str]) -> list[str]:
         validate_node_labels(value)
+        return value
+
+    @field_validator('group_id')
+    @classmethod
+    def validate_group_id_field(cls, value: str) -> str:
+        validate_group_id(value)
         return value
 
     @abstractmethod

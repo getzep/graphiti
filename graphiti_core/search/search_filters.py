@@ -21,7 +21,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.helpers import validate_node_labels
+from graphiti_core.helpers import validate_node_labels, validate_property_name
 
 
 class ComparisonOperator(Enum):
@@ -72,6 +72,16 @@ class SearchFilters(BaseModel):
         validate_node_labels(value)
         return value
 
+    @field_validator('property_filters')
+    @classmethod
+    def validate_property_filter_names(
+        cls, value: list[PropertyFilter] | None
+    ) -> list[PropertyFilter] | None:
+        if value is not None:
+            for property_filter in value:
+                validate_property_name(property_filter.property_name)
+        return value
+
 
 def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
     mapping = {
@@ -81,6 +91,35 @@ def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
         ComparisonOperator.less_than_equal: 'lte',
     }
     return mapping.get(op, op.value)
+
+
+def property_filter_query_constructor(
+    entity_alias: str,
+    property_filters: list[PropertyFilter],
+    param_prefix: str,
+) -> tuple[list[str], dict[str, Any]]:
+    """Build Cypher fragments for a list of property filters against a single entity alias.
+
+    Property keys cannot be parameterized in Cypher, so each name is validated
+    (defense-in-depth against model_construct()/other validation bypasses) before it is
+    interpolated. Property values are always passed as query parameters.
+    """
+    filter_queries: list[str] = []
+    filter_params: dict[str, Any] = {}
+
+    for i, property_filter in enumerate(property_filters):
+        validate_property_name(property_filter.property_name)
+        property_reference = f'{entity_alias}.{property_filter.property_name}'
+        operator = property_filter.comparison_operator
+
+        if operator in (ComparisonOperator.is_null, ComparisonOperator.is_not_null):
+            filter_queries.append(f'{property_reference} {operator.value}')
+        else:
+            param_name = f'{param_prefix}_{i}'
+            filter_queries.append(f'{property_reference} {operator.value} ${param_name}')
+            filter_params[param_name] = property_filter.property_value
+
+    return filter_queries, filter_params
 
 
 def node_search_filter_query_constructor(
@@ -100,6 +139,13 @@ def node_search_filter_query_constructor(
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels
         filter_queries.append(node_label_filter)
+
+    if filters.property_filters is not None:
+        property_queries, property_params = property_filter_query_constructor(
+            'n', filters.property_filters, 'node_prop'
+        )
+        filter_queries.extend(property_queries)
+        filter_params.update(property_params)
 
     return filter_queries, filter_params
 
@@ -132,6 +178,13 @@ def edge_search_filter_query_constructor(
     if filters.edge_uuids is not None:
         filter_queries.append('e.uuid in $edge_uuids')
         filter_params['edge_uuids'] = filters.edge_uuids
+
+    if filters.property_filters is not None:
+        property_queries, property_params = property_filter_query_constructor(
+            'e', filters.property_filters, 'edge_prop'
+        )
+        filter_queries.extend(property_queries)
+        filter_params.update(property_params)
 
     if filters.node_labels is not None:
         # Defense-in-depth for model_construct()/other validation bypasses.
