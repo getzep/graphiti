@@ -22,7 +22,7 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
@@ -52,12 +52,6 @@ class Edge(BaseModel, ABC):
     source_node_uuid: str
     target_node_uuid: str
     created_at: datetime
-
-    @field_validator('group_id')
-    @classmethod
-    def validate_group_id_field(cls, value: str) -> str:
-        validate_group_id(value)
-        return value
 
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
@@ -339,6 +333,11 @@ class EntityEdge(Edge):
         self.fact_embedding = records[0]['fact_embedding']
 
     async def save(self, driver: GraphDriver):
+        # Validate group_id on write only. Hydration from the DB must stay tolerant of
+        # any stored value, so validation lives at the persistence boundary rather than
+        # on the model.
+        validate_group_id(self.group_id)
+
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.edge_save(self, driver)

@@ -105,12 +105,6 @@ class Node(BaseModel, ABC):
         validate_node_labels(value)
         return value
 
-    @field_validator('group_id')
-    @classmethod
-    def validate_group_id_field(cls, value: str) -> str:
-        validate_group_id(value)
-        return value
-
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
 
@@ -550,6 +544,11 @@ class EntityNode(Node):
         self.name_embedding = records[0]['name_embedding']
 
     async def save(self, driver: GraphDriver):
+        # Validate group_id on write only. Hydration from the DB must stay tolerant of
+        # any stored value, so validation lives at the persistence boundary rather than
+        # on the model.
+        validate_group_id(self.group_id)
+
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.node_save(self, driver)

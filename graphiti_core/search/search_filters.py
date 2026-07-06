@@ -64,6 +64,9 @@ class SearchFilters(BaseModel):
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
     edge_uuids: list[str] | None = Field(default=None)
+    # A single property_filters list is intentionally shared: it is applied to the node
+    # alias `n` by node_search_filter_query_constructor and to the edge alias `e` by
+    # edge_search_filter_query_constructor.
     property_filters: list[PropertyFilter] | None = Field(default=None)
 
     @field_validator('node_labels')

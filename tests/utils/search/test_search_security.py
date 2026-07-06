@@ -103,7 +103,11 @@ def test_property_filter_null_operators_emit_no_params():
             PropertyFilter(
                 property_name='deleted_at',
                 comparison_operator=ComparisonOperator.is_null,
-            )
+            ),
+            PropertyFilter(
+                property_name='created_at',
+                comparison_operator=ComparisonOperator.is_not_null,
+            ),
         ]
     )
 
@@ -111,8 +115,30 @@ def test_property_filter_null_operators_emit_no_params():
         filters, GraphProvider.NEO4J
     )
 
-    assert filter_queries == ['n.deleted_at IS NULL']
+    assert filter_queries == ['n.deleted_at IS NULL', 'n.created_at IS NOT NULL']
     assert filter_params == {}
+
+
+def test_property_filters_are_shared_across_node_and_edge_constructors():
+    # A single property_filters list is intentionally applied to the node alias `n` in
+    # node searches and the edge alias `e` in edge searches.
+    filters = SearchFilters(
+        property_filters=[
+            PropertyFilter(
+                property_name='status',
+                property_value='active',
+                comparison_operator=ComparisonOperator.equals,
+            )
+        ]
+    )
+
+    node_queries, node_params = node_search_filter_query_constructor(filters, GraphProvider.NEO4J)
+    edge_queries, edge_params = edge_search_filter_query_constructor(filters, GraphProvider.NEO4J)
+
+    assert node_queries == ['n.status = $node_prop_0']
+    assert edge_queries == ['e.status = $edge_prop_0']
+    assert node_params == {'node_prop_0': 'active'}
+    assert edge_params == {'edge_prop_0': 'active'}
 
 
 def test_search_filters_reject_unsafe_property_names():
@@ -201,34 +227,43 @@ def test_falkordb_fulltext_query_escapes_default_group_id():
     assert '@group_id:"_"' not in built
 
 
-def test_entity_node_rejects_unsafe_group_id_on_write():
-    # Regression: the write path must reject group_ids that the read/delete path
-    # would later refuse to match, otherwise records become unreachable.
+def test_node_construction_is_tolerant_of_any_group_id():
+    # Hydration from the DB builds models directly from stored values, so construction
+    # must NOT validate group_id — otherwise a cross-partition (group_ids=None) read of a
+    # legacy record with a non-conforming group_id would hard-fail. Validation happens on
+    # write (save()) instead.
     from graphiti_core.nodes import EntityNode
 
-    with pytest.raises(ValidationError):
-        EntityNode(name='test', group_id='bad"group')
-
-
-def test_entity_node_accepts_valid_and_default_group_ids_on_write():
-    from graphiti_core.nodes import EntityNode
-
-    # Empty (Neo4j default) and safe values must still be accepted.
+    EntityNode(name='test', group_id='bad"group')  # must not raise
     EntityNode(name='test', group_id='')
     EntityNode(name='test', group_id='valid-group_1')
 
 
-def test_entity_edge_rejects_unsafe_group_id_on_write():
+@pytest.mark.asyncio
+async def test_entity_node_rejects_unsafe_group_id_on_save():
+    # Regression: the write path must reject group_ids that the read/delete path would
+    # later refuse to match, otherwise records become unreachable. validate_group_id is
+    # the first statement in save(), so a MagicMock driver is never actually used.
+    from graphiti_core.nodes import EntityNode
+
+    node = EntityNode(name='test', group_id='bad"group')
+    with pytest.raises(GroupIdValidationError, match='must contain only alphanumeric'):
+        await node.save(MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_rejects_unsafe_group_id_on_save():
     from datetime import datetime
 
     from graphiti_core.edges import EntityEdge
 
-    with pytest.raises(ValidationError):
-        EntityEdge(
-            name='RELATES_TO',
-            group_id='bad"group',
-            source_node_uuid='source',
-            target_node_uuid='target',
-            fact='fact',
-            created_at=datetime(2024, 1, 1),
-        )
+    edge = EntityEdge(
+        name='RELATES_TO',
+        group_id='bad"group',
+        source_node_uuid='source',
+        target_node_uuid='target',
+        fact='fact',
+        created_at=datetime(2024, 1, 1),
+    )
+    with pytest.raises(GroupIdValidationError, match='must contain only alphanumeric'):
+        await edge.save(MagicMock())
