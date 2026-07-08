@@ -40,6 +40,11 @@ from models.response_types import (
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
+from utils.search_tuning import (
+    apply_liveness_filter,
+    build_edge_search_config,
+    build_node_search_config,
+)
 from utils.type_config import (
     build_edge_type_map,
     build_edge_types,
@@ -478,7 +483,7 @@ async def add_memory(
 async def search_nodes(
     query: str,
     group_ids: str | list[str] | None = None,
-    max_nodes: int = 10,
+    max_nodes: int | None = None,
     entity_types: list[str] | None = None,
     center_node_uuid: str | None = None,
 ) -> NodeSearchResponse | ErrorResponse:
@@ -488,7 +493,8 @@ async def search_nodes(
         query: The search query
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
             string is accepted and treated as a one-element list)
-        max_nodes: Maximum number of nodes to return (default: 10)
+        max_nodes: Maximum number of nodes to return (defaults to the server's
+            search.max_nodes setting)
         entity_types: Optional list of entity type names (node labels) to filter by
         center_node_uuid: Optional UUID of a node to center the search around. Results
             closer to this node in the graph are ranked higher.
@@ -499,6 +505,8 @@ async def search_nodes(
         return ErrorResponse(error='Graphiti service not initialized')
 
     try:
+        max_nodes = max_nodes if max_nodes is not None else config.search.max_nodes
+
         client = await graphiti_service.get_client()
 
         # Accept a scalar group_id or a list; fall back to the default when omitted.
@@ -511,22 +519,16 @@ async def search_nodes(
             else []
         )
 
-        # Create search filters
-        search_filters = SearchFilters(
-            node_labels=entity_types,
+        search_filters = SearchFilters(node_labels=entity_types)
+
+        node_config = build_node_search_config(
+            reranker=config.search.reranker,
+            mmr_lambda=config.search.mmr_lambda,
+            limit=max_nodes,
+            min_score=config.search.reranker_min_score,
+            center_node_uuid=center_node_uuid,
         )
 
-        # center_node_uuid is only honored by the node_distance reranker, so select
-        # that recipe when a center node is given (mirroring core's Graphiti.search);
-        # otherwise use RRF.
-        from graphiti_core.search.search_config_recipes import (
-            NODE_HYBRID_SEARCH_NODE_DISTANCE,
-            NODE_HYBRID_SEARCH_RRF,
-        )
-
-        node_config = (
-            NODE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else NODE_HYBRID_SEARCH_RRF
-        )
         results = await client.search_(
             query=query,
             config=node_config,
@@ -535,15 +537,16 @@ async def search_nodes(
             search_filter=search_filters,
         )
 
-        # Extract nodes from results
         nodes = results.nodes[:max_nodes] if results.nodes else []
+        scores = results.node_reranker_scores[:max_nodes] if results.node_reranker_scores else []
 
         if not nodes:
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
-        # Format the results (embeddings stripped by to_node_result)
-        node_results = [to_node_result(node) for node in nodes]
-
+        node_results = [
+            to_node_result(node, score=(scores[i] if i < len(scores) else None))
+            for i, node in enumerate(nodes)
+        ]
         return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
     except Exception as e:
         error_msg = str(e)
@@ -555,13 +558,14 @@ async def search_nodes(
 async def search_memory_facts(
     query: str,
     group_ids: str | list[str] | None = None,
-    max_facts: int = 10,
+    max_facts: int | None = None,
     center_node_uuid: str | None = None,
     edge_types: list[str] | None = None,
     valid_at_after: str | None = None,
     valid_at_before: str | None = None,
     invalid_at_after: str | None = None,
     invalid_at_before: str | None = None,
+    include_invalidated: bool | None = None,
 ) -> FactSearchResponse | ErrorResponse:
     """Search the graph memory for relevant facts (entity edges).
 
@@ -569,7 +573,8 @@ async def search_memory_facts(
         query: The search query
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
             string is accepted and treated as a one-element list)
-        max_facts: Maximum number of facts to return (default: 10)
+        max_facts: Maximum number of facts to return (defaults to the server's
+            search.max_facts setting)
         center_node_uuid: Optional UUID of a node to center the search around
         edge_types: Optional list of edge (fact) type names to filter by
         valid_at_after: Optional ISO-8601 lower bound; only facts whose valid_at is at or
@@ -577,6 +582,9 @@ async def search_memory_facts(
         valid_at_before: Optional ISO-8601 upper bound on a fact's valid_at
         invalid_at_after: Optional ISO-8601 lower bound on a fact's invalid_at
         invalid_at_before: Optional ISO-8601 upper bound on a fact's invalid_at
+        include_invalidated: When True, include superseded/expired facts in
+            results (for historical/temporal reasoning). Defaults to the
+            server's search.exclude_invalidated setting (excluded by default).
     """
     global graphiti_service
 
@@ -584,7 +592,14 @@ async def search_memory_facts(
         return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        # Validate max_facts parameter
+        # Resolve defaults from config.
+        max_facts = max_facts if max_facts is not None else config.search.max_facts
+        include_invalidated = (
+            include_invalidated
+            if include_invalidated is not None
+            else (not config.search.exclude_invalidated)
+        )
+
         if max_facts <= 0:
             return ErrorResponse(error='max_facts must be a positive integer')
 
@@ -600,6 +615,9 @@ async def search_memory_facts(
         except ValueError as e:
             return ErrorResponse(error=f'Invalid date filter: {e}')
 
+        if not include_invalidated:
+            search_filter = apply_liveness_filter(search_filter)
+
         client = await graphiti_service.get_client()
 
         # Accept a scalar group_id or a list; fall back to the default when omitted.
@@ -612,18 +630,32 @@ async def search_memory_facts(
             else []
         )
 
-        relevant_edges = await client.search(
-            group_ids=effective_group_ids,
-            query=query,
-            num_results=max_facts,
+        edge_config = build_edge_search_config(
+            reranker=config.search.reranker,
+            mmr_lambda=config.search.mmr_lambda,
+            limit=max_facts,
+            min_score=config.search.reranker_min_score,
             center_node_uuid=center_node_uuid,
-            search_filter=search_filter,
         )
 
-        if not relevant_edges:
+        results = await client.search_(
+            query=query,
+            config=edge_config,
+            group_ids=effective_group_ids,
+            center_node_uuid=center_node_uuid,
+            search_filter=search_filter if search_filter is not None else SearchFilters(),
+        )
+
+        edges = results.edges[:max_facts] if results.edges else []
+        scores = results.edge_reranker_scores[:max_facts] if results.edge_reranker_scores else []
+
+        if not edges:
             return FactSearchResponse(message='No relevant facts found', facts=[])
 
-        facts = [format_fact_result(edge) for edge in relevant_edges]
+        facts = [
+            format_fact_result(edge, score=(scores[i] if i < len(scores) else None))
+            for i, edge in enumerate(edges)
+        ]
         return FactSearchResponse(message='Facts retrieved successfully', facts=facts)
     except Exception as e:
         error_msg = str(e)
