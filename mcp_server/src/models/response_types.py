@@ -21,6 +21,7 @@ class NodeResult(TypedDict):
     summary: str | None
     group_id: str
     attributes: dict[str, Any]
+    score: float | None
 
 
 class NodeSearchResponse(TypedDict):
@@ -74,6 +75,7 @@ class EdgeResult(TypedDict):
     created_at: str | None
     valid_at: str | None
     invalid_at: str | None
+    score: float | None
 
 
 class TripletResponse(TypedDict):
