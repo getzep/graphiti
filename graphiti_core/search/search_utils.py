@@ -1872,7 +1872,7 @@ async def episode_mentions_reranker(
     sorted_uuids, _ = rrf(node_uuids)
     scores: dict[str, float] = {}
 
-    # Find the shortest path to center node
+    # Count how many episodes mention each entity
     results, _, _ = await driver.execute_query(
         """
         UNWIND $node_uuids AS node_uuid
@@ -1888,10 +1888,10 @@ async def episode_mentions_reranker(
 
     for uuid in sorted_uuids:
         if uuid not in scores:
-            scores[uuid] = float('inf')
+            scores[uuid] = 0
 
-    # rerank on shortest distance
-    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+    # rank by descending mention count (most-mentioned first)
+    sorted_uuids.sort(reverse=True, key=lambda cur_uuid: scores[cur_uuid])
 
     return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score], [
         scores[uuid] for uuid in sorted_uuids if scores[uuid] >= min_score
