@@ -1,0 +1,74 @@
+[project]
+name = "graph-service"
+version = "0.1.0"
+description = "Zep Graph service implementing Graphiti package"
+authors = [
+    { "name" = "Paul Paliychuk", "email" = "paul@getzep.com" },
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "graphiti-core>=0.28.2",
+    "pydantic-settings>=2.4.0",
+    "uvicorn>=0.44.0",
+    "httpx>=0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pydantic>=2.8.2",
+    "pyright>=1.1.380",
+    "pytest>=9.0.3",
+    "python-dotenv>=1.2.2",
+    "pytest-asyncio>=0.24.0",
+    "pytest-xdist>=3.6.1",
+    "ruff>=0.6.2",
+    "fastapi-cli>=0.0.5",
+    # FalkorDB driver, needed by the live end-to-end test (tests/test_live_falkordb_int.py)
+    # which exercises the db_backend='falkordb' path. Not a runtime dependency.
+    "graphiti-core[falkordb]>=0.28.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["graph_service"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = [
+    "integration: live end-to-end tests requiring FalkorDB and an OpenAI API key",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.pyright]
+include = ["."]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"

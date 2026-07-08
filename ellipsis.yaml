@@ -1,0 +1,20 @@
+# See https://docs.ellipsis.dev for all available configurations.
+
+version: 1.3
+
+pr_address_comments:
+  delivery: "new_commit"
+pr_review:
+  auto_review_enabled: true  # enable auto-review of PRs
+  auto_summarize_pr: true  # enable auto-summary of PRs
+  confidence_threshold: 0.8  # Threshold for how confident Ellipsis needs to be in order to leave a comment, in range [0.0-1.0]
+  rules:  # customize behavior
+    - "Ensure the copyright notice is present as the header of all Python files"
+    - "Ensure code is idiomatic"
+    - "Code should be DRY (Don't Repeat Yourself)"
+    - "Extremely Complicated Code Needs Comments"
+    - "Use Descriptive Variable and Constant Names"
+    - "Follow the Single Responsibility Principle"
+    - "Function and Method Naming Should Follow Consistent Patterns"
+    - "There should no secrets or credentials in the code"
+    - "Don't log sensitive data"

@@ -1,0 +1,73 @@
+[project]
+name = "mcp-server"
+version = "1.0.2"
+description = "Graphiti MCP Server"
+readme = "README.md"
+requires-python = ">=3.10,<4"
+dependencies = [
+    "mcp>=1.27.2,<2",
+    "openai>=2.41.0",
+    "graphiti-core[falkordb]>=0.29.2",
+    "pydantic-settings>=2.0.0",
+    "pyyaml>=6.0.3",
+    "typing-extensions>=4.0.0",
+]
+
+[project.optional-dependencies]
+azure = [
+    "azure-identity>=1.25.3",
+]
+providers = [
+    "google-genai>=2.8.0",
+    "anthropic>=0.107.1",
+    "groq>=1.2.0",
+    "voyageai>=0.3.7",
+    "sentence-transformers>=3.2.1",
+]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Required by Pydantic on Python < 3.12
+"typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
+
+[dependency-groups]
+dev = [
+    "faker>=40.21.0",
+    "httpx>=0.28.1",
+    "psutil>=7.1.2",
+    "pyright>=1.1.408",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.4.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.15.16",
+]

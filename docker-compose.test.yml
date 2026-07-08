@@ -1,0 +1,39 @@
+services:
+  graph:
+    image: graphiti-service:${GITHUB_SHA}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NEO4J_URI=bolt://neo4j:${NEO4J_PORT}
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - PORT=8000
+
+  neo4j:
+    image: neo4j:5.26.2
+    ports:
+      - "7474:7474"
+      - "${NEO4J_PORT}:${NEO4J_PORT}"
+    healthcheck:
+      test: wget "http://localhost:${NEO4J_PORT}" || exit 1
+      interval: 1s
+      timeout: 10s
+      retries: 20
+      start_period: 3s
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
