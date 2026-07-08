@@ -24,6 +24,7 @@ from numpy._typing import NDArray
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import (
+    COMMUNITY_INDEX_NAME,
     GraphDriver,
     GraphProvider,
 )
@@ -999,7 +1000,7 @@ async def community_fulltext_search(
         yield_query = 'WITH node AS c, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
-        res = driver.run_aoss_query('community_name', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
+        res = driver.run_aoss_query(COMMUNITY_INDEX_NAME, query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
         if res['hits']['total']['value'] > 0:
             # Calculate Cosine similarity then return the edge ids
             input_ids = []

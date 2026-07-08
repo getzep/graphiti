@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.driver import COMMUNITY_INDEX_NAME, GraphProvider
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
 from graphiti_core.driver.record_parsers import (
@@ -478,7 +478,7 @@ class NeptuneSearchOperations(SearchOperations):
         if self._driver is None:
             return []
         driver = self._driver
-        res = driver.run_aoss_query('community_name', query, limit=limit)
+        res = driver.run_aoss_query(COMMUNITY_INDEX_NAME, query, limit=limit)
         if not res or res.get('hits', {}).get('total', {}).get('value', 0) == 0:
             return []
 
