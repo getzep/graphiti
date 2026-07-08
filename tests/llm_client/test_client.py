@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import pytest
+from pydantic import BaseModel
+
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.prompts.models import Message
@@ -22,8 +25,15 @@ from graphiti_core.prompts.models import Message
 class MockLLMClient(LLMClient):
     """Concrete implementation of LLMClient for testing"""
 
-    async def _generate_response(self, messages, response_model=None):
+    async def _generate_response(
+        self, messages, response_model=None, max_tokens=None, model_size=None
+    ):
+        self.last_messages = messages
         return {'content': 'test'}
+
+
+class ResponseModel(BaseModel):
+    fact: str
 
 
 def test_clean_input():
@@ -106,3 +116,49 @@ def test_attribute_extraction_preamble_handles_empty_messages():
     messages: list[Message] = []
     client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
     assert messages == []
+
+
+@pytest.mark.asyncio
+async def test_generate_response_does_not_mutate_caller_messages():
+    client = MockLLMClient(LLMConfig())
+    messages = [
+        Message(role='system', content='System message'),
+        Message(role='user', content='User message\x00'),
+    ]
+    original = [message.model_dump() for message in messages]
+
+    await client.generate_response(
+        messages,
+        response_model=ResponseModel,
+        group_id='test-group',
+        attribute_extraction=True,
+    )
+
+    assert [message.model_dump() for message in messages] == original
+    assert client.last_messages is not messages
+    assert client.last_messages[0] is not messages[0]
+    assert 'ATTRIBUTE EXTRACTION:' in client.last_messages[0].content
+    assert 'same language' in client.last_messages[0].content
+    assert 'Respond with a JSON object in the following format' in client.last_messages[-1].content
+    assert '\x00' not in client.last_messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_generate_response_preparation_is_idempotent_for_reused_messages():
+    client = MockLLMClient(LLMConfig())
+    messages = [
+        Message(role='system', content='System message'),
+        Message(role='user', content='User message'),
+    ]
+
+    await client.generate_response(
+        messages, response_model=ResponseModel, attribute_extraction=True
+    )
+    first_call = [message.model_dump() for message in client.last_messages]
+
+    await client.generate_response(
+        messages, response_model=ResponseModel, attribute_extraction=True
+    )
+    second_call = [message.model_dump() for message in client.last_messages]
+
+    assert second_call == first_call

@@ -329,6 +329,48 @@ class TestGeminiClientGenerateResponse:
         assert result['test_field'] == 'correct_value'
 
     @pytest.mark.asyncio
+    async def test_retry_does_not_mutate_caller_messages(self, gemini_client, mock_gemini_client):
+        """Test retry prompts are added only to the client's cloned messages."""
+        mock_response1 = MagicMock()
+        mock_response1.text = 'Invalid JSON that cannot be parsed'
+        mock_response1.candidates = []
+        mock_response1.prompt_feedback = None
+
+        mock_response2 = MagicMock()
+        mock_response2.text = '{"test_field": "correct_value"}'
+        mock_response2.candidates = []
+        mock_response2.prompt_feedback = None
+
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            mock_response1,
+            mock_response2,
+        ]
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        original = [message.model_dump() for message in messages]
+
+        result = await gemini_client.generate_response(
+            messages,
+            response_model=ResponseModel,
+            attribute_extraction=True,
+        )
+
+        assert result['test_field'] == 'correct_value'
+        assert [message.model_dump() for message in messages] == original
+        assert len(messages) == 2
+        first_call = mock_gemini_client.aio.models.generate_content.call_args_list[0].kwargs
+        second_call = mock_gemini_client.aio.models.generate_content.call_args_list[1].kwargs
+        assert 'ATTRIBUTE EXTRACTION:' in first_call['config'].system_instruction
+        assert len(first_call['contents']) == 1
+        assert len(second_call['contents']) == 2
+        assert (
+            'The previous response attempt was invalid' in second_call['contents'][1].parts[0].text
+        )
+
+    @pytest.mark.asyncio
     async def test_max_retries_exceeded(self, gemini_client, mock_gemini_client):
         """Test behavior when max retries are exceeded."""
         # Setup mock to always return invalid JSON
