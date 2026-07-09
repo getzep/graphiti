@@ -250,9 +250,11 @@ class SearchTuningConfig(BaseModel):
     """Tuning knobs for the MCP search tools (search_nodes / search_memory_facts)."""
 
     reranker: Literal['rrf', 'mmr', 'cross_encoder'] = Field(
-        default='mmr',
-        description="Reranker for hybrid search. 'mmr' penalizes redundancy "
-        "(suppresses recurring hub facts); 'rrf' is plain rank fusion; "
+        default='rrf',
+        description="Reranker for hybrid search. 'rrf' is plain reciprocal-rank "
+        "fusion (the reliable default: relevance-ordered, diverse). 'mmr' penalizes "
+        'redundancy but is miscalibrated for low-magnitude embedding similarities '
+        '(it can rank outliers over relevant clustered facts); validate before use. '
         "'cross_encoder' scores true relevance but requires a configured "
         'cross-encoder client and adds a model call per search.',
     )
@@ -264,7 +266,8 @@ class SearchTuningConfig(BaseModel):
     reranker_min_score: float = Field(
         default=0.0,
         description='Minimum reranker score to keep a result. Meaningful only for '
-        'cross_encoder (0-1 calibrated); leave 0 for rrf/mmr.',
+        'cross_encoder (0-1 calibrated); ignored for mmr (which must not filter) '
+        'and left at 0 for rrf.',
     )
     max_facts: int = Field(default=6, description='Default max facts for search_memory_facts')
     max_nodes: int = Field(default=6, description='Default max nodes for search_nodes')

@@ -25,6 +25,13 @@ from graphiti_core.search.search_filters import (
 
 VALID_RERANKERS = {'rrf', 'mmr', 'cross_encoder'}
 
+# graphiti_core's maximal_marginal_relevance uses -2.0 as its "keep everything"
+# sentinel. MMR scores span negatives (the diversity penalty can exceed the
+# small query-similarity term), so any min_score >= 0 silently drops most
+# candidates. reranker_min_score is only meaningful for the cross-encoder's
+# calibrated 0-1 scores; for MMR we always disable filtering and let it reorder.
+MMR_NO_FILTER_SCORE = -2.0
+
 
 def build_edge_search_config(
     reranker: str,
@@ -45,6 +52,7 @@ def build_edge_search_config(
         assert config.edge_config is not None  # RRF recipe always sets edge_config
         config.edge_config.reranker = EdgeReranker.mmr
         config.edge_config.mmr_lambda = mmr_lambda
+        min_score = MMR_NO_FILTER_SCORE  # MMR must not filter; it only reorders
     else:  # 'rrf'
         config = EDGE_HYBRID_SEARCH_RRF.model_copy(deep=True)
 
@@ -72,6 +80,7 @@ def build_node_search_config(
         assert config.node_config is not None  # RRF recipe always sets node_config
         config.node_config.reranker = NodeReranker.mmr
         config.node_config.mmr_lambda = mmr_lambda
+        min_score = MMR_NO_FILTER_SCORE  # MMR must not filter; it only reorders
     else:  # 'rrf'
         config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
 

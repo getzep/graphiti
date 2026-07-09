@@ -258,9 +258,9 @@ nested config, so the env prefix is `SEARCH__` (double underscore).
 
 | Var | Default | Purpose |
 |---|---|---|
-| `SEARCH__RERANKER` | `mmr` | `mmr` (diversity-aware, suppresses recurring hub facts), `rrf` (plain rank fusion), or `cross_encoder`. |
-| `SEARCH__MMR_LAMBDA` | `0.5` | MMR relevance/diversity tradeoff; 1.0 = no diversity. |
-| `SEARCH__RERANKER_MIN_SCORE` | `0.0` | Min score to keep a result. Only meaningful for `cross_encoder`. |
+| `SEARCH__RERANKER` | `rrf` | `rrf` (reciprocal-rank fusion; relevance-ordered and diverse — the reliable default), `mmr` (diversity-aware but miscalibrated for low-magnitude embedding similarities — validate before use), or `cross_encoder`. |
+| `SEARCH__MMR_LAMBDA` | `0.5` | MMR relevance/diversity tradeoff; 1.0 = no diversity. Only used when reranker is `mmr`. |
+| `SEARCH__RERANKER_MIN_SCORE` | `0.0` | Min score to keep a result. Only meaningful for `cross_encoder`; ignored for `mmr` (which must not filter) and left at 0 for `rrf`. |
 | `SEARCH__MAX_FACTS` | `6` | Default result count for `search_memory_facts`. |
 | `SEARCH__MAX_NODES` | `6` | Default result count for `search_nodes`. |
 | `SEARCH__EXCLUDE_INVALIDATED` | `true` | Exclude superseded/expired facts by default. Per-call override: `include_invalidated=true`. |

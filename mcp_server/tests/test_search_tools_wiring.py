@@ -63,12 +63,13 @@ def _install_fake(monkeypatch):
     return client
 
 
-def test_facts_use_mmr_and_surface_score(monkeypatch):
+def test_facts_use_default_reranker_and_surface_score(monkeypatch):
     client = _install_fake(monkeypatch)
     resp = asyncio.run(srv.search_memory_facts(query='q', group_ids='g'))
     assert resp['facts'][0]['score'] == 0.87
     call = client.calls[0]
-    assert call['config'].edge_config.reranker == EdgeReranker.mmr
+    # rrf is the default reranker (see MMR finding: mmr is miscalibrated here)
+    assert call['config'].edge_config.reranker == EdgeReranker.rrf
     # liveness filter applied by default
     assert call['search_filter'].expired_at is not None
 
@@ -86,11 +87,11 @@ def test_facts_default_limit_is_six(monkeypatch):
     assert client.calls[0]['config'].limit == 6
 
 
-def test_nodes_use_mmr_and_surface_score(monkeypatch):
+def test_nodes_use_default_reranker_and_surface_score(monkeypatch):
     client = _install_fake(monkeypatch)
     resp = asyncio.run(srv.search_nodes(query='q', group_ids='g'))
     assert resp['nodes'][0]['score'] == 0.73
-    assert client.calls[0]['config'].node_config.reranker == NodeReranker.mmr
+    assert client.calls[0]['config'].node_config.reranker == NodeReranker.rrf
 
 
 def test_nodes_default_limit_is_six(monkeypatch):

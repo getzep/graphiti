@@ -19,6 +19,14 @@ def test_edge_mmr_sets_lambda_and_reranker():
     assert cfg.edge_config.reranker == EdgeReranker.mmr
     assert cfg.edge_config.mmr_lambda == 0.5
     assert cfg.limit == 6
+    # MMR must never filter: the caller's min_score (0.0 here) is overridden with
+    # the no-filter sentinel, or MMR's mostly-negative scores would drop results.
+    assert cfg.reranker_min_score == -2.0
+
+
+def test_node_mmr_forces_no_filter_min_score():
+    cfg = build_node_search_config('mmr', mmr_lambda=0.5, limit=6, min_score=0.0)
+    assert cfg.reranker_min_score == -2.0
 
 
 def test_edge_rrf_keeps_rrf():

@@ -10,7 +10,7 @@ from config.schema import GraphitiConfig, SearchTuningConfig
 def test_search_defaults():
     cfg = GraphitiConfig()
     assert isinstance(cfg.search, SearchTuningConfig)
-    assert cfg.search.reranker == 'mmr'
+    assert cfg.search.reranker == 'rrf'
     assert cfg.search.mmr_lambda == 0.5
     assert cfg.search.max_facts == 6
     assert cfg.search.max_nodes == 6
@@ -19,13 +19,13 @@ def test_search_defaults():
 
 
 def test_search_env_overrides():
-    os.environ['SEARCH__RERANKER'] = 'rrf'
+    os.environ['SEARCH__RERANKER'] = 'mmr'
     os.environ['SEARCH__MMR_LAMBDA'] = '0.7'
     os.environ['SEARCH__MAX_FACTS'] = '4'
     os.environ['SEARCH__EXCLUDE_INVALIDATED'] = 'false'
     try:
         cfg = GraphitiConfig()
-        assert cfg.search.reranker == 'rrf'
+        assert cfg.search.reranker == 'mmr'
         assert cfg.search.mmr_lambda == 0.7
         assert cfg.search.max_facts == 4
         assert cfg.search.exclude_invalidated is False
