@@ -167,7 +167,7 @@ class FalkorSearchOperations(SearchOperations):
             + filter_query
             + """
             WITH n, score
-            ORDER BY score DESC
+            ORDER BY score DESC, n.uuid ASC
             LIMIT $limit
             RETURN
             """
@@ -218,7 +218,7 @@ class FalkorSearchOperations(SearchOperations):
             """
             + get_entity_node_return_query(GraphProvider.FALKORDB)
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, uuid ASC
             LIMIT $limit
             """
         )
@@ -324,7 +324,7 @@ class FalkorSearchOperations(SearchOperations):
             """
             + get_entity_edge_return_query(GraphProvider.FALKORDB)
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, uuid ASC
             LIMIT $limit
             """
         )
@@ -383,7 +383,7 @@ class FalkorSearchOperations(SearchOperations):
             """
             + get_entity_edge_return_query(GraphProvider.FALKORDB)
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, uuid ASC
             LIMIT $limit
             """
         )
@@ -484,7 +484,7 @@ class FalkorSearchOperations(SearchOperations):
             """
             + EPISODIC_NODE_RETURN
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, uuid ASC
             LIMIT $limit
             """
         )
@@ -528,7 +528,7 @@ class FalkorSearchOperations(SearchOperations):
             """
             + COMMUNITY_NODE_RETURN
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, uuid ASC
             LIMIT $limit
             """
         )
@@ -569,7 +569,7 @@ class FalkorSearchOperations(SearchOperations):
             """
             + COMMUNITY_NODE_RETURN
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, uuid ASC
             LIMIT $limit
             """
         )
