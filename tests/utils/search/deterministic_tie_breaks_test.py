@@ -118,13 +118,13 @@ async def _ops_community_similarity(
 @pytest.mark.parametrize(
     ("search_call", "expected_order"),
     [
-        (_legacy_edge_fulltext, "ORDER BY score DESC, uuid ASC"),
-        (_legacy_edge_similarity, "ORDER BY score DESC, uuid ASC"),
+        (_legacy_edge_fulltext, "ORDER BY score DESC, e.uuid ASC"),
+        (_legacy_edge_similarity, "ORDER BY score DESC, e.uuid ASC"),
         (_legacy_node_fulltext, "ORDER BY score DESC, n.uuid ASC"),
-        (_legacy_node_similarity, "ORDER BY score DESC, uuid ASC"),
-        (_legacy_episode_fulltext, "ORDER BY score DESC, uuid ASC"),
-        (_legacy_community_fulltext, "ORDER BY score DESC, uuid ASC"),
-        (_legacy_community_similarity, "ORDER BY score DESC, uuid ASC"),
+        (_legacy_node_similarity, "ORDER BY score DESC, n.uuid ASC"),
+        (_legacy_episode_fulltext, "ORDER BY score DESC, e.uuid ASC"),
+        (_legacy_community_fulltext, "ORDER BY score DESC, c.uuid ASC"),
+        (_legacy_community_similarity, "ORDER BY score DESC, c.uuid ASC"),
     ],
 )
 async def test_legacy_falkor_search_orders_equal_scores_by_uuid(
@@ -143,12 +143,12 @@ async def test_legacy_falkor_search_orders_equal_scores_by_uuid(
     ("search_call", "expected_order"),
     [
         (_ops_node_fulltext, "ORDER BY score DESC, n.uuid ASC"),
-        (_ops_node_similarity, "ORDER BY score DESC, uuid ASC"),
-        (_ops_edge_fulltext, "ORDER BY score DESC, uuid ASC"),
-        (_ops_edge_similarity, "ORDER BY score DESC, uuid ASC"),
-        (_ops_episode_fulltext, "ORDER BY score DESC, uuid ASC"),
-        (_ops_community_fulltext, "ORDER BY score DESC, uuid ASC"),
-        (_ops_community_similarity, "ORDER BY score DESC, uuid ASC"),
+        (_ops_node_similarity, "ORDER BY score DESC, n.uuid ASC"),
+        (_ops_edge_fulltext, "ORDER BY score DESC, e.uuid ASC"),
+        (_ops_edge_similarity, "ORDER BY score DESC, e.uuid ASC"),
+        (_ops_episode_fulltext, "ORDER BY score DESC, e.uuid ASC"),
+        (_ops_community_fulltext, "ORDER BY score DESC, c.uuid ASC"),
+        (_ops_community_similarity, "ORDER BY score DESC, c.uuid ASC"),
     ],
 )
 async def test_falkor_search_operations_order_equal_scores_by_uuid(
