@@ -67,6 +67,11 @@ from graphiti_core.search.search_config_recipes import (
     EDGE_HYBRID_SEARCH_RRF,
 )
 from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.source_hydration import (
+    attach_source_episodes,
+    collect_episode_uuids,
+    deduped_source_episodes,
+)
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
     get_mentioned_nodes,
@@ -1532,6 +1537,7 @@ class Graphiti:
         num_results=DEFAULT_SEARCH_LIMIT,
         search_filter: SearchFilters | None = None,
         driver: GraphDriver | None = None,
+        hydrate_sources: bool = False,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -1583,7 +1589,29 @@ class Graphiti:
             )
         ).edges
 
+        if hydrate_sources:
+            # redevops fork (G1): recover the non-lossy source turns behind each extracted fact.
+            edges = await self.hydrate_edge_sources(edges, driver=driver)
+
         return edges
+
+    async def hydrate_edge_sources(
+        self,
+        edges: list[EntityEdge],
+        driver: GraphDriver | None = None,
+    ) -> list[EntityEdge]:
+        """Attach each edge's raw source episodes onto ``edge.source_episodes`` (redevops fork, G1).
+
+        Batch-fetches every distinct source episode referenced by ``edges`` in a single round-trip
+        and hydrates the edges in place, so callers can recover the original turns behind an
+        LLM-extracted ``fact`` (see ``EntityEdge.hydrated_text``). Returns the same edge list.
+        """
+        uuids = collect_episode_uuids(edges)
+        if not uuids:
+            return edges
+        episodes = await EpisodicNode.get_by_uuids(driver or self.driver, uuids)
+        episodes_by_uuid = {episode.uuid: episode for episode in episodes}
+        return attach_source_episodes(edges, episodes_by_uuid)
 
     async def _search(
         self,
@@ -1609,15 +1637,20 @@ class Graphiti:
         bfs_origin_node_uuids: list[str] | None = None,
         search_filter: SearchFilters | None = None,
         driver: GraphDriver | None = None,
+        hydrate_sources: bool = False,
     ) -> SearchResults:
         """search_ (replaces _search) is our advanced search method that returns Graph objects (nodes and edges) rather
         than a list of facts. This endpoint allows the end user to utilize more advanced features such as filters and
         different search and reranker methodologies across different layers in the graph.
 
         For different config recipes refer to search/search_config_recipes.
+
+        redevops fork (G1): pass ``hydrate_sources=True`` to attach each result edge's raw source
+        episodes (``edge.source_episodes``) and surface the distinct sources on
+        ``SearchResults.episodes`` — recovering the non-lossy turns behind the extracted facts.
         """
 
-        return await search(
+        results = await search(
             self.clients,
             query,
             group_ids,
@@ -1627,6 +1660,17 @@ class Graphiti:
             bfs_origin_node_uuids,
             driver=driver,
         )
+
+        if hydrate_sources and results.edges:
+            await self.hydrate_edge_sources(results.edges, driver=driver)
+            hydrated = deduped_source_episodes(results.edges)
+            if hydrated:
+                # only fill episodes when the search config didn't already retrieve them
+                if not results.episodes:
+                    results.episodes = hydrated
+                    results.episode_reranker_scores = [1.0] * len(hydrated)
+
+        return results
 
     async def get_nodes_and_edges_by_episode(self, episode_uuids: list[str]) -> SearchResults:
         episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
