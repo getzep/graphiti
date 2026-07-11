@@ -41,7 +41,7 @@ from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_return_query,
     get_entity_edge_save_query,
 )
-from graphiti_core.nodes import Node
+from graphiti_core.nodes import EpisodicNode, Node
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +283,29 @@ class EntityEdge(Edge):
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the edge. Dependent on edge name'
     )
+    source_episodes: list[EpisodicNode] | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            'Transient source-hydration cache (redevops fork, G1): the raw source episodes this '
+            'fact was extracted from. Populated on demand by Graphiti.hydrate_edge_sources(); never '
+            'persisted. Lets callers recover the non-lossy source turns behind an LLM-extracted fact.'
+        ),
+    )
+
+    def hydrated_text(self, separator: str = '\n', max_chars: int | None = None) -> str:
+        """The non-lossy retrieval text for this edge (redevops fork, G1).
+
+        Returns the raw content of the source episodes when hydrated, so retrieval isn't limited to
+        the lossy LLM-extracted ``fact``. Falls back to ``fact`` when sources haven't been hydrated.
+        """
+        if not self.source_episodes:
+            return self.fact
+        parts = [ep.content for ep in self.source_episodes if getattr(ep, 'content', None)]
+        text = separator.join(parts) if parts else self.fact
+        if max_chars is not None and len(text) > max_chars:
+            text = text[:max_chars]
+        return text
 
     async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
