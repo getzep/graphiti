@@ -338,10 +338,10 @@ class NeptuneDriver(GraphDriver):
         if isinstance(cypher_query_, list):
             result: list[dict[str, Any]] = []
             for q in cypher_query_:
-                result, _, _ = self._run_query(q[0], q[1])
+                result, _, _ = await asyncio.to_thread(self._run_query, q[0], q[1])
             return result, None, None
         else:
-            return self._run_query(cypher_query_, params)
+            return await asyncio.to_thread(self._run_query, cypher_query_, params)
 
     def _run_query(self, cypher_query_, params):
         cypher_query_ = str(self._sanitize_parameters(cypher_query_, params))
