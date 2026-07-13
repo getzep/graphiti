@@ -95,7 +95,7 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
-                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
+                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content,
                 entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
                 RETURN n.uuid AS uuid
             """
@@ -103,7 +103,7 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
-                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
+                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content,
                 entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
                 RETURN n.uuid AS uuid
             """
@@ -130,7 +130,7 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
     e.group_id AS group_id,
     e.source_description AS source_description,
     e.source AS source,
-    split(e.entity_edges, ",") AS entity_edges
+    split(e.entity_edges, "|") AS entity_edges
 """
 
 

@@ -443,6 +443,36 @@ class DatabaseDriverFactory:
                     # to the driver after initialization if supported
                 }
 
+            case 'neptune':
+                if not config.providers.neptune:
+                    raise ValueError(
+                        'Neptune provider configuration not found. '
+                        'Set database.providers.neptune.host and '
+                        'database.providers.neptune.aoss_host in your config.'
+                    )
+
+                neptune_config = config.providers.neptune
+
+                import os
+
+                host = os.environ.get('NEPTUNE_HOST') or neptune_config.host
+                aoss_host = os.environ.get('AOSS_HOST') or neptune_config.aoss_host
+                port = int(os.environ.get('NEPTUNE_PORT', str(neptune_config.port)))
+                aoss_port = int(os.environ.get('AOSS_PORT', str(neptune_config.aoss_port)))
+
+                if not host or not aoss_host:
+                    raise ValueError(
+                        'NEPTUNE_HOST and AOSS_HOST are required when database provider is neptune'
+                    )
+
+                return {
+                    'driver': 'neptune',
+                    'host': host,
+                    'aoss_host': aoss_host,
+                    'port': port,
+                    'aoss_port': aoss_port,
+                }
+
             case 'falkordb':
                 if not HAS_FALKOR:
                     raise ValueError(

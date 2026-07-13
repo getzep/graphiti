@@ -20,6 +20,7 @@ from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -225,7 +226,8 @@ class GraphitiService:
 
             # Initialize Graphiti client with appropriate driver
             try:
-                if self.config.database.provider.lower() == 'falkordb':
+                db_provider = self.config.database.provider.lower()
+                if db_provider == 'falkordb':
                     # For FalkorDB, create a FalkorDriver instance directly
                     from graphiti_core.driver.falkordb_driver import FalkorDriver
 
@@ -238,6 +240,22 @@ class GraphitiService:
 
                     self.client = Graphiti(
                         graph_driver=falkor_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
+                elif db_provider == 'neptune':
+                    from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+                    neptune_driver = NeptuneDriver(
+                        host=db_config['host'],
+                        aoss_host=db_config['aoss_host'],
+                        port=db_config['port'],
+                        aoss_port=db_config['aoss_port'],
+                    )
+
+                    self.client = Graphiti(
+                        graph_driver=neptune_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
@@ -266,6 +284,17 @@ class GraphitiService:
                             f'To start FalkorDB:\n'
                             f'  - Using Docker Compose: cd mcp_server && docker compose up\n'
                             f'  - Or run FalkorDB manually: docker run -p 6379:6379 falkordb/falkordb\n\n'
+                            f'{"=" * 70}\n'
+                        ) from db_error
+                    elif db_provider.lower() == 'neptune':
+                        raise RuntimeError(
+                            f'\n{"=" * 70}\n'
+                            f'Database Connection Error: Neptune is not accessible\n'
+                            f'{"=" * 70}\n\n'
+                            f'Neptune at {db_config.get("host", "unknown")} is not accessible.\n'
+                            f'AOSS at {db_config.get("aoss_host", "unknown")} is not accessible.\n\n'
+                            f'Ensure your Neptune cluster and AOSS collection are running\n'
+                            f'and that your AWS credentials / IAM role are configured.\n\n'
                             f'{"=" * 70}\n'
                         ) from db_error
                     elif db_provider.lower() == 'neo4j':
@@ -1044,7 +1073,7 @@ async def clear_graph(
 
 
 @mcp.tool()
-async def forget(
+async def forget_memory(
     query: str,
     group_ids: list[str] | None = None,
     max_deletions: int = 10,
@@ -1057,7 +1086,7 @@ async def forget(
 
     Args:
         query: Natural language description of what to forget (e.g. "Acme Corp")
-        group_ids: Optional list of group IDs to scope the forget operation
+        group_ids: Optional list of group IDs to scope the forget_memory operation
         max_deletions: Maximum number of nodes to delete (default: 10, max: 100)
     """
     global graphiti_service
@@ -1110,8 +1139,8 @@ async def forget(
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error in forget operation: {error_msg}')
-        return ErrorResponse(error=f'Error in forget operation: {error_msg}')
+        logger.error(f'Error in forget_memory operation: {error_msg}')
+        return ErrorResponse(error=f'Error in forget_memory operation: {error_msg}')
 
 
 @mcp.tool()
@@ -1200,7 +1229,7 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb'],
+        choices=['neo4j', 'falkordb', 'neptune'],
         help='Database provider to use',
     )
 
@@ -1261,7 +1290,9 @@ async def initialize_server() -> ServerConfig:
         logger.info(f'  - Graphiti Core: {graphiti_version}')
     except Exception:
         # Check for Docker-stored version file
-        version_file = Path('/app/.graphiti-core-version')
+        version_file = Path('/app/mcp/.graphiti-core-version')
+        if not version_file.exists():
+            version_file = Path('/app/.graphiti-core-version')
         if version_file.exists():
             graphiti_version = version_file.read_text().strip()
             logger.info(f'  - Graphiti Core: {graphiti_version}')
@@ -1295,6 +1326,17 @@ async def initialize_server() -> ServerConfig:
     if config.server.port:
         mcp.settings.port = config.server.port
 
+    # Enable stateless HTTP mode so sessions aren't tracked in-memory.
+    # This prevents "Session not found" errors when the server pod restarts.
+    mcp.settings.stateless_http = True
+    mcp.settings.json_response = True
+
+    # Disable DNS rebinding protection when binding to non-localhost (e.g. 0.0.0.0 in K8s)
+    if config.server.host not in ('127.0.0.1', 'localhost', '::1'):
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        )
+
     # Return MCP configuration for transport
     return config.server
 
@@ -1327,7 +1369,7 @@ async def run_mcp_server():
         logger.info('  Transport: HTTP (streamable)')
 
         # Show FalkorDB Browser UI access if enabled
-        if os.environ.get('BROWSER', '1') == '1':
+        if os.environ.get('GRAPH_DB_PROVIDER', 'falkordb').lower() == 'falkordb' and os.environ.get('BROWSER', '1') == '1':
             logger.info(f'  FalkorDB Browser UI: http://{display_host}:3000/')
 
         logger.info('=' * 60)

@@ -734,7 +734,7 @@ async def node_similarity_search(
                                                                                                                                                                 UNWIND $ids as i
                                                                                                                                                                 MATCH (n:Entity)
                                                                                                                                                                 WHERE id(n)=i.id
-                                                                                                                                                                RETURN 
+                                                                                                                                                                RETURN
                                                                                                                                                                 """
                 + get_entity_node_return_query(driver.provider)
                 + """
@@ -927,7 +927,7 @@ async def episode_fulltext_search(
                     e.group_id AS group_id,
                     e.source_description AS source_description,
                     e.source AS source,
-                    e.entity_edges AS entity_edges
+                    split(e.entity_edges, "|") AS entity_edges
                 ORDER BY i.score DESC
                 LIMIT $limit
             """
@@ -1077,8 +1077,10 @@ async def community_similarity_search(
     query_params: dict[str, Any] = {}
 
     group_filter_query: LiteralString = ''
+    neptune_group_filter_query: LiteralString = ''
     if group_ids is not None:
         group_filter_query += ' WHERE c.group_id IN $group_ids'
+        neptune_group_filter_query += ' WHERE n.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
 
     if driver.provider == GraphProvider.NEPTUNE:
@@ -1086,7 +1088,7 @@ async def community_similarity_search(
             """
                                                                                                                                     MATCH (n:Community)
                                                                                                                                     """
-            + group_filter_query
+            + neptune_group_filter_query
             + """
             RETURN DISTINCT id(n) as id, n.name_embedding as embedding
             """
