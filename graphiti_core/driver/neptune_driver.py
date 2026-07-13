@@ -22,6 +22,7 @@ from collections.abc import Coroutine
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
@@ -58,6 +59,17 @@ from graphiti_core.driver.operations.search_ops import SearchOperations
 
 logger = logging.getLogger(__name__)
 DEFAULT_SIZE = 10
+
+# read_timeout is kept slightly above the default Neptune cluster
+# `neptune_query_timeout` (120s) so a slow-but-alive query gets a clean
+# botocore timeout from Neptune instead of the socket being torn down first.
+# `standard` retry mode retries transient connection errors (e.g. the
+# connection getting reset mid-response) instead of surfacing them directly.
+NEPTUNE_BOTO_CONFIG = Config(
+    connect_timeout=10,
+    read_timeout=130,
+    retries={'max_attempts': 3, 'mode': 'standard'},
+)
 
 aoss_indices = [
     {
@@ -150,6 +162,7 @@ class NeptuneDatabaseClient:
         self.client = session.client(
             'neptunedata',
             endpoint_url=f'https://{host}:{port}',
+            config=NEPTUNE_BOTO_CONFIG,
         )
 
     def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
@@ -168,7 +181,7 @@ class NeptuneAnalyticsClient:
 
     def __init__(self, graph_identifier: str):
         session = boto3.Session()
-        self.client = session.client('neptune-graph')
+        self.client = session.client('neptune-graph', config=NEPTUNE_BOTO_CONFIG)
         self.graph_identifier = graph_identifier
 
     def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
