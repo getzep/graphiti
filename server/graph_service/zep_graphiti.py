@@ -93,9 +93,7 @@ def _create_graphiti_client(settings: ZepEnvDep) -> ZepGraphiti:
         from graphiti_core.driver.neptune_driver import NeptuneDriver
 
         if not settings.neptune_host or not settings.aoss_host:
-            raise ValueError(
-                'NEPTUNE_HOST and AOSS_HOST are required when db_backend is "neptune"'
-            )
+            raise ValueError('NEPTUNE_HOST and AOSS_HOST are required when db_backend is "neptune"')
         driver = NeptuneDriver(  # type: ignore
             host=settings.neptune_host,
             aoss_host=settings.aoss_host,
