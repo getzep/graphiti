@@ -71,7 +71,7 @@ embedder:
       model: "voyage-3"
 
 database:
-  provider: ${GRAPH_DB_PROVIDER:falkordb}  # Options: neo4j, falkordb, neptune
+  provider: ${DB_BACKEND:falkordb}  # Options: neo4j, falkordb, neptune
 
   providers:
     falkordb:

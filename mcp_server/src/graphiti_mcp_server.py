@@ -1370,7 +1370,7 @@ async def run_mcp_server():
 
         # Show FalkorDB Browser UI access if enabled
         if (
-            os.environ.get('GRAPH_DB_PROVIDER', 'falkordb').lower() == 'falkordb'
+            os.environ.get('DB_BACKEND', 'falkordb').lower() == 'falkordb'
             and os.environ.get('BROWSER', '1') == '1'
         ):
             logger.info(f'  FalkorDB Browser UI: http://{display_host}:3000/')
