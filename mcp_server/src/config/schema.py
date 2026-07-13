@@ -197,9 +197,7 @@ class NeptuneProviderConfig(BaseModel):
     host: str | None = Field(
         default=None, description='Neptune endpoint (neptune-db:// or neptune-graph:// URI)'
     )
-    aoss_host: str | None = Field(
-        default=None, description='OpenSearch Serverless (AOSS) host'
-    )
+    aoss_host: str | None = Field(default=None, description='OpenSearch Serverless (AOSS) host')
     port: int = 8182
     aoss_port: int = 443
 

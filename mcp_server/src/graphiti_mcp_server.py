@@ -1369,7 +1369,10 @@ async def run_mcp_server():
         logger.info('  Transport: HTTP (streamable)')
 
         # Show FalkorDB Browser UI access if enabled
-        if os.environ.get('GRAPH_DB_PROVIDER', 'falkordb').lower() == 'falkordb' and os.environ.get('BROWSER', '1') == '1':
+        if (
+            os.environ.get('GRAPH_DB_PROVIDER', 'falkordb').lower() == 'falkordb'
+            and os.environ.get('BROWSER', '1') == '1'
+        ):
             logger.info(f'  FalkorDB Browser UI: http://{display_host}:3000/')
 
         logger.info('=' * 60)
