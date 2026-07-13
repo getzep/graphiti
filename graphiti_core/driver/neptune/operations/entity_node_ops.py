@@ -80,13 +80,28 @@ class NeptuneEntityNodeOperations(EntityNodeOperations):
             entity_data.update(node.attributes or {})
             prepared.append(entity_data)
 
+        if not prepared:
+            return
+
         queries = get_entity_node_save_bulk_query(GraphProvider.NEPTUNE, prepared)
 
-        for query in queries:
-            if tx is not None:
-                await tx.run(query, nodes=prepared)
-            else:
-                await executor.execute_query(query, nodes=prepared)
+        # Neptune bakes each node's labels into its query text (openCypher has
+        # no equivalent to Neo4j's `SET n:$(node.labels)`), so query text is a
+        # pure function of a node's label set. Group nodes by that query text
+        # so a node only gets UNWOUND through the query built for its own
+        # labels, then chunk each group so a single request's payload stays
+        # bounded regardless of how many nodes share a label combination.
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for query, node_data in zip(queries, prepared, strict=True):
+            grouped.setdefault(query, []).append(node_data)
+
+        for query, group_nodes in grouped.items():
+            for i in range(0, len(group_nodes), batch_size):
+                chunk = group_nodes[i : i + batch_size]
+                if tx is not None:
+                    await tx.run(query, nodes=chunk)
+                else:
+                    await executor.execute_query(query, nodes=chunk)
 
     async def delete(
         self,
@@ -225,8 +240,11 @@ class NeptuneEntityNodeOperations(EntityNodeOperations):
             WHERE n.uuid IN $uuids
             RETURN DISTINCT n.uuid AS uuid, [x IN split(n.name_embedding, ",") | toFloat(x)] AS name_embedding
         """
-        records, _, _ = await executor.execute_query(query, uuids=uuids)
-        embedding_map = {r['uuid']: r['name_embedding'] for r in records}
+        embedding_map: dict[str, list[float]] = {}
+        for i in range(0, len(uuids), batch_size):
+            chunk = uuids[i : i + batch_size]
+            records, _, _ = await executor.execute_query(query, uuids=chunk)
+            embedding_map.update({r['uuid']: r['name_embedding'] for r in records})
         for node in nodes:
             if node.uuid in embedding_map:
                 node.name_embedding = embedding_map[node.uuid]

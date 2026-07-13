@@ -89,11 +89,16 @@ class NeptuneEntityEdgeOperations(EntityEdgeOperations):
             edge_data.update(edge.attributes or {})
             prepared.append(edge_data)
 
+        if not prepared:
+            return
+
         query = get_entity_edge_save_bulk_query(GraphProvider.NEPTUNE)
-        if tx is not None:
-            await tx.run(query, entity_edges=prepared)
-        else:
-            await executor.execute_query(query, entity_edges=prepared)
+        for i in range(0, len(prepared), batch_size):
+            chunk = prepared[i : i + batch_size]
+            if tx is not None:
+                await tx.run(query, entity_edges=chunk)
+            else:
+                await executor.execute_query(query, entity_edges=chunk)
 
     async def delete(
         self,
@@ -245,8 +250,11 @@ class NeptuneEntityEdgeOperations(EntityEdgeOperations):
             WHERE e.uuid IN $edge_uuids
             RETURN DISTINCT e.uuid AS uuid, [x IN split(e.fact_embedding, ",") | toFloat(x)] AS fact_embedding
         """
-        records, _, _ = await executor.execute_query(query, edge_uuids=uuids)
-        embedding_map = {r['uuid']: r['fact_embedding'] for r in records}
+        embedding_map: dict[str, list[float]] = {}
+        for i in range(0, len(uuids), batch_size):
+            chunk = uuids[i : i + batch_size]
+            records, _, _ = await executor.execute_query(query, edge_uuids=chunk)
+            embedding_map.update({r['uuid']: r['fact_embedding'] for r in records})
         for edge in edges:
             if edge.uuid in embedding_map:
                 edge.fact_embedding = embedding_map[edge.uuid]

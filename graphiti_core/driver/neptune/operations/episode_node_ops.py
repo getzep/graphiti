@@ -73,11 +73,16 @@ class NeptuneEpisodeNodeOperations(EpisodeNodeOperations):
             ep.pop('labels', None)
             episodes.append(ep)
 
+        if not episodes:
+            return
+
         query = get_episode_node_save_bulk_query(GraphProvider.NEPTUNE)
-        if tx is not None:
-            await tx.run(query, episodes=episodes)
-        else:
-            await executor.execute_query(query, episodes=episodes)
+        for i in range(0, len(episodes), batch_size):
+            chunk = episodes[i : i + batch_size]
+            if tx is not None:
+                await tx.run(query, episodes=chunk)
+            else:
+                await executor.execute_query(query, episodes=chunk)
 
     async def delete(
         self,
