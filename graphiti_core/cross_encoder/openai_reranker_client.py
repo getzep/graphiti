@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-import os
 from typing import Any
 
 import numpy as np
@@ -60,15 +59,6 @@ class OpenAIRerankerClient(CrossEncoderClient):
             self.client = client
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
-        # Passages arrive RRF-ordered from hybrid search; reranking the deep
-        # tail costs one API call each for candidates that cannot reach the
-        # final top-k anyway (measured: 85 calls per recall for a limit-8
-        # request). Cap keeps rerank to one semaphore wave.
-        max_passages = int(os.getenv('RERANKER_MAX_PASSAGES', 32))
-        if len(passages) > max_passages:
-            tail = [(passage, 0.0) for passage in passages[max_passages:]]
-            head = await self.rank(query, passages[:max_passages])
-            return head + tail
         openai_messages_list: Any = [
             [
                 Message(
