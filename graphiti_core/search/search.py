@@ -596,7 +596,22 @@ async def node_search(
                         reranker_min_score,
                     )
             elif config.reranker == NodeReranker.cross_encoder:
-                name_to_uuid_map = {node.name: node.uuid for node in list(node_uuid_map.values())}
+                # Seed with RRF and cap candidates before the per-passage
+                # classifier, mirroring the episode cross_encoder branch.
+                # The reranker issues one completion per passage, and node
+                # candidates are the only uncapped set — every fulltext/
+                # similarity/BFS hit (hundreds per search) was scored even
+                # though only the top `limit` can be returned.
+                with _trace_phase(
+                    search_tracer,
+                    'search.node_search.seed_rrf',
+                    {'result_set_count': len(search_results)},
+                ):
+                    rrf_seed_uuids, _ = rrf(
+                        search_result_uuids, min_score=reranker_min_score
+                    )
+                seed_nodes = [node_uuid_map[uuid] for uuid in rrf_seed_uuids][: 2 * limit]
+                name_to_uuid_map = {node.name: node.uuid for node in seed_nodes}
 
                 with _trace_phase(
                     search_tracer,

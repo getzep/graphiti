@@ -15,6 +15,8 @@ limitations under the License.
 """
 
 import logging
+import os
+import re
 from typing import Any
 
 import numpy as np
@@ -59,6 +61,11 @@ class OpenAIRerankerClient(CrossEncoderClient):
             self.client = client
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
+        # RERANKER_MODE=listwise scores all passages in ONE completion
+        # instead of one boolean-classifier call per passage. Read at call
+        # time (not import time) so a container env flip needs no reload.
+        if os.getenv('RERANKER_MODE', 'pointwise') == 'listwise' and len(passages) > 1:
+            return await self._rank_listwise(query, passages)
         openai_messages_list: Any = [
             [
                 Message(
@@ -121,3 +128,60 @@ class OpenAIRerankerClient(CrossEncoderClient):
         except Exception as e:
             logger.error(f'Error in generating LLM response: {e}')
             raise
+
+    async def _rank_listwise(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
+        """Rank all passages with a single completion.
+
+        The model returns passage numbers in relevance order. Malformed
+        output degrades gracefully: out-of-range and duplicate numbers are
+        dropped, omitted passages keep their original relative order at the
+        tail. Scores are rank-based pseudo-scores in (0, 1] (descending),
+        compatible with the callers' `score >= reranker_min_score` filter
+        (default 0) but NOT calibrated probabilities like pointwise mode.
+        """
+        max_chars = int(os.getenv('RERANKER_LISTWISE_PASSAGE_CHARS', 4000))
+        numbered = '\n\n'.join(
+            f'[{i + 1}] {passage[:max_chars]}' for i, passage in enumerate(passages)
+        )
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.config.model or DEFAULT_MODEL,
+                messages=[
+                    {
+                        'role': 'system',
+                        'content': 'You are an expert reranker: order passages by relevance to a query.',
+                    },
+                    {
+                        'role': 'user',
+                        'content': f"""
+                               Rank the passages below by relevance to QUERY, most relevant first.
+                               Respond with ONLY the passage numbers in ranked order, comma-separated
+                               (example: 3,1,2). Include every number from 1 to {len(passages)} exactly once.
+                               <QUERY>
+                               {query}
+                               </QUERY>
+                               <PASSAGES>
+                               {numbered}
+                               </PASSAGES>
+                               """,
+                    },
+                ],
+                temperature=0,
+                max_tokens=max(200, 5 * len(passages)),
+            )
+        except openai.RateLimitError as e:
+            raise RateLimitError from e
+
+        content = response.choices[0].message.content or ''
+        order: list[int] = []
+        seen: set[int] = set()
+        for token in re.findall(r'\d+', content):
+            idx = int(token) - 1
+            if 0 <= idx < len(passages) and idx not in seen:
+                seen.add(idx)
+                order.append(idx)
+        for idx in range(len(passages)):
+            if idx not in seen:
+                order.append(idx)
+        n = len(passages)
+        return [(passages[idx], (n - rank) / n) for rank, idx in enumerate(order)]

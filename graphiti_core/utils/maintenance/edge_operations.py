@@ -45,6 +45,7 @@ from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.attribute_utils import apply_capped_attributes
 from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
 from graphiti_core.utils.text_utils import concatenate_episodes
+from graphiti_core.write_path_hooks import get_hook, get_write_path_context
 
 logger = logging.getLogger(__name__)
 
@@ -397,6 +398,11 @@ async def resolve_extracted_edges(
                 group_ids=[extracted_edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
                 search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
+                query_vector=(
+                    extracted_edge.fact_embedding
+                    if extracted_edge.fact and extracted_edge.fact == extracted_edge.fact.replace('\n', ' ')
+                    else None
+                ),
             )
             for extracted_edge, valid_edges in zip(extracted_edges, valid_edges_list, strict=True)
         ]
@@ -412,6 +418,11 @@ async def resolve_extracted_edges(
                 group_ids=[extracted_edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
                 search_filter=SearchFilters(),
+                query_vector=(
+                    extracted_edge.fact_embedding
+                    if extracted_edge.fact and extracted_edge.fact == extracted_edge.fact.replace('\n', ' ')
+                    else None
+                ),
             )
             for extracted_edge in extracted_edges
         ]
@@ -620,7 +631,7 @@ async def _extract_edge_timestamps(
         logger.warning('Failed to extract timestamps for edge %s', edge.uuid, exc_info=True)
 
 
-async def resolve_extracted_edge(
+async def _resolve_extracted_edge_impl(
     llm_client: LLMClient,
     extracted_edge: EntityEdge,
     related_edges: list[EntityEdge],
@@ -845,6 +856,37 @@ async def resolve_extracted_edge(
     duplicate_edges: list[EntityEdge] = [related_edges[idx] for idx in duplicate_fact_ids]
 
     return resolved_edge, invalidated_edges, duplicate_edges
+
+
+async def resolve_extracted_edge(
+    llm_client: LLMClient,
+    extracted_edge: EntityEdge,
+    related_edges: list[EntityEdge],
+    existing_edges: list[EntityEdge],
+    episode: EpisodicNode,
+    edge_type_candidates: dict[str, type[BaseModel]] | None = None,
+) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
+    context = get_write_path_context()
+    hook = get_hook('edge_resolution') if context is not None else None
+    if hook is not None and hasattr(hook, 'resolve_extracted_edge'):
+        return await hook.resolve_extracted_edge(
+            _resolve_extracted_edge_impl,
+            llm_client,
+            extracted_edge,
+            related_edges,
+            existing_edges,
+            episode,
+            edge_type_candidates,
+            context=context,
+        )
+    return await _resolve_extracted_edge_impl(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates,
+    )
 
 
 async def filter_existing_duplicate_of_edges(

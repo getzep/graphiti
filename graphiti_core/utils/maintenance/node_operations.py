@@ -56,6 +56,7 @@ from graphiti_core.utils.text_utils import (
     concatenate_episodes,
     truncate_at_sentence,
 )
+from graphiti_core.write_path_hooks import get_hook, get_write_path_context
 
 logger = logging.getLogger(__name__)
 
@@ -404,7 +405,7 @@ def _merge_candidate_nodes(
     return ordered_candidates
 
 
-async def _collect_candidate_nodes(
+async def _collect_candidate_nodes_impl(
     clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
     existing_nodes_override: list[EntityNode] | None,
@@ -413,6 +414,24 @@ async def _collect_candidate_nodes(
     search_results = await _semantic_candidate_search(clients, extracted_nodes)
 
     return [_merge_candidate_nodes(result, existing_nodes_override) for result in search_results]
+
+
+async def _collect_candidate_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    existing_nodes_override: list[EntityNode] | None,
+) -> list[list[EntityNode]]:
+    context = get_write_path_context()
+    hook = get_hook('candidate_nodes') if context is not None else None
+    if hook is not None and hasattr(hook, 'collect_candidate_nodes'):
+        return await hook.collect_candidate_nodes(
+            _collect_candidate_nodes_impl,
+            clients,
+            extracted_nodes,
+            existing_nodes_override,
+            context=context,
+        )
+    return await _collect_candidate_nodes_impl(clients, extracted_nodes, existing_nodes_override)
 
 
 async def _semantic_candidate_search(
@@ -624,7 +643,7 @@ async def _resolve_with_llm(
             state.duplicate_pairs.append((extracted_node, resolved_node))
 
 
-async def resolve_extracted_nodes(
+async def _resolve_extracted_nodes_impl(
     clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
@@ -708,6 +727,37 @@ async def resolve_extracted_nodes(
     )
 
 
+async def resolve_extracted_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    episode: EpisodicNode | None = None,
+    previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    existing_nodes_override: list[EntityNode] | None = None,
+) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
+    context = get_write_path_context()
+    hook = get_hook('node_resolution') if context is not None else None
+    if hook is not None and hasattr(hook, 'resolve_extracted_nodes'):
+        return await hook.resolve_extracted_nodes(
+            _resolve_extracted_nodes_impl,
+            clients,
+            extracted_nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+            existing_nodes_override,
+            context=context,
+        )
+    return await _resolve_extracted_nodes_impl(
+        clients,
+        extracted_nodes,
+        episode,
+        previous_episodes,
+        entity_types,
+        existing_nodes_override,
+    )
+
+
 def _build_edges_by_node(edges: list[EntityEdge] | None) -> dict[str, list[EntityEdge]]:
     """Build a dictionary mapping node UUIDs to their connected edges."""
     edges_by_node: dict[str, list[EntityEdge]] = {}
@@ -723,7 +773,7 @@ def _build_edges_by_node(edges: list[EntityEdge] | None) -> dict[str, list[Entit
     return edges_by_node
 
 
-async def extract_attributes_from_nodes(
+async def _extract_attributes_from_nodes_impl(
     clients: GraphitiClients,
     nodes: list[EntityNode],
     episode: EpisodicNode | list[EpisodicNode] | None = None,
@@ -778,6 +828,46 @@ async def extract_attributes_from_nodes(
     await create_entity_node_embeddings(embedder, nodes)
 
     return nodes
+
+
+async def extract_attributes_from_nodes(
+    clients: GraphitiClients,
+    nodes: list[EntityNode],
+    episode: EpisodicNode | list[EpisodicNode] | None = None,
+    previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    should_summarize_node: NodeSummaryFilter | None = None,
+    edges: list[EntityEdge] | None = None,
+    skip_fact_appending: bool = False,
+    include_type_descriptions: bool = False,
+) -> list[EntityNode]:
+    context = get_write_path_context()
+    hook = get_hook('node_attributes') if context is not None else None
+    if hook is not None and hasattr(hook, 'extract_attributes_from_nodes'):
+        return await hook.extract_attributes_from_nodes(
+            _extract_attributes_from_nodes_impl,
+            clients,
+            nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+            should_summarize_node,
+            edges,
+            skip_fact_appending,
+            include_type_descriptions,
+            context=context,
+        )
+    return await _extract_attributes_from_nodes_impl(
+        clients,
+        nodes,
+        episode,
+        previous_episodes,
+        entity_types,
+        should_summarize_node,
+        edges,
+        skip_fact_appending,
+        include_type_descriptions,
+    )
 
 
 async def _extract_entity_attributes(

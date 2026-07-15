@@ -14,10 +14,50 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import base64
 import json
+from collections.abc import Iterable
+from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
+from pathlib import Path
 from typing import Any
 
 DO_NOT_ESCAPE_UNICODE = '\nDo not escape unicode characters.\n'
+
+
+def _prompt_json_default(value: Any) -> Any:
+    """Serialize driver/model values that commonly appear in prompt contexts."""
+
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, bytes | bytearray | memoryview):
+        return base64.b64encode(bytes(value)).decode('ascii')
+    if isinstance(value, set | frozenset):
+        return sorted(value, key=repr)
+
+    # Neo4j temporal types expose iso_format(), not isoformat().
+    iso_format = getattr(value, 'iso_format', None)
+    if callable(iso_format):
+        return iso_format()
+    isoformat = getattr(value, 'isoformat', None)
+    if callable(isoformat):
+        return isoformat()
+
+    model_dump = getattr(value, 'model_dump', None)
+    if callable(model_dump):
+        return model_dump(mode='json')
+
+    if isinstance(value, Iterable) and not isinstance(value, str | bytes | bytearray | dict):
+        return list(value)
+
+    raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
 
 
 def to_prompt_json(data: Any, ensure_ascii: bool = False, indent: int | None = None) -> str:
@@ -37,4 +77,4 @@ def to_prompt_json(data: Any, ensure_ascii: bool = False, indent: int | None = N
         are preserved in their original form in the prompt, making them readable
         in LLM logs and improving model understanding.
     """
-    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent, default=_prompt_json_default)

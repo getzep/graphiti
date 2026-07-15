@@ -30,6 +30,14 @@ class Neighbor(BaseModel):
 async def get_community_clusters(
     driver: GraphDriver, group_ids: list[str] | None
 ) -> list[list[EntityNode]]:
+    """Build community clusters using a batched relationship projection.
+
+    Upstream 0.29.0 queried neighbors once per entity, which turns community
+    maintenance into an O(N) sequence of database round-trips. Hermes' hot graph
+    has thousands of entities in a partition, so that behavior stalls community
+    refreshes for minutes. Build the whole group projection in one query instead.
+    """
+
     if driver.graph_operations_interface:
         try:
             return await driver.graph_operations_interface.get_community_clusters(driver, group_ids)
@@ -51,32 +59,42 @@ async def get_community_clusters(
         group_ids = group_id_values[0]['group_ids'] if group_id_values else []
 
     for group_id in group_ids:
-        projection: dict[str, list[Neighbor]] = {}
         nodes = await EntityNode.get_by_group_ids(driver, [group_id])
-        for node in nodes:
-            match_query = """
-                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
-            """
-            if driver.provider == GraphProvider.KUZU:
-                match_query = """
-                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
-                """
-            records, _, _ = await driver.execute_query(
-                match_query
-                + """
-                WITH count(e) AS count, m.uuid AS uuid
+        projection: dict[str, list[Neighbor]] = {node.uuid: [] for node in nodes}
+
+        aggregate_query = """
+            MATCH (n:Entity {group_id: $group_id})-[e:RELATES_TO]-(m:Entity {group_id: $group_id})
+            RETURN
+                n.uuid AS src_uuid,
+                m.uuid AS tgt_uuid,
+                count(e) AS edge_count
+        """
+        if driver.provider == GraphProvider.KUZU:
+            aggregate_query = """
+                MATCH (n:Entity {group_id: $group_id})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m:Entity {group_id: $group_id})
                 RETURN
-                    uuid,
-                    count
-                """,
-                uuid=node.uuid,
-                group_id=group_id,
+                    n.uuid AS src_uuid,
+                    m.uuid AS tgt_uuid,
+                    count(e) AS edge_count
+            """
+
+        edge_records, _, _ = await driver.execute_query(aggregate_query, group_id=group_id)
+        for record in edge_records:
+            src_uuid = record['src_uuid']
+            if src_uuid not in projection:
+                # Ignore stale or otherwise filtered endpoints. label_propagation
+                # also handles dangling neighbors defensively.
+                continue
+            projection[src_uuid].append(
+                Neighbor(node_uuid=record['tgt_uuid'], edge_count=record['edge_count'])
             )
 
-            projection[node.uuid] = [
-                Neighbor(node_uuid=record['uuid'], edge_count=record['count']) for record in records
-            ]
-
+        logger.info(
+            'get_community_clusters: group_id=%s nodes=%d edges=%d',
+            group_id,
+            len(projection),
+            len(edge_records),
+        )
         cluster_uuids = label_propagation(projection)
 
         community_clusters.extend(
@@ -90,52 +108,65 @@ async def get_community_clusters(
     return community_clusters
 
 
-def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
-    # Implement the label propagation community detection algorithm.
-    # 1. Start with each node being assigned its own community
-    # 2. Each node will take on the community of the plurality of its neighbors
-    # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
+def label_propagation(
+    projection: dict[str, list[Neighbor]],
+    max_iterations: int = 100,
+) -> list[list[str]]:
+    """Label-propagation community detection with a hard iteration cap.
 
-    community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
+    Upstream 0.29.0 can oscillate forever on bipartite / hub-and-spoke graphs.
+    Use deterministic tie-breaking plus self-stickiness, and fail open with the
+    best partial clustering if the cap is reached.
+    """
 
-    while True:
+    community_map: dict[str, int] = {uuid: i for i, uuid in enumerate(projection.keys())}
+
+    converged = False
+    for _ in range(max_iterations):
         no_change = True
-        new_community_map: dict[str, int] = {}
 
         for uuid, neighbors in projection.items():
-            curr_community = community_map[uuid]
-
             community_candidates: dict[int, int] = defaultdict(int)
             for neighbor in neighbors:
-                community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
-            community_lst = [
-                (count, community) for community, count in community_candidates.items()
-            ]
+                neighbor_community = community_map.get(neighbor.node_uuid)
+                if neighbor_community is None:
+                    # The projected node set can be non-closed when edges point
+                    # at stale or filtered entities. Ignore dangling endpoints
+                    # instead of failing maintenance with KeyError.
+                    continue
+                community_candidates[neighbor_community] += neighbor.edge_count
 
-            community_lst.sort(reverse=True)
-            candidate_rank, community_candidate = community_lst[0] if community_lst else (0, -1)
-            if community_candidate != -1 and candidate_rank > 1:
-                new_community = community_candidate
+            if not community_candidates:
+                continue
+
+            curr_community = community_map[uuid]
+            max_weight = max(community_candidates.values())
+            if community_candidates.get(curr_community, 0) == max_weight:
+                new_community = curr_community
             else:
-                new_community = max(community_candidate, curr_community)
-
-            new_community_map[uuid] = new_community
+                new_community = min(
+                    community for community, weight in community_candidates.items() if weight == max_weight
+                )
 
             if new_community != curr_community:
+                community_map[uuid] = new_community
                 no_change = False
 
         if no_change:
+            converged = True
             break
 
-        community_map = new_community_map
+    if not converged:
+        logger.warning(
+            'label_propagation: max_iterations=%d reached without convergence; returning partial clustering',
+            max_iterations,
+        )
 
-    community_cluster_map = defaultdict(list)
+    community_cluster_map: dict[int, list[str]] = defaultdict(list)
     for uuid, community in community_map.items():
         community_cluster_map[community].append(uuid)
 
-    clusters = [cluster for cluster in community_cluster_map.values()]
-    return clusters
+    return list(community_cluster_map.values())
 
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:

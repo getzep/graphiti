@@ -5,6 +5,9 @@ This module provides database-agnostic query generation for Neo4j and FalkorDB,
 supporting index creation, fulltext search, and bulk operations.
 """
 
+import os
+from typing import cast as typing_cast
+
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphProvider
@@ -128,7 +131,7 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
             "CALL CREATE_FTS_INDEX('RelatesToNode_', 'edge_name_and_fact', ['name', 'fact']);",
         ]
 
-    return [
+    indices: list[LiteralString] = [
         """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS
         FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
         """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS
@@ -138,6 +141,13 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
         """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS
         FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
     ]
+
+    analyzer = os.getenv('FULLTEXT_ANALYZER')
+    if provider == GraphProvider.NEO4J and analyzer:
+        options = f" OPTIONS {{indexConfig: {{`fulltext.analyzer`: '{analyzer}'}}}}"
+        return typing_cast(list[LiteralString], [index + options for index in indices])
+
+    return indices
 
 
 def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) -> str:
