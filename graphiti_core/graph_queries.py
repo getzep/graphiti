@@ -6,7 +6,7 @@ supporting index creation, fulltext search, and bulk operations.
 """
 
 import os
-from typing import cast
+from typing import cast as typing_cast
 
 from typing_extensions import LiteralString
 
@@ -145,7 +145,7 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
     analyzer = os.getenv('FULLTEXT_ANALYZER')
     if provider == GraphProvider.NEO4J and analyzer:
         options = f" OPTIONS {{indexConfig: {{`fulltext.analyzer`: '{analyzer}'}}}}"
-        return cast(list[LiteralString], [index + options for index in indices])
+        return typing_cast(list[LiteralString], [index + options for index in indices])
 
     return indices
 
