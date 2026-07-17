@@ -89,9 +89,13 @@ class OpenAIClient(BaseOpenAIClient):
         if temperature_value is not None:
             request_kwargs['temperature'] = temperature_value
 
-        # Only include reasoning and verbosity parameters for reasoning models
-        if is_reasoning_model and reasoning is not None:
-            request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+        # Only include reasoning and verbosity parameters for reasoning models.
+        # 'auto' is resolved to a per-model effort (e.g. 'none' for gpt-5.5).
+        # Truthiness guard (matches the Azure client) skips both None and an
+        # empty string, so a stray reasoning='' never sends an invalid effort.
+        effort = self._resolve_reasoning_effort(model, reasoning)
+        if is_reasoning_model and effort:
+            request_kwargs['reasoning'] = {'effort': effort}  # type: ignore
 
         if is_reasoning_model and verbosity is not None:
             request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
@@ -111,15 +115,19 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
-        # Reasoning models (gpt-5 family) don't support temperature
+        # Reasoning models (gpt-5 family, o1, o3) reject temperature.
         is_reasoning_model = (
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
-        return await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature if not is_reasoning_model else None,
-            max_tokens=max_tokens,
-            response_format={'type': 'json_object'},
-        )
+        request_kwargs: dict[str, typing.Any] = {
+            'model': model,
+            'messages': messages,
+            'max_tokens': max_tokens,
+            'response_format': {'type': 'json_object'},
+        }
+        # Omit temperature entirely for reasoning models — don't even send None.
+        if not is_reasoning_model and temperature is not None:
+            request_kwargs['temperature'] = temperature
+
+        return await self.client.chat.completions.create(**request_kwargs)

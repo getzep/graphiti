@@ -343,7 +343,9 @@ class Graphiti:
         """
         await self.driver.close()
 
-    async def _get_or_create_saga(self, saga_name: str, group_id: str, now: datetime) -> SagaNode:
+    async def _get_or_create_saga(
+        self, saga_name: str, group_id: str, created_at: datetime
+    ) -> SagaNode:
         """
         Get an existing saga by name or create a new one.
 
@@ -353,8 +355,11 @@ class Graphiti:
             The name of the saga.
         group_id : str
             The group id for the saga.
-        now : datetime
-            The current timestamp for creation.
+        created_at : datetime
+            Timestamp to stamp on a newly created saga. Callers should pass the
+            originating episode's reference time (``valid_at``) rather than the
+            current wall-clock time so the saga's ``created_at`` reflects the
+            episode it was minted from.
 
         Returns
         -------
@@ -382,7 +387,7 @@ class Graphiti:
                 created_at=parse_db_date(record['created_at']),  # type: ignore
             )
 
-        saga = SagaNode(name=saga_name, group_id=group_id, created_at=now)
+        saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
         await saga.save(self.driver)
         return saga
 
@@ -419,8 +424,8 @@ class Graphiti:
         saga_uuid: str,
         since: datetime | None = None,
         limit: int = 200,
-    ) -> list[str] | None:
-        """Retrieve episode contents for summarization, using IoC if available."""
+    ) -> list[tuple[str, datetime | None]] | None:
+        """Retrieve (content, valid_at) per episode for summarization, using IoC if available."""
         if self.driver.graph_operations_interface:
             try:
                 return await self.driver.graph_operations_interface.saga_get_episode_contents(
@@ -433,9 +438,24 @@ class Graphiti:
     async def summarize_saga(self, saga_id: str) -> SagaNode:
         """Incrementally summarize a saga using only new episodes since the last summary.
 
-        If the saga has been summarized before (``last_summarized_at`` is set),
-        only episodes added after that timestamp are fetched. The existing
-        summary is provided to the LLM as context so no information is lost.
+        Two watermarks are maintained on the saga node, with deliberately
+        different semantics:
+
+        - ``last_summarized_at`` is wall-clock and is the *filter* watermark:
+          the next run picks up any episode whose ``created_at`` (ingestion
+          time) is greater than this value. Wall-clock is the right semantics
+          here because episode ``created_at`` is monotonic with processing
+          time, so a backfilled episode added today with ``valid_at`` in the
+          past is still picked up next run.
+        - ``last_summarized_episode_valid_at`` is the *temporal* watermark:
+          the maximum ``valid_at`` (episode reference time) across the
+          episodes covered by the current summary. Consumers asking "how
+          recent is the content of this summary in event-time?" should use
+          this field, not ``last_summarized_at``.
+
+        If the saga has been summarized before, only episodes added after
+        ``last_summarized_at`` are fetched. The existing summary is provided
+        to the LLM as context so no information is lost.
 
         On the first call (no prior summary), all episodes are included.
 
@@ -461,16 +481,16 @@ class Graphiti:
         since = saga.last_summarized_at
 
         # Try IoC interface first, fall back to raw Cypher
-        episode_contents = await self._saga_get_episode_contents(
+        episodes_data = await self._saga_get_episode_contents(
             saga_id, since=since, limit=max_episodes
         )
-        if episode_contents is None:
+        if episodes_data is None:
             if since is not None:
                 records, _, _ = await self.driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
                     WHERE e.created_at > $since
-                    RETURN e.content AS content
+                    RETURN e.content AS content, e.valid_at AS valid_at
                     ORDER BY e.valid_at ASC, e.created_at ASC
                     LIMIT $limit
                     """,
@@ -483,7 +503,7 @@ class Graphiti:
                 records, _, _ = await self.driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
-                    RETURN e.content AS content
+                    RETURN e.content AS content, e.valid_at AS valid_at
                     ORDER BY e.valid_at DESC, e.created_at DESC
                     LIMIT $limit
                     """,
@@ -494,11 +514,20 @@ class Graphiti:
                 # Reverse to chronological order for the prompt
                 records = list(reversed(records))
 
-            episode_contents = [r['content'] for r in records if r.get('content')]
+            from graphiti_core.helpers import parse_db_date
 
-        if not episode_contents:
+            episodes_data = [
+                (r['content'], parse_db_date(r.get('valid_at')))
+                for r in records
+                if r.get('content')
+            ]
+
+        if not episodes_data:
             logger.info(f'No new episodes found for saga {saga_id}, skipping summary')
             return saga
+
+        episode_contents = [content for content, _ in episodes_data]
+        valid_ats = [valid_at for _, valid_at in episodes_data if valid_at is not None]
 
         context = {
             'saga_name': saga.name,
@@ -517,7 +546,21 @@ class Graphiti:
             summary = summary[:MAX_SUMMARY_CHARS]
 
         saga.summary = summary
+        # Wall-clock watermark for the next-run filter: keeps backfilled
+        # episodes (valid_at in the past, created_at = now) reachable on
+        # subsequent runs.
         saga.last_summarized_at = utc_now()
+        # Episode-time watermark for public/temporal consumers: advance only
+        # forward to the latest reference time we just summarized. If no
+        # episode in this batch carried a valid_at, leave the previous value
+        # unchanged so the field never regresses.
+        if valid_ats:
+            new_episode_watermark = max(valid_ats)
+            if (
+                saga.last_summarized_episode_valid_at is None
+                or new_episode_watermark > saga.last_summarized_episode_valid_at
+            ):
+                saga.last_summarized_episode_valid_at = new_episode_watermark
         await saga.save(self.driver)
 
         logger.info(f'Updated summary for saga {saga_id}')
@@ -695,7 +738,11 @@ class Graphiti:
         if saga is not None:
             # Get or create saga node based on input type
             if isinstance(saga, str):
-                saga_node = await self._get_or_create_saga(saga, group_id, now)
+                # Use the originating episode's reference time (valid_at) for a
+                # newly created saga so its created_at matches the episode that
+                # minted it, not the wall-clock time of this run.
+                saga_created_at = primary_episode.valid_at or now
+                saga_node = await self._get_or_create_saga(saga, group_id, saga_created_at)
             else:
                 saga_node = saga
 
@@ -1364,7 +1411,12 @@ class Graphiti:
                 if saga is not None:
                     # Get or create saga node based on input type
                     if isinstance(saga, str):
-                        saga_node = await self._get_or_create_saga(saga, group_id, now)
+                        # Anchor a newly minted saga to the earliest episode
+                        # reference time in the bulk, so created_at reflects the
+                        # episode window rather than the time this run started.
+                        valid_ats = [ep.valid_at for ep in episodes if ep.valid_at is not None]
+                        saga_created_at = min(valid_ats) if valid_ats else now
+                        saga_node = await self._get_or_create_saga(saga, group_id, saga_created_at)
                     else:
                         saga_node = saga
 

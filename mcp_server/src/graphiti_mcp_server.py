@@ -8,13 +8,15 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
@@ -23,17 +25,29 @@ from starlette.responses import JSONResponse
 
 from config.schema import GraphitiConfig, ServerConfig
 from models.response_types import (
+    BuildCommunitiesResponse,
+    CommunityResult,
+    EpisodeEntitiesResponse,
     EpisodeSearchResponse,
     ErrorResponse,
     FactSearchResponse,
-    NodeResult,
     NodeSearchResponse,
+    SagaSummaryResponse,
     StatusResponse,
     SuccessResponse,
+    TripletResponse,
 )
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.queue_service import QueueService
-from utils.formatting import format_fact_result
+from utils.formatting import format_fact_result, to_edge_result, to_node_result
+from utils.type_config import (
+    build_edge_type_map,
+    build_edge_types,
+    build_entity_types,
+    build_fact_search_filters,
+    coerce_group_ids,
+    parse_reference_time,
+)
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -114,33 +128,43 @@ config: GraphitiConfig
 
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
-Graphiti is a memory service for AI agents built on a knowledge graph. Graphiti performs well
-with dynamic data such as user interactions, changing enterprise data, and external information.
+Graphiti is a memory service for AI agents built on a temporally-aware knowledge graph. It performs
+well with dynamic data such as user interactions, changing enterprise data, and external information.
 
-Graphiti transforms information into a richly connected knowledge network, allowing you to 
-capture relationships between concepts, entities, and information. The system organizes data as episodes 
-(content snippets), nodes (entities), and facts (relationships between entities), creating a dynamic, 
-queryable memory store that evolves with new information. Graphiti supports multiple data formats, including 
-structured JSON data, enabling seamless integration with existing data pipelines and systems.
+Graphiti organizes data as episodes (content snippets), nodes (entities), and facts (relationships
+between entities). Each piece of information is partitioned by group_id, so you can maintain separate
+knowledge domains in one graph.
 
-Facts contain temporal metadata, allowing you to track the time of creation and whether a fact is invalid 
-(superseded by new information).
+Bi-temporal model: every episode records both when it was ingested and when the events it describes
+actually occurred. Pass reference_time to add_memory to set the event-occurrence time; otherwise the
+current time is used. Facts carry valid_at / invalid_at metadata, so a fact can be superseded by newer
+information while its history is preserved.
 
-Key capabilities:
-1. Add episodes (text, messages, or JSON) to the knowledge graph with the add_memory tool
-2. Search for nodes (entities) in the graph using natural language queries with search_nodes
-3. Find relevant facts (relationships between entities) with search_facts
-4. Retrieve specific entity edges or episodes by UUID
-5. Manage the knowledge graph with tools like delete_episode, delete_entity_edge, and clear_graph
+Core tools:
+- add_memory: add an episode (text, message, or JSON). Supports reference_time (bi-temporal),
+  excluded_entity_types and custom_extraction_instructions to steer extraction,
+  previous_episode_uuids to supply explicit context, update_communities to refresh community summaries,
+  and saga / saga_previous_episode_uuid to associate the episode with an ordered saga.
+- add_triplet: write a single fact (source entity -> fact -> target entity) directly, bypassing
+  extraction. graphiti-core resolves/deduplicates the endpoint entities and generates embeddings.
+- search_nodes: semantic + keyword + graph search over entities, optionally filtered by entity type
+  (node label) and re-ranked around a center_node_uuid.
+- search_memory_facts: search over facts (edges), optionally filtered by edge (fact) type and by
+  valid_at / invalid_at date ranges.
+- summarize_saga: generate or refresh the running summary of a saga's episodes.
+- build_communities: detect entity communities and produce higher-level community summaries.
+- get_episode_entities: trace provenance — the entities and facts created by specific episode UUIDs.
+- get_entity_edge / get_episodes: retrieve specific facts or episodes.
+- delete_episode: remove an episode and cascade-delete the entities/facts it solely created.
+- delete_entity_edge / clear_graph: remove a fact, or clear a group's data.
 
-The server connects to a database for persistent storage and uses language models for certain operations. 
-Each piece of information is organized by group_id, allowing you to maintain separate knowledge domains.
+Custom types: the server can register rich entity-type and edge-type models (with attributes and
+extraction instructions) from configuration, and constrain which edge types are allowed between which
+entity types via an edge_type_map. With no such configuration, default extraction behavior applies.
 
-When adding information, provide descriptive names and detailed content to improve search quality. 
-When searching, use specific queries and consider filtering by group_id for more relevant results.
-
-For optimal performance, ensure the database is properly configured and accessible, and valid 
-API keys are provided for any language model operations.
+When adding information, provide descriptive names and detailed content to improve search quality.
+When searching, use specific queries and consider filtering by group_id, type, or date range. The
+server requires a configured database and valid API keys for language-model operations.
 """
 
 # MCP server instance
@@ -166,7 +190,9 @@ class GraphitiService:
         self.semaphore_limit = semaphore_limit
         self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.client: Graphiti | None = None
-        self.entity_types = None
+        self.entity_types: dict[str, type[BaseModel]] | None = None
+        self.edge_types: dict[str, type[BaseModel]] | None = None
+        self.edge_type_map: dict[tuple[str, str], list[str]] | None = None
 
     async def initialize(self) -> None:
         """Initialize the Graphiti client with factory-created components."""
@@ -190,24 +216,12 @@ class GraphitiService:
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
-            # Build entity types from configuration
-            custom_types = None
-            if self.config.graphiti.entity_types:
-                custom_types = {}
-                for entity_type in self.config.graphiti.entity_types:
-                    # Create a dynamic Pydantic model for each entity type
-                    # Note: Don't use 'name' as it's a protected Pydantic attribute
-                    entity_model = type(
-                        entity_type.name,
-                        (BaseModel,),
-                        {
-                            '__doc__': entity_type.description,
-                        },
-                    )
-                    custom_types[entity_type.name] = entity_model
-
-            # Store entity types for later use
-            self.entity_types = custom_types
+            # Build entity / edge types from configuration. Rich Pydantic models
+            # registered in models.entity_types / models.edge_types are preferred;
+            # otherwise documentation-only models are built from the description.
+            self.entity_types = build_entity_types(self.config.graphiti.entity_types)
+            self.edge_types = build_edge_types(self.config.graphiti.edge_types)
+            self.edge_type_map = build_edge_type_map(self.config.graphiti.edge_type_map)
 
             # Initialize Graphiti client with appropriate driver
             try:
@@ -302,6 +316,12 @@ class GraphitiService:
             else:
                 logger.info('Using default entity types')
 
+            if self.edge_types:
+                edge_type_names = list(self.edge_types.keys())
+                logger.info(f'Using custom edge types: {", ".join(edge_type_names)}')
+            else:
+                logger.info('Using default edge types')
+
             logger.info(f'Using database: {self.config.database.provider}')
             logger.info(f'Using group_id: {self.config.graphiti.group_id}')
 
@@ -326,11 +346,22 @@ async def add_memory(
     source: str = 'text',
     source_description: str = '',
     uuid: str | None = None,
+    reference_time: str | None = None,
+    excluded_entity_types: list[str] | None = None,
+    custom_extraction_instructions: str | None = None,
+    previous_episode_uuids: list[str] | None = None,
+    update_communities: bool = False,
+    saga: str | None = None,
+    saga_previous_episode_uuid: str | None = None,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory. This is the primary way to add information to the graph.
 
     This function returns immediately and processes the episode addition in the background.
     Episodes for the same group_id are processed sequentially to avoid race conditions.
+
+    Graphiti uses a bi-temporal model: each episode records both when it was ingested and
+    when the described events actually occurred (its reference_time). Pass reference_time to
+    set the event-occurrence time explicitly; otherwise the current time is used.
 
     Args:
         name (str): Name of the episode
@@ -345,6 +376,22 @@ async def add_memory(
                                - 'message': For conversation-style content
         source_description (str, optional): Description of the source
         uuid (str, optional): Optional UUID for the episode
+        reference_time (str, optional): ISO-8601 timestamp for when the described events occurred
+                                 (e.g. "2025-01-15T10:30:00Z" or "2025-01-15T10:30:00+00:00"). A
+                                 timezone-naive value is interpreted as UTC. Defaults to the
+                                 current time when omitted.
+        excluded_entity_types (list[str], optional): Names of configured entity types to exclude
+                                 from extraction for this episode.
+        custom_extraction_instructions (str, optional): Additional natural-language guidance passed
+                                 to the extraction model for this episode only.
+        previous_episode_uuids (list[str], optional): Explicit list of prior episode UUIDs to use
+                                 as conversational/contextual history. Overrides automatic retrieval.
+        update_communities (bool, optional): When True, incrementally update community summaries to
+                                 reflect entities affected by this episode. Defaults to False.
+        saga (str, optional): Name/id of a saga to associate this episode with. Sagas group related
+                                 episodes so their evolving narrative can be summarized via summarize_saga.
+        saga_previous_episode_uuid (str, optional): UUID of the preceding episode in the saga, used to
+                                 order episodes within the saga.
 
     Examples:
         # Adding plain text content
@@ -364,11 +411,25 @@ async def add_memory(
             source="json",
             source_description="CRM data"
         )
+
+        # Recording an event that occurred in the past (bi-temporal)
+        add_memory(
+            name="Historical Note",
+            episode_body="The merger closed in early 2020.",
+            reference_time="2020-03-01T00:00:00Z"
+        )
     """
     global graphiti_service, queue_service
 
     if graphiti_service is None or queue_service is None:
         return ErrorResponse(error='Services not initialized')
+
+    # Parse the optional reference_time before queuing so callers get an immediate
+    # error on a malformed timestamp rather than a silent background failure.
+    try:
+        parsed_reference_time = parse_reference_time(reference_time)
+    except ValueError as e:
+        return ErrorResponse(error=f'Invalid reference_time: {e}')
 
     try:
         # Use the provided group_id or fall back to the default from config
@@ -393,6 +454,15 @@ async def add_memory(
             episode_type=episode_type,
             entity_types=graphiti_service.entity_types,
             uuid=uuid or None,  # Ensure None is passed if uuid is None
+            reference_time=parsed_reference_time,
+            edge_types=graphiti_service.edge_types,
+            edge_type_map=graphiti_service.edge_type_map,
+            excluded_entity_types=excluded_entity_types,
+            previous_episode_uuids=previous_episode_uuids,
+            custom_extraction_instructions=custom_extraction_instructions,
+            update_communities=update_communities,
+            saga=saga,
+            saga_previous_episode_uuid=saga_previous_episode_uuid,
         )
 
         return SuccessResponse(
@@ -407,17 +477,21 @@ async def add_memory(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: list[str] | None = None,
+    group_ids: str | list[str] | None = None,
     max_nodes: int = 10,
     entity_types: list[str] | None = None,
+    center_node_uuid: str | None = None,
 ) -> NodeSearchResponse | ErrorResponse:
-    """Search for nodes in the graph memory.
+    """Search for nodes (entities) in the graph memory.
 
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional group ID, or list of group IDs, to filter results (a single
+            string is accepted and treated as a one-element list)
         max_nodes: Maximum number of nodes to return (default: 10)
-        entity_types: Optional list of entity type names to filter by
+        entity_types: Optional list of entity type names (node labels) to filter by
+        center_node_uuid: Optional UUID of a node to center the search around. Results
+            closer to this node in the graph are ranked higher.
     """
     global graphiti_service
 
@@ -427,7 +501,8 @@ async def search_nodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        group_ids = coerce_group_ids(group_ids)
         effective_group_ids = (
             group_ids
             if group_ids is not None
@@ -441,13 +516,22 @@ async def search_nodes(
             node_labels=entity_types,
         )
 
-        # Use the search_ method with node search config
-        from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
+        # center_node_uuid is only honored by the node_distance reranker, so select
+        # that recipe when a center node is given (mirroring core's Graphiti.search);
+        # otherwise use RRF.
+        from graphiti_core.search.search_config_recipes import (
+            NODE_HYBRID_SEARCH_NODE_DISTANCE,
+            NODE_HYBRID_SEARCH_RRF,
+        )
 
+        node_config = (
+            NODE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else NODE_HYBRID_SEARCH_RRF
+        )
         results = await client.search_(
             query=query,
-            config=NODE_HYBRID_SEARCH_RRF,
+            config=node_config,
             group_ids=effective_group_ids,
+            center_node_uuid=center_node_uuid,
             search_filter=search_filters,
         )
 
@@ -457,25 +541,8 @@ async def search_nodes(
         if not nodes:
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
-        # Format the results
-        node_results = []
-        for node in nodes:
-            # Get attributes and ensure no embeddings are included
-            attrs = node.attributes if hasattr(node, 'attributes') else {}
-            # Remove any embedding keys that might be in attributes
-            attrs = {k: v for k, v in attrs.items() if 'embedding' not in k.lower()}
-
-            node_results.append(
-                NodeResult(
-                    uuid=node.uuid,
-                    name=node.name,
-                    labels=node.labels if node.labels else [],
-                    created_at=node.created_at.isoformat() if node.created_at else None,
-                    summary=node.summary,
-                    group_id=node.group_id,
-                    attributes=attrs,
-                )
-            )
+        # Format the results (embeddings stripped by to_node_result)
+        node_results = [to_node_result(node) for node in nodes]
 
         return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
     except Exception as e:
@@ -487,17 +554,29 @@ async def search_nodes(
 @mcp.tool()
 async def search_memory_facts(
     query: str,
-    group_ids: list[str] | None = None,
+    group_ids: str | list[str] | None = None,
     max_facts: int = 10,
     center_node_uuid: str | None = None,
+    edge_types: list[str] | None = None,
+    valid_at_after: str | None = None,
+    valid_at_before: str | None = None,
+    invalid_at_after: str | None = None,
+    invalid_at_before: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
-    """Search the graph memory for relevant facts.
+    """Search the graph memory for relevant facts (entity edges).
 
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional group ID, or list of group IDs, to filter results (a single
+            string is accepted and treated as a one-element list)
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
+        edge_types: Optional list of edge (fact) type names to filter by
+        valid_at_after: Optional ISO-8601 lower bound; only facts whose valid_at is at or
+            after this time are returned (timezone-naive is treated as UTC)
+        valid_at_before: Optional ISO-8601 upper bound on a fact's valid_at
+        invalid_at_after: Optional ISO-8601 lower bound on a fact's invalid_at
+        invalid_at_before: Optional ISO-8601 upper bound on a fact's invalid_at
     """
     global graphiti_service
 
@@ -509,9 +588,22 @@ async def search_memory_facts(
         if max_facts <= 0:
             return ErrorResponse(error='max_facts must be a positive integer')
 
+        # Build search filters from the optional edge-type / date-range params.
+        try:
+            search_filter = build_fact_search_filters(
+                edge_types=edge_types,
+                valid_at_after=valid_at_after,
+                valid_at_before=valid_at_before,
+                invalid_at_after=invalid_at_after,
+                invalid_at_before=invalid_at_before,
+            )
+        except ValueError as e:
+            return ErrorResponse(error=f'Invalid date filter: {e}')
+
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        group_ids = coerce_group_ids(group_ids)
         effective_group_ids = (
             group_ids
             if group_ids is not None
@@ -525,6 +617,7 @@ async def search_memory_facts(
             query=query,
             num_results=max_facts,
             center_node_uuid=center_node_uuid,
+            search_filter=search_filter,
         )
 
         if not relevant_edges:
@@ -568,6 +661,10 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
 async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     """Delete an episode from the graph memory.
 
+    Uses Graphiti.remove_episode, which cascades the deletion: entities and facts
+    that were created solely by this episode are removed along with it, while
+    entities and facts also supported by other episodes are preserved.
+
     Args:
         uuid: UUID of the episode to delete
     """
@@ -579,10 +676,9 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
-        # Get the episodic node by UUID
-        episodic_node = await EpisodicNode.get_by_uuid(client.driver, uuid)
-        # Delete the node using its delete method
-        await episodic_node.delete(client.driver)
+        # remove_episode cascades cleanup of episode-created entities/edges,
+        # unlike EpisodicNode.delete which would orphan them.
+        await client.remove_episode(uuid)
         return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
@@ -619,13 +715,14 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 
 @mcp.tool()
 async def get_episodes(
-    group_ids: list[str] | None = None,
+    group_ids: str | list[str] | None = None,
     max_episodes: int = 10,
 ) -> EpisodeSearchResponse | ErrorResponse:
     """Get episodes from the graph memory.
 
     Args:
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional group ID, or list of group IDs, to filter results (a single
+            string is accepted and treated as a one-element list)
         max_episodes: Maximum number of episodes to return (default: 10)
     """
     global graphiti_service
@@ -636,7 +733,8 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        group_ids = coerce_group_ids(group_ids)
         effective_group_ids = (
             group_ids
             if group_ids is not None
@@ -686,11 +784,21 @@ async def get_episodes(
 
 
 @mcp.tool()
-async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | ErrorResponse:
-    """Clear all data from the graph for specified group IDs.
+async def summarize_saga(
+    saga_name: str, group_id: str | None = None
+) -> SagaSummaryResponse | ErrorResponse:
+    """Summarize a saga: an ordered group of related episodes.
+
+    Generates (or refreshes) a running summary of the saga's narrative across its
+    episodes and returns the saga's name and summary text.
+
+    Sagas are keyed by (name, group_id): pass the same ``saga`` name you used with
+    add_memory. This tool resolves that name to the saga within the group and
+    summarizes it.
 
     Args:
-        group_ids: Optional list of group IDs to clear. If not provided, clears the default group.
+        saga_name: The saga name — the same value passed as ``saga`` to add_memory.
+        group_id: Optional group ID the saga belongs to. Falls back to the default group.
     """
     global graphiti_service
 
@@ -700,9 +808,224 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        effective_group_id = group_id or config.graphiti.group_id
+        if not effective_group_id:
+            return ErrorResponse(error='No group_id provided and no default group_id is configured')
+
+        # add_memory takes a saga *name*; core keys sagas by (name, group_id) and
+        # assigns its own UUID, while summarize_saga requires that UUID. Resolve the
+        # name to its UUID within the group before delegating to core.
+        sagas = await SagaNode.get_by_group_ids(client.driver, [effective_group_id])
+        match = next((saga for saga in sagas if saga.name == saga_name), None)
+        if match is None:
+            return ErrorResponse(
+                error=f"No saga named '{saga_name}' found in group '{effective_group_id}'"
+            )
+
+        saga_node = await client.summarize_saga(match.uuid)
+
+        return SagaSummaryResponse(
+            message=f"Saga '{saga_name}' summarized successfully",
+            uuid=saga_node.uuid,
+            name=saga_node.name,
+            summary=saga_node.summary,
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error summarizing saga: {error_msg}')
+        return ErrorResponse(error=f'Error summarizing saga: {error_msg}')
+
+
+@mcp.tool()
+async def build_communities(
+    group_ids: str | list[str] | None = None,
+) -> BuildCommunitiesResponse | ErrorResponse:
+    """Detect and build community summaries over the graph's entities.
+
+    Communities group densely-connected entities and produce higher-level summaries
+    that can then be searched. This is a relatively expensive operation that
+    processes the full set of entities for the given group(s).
+
+    Args:
+        group_ids: Optional group ID, or list of group IDs, to build communities for.
+            Falls back to the default group when omitted. Pass an explicit list to scope
+            community detection across multiple graphs.
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        normalized_group_ids = coerce_group_ids(group_ids)
+        if normalized_group_ids is None and config.graphiti.group_id:
+            normalized_group_ids = [config.graphiti.group_id]
+
+        communities, community_edges = await client.build_communities(
+            group_ids=normalized_group_ids
+        )
+
+        community_results: list[CommunityResult] = [
+            CommunityResult(
+                uuid=community.uuid,
+                name=community.name,
+                group_id=community.group_id,
+                summary=getattr(community, 'summary', None),
+            )
+            for community in communities
+        ]
+
+        return BuildCommunitiesResponse(
+            message=f'Built {len(communities)} communities',
+            community_count=len(communities),
+            edge_count=len(community_edges),
+            communities=community_results,
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error building communities: {error_msg}')
+        return ErrorResponse(error=f'Error building communities: {error_msg}')
+
+
+@mcp.tool()
+async def add_triplet(
+    source_node_name: str,
+    edge_name: str,
+    fact: str,
+    target_node_name: str,
+    group_id: str | None = None,
+    source_node_uuid: str | None = None,
+    target_node_uuid: str | None = None,
+) -> TripletResponse | ErrorResponse:
+    """Directly add a single fact triplet (source entity -> fact -> target entity).
+
+    Unlike add_memory, this bypasses episode extraction and writes the relationship
+    directly. graphiti-core resolves the source/target nodes against existing entities
+    (deduplicating by name) and generates the required embeddings internally.
+
+    Args:
+        source_node_name: Name of the source entity
+        edge_name: Relationship/edge type name (e.g. "WORKS_FOR")
+        fact: Natural-language statement describing the relationship
+        target_node_name: Name of the target entity
+        group_id: Optional group ID. Falls back to the default group when omitted.
+        source_node_uuid: Optional UUID to reuse an existing source entity. A new UUID is
+            generated when omitted.
+        target_node_uuid: Optional UUID to reuse an existing target entity. A new UUID is
+            generated when omitted.
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        effective_group_id = group_id or config.graphiti.group_id
+        if not effective_group_id:
+            return ErrorResponse(error='No group_id provided and no default group_id is configured')
+        now = datetime.now(timezone.utc)
+
+        source_node = EntityNode(
+            uuid=source_node_uuid or str(uuid4()),
+            name=source_node_name,
+            group_id=effective_group_id,
+            created_at=now,
+        )
+        target_node = EntityNode(
+            uuid=target_node_uuid or str(uuid4()),
+            name=target_node_name,
+            group_id=effective_group_id,
+            created_at=now,
+        )
+        edge = EntityEdge(
+            name=edge_name,
+            fact=fact,
+            group_id=effective_group_id,
+            source_node_uuid=source_node.uuid,
+            target_node_uuid=target_node.uuid,
+            created_at=now,
+        )
+
+        result = await client.add_triplet(source_node, edge, target_node)
+
+        return TripletResponse(
+            message=f"Triplet '{source_node_name} -[{edge_name}]-> {target_node_name}' added",
+            nodes=[to_node_result(node) for node in result.nodes],
+            edges=[to_edge_result(e) for e in result.edges],
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error adding triplet: {error_msg}')
+        return ErrorResponse(error=f'Error adding triplet: {error_msg}')
+
+
+@mcp.tool()
+async def get_episode_entities(
+    episode_uuids: list[str],
+) -> EpisodeEntitiesResponse | ErrorResponse:
+    """Get the entities (nodes) and facts (edges) created by specific episodes.
+
+    Use this to trace provenance: given one or more episode UUIDs, return the graph
+    elements that those episodes produced.
+
+    Args:
+        episode_uuids: List of episode UUIDs to look up provenance for
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    if not episode_uuids:
+        return ErrorResponse(error='episode_uuids must contain at least one UUID')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        results = await client.get_nodes_and_edges_by_episode(episode_uuids)
+
+        return EpisodeEntitiesResponse(
+            message=f'Retrieved provenance for {len(episode_uuids)} episode(s)',
+            nodes=[to_node_result(node) for node in results.nodes],
+            edges=[to_edge_result(e) for e in results.edges],
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error getting episode entities: {error_msg}')
+        return ErrorResponse(error=f'Error getting episode entities: {error_msg}')
+
+
+@mcp.tool()
+async def clear_graph(
+    group_ids: str | list[str] | None = None,
+) -> SuccessResponse | ErrorResponse:
+    """Clear all data from the graph for specified group IDs.
+
+    Args:
+        group_ids: Optional group ID, or list of group IDs, to clear (a single string is
+            accepted). If not provided, clears the default group.
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        # (Parenthesized so an explicit group_ids isn't dropped when the configured
+        # default group_id is unset — `or` binds tighter than the ternary.)
+        group_ids = coerce_group_ids(group_ids)
         effective_group_ids = (
-            group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
+            group_ids
+            if group_ids is not None
+            else ([config.graphiti.group_id] if config.graphiti.group_id else [])
         )
 
         if not effective_group_ids:

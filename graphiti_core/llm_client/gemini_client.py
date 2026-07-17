@@ -368,6 +368,8 @@ class GeminiClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model with retry logic and error handling.
@@ -380,10 +382,14 @@ class GeminiClient(LLMClient):
             model_size (ModelSize): The size of the model to use (small or medium).
             group_id (str | None): Optional partition identifier for the graph.
             prompt_name (str | None): Optional name of the prompt for tracing.
+            attribute_extraction (bool): When True, prepends the shared attribute-extraction
+                framing to the system message so the strict "field descriptions are not
+                values" instruction reaches the model on Gemini's native-structured-output path.
 
         Returns:
             dict[str, typing.Any]: The response from the language model.
         """
+        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         # Add multilingual extraction instructions
         messages[0].content += get_extraction_language_instruction(group_id)
 

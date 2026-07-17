@@ -5,8 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
 from graphiti_core.driver.neo4j.operations.search_ops import _build_neo4j_fulltext_query
 from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationError
+from graphiti_core.helpers import get_default_group_id, validate_group_id
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchConfig
 from graphiti_core.search.search_filters import (
@@ -90,3 +92,20 @@ async def test_shared_search_rejects_invalid_group_ids():
             config=SearchConfig(),
             search_filter=SearchFilters(),
         )
+
+
+def test_falkordb_default_group_id_passes_validation():
+    # Regression: the FalkorDB default group_id must satisfy validate_group_id.
+    # Otherwise add_episode/search with the default group_id raises
+    # GroupIdValidationError once search re-validates the group_ids.
+    default = get_default_group_id(GraphProvider.FALKORDB)
+    assert validate_group_id(default) is True
+
+
+def test_falkordb_fulltext_query_escapes_default_group_id():
+    # The default group_id ('_') must be escaped for RediSearch (-> '\\_').
+    # An unescaped '_' produces a RediSearch fulltext syntax error.
+    default = get_default_group_id(GraphProvider.FALKORDB)
+    built = _build_falkor_fulltext_query('hello', [default])
+    assert '@group_id:"\\_"' in built
+    assert '@group_id:"_"' not in built
