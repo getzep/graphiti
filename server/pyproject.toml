@@ -25,6 +25,9 @@ dev = [
     "pytest-xdist>=3.6.1",
     "ruff>=0.6.2",
     "fastapi-cli>=0.0.5",
+    # FalkorDB driver, needed by the live end-to-end test (tests/test_live_falkordb_int.py)
+    # which exercises the db_backend='falkordb' path. Not a runtime dependency.
+    "graphiti-core[falkordb]>=0.28.2",
 ]
 
 [build-system]
@@ -36,6 +39,9 @@ packages = ["graph_service"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "integration: live end-to-end tests requiring FalkorDB and an OpenAI API key",
+]
 
 [tool.ruff]
 line-length = 100

@@ -46,21 +46,6 @@ jobs:
 
   database-integration-tests:
     runs-on: depot-ubuntu-22.04
-    services:
-      falkordb:
-        image: falkordb/falkordb:latest
-        ports:
-          - 6379:6379
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
-      neo4j:
-        image: neo4j:5.26-community
-        ports:
-          - 7687:7687
-          - 7474:7474
-        env:
-          NEO4J_AUTH: neo4j/testpass
-          NEO4J_PLUGINS: '["apoc"]'
-        options: --health-cmd "cypher-shell -u neo4j -p testpass 'RETURN 1'" --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Set up Python
@@ -71,23 +56,45 @@ jobs:
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
         with:
           version: "latest"
-      - name: Install redis-cli for FalkorDB health check
-        run: sudo apt-get update && sudo apt-get install -y redis-tools
+      - name: Start databases
+        # Run the databases ourselves on the host network rather than via a GitHub
+        # Actions `services:` block. On the depot-ubuntu runner pool, bridge-network
+        # NAT silently drops packets to published service-container ports, so the job
+        # host can't reach a `services:` container (connect black-holes -> the wait step
+        # times out with exit 124). `services:` always uses bridge networking and can't
+        # be overridden, so we use `docker run --network host` instead. Readiness is
+        # checked via `docker exec`, which doesn't depend on host->container networking.
+        run: |
+          docker run -d --name falkordb --network host falkordb/falkordb:latest
+          docker run -d --name neo4j --network host \
+            -e NEO4J_AUTH=neo4j/testpass \
+            -e NEO4J_PLUGINS='["apoc"]' \
+            neo4j:5.26-community
       - name: Install dependencies
         run: uv sync --all-extras
-      - name: Wait for FalkorDB
+      - name: Wait for databases
         run: |
-          timeout 60 bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
-      - name: Wait for Neo4j
-        run: |
-          timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
+          for i in $(seq 1 30); do
+            if docker exec falkordb redis-cli ping 2>/dev/null | grep -q PONG; then
+              echo "falkordb ready after ${i}s"; break
+            fi
+            if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
+            sleep 1
+          done
+          for i in $(seq 1 60); do
+            if docker exec neo4j cypher-shell -u neo4j -p testpass 'RETURN 1' >/dev/null 2>&1; then
+              echo "neo4j ready after ${i}s"; break
+            fi
+            if [ "$i" -eq 60 ]; then echo "neo4j did not become ready in 60s" >&2; docker logs neo4j; exit 1; fi
+            sleep 1
+          done
       - name: Run database integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-          NEO4J_URI: bolt://localhost:7687
+          NEO4J_URI: bolt://127.0.0.1:7687
           NEO4J_USER: neo4j
           NEO4J_PASSWORD: testpass
-          FALKORDB_HOST: localhost
+          FALKORDB_HOST: 127.0.0.1
           FALKORDB_PORT: 6379
           DISABLE_NEPTUNE: 1
         run: |

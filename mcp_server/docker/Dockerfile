@@ -33,7 +33,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.28.1
+ARG GRAPHITI_CORE_VERSION=0.29.1
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
@@ -114,7 +114,7 @@ EOF
 RUN chmod +x /start-services.sh
 
 # Add Docker labels with version information
-ARG MCP_SERVER_VERSION=1.0.1
+ARG MCP_SERVER_VERSION=1.0.2
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL org.opencontainers.image.title="FalkorDB + Graphiti MCP Server" \

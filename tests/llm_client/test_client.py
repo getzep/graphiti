@@ -16,6 +16,7 @@ limitations under the License.
 
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.prompts.models import Message
 
 
 class MockLLMClient(LLMClient):
@@ -55,3 +56,53 @@ def test_clean_input():
 
     for input_str, expected in test_cases:
         assert client._clean_input(input_str) == expected, f'Failed for input: {repr(input_str)}'
+
+
+def test_attribute_extraction_preamble_no_op_when_disabled():
+    client = MockLLMClient(LLMConfig())
+    messages = [Message(role='system', content='base'), Message(role='user', content='hi')]
+    client._apply_attribute_extraction_preamble(messages, attribute_extraction=False)
+    assert messages[0].content == 'base'
+    assert messages[1].content == 'hi'
+
+
+def test_attribute_extraction_preamble_appends_to_system():
+    client = MockLLMClient(LLMConfig())
+    messages = [
+        Message(role='system', content='You are helpful.'),
+        Message(role='user', content='hi'),
+    ]
+    client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
+    assert messages[0].content.startswith('You are helpful.')
+    assert 'ATTRIBUTE EXTRACTION:' in messages[0].content
+    assert 'NEVER themselves valid values' in messages[0].content
+    assert messages[1].content == 'hi'  # user message untouched
+
+
+def test_attribute_extraction_preamble_is_idempotent():
+    client = MockLLMClient(LLMConfig())
+    messages = [
+        Message(role='system', content='You are helpful.'),
+        Message(role='user', content='hi'),
+    ]
+    client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
+    once = messages[0].content
+    client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
+    assert messages[0].content == once, 'second call must not double-append'
+
+
+def test_attribute_extraction_preamble_falls_back_to_first_message_if_no_system():
+    client = MockLLMClient(LLMConfig())
+    messages = [Message(role='user', content='hi')]
+    client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
+    assert 'ATTRIBUTE EXTRACTION:' in messages[0].content
+    assert messages[0].content.endswith('hi')
+    # Sentinel must be at the front so the idempotency check finds it.
+    assert messages[0].content.startswith('<<graphiti.attr_extraction.preamble.v1>>')
+
+
+def test_attribute_extraction_preamble_handles_empty_messages():
+    client = MockLLMClient(LLMConfig())
+    messages: list[Message] = []
+    client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
+    assert messages == []
