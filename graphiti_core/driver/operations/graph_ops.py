@@ -53,6 +53,7 @@ class GraphMaintenanceOperations(ABC):
     async def remove_communities(
         self,
         executor: QueryExecutor,
+        group_ids: list[str] | None = None,
     ) -> None: ...
 
     @abstractmethod
