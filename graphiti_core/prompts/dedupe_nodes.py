@@ -35,7 +35,16 @@ class NodeDuplicate(BaseModel):
 
 
 class NodeResolutions(BaseModel):
-    entity_resolutions: list[NodeDuplicate] = Field(..., description='List of resolved nodes')
+    # default_factory=list, NOT Field(...): the dedupe LLM intermittently returns a bare
+    # NodeDuplicate instead of {'entity_resolutions': [...]}. Required-field validation turned
+    # that into a dropped episode (measured in production: 2 of 8 episodes lost, no retry).
+    # Defaulting to an empty list lets the episode through — node_operations already diffs the
+    # returned ids against the expected ones and logs 'LLM did not return resolutions for IDs',
+    # so an empty list just means "resolve nothing this round". A skipped dedup round is
+    # recoverable; a dropped episode is not.
+    entity_resolutions: list[NodeDuplicate] = Field(
+        default_factory=list, description='List of resolved nodes'
+    )
 
 
 class Prompt(Protocol):
