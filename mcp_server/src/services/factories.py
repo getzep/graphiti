@@ -65,6 +65,13 @@ try:
 except ImportError:
     HAS_GROQ = False
 
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
+
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     """Validate API key is present.
@@ -291,6 +298,50 @@ class LLMClientFactory:
 
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
+
+
+class CrossEncoderFactory:
+    """Factory for creating CrossEncoder (reranker) clients based on the LLM provider.
+
+    When no ``cross_encoder`` is passed to ``Graphiti()``, graphiti-core falls back to
+    ``OpenAIRerankerClient()``, which requires ``OPENAI_API_KEY`` — even when the LLM and
+    embedder are both configured for another provider. This factory returns a reranker that
+    matches the configured provider so a non-OpenAI stack (e.g. all-Gemini) does not pull in a
+    hard OpenAI dependency. Providers without a dedicated reranker return ``None``, which
+    preserves the existing default behavior.
+    """
+
+    @staticmethod
+    def create(config: LLMConfig):
+        """Create a cross-encoder client for the configured LLM provider, or None."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        provider = config.provider.lower()
+
+        match provider:
+            case 'gemini':
+                if not HAS_GEMINI_RERANKER:
+                    logger.warning(
+                        'Gemini reranker not available in current graphiti-core version; '
+                        'falling back to the default cross-encoder'
+                    )
+                    return None
+                if not config.providers.gemini:
+                    raise ValueError('Gemini provider configuration not found')
+
+                api_key = config.providers.gemini.api_key
+                _validate_api_key('Gemini reranker', api_key, logger)
+
+                # Reuse the fast/cheap default reranker model from graphiti-core.
+                reranker_config = GraphitiLLMConfig(api_key=api_key)
+                return GeminiRerankerClient(config=reranker_config)
+
+            case _:
+                # No dedicated reranker for this provider — return None so graphiti-core
+                # applies its existing default (OpenAIRerankerClient).
+                return None
 
 
 class EmbedderFactory:
