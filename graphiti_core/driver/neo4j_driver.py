@@ -178,10 +178,13 @@ class Neo4jDriver(GraphDriver):
         return self.client.session(database=_database)  # type: ignore
 
     async def close(self) -> None:
-        if self._init_task is not None and not self._init_task.done():
-            self._init_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._init_task
+        if self._init_task is not None:
+            if not self._init_task.done():
+                self._init_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._init_task
+            else:
+                self._init_task.exception()
         await self.client.close()
 
     def delete_all_indexes(self) -> Coroutine:

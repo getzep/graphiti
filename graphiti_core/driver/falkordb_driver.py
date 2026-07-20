@@ -273,10 +273,13 @@ class FalkorDriver(GraphDriver):
 
     async def close(self) -> None:
         """Close the driver connection."""
-        if self._init_task is not None and not self._init_task.done():
-            self._init_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._init_task
+        if self._init_task is not None:
+            if not self._init_task.done():
+                self._init_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._init_task
+            else:
+                self._init_task.exception()
         if hasattr(self.client, 'aclose'):
             await self.client.aclose()  # type: ignore[reportUnknownMemberType]
         elif hasattr(self.client.connection, 'aclose'):
