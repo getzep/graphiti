@@ -732,32 +732,40 @@ async def resolve_extracted_edge(
     response_object = EdgeDuplicate(**llm_response)
     duplicate_facts = response_object.duplicate_facts
 
-    # Validate duplicate_facts are in valid range for EXISTING FACTS
-    invalid_duplicates = [i for i in duplicate_facts if i < 0 or i >= len(related_edges)]
-    if invalid_duplicates:
-        logger.warning(
-            'LLM returned invalid duplicate_facts idx values %s (valid range: 0-%d for EXISTING FACTS)',
-            invalid_duplicates,
-            len(related_edges) - 1,
-        )
-
-    duplicate_fact_ids: list[int] = [i for i in duplicate_facts if 0 <= i < len(related_edges)]
-
-    resolved_edge = extracted_edge
-    for duplicate_fact_id in duplicate_fact_ids:
-        resolved_edge = related_edges[duplicate_fact_id]
-        break
-
-    if duplicate_fact_ids and episode is not None:
-        resolved_edge.episodes.append(episode.uuid)
-
     # Process contradicted facts (continuous indexing across both lists)
     contradicted_facts: list[int] = response_object.contradicted_facts
     invalidation_candidates: list[EntityEdge] = []
 
     # Only process contradictions if there are edges to check against
+    max_valid_idx = len(related_edges) + len(existing_edges) - 1
+
+    # Validate duplicate_facts are in valid range across both lists
+    duplicate_fact_ids = [i for i in duplicate_facts if 0 <= i < len(related_edges)]
+    cross_list_duplicates = [i for i in duplicate_facts if len(related_edges) <= i <= max_valid_idx]
+    truly_invalid_duplicates = [i for i in duplicate_facts if i < 0 or i > max_valid_idx]
+
+    if truly_invalid_duplicates:
+        logger.warning(
+            'LLM returned invalid duplicate_facts idx values %s (valid range: 0-%d)',
+            truly_invalid_duplicates,
+            max_valid_idx,
+        )
+    
+    resolved_edge = extracted_edge
+    for duplicate_facts_id in duplicate_fact_ids:
+        resolved_edge = related_edges[duplicate_facts_id]
+        break
+
+    if not duplicate_fact_ids and cross_list_duplicates:
+        # Duplicate cited only against an invalidation candidate — merge into it
+        # directly instead of discarding a correct verdict as "invalid."
+        resolved_edge = existing_edges[cross_list_duplicates[0] - len(related_edges)]
+    
+    if (duplicate_fact_ids or cross_list_duplicates) and episode is not None:
+        if episode.uuid not in resolved_edge.episodes:
+            resolved_edge.episodes.append(episode.uuid)
+
     if related_edges or existing_edges:
-        max_valid_idx = len(related_edges) + len(existing_edges) - 1
         invalid_contradictions = [i for i in contradicted_facts if i < 0 or i > max_valid_idx]
         if invalid_contradictions:
             logger.warning(
@@ -843,6 +851,8 @@ async def resolve_extracted_edge(
         resolved_edge, invalidation_candidates
     )
     duplicate_edges: list[EntityEdge] = [related_edges[idx] for idx in duplicate_fact_ids]
+    if not duplicate_fact_ids and cross_list_duplicates:
+        duplicate_edges = [existing_edges[idx - len(related_edges)] for idx in cross_list_duplicates]
 
     return resolved_edge, invalidated_edges, duplicate_edges
 
