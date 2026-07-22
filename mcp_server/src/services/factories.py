@@ -429,8 +429,21 @@ class CrossEncoderFactory:
 
         # No provider reranker available (e.g. Anthropic LLM + Voyage embedder), so use the
         # local BGE cross-encoder, which needs no API key.
-        logger.info('No provider reranker available, using local BGERerankerClient')
-        from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
+        logger.warning(
+            'No provider reranker available, using local BGERerankerClient '
+            '(downloads BAAI/bge-reranker-v2-m3, ~2.3 GB, on first run)'
+        )
+        try:
+            from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
+        except ImportError as e:
+            raise ValueError(
+                'No provider reranker is available for this configuration, and the local '
+                'BGE fallback requires the optional sentence-transformers dependency. '
+                "Install the MCP server's 'providers' extra (uv sync --extra providers), "
+                "install graphiti-core's 'sentence-transformers' extra "
+                "(pip install 'graphiti-core[sentence-transformers]'), or configure the "
+                'LLM or embedder provider as OpenAI or Gemini with a valid API key.'
+            ) from e
 
         return BGERerankerClient()
 

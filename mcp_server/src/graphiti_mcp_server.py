@@ -205,7 +205,6 @@ class GraphitiService:
             # Create clients using factories
             llm_client = None
             embedder_client = None
-            cross_encoder_client = None
 
             # Create LLM client based on configured provider
             try:
@@ -221,12 +220,8 @@ class GraphitiService:
 
             # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
             # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
-            try:
-                cross_encoder_client = CrossEncoderFactory.create(
-                    self.config.llm, self.config.embedder
-                )
-            except Exception as e:
-                logger.warning(f'Failed to create cross-encoder client: {e}')
+            # Reranker setup errors must remain fatal rather than silently restoring that default.
+            cross_encoder_client = CrossEncoderFactory.create(self.config.llm, self.config.embedder)
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
