@@ -224,11 +224,12 @@ class FalkorEpisodeNodeOperations(EpisodeNodeOperations):
         saga: str | None = None,
     ) -> list[EpisodicNode]:
         if saga is not None and group_ids is not None and len(group_ids) > 0:
-            source_clause = 'AND e.source = $source' if source else ''
+            source_clause = '\nAND e.source = $source' if source else ''
             query = (
                 """
                 MATCH (s:Saga {name: $saga_name, group_id: $group_id})-[:HAS_EPISODE]->(e:Episodic)
-                WHERE e.valid_at <= $reference_time
+                WITH e, e.valid_at <= $reference_time AS valid_at_ok
+                WHERE valid_at_ok
                 """
                 + source_clause
                 + """
@@ -249,12 +250,13 @@ class FalkorEpisodeNodeOperations(EpisodeNodeOperations):
                 num_episodes=last_n,
             )
         else:
-            source_clause = 'AND e.source = $source' if source else ''
-            group_clause = 'AND e.group_id IN $group_ids' if group_ids else ''
+            source_clause = '\nAND e.source = $source' if source else ''
+            group_clause = '\nAND e.group_id IN $group_ids' if group_ids else ''
             query = (
                 """
                 MATCH (e:Episodic)
-                WHERE e.valid_at <= $reference_time
+                WITH e, e.valid_at <= $reference_time AS valid_at_ok
+                WHERE valid_at_ok
                 """
                 + group_clause
                 + source_clause
