@@ -15,7 +15,8 @@ limitations under the License.
 """
 
 import logging
-from collections.abc import Coroutine
+from collections.abc import AsyncIterator, Coroutine
+from contextlib import asynccontextmanager
 from typing import Any
 
 from neo4j import AsyncGraphDatabase, EagerResult
@@ -23,6 +24,33 @@ from neo4j.exceptions import ClientError
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.neo4j.operations.community_edge_ops import Neo4jCommunityEdgeOperations
+from graphiti_core.driver.neo4j.operations.community_node_ops import Neo4jCommunityNodeOperations
+from graphiti_core.driver.neo4j.operations.entity_edge_ops import Neo4jEntityEdgeOperations
+from graphiti_core.driver.neo4j.operations.entity_node_ops import Neo4jEntityNodeOperations
+from graphiti_core.driver.neo4j.operations.episode_node_ops import Neo4jEpisodeNodeOperations
+from graphiti_core.driver.neo4j.operations.episodic_edge_ops import Neo4jEpisodicEdgeOperations
+from graphiti_core.driver.neo4j.operations.graph_ops import Neo4jGraphMaintenanceOperations
+from graphiti_core.driver.neo4j.operations.has_episode_edge_ops import (
+    Neo4jHasEpisodeEdgeOperations,
+)
+from graphiti_core.driver.neo4j.operations.next_episode_edge_ops import (
+    Neo4jNextEpisodeEdgeOperations,
+)
+from graphiti_core.driver.neo4j.operations.saga_node_ops import Neo4jSagaNodeOperations
+from graphiti_core.driver.neo4j.operations.search_ops import Neo4jSearchOperations
+from graphiti_core.driver.operations.community_edge_ops import CommunityEdgeOperations
+from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
+from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
+from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
+from graphiti_core.driver.operations.episode_node_ops import EpisodeNodeOperations
+from graphiti_core.driver.operations.episodic_edge_ops import EpisodicEdgeOperations
+from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
+from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeOperations
+from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
+from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
+from graphiti_core.driver.operations.search_ops import SearchOperations
+from graphiti_core.driver.query_executor import Transaction
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import semaphore_gather
 
@@ -47,6 +75,19 @@ class Neo4jDriver(GraphDriver):
         )
         self._database = database
 
+        # Instantiate Neo4j operations
+        self._entity_node_ops = Neo4jEntityNodeOperations()
+        self._episode_node_ops = Neo4jEpisodeNodeOperations()
+        self._community_node_ops = Neo4jCommunityNodeOperations()
+        self._saga_node_ops = Neo4jSagaNodeOperations()
+        self._entity_edge_ops = Neo4jEntityEdgeOperations()
+        self._episodic_edge_ops = Neo4jEpisodicEdgeOperations()
+        self._community_edge_ops = Neo4jCommunityEdgeOperations()
+        self._has_episode_edge_ops = Neo4jHasEpisodeEdgeOperations()
+        self._next_episode_edge_ops = Neo4jNextEpisodeEdgeOperations()
+        self._search_ops = Neo4jSearchOperations()
+        self._graph_ops = Neo4jGraphMaintenanceOperations()
+
         # Schedule the indices and constraints to be built
         import asyncio
 
@@ -60,6 +101,64 @@ class Neo4jDriver(GraphDriver):
             pass
 
         self.aoss_client = None
+
+    # --- Operations properties ---
+
+    @property
+    def entity_node_ops(self) -> EntityNodeOperations:
+        return self._entity_node_ops
+
+    @property
+    def episode_node_ops(self) -> EpisodeNodeOperations:
+        return self._episode_node_ops
+
+    @property
+    def community_node_ops(self) -> CommunityNodeOperations:
+        return self._community_node_ops
+
+    @property
+    def saga_node_ops(self) -> SagaNodeOperations:
+        return self._saga_node_ops
+
+    @property
+    def entity_edge_ops(self) -> EntityEdgeOperations:
+        return self._entity_edge_ops
+
+    @property
+    def episodic_edge_ops(self) -> EpisodicEdgeOperations:
+        return self._episodic_edge_ops
+
+    @property
+    def community_edge_ops(self) -> CommunityEdgeOperations:
+        return self._community_edge_ops
+
+    @property
+    def has_episode_edge_ops(self) -> HasEpisodeEdgeOperations:
+        return self._has_episode_edge_ops
+
+    @property
+    def next_episode_edge_ops(self) -> NextEpisodeEdgeOperations:
+        return self._next_episode_edge_ops
+
+    @property
+    def search_ops(self) -> SearchOperations:
+        return self._search_ops
+
+    @property
+    def graph_ops(self) -> GraphMaintenanceOperations:
+        return self._graph_ops
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[Transaction]:
+        """Neo4j transaction with real commit/rollback semantics."""
+        async with self.client.session(database=self._database) as session:
+            tx = await session.begin_transaction()
+            try:
+                yield _Neo4jTransaction(tx)
+                await tx.commit()
+            except BaseException:
+                await tx.rollback()
+                raise
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
         # Check if database_ is provided in kwargs.
@@ -124,3 +223,13 @@ class Neo4jDriver(GraphDriver):
         except Exception as e:
             print(f'Neo4j health check failed: {e}')
             raise
+
+
+class _Neo4jTransaction(Transaction):
+    """Wraps a Neo4j AsyncTransaction for the Transaction ABC."""
+
+    def __init__(self, tx: Any):
+        self._tx = tx
+
+    async def run(self, query: str, **kwargs: Any) -> Any:
+        return await self._tx.run(query, **kwargs)

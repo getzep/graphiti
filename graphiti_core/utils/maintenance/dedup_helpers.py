@@ -167,6 +167,28 @@ class DedupResolutionState:
     duplicate_pairs: list[tuple[EntityNode, EntityNode]] = field(default_factory=list)
 
 
+def _promote_resolved_node(
+    extracted_node: EntityNode,
+    resolved_node: EntityNode,
+) -> EntityNode:
+    """Upgrade a generic canonical node when a duplicate carries a specific type."""
+    resolved_specific_labels = [label for label in resolved_node.labels if label != 'Entity']
+    if resolved_specific_labels:
+        return resolved_node
+
+    extracted_specific_labels = [label for label in extracted_node.labels if label != 'Entity']
+    if not extracted_specific_labels:
+        return resolved_node
+
+    promoted_labels: list[str] = []
+    for label in ['Entity', *resolved_node.labels, *extracted_specific_labels]:
+        if label not in promoted_labels:
+            promoted_labels.append(label)
+
+    resolved_node.labels = promoted_labels
+    return resolved_node
+
+
 def _build_candidate_indexes(existing_nodes: list[EntityNode]) -> DedupCandidateIndexes:
     """Precompute exact and fuzzy lookup structures once per dedupe run."""
     normalized_existing: defaultdict[str, list[EntityNode]] = defaultdict(list)
@@ -200,27 +222,37 @@ def _resolve_with_similarity(
     indexes: DedupCandidateIndexes,
     state: DedupResolutionState,
 ) -> None:
-    """Attempt deterministic resolution using exact name hits and fuzzy MinHash comparisons."""
+    """Attempt deterministic resolution using exact name hits and fuzzy MinHash comparisons.
+
+    Exact normalized-name matching runs first for *all* names regardless of
+    length or entropy.  The entropy gate only guards the fuzzy (MinHash/LSH)
+    path where short or low-entropy names produce unreliable shingle sets.
+    """
     for idx, node in enumerate(extracted_nodes):
         normalized_exact = _normalize_string_exact(node.name)
         normalized_fuzzy = _normalize_name_for_fuzzy(node.name)
 
-        if not _has_high_entropy(normalized_fuzzy):
-            state.unresolved_indices.append(idx)
-            continue
-
+        # --- exact-name matching (always attempted) ---
         existing_matches = indexes.normalized_existing.get(normalized_exact, [])
         if len(existing_matches) == 1:
-            match = existing_matches[0]
+            match = _promote_resolved_node(node, existing_matches[0])
             state.resolved_nodes[idx] = match
             state.uuid_map[node.uuid] = match.uuid
             if match.uuid != node.uuid:
                 state.duplicate_pairs.append((node, match))
             continue
         if len(existing_matches) > 1:
+            # Ambiguous: multiple candidates share the same normalized name.
+            # Escalate to LLM so it can pick the best match.
             state.unresolved_indices.append(idx)
             continue
 
+        # --- entropy gate (protects fuzzy matching only) ---
+        if not _has_high_entropy(normalized_fuzzy):
+            state.unresolved_indices.append(idx)
+            continue
+
+        # --- fuzzy matching via MinHash/LSH ---
         shingles = _cached_shingles(normalized_fuzzy)
         signature = _minhash_signature(shingles)
         candidate_ids: set[str] = set()
@@ -237,6 +269,7 @@ def _resolve_with_similarity(
                 best_candidate = indexes.nodes_by_uuid.get(candidate_id)
 
         if best_candidate is not None and best_score >= _FUZZY_JACCARD_THRESHOLD:
+            best_candidate = _promote_resolved_node(node, best_candidate)
             state.resolved_nodes[idx] = best_candidate
             state.uuid_map[node.uuid] = best_candidate.uuid
             if best_candidate.uuid != node.uuid:
@@ -258,5 +291,6 @@ __all__ = [
     '_cached_shingles',
     '_FUZZY_JACCARD_THRESHOLD',
     '_build_candidate_indexes',
+    '_promote_resolved_node',
     '_resolve_with_similarity',
 ]

@@ -8,7 +8,7 @@ services:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
       - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
     volumes:
-      - falkordb_data:/data
+      - falkordb_data:/var/lib/falkordb/data
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 10s
@@ -17,10 +17,10 @@ services:
       start_period: 10s
 
   graphiti-mcp:
+    # To use the latest graphiti-core, build locally with:
+    #   docker compose -f docker-compose-falkordb.yml build
+    # The Docker Hub image may lag behind the latest release.
     image: zepai/knowledge-graph-mcp:standalone
-    # For specific versions, replace 'standalone' with a version tag:
-    #   image: zepai/knowledge-graph-mcp:1.0.0-standalone
-    # When building locally, the build section below will be used.
     build:
       context: ..
       dockerfile: docker/Dockerfile.standalone
@@ -39,7 +39,6 @@ services:
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
-      - PATH=/root/.local/bin:${PATH}
     volumes:
       - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
     ports:

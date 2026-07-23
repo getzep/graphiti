@@ -355,7 +355,7 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_extrac
                 'custom_extraction_instructions': custom_extraction_instructions,
             }
         )
-        return []
+        return [], {}
 
     async def mock_extract_edges(
         clients,
@@ -405,7 +405,7 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_extrac
         excluded_entity_types=None,
         custom_extraction_instructions=None,
     ):
-        return [extracted_node]
+        return [extracted_node], {}
 
     async def mock_extract_edges(
         clients,
@@ -464,7 +464,7 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_none_by_default(
         extract_nodes_calls.append(
             {'custom_extraction_instructions': custom_extraction_instructions}
         )
-        return []
+        return [], {}
 
     async def mock_extract_edges(
         clients,
@@ -522,7 +522,7 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
                 'custom_extraction_instructions': custom_extraction_instructions,
             }
         )
-        return []
+        return [], {}
 
     async def mock_extract_edges(
         clients,

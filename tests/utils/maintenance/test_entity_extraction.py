@@ -14,20 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.nodes import EpisodeType, EpisodicNode
-from graphiti_core.prompts.extract_nodes import ExtractedEntity
-from graphiti_core.utils import content_chunking
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
-from graphiti_core.utils.maintenance import node_operations
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
-    _merge_extracted_entities,
+    _extract_entity_summaries_batch,
+    _truncate_type_description,
     extract_nodes,
 )
 
@@ -84,7 +82,7 @@ class TestExtractNodesSmallInput:
         # Small content (below threshold)
         episode = _make_episode(content='Alice talked to Bob.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -118,7 +116,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice works at Acme Corp.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -154,7 +152,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice created Project X.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -181,7 +179,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice is here.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -190,175 +188,44 @@ class TestExtractNodesSmallInput:
         assert len(nodes) == 1
         assert nodes[0].name == 'Alice'
 
-
-class TestExtractNodesChunking:
     @pytest.mark.asyncio
-    async def test_large_input_triggers_chunking(self, monkeypatch):
-        """Large inputs should be chunked and processed in parallel."""
+    async def test_collapses_exact_duplicate_names_preferring_specific_type(self, monkeypatch):
+        """Exact same-name duplicates from one message should collapse deterministically."""
         clients, llm_generate = _make_clients()
 
-        # Track number of LLM calls
-        call_count = 0
+        from pydantic import BaseModel
 
-        async def mock_generate(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            return {
-                'extracted_entities': [
-                    {'name': f'Entity{call_count}', 'entity_type_id': 0},
-                ]
-            }
+        class Person(BaseModel):
+            """A human person."""
 
-        llm_generate.side_effect = mock_generate
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        # Large content that exceeds threshold
-        large_content = 'word ' * 1000
-        episode = _make_episode(content=large_content)
-
-        await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Multiple LLM calls should have been made
-        assert call_count > 1
-
-    @pytest.mark.asyncio
-    async def test_json_content_uses_json_chunking(self, monkeypatch):
-        """JSON episodes should use JSON-aware chunking."""
-        clients, llm_generate = _make_clients()
+            pass
 
         llm_generate.return_value = {
             'extracted_entities': [
-                {'name': 'Service1', 'entity_type_id': 0},
+                {'name': 'Caroline', 'entity_type_id': 0},  # Default Entity
+                {'name': 'Caroline', 'entity_type_id': 1},  # Person
+                {'name': 'Melanie', 'entity_type_id': 1},
             ]
         }
 
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        # JSON content
-        json_data = [{'service': f'Service{i}'} for i in range(50)]
         episode = _make_episode(
-            content=json.dumps(json_data),
-            source=EpisodeType.json,
-        )
-
-        await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Verify JSON chunking was used (LLM called multiple times)
-        assert llm_generate.await_count > 1
-
-    @pytest.mark.asyncio
-    async def test_message_content_uses_message_chunking(self, monkeypatch):
-        """Message episodes should use message-aware chunking."""
-        clients, llm_generate = _make_clients()
-
-        llm_generate.return_value = {
-            'extracted_entities': [
-                {'name': 'Speaker', 'entity_type_id': 0},
-            ]
-        }
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        # Conversation content
-        messages = [f'Speaker{i}: Hello from speaker {i}!' for i in range(50)]
-        episode = _make_episode(
-            content='\n'.join(messages),
+            content=(
+                'Caroline: Hey Mel! Good to see you! How have you been?\n'
+                'Melanie: Hey Caroline! Good to see you!'
+            ),
             source=EpisodeType.message,
         )
 
-        await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
+            entity_types={'Person': Person},
         )
 
-        assert llm_generate.await_count > 1
-
-    @pytest.mark.asyncio
-    async def test_deduplicates_across_chunks(self, monkeypatch):
-        """Entities appearing in multiple chunks should be deduplicated."""
-        clients, llm_generate = _make_clients()
-
-        # Simulate same entity appearing in multiple chunks
-        call_count = 0
-
-        async def mock_generate(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            # Return 'Alice' in every chunk
-            return {
-                'extracted_entities': [
-                    {'name': 'Alice', 'entity_type_id': 0},
-                    {'name': f'Entity{call_count}', 'entity_type_id': 0},
-                ]
-            }
-
-        llm_generate.side_effect = mock_generate
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        large_content = 'word ' * 1000
-        episode = _make_episode(content=large_content)
-
-        nodes = await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Alice should appear only once despite being in every chunk
-        alice_count = sum(1 for n in nodes if n.name == 'Alice')
-        assert alice_count == 1
-
-    @pytest.mark.asyncio
-    async def test_deduplication_case_insensitive(self, monkeypatch):
-        """Deduplication should be case-insensitive."""
-        clients, llm_generate = _make_clients()
-
-        call_count = 0
-
-        async def mock_generate(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return {'extracted_entities': [{'name': 'alice', 'entity_type_id': 0}]}
-            return {'extracted_entities': [{'name': 'Alice', 'entity_type_id': 0}]}
-
-        llm_generate.side_effect = mock_generate
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        large_content = 'word ' * 1000
-        episode = _make_episode(content=large_content)
-
-        nodes = await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Should have only one Alice (case-insensitive dedup)
-        alice_variants = [n for n in nodes if n.name.lower() == 'alice']
-        assert len(alice_variants) == 1
+        assert [node.name for node in nodes] == ['Caroline', 'Melanie']
+        caroline = next(node for node in nodes if node.name == 'Caroline')
+        assert 'Person' in caroline.labels
 
 
 class TestExtractNodesPromptSelection:
@@ -441,34 +308,354 @@ class TestBuildEntityTypesContext:
         assert context[2]['entity_type_id'] == 2
 
 
-class TestMergeExtractedEntities:
-    def test_merge_deduplicates_by_name(self):
-        """Entities with same name should be deduplicated."""
-        chunk_results = [
-            [
-                ExtractedEntity(name='Alice', entity_type_id=0),
-                ExtractedEntity(name='Bob', entity_type_id=0),
-            ],
-            [
-                ExtractedEntity(name='Alice', entity_type_id=0),  # Duplicate
-                ExtractedEntity(name='Charlie', entity_type_id=0),
-            ],
-        ]
+def _make_entity_node(
+    name: str,
+    summary: str = '',
+    group_id: str = 'group',
+    uuid: str | None = None,
+) -> EntityNode:
+    """Create a test entity node."""
+    node = EntityNode(
+        name=name,
+        group_id=group_id,
+        labels=['Entity'],
+        summary=summary,
+        created_at=utc_now(),
+    )
+    if uuid is not None:
+        node.uuid = uuid
+    return node
 
-        merged = _merge_extracted_entities(chunk_results)
 
-        assert len(merged) == 3
-        names = {e.name for e in merged}
-        assert names == {'Alice', 'Bob', 'Charlie'}
+def _make_entity_edge(
+    source_uuid: str,
+    target_uuid: str,
+    fact: str,
+) -> EntityEdge:
+    """Create a test entity edge."""
+    return EntityEdge(
+        source_node_uuid=source_uuid,
+        target_node_uuid=target_uuid,
+        name='TEST_RELATION',
+        fact=fact,
+        group_id='group',
+        created_at=utc_now(),
+    )
 
-    def test_merge_prefers_first_occurrence(self):
-        """When duplicates exist, first occurrence should be preferred."""
-        chunk_results = [
-            [ExtractedEntity(name='Alice', entity_type_id=1)],  # First: type 1
-            [ExtractedEntity(name='Alice', entity_type_id=2)],  # Later: type 2
-        ]
 
-        merged = _merge_extracted_entities(chunk_results)
+class TestExtractEntitySummariesBatch:
+    @pytest.mark.asyncio
+    async def test_no_nodes_needing_summarization(self):
+        """When no nodes need summarization, no LLM call should be made."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
 
-        assert len(merged) == 1
-        assert merged[0].entity_type_id == 1  # First occurrence wins
+        # Node with short summary that doesn't need LLM
+        node = _make_entity_node('Alice', summary='Alice is a person.')
+        nodes = [node]
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            nodes,
+            episode=None,
+            previous_episodes=None,
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should not be called
+        llm_generate.assert_not_awaited()
+        # Summary should remain unchanged
+        assert nodes[0].summary == 'Alice is a person.'
+
+    @pytest.mark.asyncio
+    async def test_short_summary_with_edge_facts(self):
+        """Nodes with short summaries should have edge facts appended without LLM."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
+
+        node = _make_entity_node('Alice', summary='Alice is a person.', uuid='alice-uuid')
+        edge = _make_entity_edge('alice-uuid', 'bob-uuid', 'Alice works with Bob.')
+
+        edges_by_node = {
+            'alice-uuid': [edge],
+        }
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=None,
+            previous_episodes=None,
+            should_summarize_node=None,
+            edges_by_node=edges_by_node,
+        )
+
+        # LLM should not be called
+        llm_generate.assert_not_awaited()
+        # Summary should include edge fact
+        assert 'Alice is a person.' in node.summary
+        assert 'Alice works with Bob.' in node.summary
+
+    @pytest.mark.asyncio
+    async def test_long_summary_needs_llm(self):
+        """Nodes with long summaries should trigger LLM summarization."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice is a software engineer at Acme Corp.'}
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        # Create a node with a very long summary (over MAX_SUMMARY_CHARS * 4)
+        long_summary = 'Alice is a person. ' * 200  # ~3800 chars
+        node = _make_entity_node('Alice', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should be called
+        llm_generate.assert_awaited_once()
+        # Summary should be updated from LLM response
+        assert node.summary == 'Alice is a software engineer at Acme Corp.'
+
+    @pytest.mark.asyncio
+    async def test_should_summarize_filter(self):
+        """Nodes filtered by should_summarize_node should be skipped."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
+
+        node = _make_entity_node('Alice', summary='')
+
+        # Filter that rejects all nodes
+        async def reject_all(n):
+            return False
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=reject_all,
+            edges_by_node={},
+        )
+
+        # LLM should not be called
+        llm_generate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_batch_multiple_nodes(self):
+        """Multiple nodes needing summarization should be batched into one call."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice summary.'},
+                {'name': 'Bob', 'summary': 'Bob summary.'},
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        # Create nodes with long summaries
+        long_summary = 'X ' * 1500  # Long enough to need LLM
+        alice = _make_entity_node('Alice', summary=long_summary)
+        bob = _make_entity_node('Bob', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [alice, bob],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should be called exactly once (batch call)
+        llm_generate.assert_awaited_once()
+        # Both nodes should have updated summaries
+        assert alice.summary == 'Alice summary.'
+        assert bob.summary == 'Bob summary.'
+
+    @pytest.mark.asyncio
+    async def test_unknown_entity_in_response(self):
+        """LLM returning unknown entity names should be logged but not crash."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'UnknownEntity', 'summary': 'Should be ignored.'},
+                {'name': 'Alice', 'summary': 'Alice summary.'},
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        long_summary = 'X ' * 1500
+        alice = _make_entity_node('Alice', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [alice],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # Alice should have updated summary
+        assert alice.summary == 'Alice summary.'
+
+    @pytest.mark.asyncio
+    async def test_no_episode_and_no_summary(self):
+        """Nodes with no summary and no episode should be skipped."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
+
+        node = _make_entity_node('Alice', summary='')
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=None,
+            previous_episodes=None,
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should not be called - no content to summarize
+        llm_generate.assert_not_awaited()
+        assert node.summary == ''
+
+    @pytest.mark.asyncio
+    async def test_flight_partitioning(self, monkeypatch):
+        """Nodes should be partitioned into flights of MAX_NODES."""
+        # Set MAX_NODES to a small value for testing
+        monkeypatch.setattr('graphiti_core.utils.maintenance.node_operations.MAX_NODES', 2)
+
+        llm_client = MagicMock()
+        call_count = 0
+        call_args_list = []
+
+        async def mock_generate(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # Extract entity names from the context
+            context = args[0][1].content if args else ''
+            call_args_list.append(context)
+            return {'summaries': []}
+
+        llm_client.generate_response = mock_generate
+
+        # Create 5 nodes with long summaries (need LLM)
+        long_summary = 'X ' * 1500
+        nodes = [_make_entity_node(f'Entity{i}', summary=long_summary) for i in range(5)]
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            nodes,
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # With MAX_NODES=2 and 5 nodes, we should have 3 flights (2+2+1)
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive_name_matching(self):
+        """LLM response names should match case-insensitively."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        # LLM returns name with different casing
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'ALICE', 'summary': 'Alice summary from LLM.'},
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        # Node has lowercase name
+        long_summary = 'X ' * 1500
+        node = _make_entity_node('alice', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # Should match despite case difference
+        assert node.summary == 'Alice summary from LLM.'
+
+
+class TestTruncateTypeDescription:
+    def test_single_sentence_passes_through(self):
+        assert (
+            _truncate_type_description('A human person who interacts with the system.')
+            == 'A human person who interacts with the system.'
+        )
+
+    def test_stops_at_first_blank_line(self):
+        doc = 'A human person.\n\nGOOD: Alice, Bob\nBAD: happiness'
+        assert _truncate_type_description(doc) == 'A human person.'
+
+    def test_caps_at_3_sentences(self):
+        doc = 'First. Second. Third. Fourth should be dropped.'
+        assert _truncate_type_description(doc) == 'First. Second. Third.'
+
+    def test_first_paragraph_with_multiple_sentences(self):
+        doc = 'A specific thing. It has properties. Use it wisely.\n\nGOOD: example'
+        assert (
+            _truncate_type_description(doc) == 'A specific thing. It has properties. Use it wisely.'
+        )
+
+    def test_skips_leading_blank_lines(self):
+        doc = '\n\nA location.\n\nGOOD: New York'
+        assert _truncate_type_description(doc) == 'A location.'
+
+    def test_joins_multiline_first_paragraph(self):
+        doc = 'A specific, named subject\nor knowledge domain.\n\nGOOD: cooking'
+        assert _truncate_type_description(doc) == 'A specific, named subject or knowledge domain.'
+
+    def test_empty_string(self):
+        assert _truncate_type_description('') == ''
+
+    def test_no_sentence_ending_punctuation(self):
+        assert (
+            _truncate_type_description('A human person who interacts with the system')
+            == 'A human person who interacts with the system'
+        )
+
+    def test_realistic_preference_docstring(self):
+        doc = (
+            'A specific thing that a speaker likes, dislikes, wants, '
+            'or has expressed an opinion about.\n\n'
+            'GOOD: "sushi"\nBAD: do not use\n\n'
+            'Trigger patterns: "I love X"'
+        )
+        assert _truncate_type_description(doc) == (
+            'A specific thing that a speaker likes, dislikes, wants, '
+            'or has expressed an opinion about.'
+        )
+
+    def test_preserves_abbreviations(self):
+        doc = "An entity used in e.g. medical contexts. It tracks Dr. Smith's patients."
+        assert _truncate_type_description(doc) == doc
+
+    def test_preserves_decimals(self):
+        doc = 'Requires version 2.0 or higher. Must be certified.'
+        assert _truncate_type_description(doc) == doc

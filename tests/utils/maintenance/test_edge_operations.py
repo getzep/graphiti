@@ -9,6 +9,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.utils.maintenance.edge_operations import (
+    extract_edges,
     resolve_extracted_edge,
     resolve_extracted_edges,
 )
@@ -221,7 +222,7 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
     edge_types = {'OCCURRED_AT': OccurredAtEdge}
     edge_type_map = {('Event', 'Entity'): ['OCCURRED_AT']}
 
-    resolved_edges, invalidated_edges = await resolve_extracted_edges(
+    resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
         clients,
         [extracted_edge],
         episode,
@@ -232,6 +233,7 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
 
     assert resolved_edges[0].name == 'INTERACTED_WITH'
     assert invalidated_edges == []
+    assert new_edges == resolved_edges  # No duplicates, so all edges are new
 
 
 @pytest.mark.asyncio
@@ -431,7 +433,7 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
         valid_at=datetime.now(timezone.utc),
     )
 
-    resolved_edges, invalidated_edges = await resolve_extracted_edges(
+    resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
         clients,
         [edge1, edge2, edge3],
         episode,
@@ -445,6 +447,7 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
     assert resolve_call_count == 1
     assert len(resolved_edges) == 1
     assert invalidated_edges == []
+    assert new_edges == resolved_edges  # All edges are new (no graph duplicates)
 
 
 class InterpersonalRelationship(BaseModel):
@@ -555,3 +558,216 @@ def test_edge_type_signatures_map_single_signature_still_works():
         assert 'fact_type_signatures' in ctx
         assert isinstance(ctx['fact_type_signatures'], list)
         assert len(ctx['fact_type_signatures']) == 1
+
+
+@pytest.mark.asyncio
+async def test_extract_edges_drops_self_edges(monkeypatch):
+    """Self-edges (source == target) are dropped during extraction."""
+    from graphiti_core.prompts.extract_edges import Edge as ExtractedEdge
+    from graphiti_core.prompts.extract_edges import ExtractedEdges
+
+    alice = EntityNode(
+        uuid='alice_uuid',
+        name='Alice',
+        group_id='group_1',
+        labels=['Person'],
+    )
+    bob = EntityNode(
+        uuid='bob_uuid',
+        name='Bob',
+        group_id='group_1',
+        labels=['Person'],
+    )
+
+    # LLM returns one valid edge and one self-edge
+    llm_response = ExtractedEdges(
+        edges=[
+            ExtractedEdge(
+                source_entity_name='Alice',
+                target_entity_name='Bob',
+                relation_type='CONGRATULATED',
+                fact='Alice congratulated Bob',
+                valid_at=None,
+                invalid_at=None,
+            ),
+            ExtractedEdge(
+                source_entity_name='Alice',
+                target_entity_name='Alice',
+                relation_type='FEELS_HAPPY',
+                fact='Alice feels happy',
+                valid_at=None,
+                invalid_at=None,
+            ),
+        ]
+    ).model_dump()
+
+    mock_llm = MagicMock()
+    mock_llm.generate_response = AsyncMock(return_value=llm_response)
+
+    clients = SimpleNamespace(
+        driver=MagicMock(),
+        llm_client=mock_llm,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+    )
+
+    episode = EpisodicNode(
+        uuid='ep_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice congratulated Bob. Alice feels happy.',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    edges = await extract_edges(
+        clients,
+        episode,
+        [alice, bob],
+        [],
+        {},
+        group_id='group_1',
+    )
+
+    # Only the Alice -> Bob edge survives; the Alice -> Alice self-edge is dropped
+    assert len(edges) == 1
+    assert edges[0].source_node_uuid == 'alice_uuid'
+    assert edges[0].target_node_uuid == 'bob_uuid'
+    assert edges[0].name == 'CONGRATULATED'
+
+
+@pytest.mark.asyncio
+async def test_extract_edges_keeps_valid_edges_with_same_name_different_nodes(monkeypatch):
+    """Edges between different nodes that happen to share a name are NOT self-edges."""
+    from graphiti_core.prompts.extract_edges import Edge as ExtractedEdge
+    from graphiti_core.prompts.extract_edges import ExtractedEdges
+
+    alice = EntityNode(
+        uuid='alice_uuid',
+        name='Alice',
+        group_id='group_1',
+        labels=['Person'],
+    )
+    paris = EntityNode(
+        uuid='paris_uuid',
+        name='Paris',
+        group_id='group_1',
+        labels=['City'],
+    )
+
+    llm_response = ExtractedEdges(
+        edges=[
+            ExtractedEdge(
+                source_entity_name='Alice',
+                target_entity_name='Paris',
+                relation_type='LIVES_IN',
+                fact='Alice lives in Paris',
+                valid_at=None,
+                invalid_at=None,
+            ),
+        ]
+    ).model_dump()
+
+    mock_llm = MagicMock()
+    mock_llm.generate_response = AsyncMock(return_value=llm_response)
+
+    clients = SimpleNamespace(
+        driver=MagicMock(),
+        llm_client=mock_llm,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+    )
+
+    episode = EpisodicNode(
+        uuid='ep_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice lives in Paris.',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    edges = await extract_edges(
+        clients,
+        episode,
+        [alice, paris],
+        [],
+        {},
+        group_id='group_1',
+    )
+
+    assert len(edges) == 1
+    assert edges[0].source_node_uuid == 'alice_uuid'
+    assert edges[0].target_node_uuid == 'paris_uuid'
+
+
+class _EmploymentEdge(BaseModel):
+    """Edge attribute schema mirroring a customer's EMPLOYMENT relation."""
+
+    title: str | None = None
+    is_current: str | None = None
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_overcap_attribute_preserves_prior(monkeypatch):
+    """End-to-end: when the LLM bleeds meta-reasoning into one attribute, the
+    cap drops that field and the merge logic falls back to the prior on-edge
+    value — without affecting fields the LLM legitimately updated."""
+    from graphiti_core.utils.maintenance import edge_operations as edge_ops
+
+    # Avoid the timestamps LLM call that follows attribute extraction.
+    monkeypatch.setattr(edge_ops, '_extract_edge_timestamps', AsyncMock(return_value=None))
+
+    # The LLM returns a clean update for `title` but bleeds 9 KB of meta-reasoning into
+    # `is_current` — the kind of failure the customer reported.
+    bleed = (
+        'true (implied by context, but no new information explicitly stated. '
+        'I should ideally remove it or set it to null. However, the instruction '
+        'is to preserve existing values...) '
+    ) * 30
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'title': 'Senior Engineer', 'is_current': bleed}
+    )
+
+    extracted_edge = EntityEdge(
+        source_node_uuid='person_uuid',
+        target_node_uuid='company_uuid',
+        name='EMPLOYMENT',
+        group_id='group_1',
+        fact='Sam was promoted to Senior Engineer at Northwind',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+        attributes={'title': 'Engineer', 'is_current': 'true'},
+    )
+
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Sam was promoted to Senior Engineer.',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    resolved, dupes, invalidated = await resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges=[],
+        existing_edges=[],
+        episode=episode,
+        edge_type_candidates={'EMPLOYMENT': _EmploymentEdge},
+    )
+
+    # Title should reflect the legitimate LLM update.
+    assert resolved.attributes['title'] == 'Senior Engineer'
+    # is_current was bleed-dropped, so the prior value must be preserved (not the
+    # 9 KB rant, not None, not absent).
+    assert resolved.attributes['is_current'] == 'true'
+    assert dupes == []
+    assert invalidated == []

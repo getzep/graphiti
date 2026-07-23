@@ -82,7 +82,9 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve a single node by UUID."""
         raise NotImplementedError
 
-    async def node_get_by_uuids(self, _cls: Any, driver: Any, uuids: list[str]) -> list[Any]:
+    async def node_get_by_uuids(
+        self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None
+    ) -> list[Any]:
         """Retrieve multiple nodes by UUIDs."""
         raise NotImplementedError
 
@@ -351,6 +353,58 @@ class GraphOperationsInterface(BaseModel):
         uuid_cursor: str | None = None,
     ) -> list[Any]:
         """Retrieve saga nodes by group IDs with optional pagination."""
+        raise NotImplementedError
+
+    # -----------------------
+    # Saga: Queries
+    # -----------------------
+
+    async def saga_get_previous_episode_uuid(
+        self,
+        driver: Any,
+        saga_uuid: str,
+        current_episode_uuid: str,
+    ) -> str | None:
+        """Find the most recent episode UUID in a saga, excluding the current one.
+
+        Args:
+            driver: GraphDriver instance
+            saga_uuid: UUID of the saga
+            current_episode_uuid: UUID of the current episode to exclude
+
+        Returns:
+            UUID of the previous episode, or None if the saga has no other episodes
+        """
+        raise NotImplementedError
+
+    async def saga_get_episode_contents(
+        self,
+        driver: Any,
+        saga_uuid: str,
+        since: Any | None = None,
+        limit: int = 200,
+    ) -> list[tuple[str, Any]]:
+        """Retrieve episode content + reference timestamp from a saga for summarization.
+
+        Args:
+            driver: GraphDriver instance
+            saga_uuid: UUID of the saga
+            since: Optional datetime compared against episode ``created_at``
+                (ingestion time). If provided, only returns episodes added
+                after this timestamp; if None, returns all episodes. Filtering
+                by ingestion time (not ``valid_at``) keeps backfilled episodes
+                with historical reference times reachable on subsequent runs.
+            limit: Maximum number of episodes to return
+
+        Returns:
+            list[tuple[str, datetime | None]]: (content, valid_at) pairs in
+            chronological order by ``valid_at``. The ``valid_at`` value is the
+            originating episode's reference time and is used by the caller to
+            advance the saga's ``last_summarized_episode_valid_at`` field
+            (the public/temporal watermark, distinct from
+            ``last_summarized_at`` which is wall-clock and used as the
+            ingestion-time filter watermark).
+        """
         raise NotImplementedError
 
     # -----------------

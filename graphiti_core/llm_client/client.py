@@ -21,14 +21,15 @@ import typing
 from abc import ABC, abstractmethod
 
 import httpx
-from diskcache import Cache
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
 from ..tracer import NoOpTracer, Tracer
+from .cache import LLMCache
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
-from .errors import RateLimitError
+from .errors import EmptyResponseError, RateLimitError
+from .token_tracker import TokenUsageTracker
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
@@ -59,7 +60,11 @@ logger = logging.getLogger(__name__)
 
 
 def is_server_or_retry_error(exception):
-    if isinstance(exception, RateLimitError | json.decoder.JSONDecodeError):
+    # EmptyResponseError is treated as transient: an empty body is most often a flaky
+    # provider/endpoint hiccup (common on the OpenAI-compatible/local servers the generic
+    # client targets), which a retry can recover from. A persistent empty response still
+    # fails after the bounded retries with a clear error.
+    if isinstance(exception, RateLimitError | EmptyResponseError | json.decoder.JSONDecodeError):
         return True
 
     return (
@@ -80,10 +85,11 @@ class LLMClient(ABC):
         self.cache_enabled = cache
         self.cache_dir = None
         self.tracer: Tracer = NoOpTracer()
+        self.token_tracker: TokenUsageTracker = TokenUsageTracker()
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:
-            self.cache_dir = Cache(DEFAULT_CACHE_DIR)
+            self.cache_dir = LLMCache(DEFAULT_CACHE_DIR)
 
     def set_tracer(self, tracer: Tracer) -> None:
         """Set the tracer for this LLM client."""
@@ -150,6 +156,44 @@ class LLMClient(ABC):
         key_str = f'{self.model}:{message_str}'
         return hashlib.md5(key_str.encode()).hexdigest()
 
+    def _apply_attribute_extraction_preamble(
+        self, messages: list[Message], attribute_extraction: bool
+    ) -> None:
+        """Append a strict-framing instruction to the system message for attribute
+        extraction calls.
+
+        Customer-supplied entity-type schemas use ``Field(description=...)`` to describe
+        the FORMAT of a value (e.g. "Phone numbers, comma-separated"). Models — across
+        OpenAI, Anthropic, and Gemini — have been observed copying that description text
+        verbatim into the value when no real value exists, or dumping reasoning instead
+        of returning null. This preamble names the failure mode explicitly so the
+        instruction reaches every provider regardless of how structured output is wired
+        (schema injection in the prompt body, ``response_format``, native tool use, etc.).
+
+        Mutates ``messages`` in place. Idempotent so concrete-provider overrides can
+        safely call it without coordinating with the base class.
+        """
+        if not attribute_extraction or not messages:
+            return
+        # Unique sentinel so the idempotency check can't collide with prompt content
+        # that happens to mention "attribute extraction". Bump the suffix if the note
+        # text is meaningfully revised so older callers don't suppress the new copy.
+        sentinel = '<<graphiti.attr_extraction.preamble.v1>>'
+        note = (
+            f'\n\n{sentinel}\n'
+            'ATTRIBUTE EXTRACTION: Field descriptions in the response schema describe '
+            'what a real value LOOKS LIKE — they are NEVER themselves valid values and '
+            'must NEVER be copied into any field. If you have no value for a field, set '
+            'it to null; never explain the absence in the field itself.'
+        )
+        target = messages[0]
+        if sentinel in target.content:
+            return
+        if target.role == 'system':
+            target.content += note
+        else:
+            target.content = note.lstrip() + '\n\n' + target.content
+
     async def generate_response(
         self,
         messages: list[Message],
@@ -158,9 +202,15 @@ class LLMClient(ABC):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
+
+        # The strict attribute-extraction framing belongs on the system message so it
+        # reaches every provider regardless of structured-output mechanism.
+        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
 
         if response_model is not None:
             serialized_model = json.dumps(response_model.model_json_schema())
@@ -232,15 +282,14 @@ class LLMClient(ABC):
 
     def _get_failed_generation_log(self, messages: list[Message], output: str | None) -> str:
         """
-        Log the full input messages, the raw output (if any), and the exception for debugging failed generations.
+        Log structural metadata and truncated raw output for debugging failed
+        generations, without including full message content that may contain PII.
         """
-        log = ''
-        log += f'Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}\n'
+        log = f'Input messages: {len(messages)} message(s), '
+        log += f'roles: {[m.role for m in messages]}\n'
         if output is not None:
-            if len(output) > 4000:
-                log += f'Raw output: {output[:2000]}... (truncated) ...{output[-2000:]}\n'
-            else:
-                log += f'Raw output: {output}\n'
+            truncated = output[:500] + '...' if len(output) > 500 else output
+            log += f'Raw output (truncated): {truncated}\n'
         else:
             log += 'No raw output available'
         return log

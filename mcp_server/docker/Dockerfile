@@ -5,14 +5,15 @@
 FROM falkordb/falkordb:latest AS falkordb-base
 
 # Install Python and system dependencies
-# Note: Debian Bookworm (FalkorDB base) ships with Python 3.11
+# Note: Debian 13 "trixie" (FalkorDB base) ships with Python 3.13.
+# procps is omitted: its postinst runs update-rc.d (a perl script), and the
+# FalkorDB base image no longer ships perl (purged upstream for CVE reduction).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-dev \
     python3-pip \
     curl \
     ca-certificates \
-    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for Python package management
@@ -33,7 +34,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.23.1
+ARG GRAPHITI_CORE_VERSION=0.29.1
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
@@ -42,15 +43,17 @@ COPY pyproject.toml uv.lock ./
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     if [ -n "${GRAPHITI_CORE_VERSION}" ]; then \
-      sed -i "s/graphiti-core\[falkordb\]>=[0-9]\+\.[0-9]\+\.[0-9]\+$/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
+      sed -i "s/graphiti-core\[falkordb\][>=]\+[0-9]\+\.[0-9]\+\.[0-9]\+/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
     fi && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \
     uv lock
 
 # Install Python dependencies (exclude dev dependency group)
+# Include optional provider extras so the image matches the providers
+# advertised by the MCP server configuration and docs.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+    uv sync --no-group dev --extra providers --extra azure
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
@@ -112,7 +115,7 @@ EOF
 RUN chmod +x /start-services.sh
 
 # Add Docker labels with version information
-ARG MCP_SERVER_VERSION=1.0.1
+ARG MCP_SERVER_VERSION=1.0.2
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL org.opencontainers.image.title="FalkorDB + Graphiti MCP Server" \

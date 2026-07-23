@@ -182,7 +182,9 @@ async def add_nodes_and_edges_bulk_tx(
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes)
         else:
-            entity_data.update(node.attributes or {})
+            for k, v in (node.attributes or {}).items():
+                if k not in entity_data:
+                    entity_data[k] = v
 
         nodes.append(entity_data)
 
@@ -202,6 +204,7 @@ async def add_nodes_and_edges_bulk_tx(
             'expired_at': edge.expired_at,
             'valid_at': edge.valid_at,
             'invalid_at': edge.invalid_at,
+            'reference_time': edge.reference_time,
             'fact_embedding': edge.fact_embedding,
         }
 
@@ -209,7 +212,13 @@ async def add_nodes_and_edges_bulk_tx(
             attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
             edge_data['attributes'] = json.dumps(attributes)
         else:
-            edge_data.update(edge.attributes or {})
+            # Merge attributes without overwriting explicit edge fields.
+            # Attributes may contain stale string versions of typed fields
+            # (e.g. reference_time as ISO string) that would replace the
+            # datetime values set above.
+            for k, v in (edge.attributes or {}).items():
+                if k not in edge_data:
+                    edge_data[k] = v
 
         edges.append(edge_data)
 
@@ -259,8 +268,76 @@ async def extract_nodes_and_edges_bulk(
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
     custom_extraction_instructions: str | None = None,
+    use_combined_extraction: bool = False,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
-    extracted_nodes_bulk: list[list[EntityNode]] = await semaphore_gather(
+    if use_combined_extraction:
+        return await _extract_nodes_and_edges_bulk_combined(
+            clients,
+            episode_tuples,
+            edge_type_map,
+            entity_types=entity_types,
+            excluded_entity_types=excluded_entity_types,
+            edge_types=edge_types,
+            custom_extraction_instructions=custom_extraction_instructions,
+        )
+
+    return await _extract_nodes_and_edges_bulk_separate(
+        clients,
+        episode_tuples,
+        edge_type_map,
+        entity_types=entity_types,
+        excluded_entity_types=excluded_entity_types,
+        edge_types=edge_types,
+        custom_extraction_instructions=custom_extraction_instructions,
+    )
+
+
+async def _extract_nodes_and_edges_bulk_combined(
+    clients: GraphitiClients,
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
+) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
+    """Combined extraction: single LLM call per episode for both nodes and edges."""
+    from graphiti_core.utils.maintenance.combined_extraction import (
+        extract_nodes_and_edges as extract_combined,
+    )
+
+    results = await semaphore_gather(
+        *[
+            extract_combined(
+                clients,
+                episode,
+                previous_episodes,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
+                edge_type_map=edge_type_map,
+                edge_types=edge_types,
+                custom_extraction_instructions=custom_extraction_instructions,
+            )
+            for episode, previous_episodes in episode_tuples
+        ]
+    )
+
+    nodes_bulk = [nodes for nodes, _, _ in results]
+    edges_bulk = [edges for _, edges, _ in results]
+    return nodes_bulk, edges_bulk
+
+
+async def _extract_nodes_and_edges_bulk_separate(
+    clients: GraphitiClients,
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
+) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
+    """Separate extraction: two sequential LLM calls per episode (legacy)."""
+    extracted_results: list[tuple[list[EntityNode], dict[str, list[int]]]] = await semaphore_gather(
         *[
             extract_nodes(
                 clients,
@@ -273,6 +350,7 @@ async def extract_nodes_and_edges_bulk(
             for episode, previous_episodes in episode_tuples
         ]
     )
+    extracted_nodes_bulk = [nodes for nodes, _ in extracted_results]
 
     extracted_edges_bulk: list[list[EntityEdge]] = await semaphore_gather(
         *[
