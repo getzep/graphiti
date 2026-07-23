@@ -96,6 +96,7 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
+                    e.reference_time = $reference_time,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
@@ -160,6 +161,7 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
+                    e.reference_time = $reference_time,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
@@ -272,6 +274,44 @@ def get_community_edge_save_query(provider: GraphProvider) -> str:
 
 
 COMMUNITY_EDGE_RETURN = """
+    e.uuid AS uuid,
+    e.group_id AS group_id,
+    n.uuid AS source_node_uuid,
+    m.uuid AS target_node_uuid,
+    e.created_at AS created_at
+"""
+
+
+HAS_EPISODE_EDGE_SAVE = """
+    MATCH (saga:Saga {uuid: $saga_uuid})
+    MATCH (episode:Episodic {uuid: $episode_uuid})
+    MERGE (saga)-[e:HAS_EPISODE {uuid: $uuid}]->(episode)
+    SET
+        e.group_id = $group_id,
+        e.created_at = $created_at
+    RETURN e.uuid AS uuid
+"""
+
+HAS_EPISODE_EDGE_RETURN = """
+    e.uuid AS uuid,
+    e.group_id AS group_id,
+    n.uuid AS source_node_uuid,
+    m.uuid AS target_node_uuid,
+    e.created_at AS created_at
+"""
+
+
+NEXT_EPISODE_EDGE_SAVE = """
+    MATCH (source_episode:Episodic {uuid: $source_episode_uuid})
+    MATCH (target_episode:Episodic {uuid: $target_episode_uuid})
+    MERGE (source_episode)-[e:NEXT_EPISODE {uuid: $uuid}]->(target_episode)
+    SET
+        e.group_id = $group_id,
+        e.created_at = $created_at
+    RETURN e.uuid AS uuid
+"""
+
+NEXT_EPISODE_EDGE_RETURN = """
     e.uuid AS uuid,
     e.group_id AS group_id,
     n.uuid AS source_node_uuid,

@@ -1,12 +1,11 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
-from openai import AsyncAzureOpenAI
+from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
-from config.schema import (
-    DatabaseConfig,
-    EmbedderConfig,
-    LLMConfig,
-)
+from config.schema import DatabaseConfig, EmbedderConfig, LLMConfig
 
 # Try to import FalkorDriver if available
 try:
@@ -15,11 +14,6 @@ try:
     HAS_FALKOR = True
 except ImportError:
     HAS_FALKOR = False
-
-# Kuzu support removed - FalkorDB is now the default
-from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
-from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
 try:
@@ -70,7 +64,6 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
-from utils.utils import create_azure_credential_token_provider
 
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
@@ -97,6 +90,37 @@ def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     return api_key
 
 
+def is_non_openai_provider(base_url: str | None) -> bool:
+    """
+    Detect if the base_url points to a non-OpenAI provider.
+
+    Returns True if base_url is set and doesn't point to OpenAI's official API.
+    This includes Ollama, LM Studio, vLLM, and other OpenAI-compatible providers.
+    """
+    if not base_url:
+        return False
+
+    # OpenAI's official endpoints
+    openai_domains = ['api.openai.com', 'openai.azure.com']
+
+    # Check if base_url contains any official OpenAI domain
+    return not any(domain in base_url for domain in openai_domains)
+
+
+def reasoning_effort_for_model(model: str) -> str | None:
+    """Reasoning effort to send for a reasoning model, or None if not one.
+
+    Reasoning models (o1, o3, gpt-5 family) need an effort; non-reasoning models
+    must not receive one. gpt-5.5 runs with reasoning off ('none') for lower
+    cost/latency (comparable extraction quality); earlier reasoning models keep
+    the cheapest broadly-supported tier ('minimal'). Shared by the OpenAI and
+    Azure OpenAI factory branches so both providers select effort identically.
+    """
+    if not model.startswith(('o1', 'o3', 'gpt-5')):
+        return None
+    return 'none' if model.startswith('gpt-5.5') else 'minimal'
+
+
 class LLMClientFactory:
     """Factory for creating LLM clients based on configuration."""
 
@@ -119,30 +143,34 @@ class LLMClientFactory:
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                # Determine appropriate small model based on main model type
-                is_reasoning_model = (
-                    config.model.startswith('gpt-5')
-                    or config.model.startswith('o1')
-                    or config.model.startswith('o3')
-                )
-                small_model = (
-                    'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
-                )  # Use reasoning model for small tasks if main model is reasoning
+                # Use the same model for both main and small model slots
+                small_model = config.model
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
                     model=config.model,
                     small_model=small_model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
+                    base_url=config.providers.openai.api_url,
                 )
 
-                # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
-                if is_reasoning_model:
-                    return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                # Detect if we're using a non-OpenAI provider (Ollama, LM Studio, etc)
+                use_generic_client = is_non_openai_provider(config.providers.openai.api_url)
+
+                if use_generic_client:
+                    # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
+                    # This uses the standard Chat Completions API instead of Responses API
+                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens)
                 else:
-                    # For non-reasoning models, explicitly pass None to disable these parameters
-                    return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
+                    # Use OpenAIClient for official OpenAI API (supports Responses API).
+                    # Reasoning models get a reasoning effort; others must not.
+                    effort = reasoning_effort_for_model(config.model)
+                    if effort is not None:
+                        return OpenAIClient(config=llm_config, reasoning=effort, verbosity='low')
+                    return OpenAIClient(config=llm_config)
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
@@ -156,23 +184,25 @@ class LLMClientFactory:
                 if not azure_config.api_url:
                     raise ValueError('Azure OpenAI API URL is required')
 
-                # Handle Azure AD authentication if enabled
-                api_key: str | None = None
-                azure_ad_token_provider = None
-                if azure_config.use_azure_ad:
-                    logger.info('Creating Azure OpenAI LLM client with Azure AD authentication')
-                    azure_ad_token_provider = create_azure_credential_token_provider()
-                else:
-                    api_key = azure_config.api_key
-                    _validate_api_key('Azure OpenAI', api_key, logger)
+                # Currently using API key authentication
+                # TODO: Add Azure AD authentication support for v1 API compatibility
+                api_key = azure_config.api_key
+                _validate_api_key('Azure OpenAI', api_key, logger)
 
-                # Create the Azure OpenAI client first
-                azure_client = AsyncAzureOpenAI(
+                # Azure OpenAI should use the standard AsyncOpenAI client with v1 compatibility endpoint
+                # See: https://github.com/getzep/graphiti README Azure OpenAI section
+                from openai import AsyncOpenAI
+
+                # Ensure the base_url ends with /openai/v1/ for Azure v1 compatibility
+                base_url = azure_config.api_url
+                if not base_url.endswith('/'):
+                    base_url += '/'
+                if not base_url.endswith('openai/v1/'):
+                    base_url += 'openai/v1/'
+
+                azure_client = AsyncOpenAI(
+                    base_url=base_url,
                     api_key=api_key,
-                    azure_endpoint=azure_config.api_url,
-                    api_version=azure_config.api_version,
-                    azure_deployment=azure_config.deployment_name,
-                    azure_ad_token_provider=azure_ad_token_provider,
                 )
 
                 # Then create the LLMConfig
@@ -180,16 +210,23 @@ class LLMClientFactory:
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
-                    base_url=azure_config.api_url,
+                    base_url=base_url,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
 
+                # Apply the same model-tied reasoning effort as the OpenAI branch
+                # (e.g. a gpt-5.5 Azure deployment runs with reasoning off).
+                effort = reasoning_effort_for_model(config.model)
                 return AzureOpenAILLMClient(
                     azure_client=azure_client,
                     config=llm_config,
                     max_tokens=config.max_tokens,
+                    reasoning=effort,
+                    verbosity='low' if effort is not None else None,
                 )
 
             case 'anthropic':
@@ -206,7 +243,9 @@ class LLMClientFactory:
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
                 return AnthropicClient(config=llm_config)
@@ -223,7 +262,9 @@ class LLMClientFactory:
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
                 return GeminiClient(config=llm_config)
@@ -241,7 +282,9 @@ class LLMClientFactory:
                     api_key=api_key,
                     base_url=config.providers.groq.api_url,
                     model=config.model,
-                    temperature=config.temperature,
+                    # None is intentional for reasoning models; core LLMConfig stores it
+                    # verbatim and downstream clients omit temperature when it is None.
+                    temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
                 )
                 return GroqClient(config=llm_config)
@@ -275,6 +318,8 @@ class EmbedderFactory:
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
+                    base_url=config.providers.openai.api_url,  # Support custom endpoints like Ollama
+                    embedding_dim=config.dimensions,  # Support custom embedding dimensions
                 )
                 return OpenAIEmbedder(config=embedder_config)
 
@@ -290,25 +335,25 @@ class EmbedderFactory:
                 if not azure_config.api_url:
                     raise ValueError('Azure OpenAI API URL is required')
 
-                # Handle Azure AD authentication if enabled
-                api_key: str | None = None
-                azure_ad_token_provider = None
-                if azure_config.use_azure_ad:
-                    logger.info(
-                        'Creating Azure OpenAI Embedder client with Azure AD authentication'
-                    )
-                    azure_ad_token_provider = create_azure_credential_token_provider()
-                else:
-                    api_key = azure_config.api_key
-                    _validate_api_key('Azure OpenAI Embedder', api_key, logger)
+                # Currently using API key authentication
+                # TODO: Add Azure AD authentication support for v1 API compatibility
+                api_key = azure_config.api_key
+                _validate_api_key('Azure OpenAI Embedder', api_key, logger)
 
-                # Create the Azure OpenAI client first
-                azure_client = AsyncAzureOpenAI(
+                # Azure OpenAI should use the standard AsyncOpenAI client with v1 compatibility endpoint
+                # See: https://github.com/getzep/graphiti README Azure OpenAI section
+                from openai import AsyncOpenAI
+
+                # Ensure the base_url ends with /openai/v1/ for Azure v1 compatibility
+                base_url = azure_config.api_url
+                if not base_url.endswith('/'):
+                    base_url += '/'
+                if not base_url.endswith('openai/v1/'):
+                    base_url += 'openai/v1/'
+
+                azure_client = AsyncOpenAI(
+                    base_url=base_url,
                     api_key=api_key,
-                    azure_endpoint=azure_config.api_url,
-                    api_version=azure_config.api_version,
-                    azure_deployment=azure_config.deployment_name,
-                    azure_ad_token_provider=azure_ad_token_provider,
                 )
 
                 return AzureOpenAIEmbedderClient(
@@ -418,6 +463,7 @@ class DatabaseDriverFactory:
                 from urllib.parse import urlparse
 
                 uri = os.environ.get('FALKORDB_URI', falkor_config.uri)
+                username = os.environ.get('FALKORDB_USERNAME')
                 password = os.environ.get('FALKORDB_PASSWORD', falkor_config.password)
                 database = os.environ.get('FALKORDB_DATABASE', falkor_config.database)
 
@@ -425,11 +471,13 @@ class DatabaseDriverFactory:
                 parsed = urlparse(uri)
                 host = parsed.hostname or 'localhost'
                 port = parsed.port or 6379
+                username = username or parsed.username or falkor_config.username
 
                 return {
                     'driver': 'falkordb',
                     'host': host,
                     'port': port,
+                    'username': username,
                     'password': password,
                     'database': database,
                 }

@@ -18,9 +18,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.helpers import validate_node_labels
 
 
 class ComparisonOperator(Enum):
@@ -35,7 +36,7 @@ class ComparisonOperator(Enum):
 
 
 class DateFilter(BaseModel):
-    date: datetime | None = Field(description='A datetime to filter on')
+    date: datetime | None = Field(default=None, description='A datetime to filter on')
     comparison_operator: ComparisonOperator = Field(
         description='Comparison operator for date filter'
     )
@@ -44,7 +45,7 @@ class DateFilter(BaseModel):
 class PropertyFilter(BaseModel):
     property_name: str = Field(description='Property name')
     property_value: str | int | float | None = Field(
-        description='Value you want to match on for the property'
+        default=None, description='Value you want to match on for the property'
     )
     comparison_operator: ComparisonOperator = Field(
         description='Comparison operator for the property'
@@ -65,6 +66,12 @@ class SearchFilters(BaseModel):
     edge_uuids: list[str] | None = Field(default=None)
     property_filters: list[PropertyFilter] | None = Field(default=None)
 
+    @field_validator('node_labels')
+    @classmethod
+    def validate_node_label_filters(cls, value: list[str] | None) -> list[str] | None:
+        validate_node_labels(value)
+        return value
+
 
 def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
     mapping = {
@@ -84,6 +91,8 @@ def node_search_filter_query_constructor(
     filter_params: dict[str, Any] = {}
 
     if filters.node_labels is not None:
+        # Defense-in-depth for model_construct()/other validation bypasses.
+        validate_node_labels(filters.node_labels)
         if provider == GraphProvider.KUZU:
             node_label_filter = 'list_has_all(n.labels, $labels)'
             filter_params['labels'] = filters.node_labels
@@ -125,6 +134,8 @@ def edge_search_filter_query_constructor(
         filter_params['edge_uuids'] = filters.edge_uuids
 
     if filters.node_labels is not None:
+        # Defense-in-depth for model_construct()/other validation bypasses.
+        validate_node_labels(filters.node_labels)
         if provider == GraphProvider.KUZU:
             node_label_filter = (
                 'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'

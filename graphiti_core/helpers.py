@@ -28,14 +28,31 @@ from numpy._typing import NDArray
 from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.errors import GroupIdValidationError
+from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationError
 
 load_dotenv()
 
+SAFE_CYPHER_IDENTIFIER_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
-MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 0))
 DEFAULT_PAGE_LIMIT = 20
+
+# Content chunking configuration for entity extraction
+# Density-based chunking: only chunk high-density content (many entities per token)
+# This targets the failure case (large entity-dense inputs) while preserving
+# context for prose/narrative content
+CHUNK_TOKEN_SIZE = int(os.getenv('CHUNK_TOKEN_SIZE', 3000))
+CHUNK_OVERLAP_TOKENS = int(os.getenv('CHUNK_OVERLAP_TOKENS', 200))
+# Minimum tokens before considering chunking - short content processes fine regardless of density
+CHUNK_MIN_TOKENS = int(os.getenv('CHUNK_MIN_TOKENS', 1000))
+# Entity density threshold: chunk if estimated density > this value
+# For JSON: elements per 1000 tokens > threshold * 1000 (e.g., 0.15 = 150 elements/1000 tokens)
+# For Text: capitalized words per 1000 tokens > threshold * 500 (e.g., 0.15 = 75 caps/1000 tokens)
+# Higher values = more conservative (less chunking), targets P95+ density cases
+# Examples that trigger chunking at 0.15: AWS cost data (12mo), bulk data imports, entity-dense JSON
+# Examples that DON'T chunk at 0.15: meeting transcripts, news articles, documentation
+CHUNK_DENSITY_THRESHOLD = float(os.getenv('CHUNK_DENSITY_THRESHOLD', 0.15))
 
 
 def parse_db_date(input_date: neo4j_time.DateTime | str | None) -> datetime | None:
@@ -54,7 +71,7 @@ def get_default_group_id(provider: GraphProvider) -> str:
     For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
     """
     if provider == GraphProvider.FALKORDB:
-        return '\\_'
+        return '_'
     else:
         return ''
 
@@ -138,6 +155,33 @@ def validate_group_id(group_id: str | None) -> bool:
     # Pattern matches: letters (a-z, A-Z), digits (0-9), hyphens (-), and underscores (_)
     if not re.match(r'^[a-zA-Z0-9_-]+$', group_id):
         raise GroupIdValidationError(group_id)
+
+    return True
+
+
+def validate_group_ids(group_ids: list[str] | None) -> bool:
+    """Validate a list of group ids used by search paths."""
+
+    if group_ids is None:
+        return True
+
+    for group_id in group_ids:
+        validate_group_id(group_id)
+
+    return True
+
+
+def validate_node_labels(node_labels: list[str] | None) -> bool:
+    """Validate that node labels are safe to interpolate into Cypher label expressions."""
+
+    if not node_labels:
+        return True
+
+    invalid_labels = [
+        label for label in node_labels if not SAFE_CYPHER_IDENTIFIER_PATTERN.match(label)
+    ]
+    if invalid_labels:
+        raise NodeLabelValidationError(invalid_labels)
 
     return True
 
