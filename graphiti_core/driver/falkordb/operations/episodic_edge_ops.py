@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 from typing import Any
 
-from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.driver.operations.episodic_edge_ops import EpisodicEdgeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.edges import EpisodicEdge
@@ -151,6 +151,29 @@ class FalkorEpisodicEdgeOperations(EpisodicEdgeOperations):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ) -> list[EpisodicEdge]:
+        # For FalkorDB, route each group_id to its own graph database. The
+        # namespace/ops path receives the base driver (default_db), so a
+        # single-group read must be cloned to the group's graph or it queries
+        # an empty default database and returns nothing.
+        if (
+            isinstance(executor, GraphDriver)
+            and executor.provider == GraphProvider.FALKORDB
+            and group_ids
+        ):
+            if len(group_ids) == 1:
+                executor = executor.clone(database=group_ids[0])
+            else:
+                all_edges: list[EpisodicEdge] = []
+                for gid in group_ids:
+                    partial = await self.get_by_group_ids(
+                        executor.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_edges.extend(partial)
+                all_edges.sort(key=lambda e: e.uuid, reverse=True)
+                if limit is not None:
+                    all_edges = all_edges[:limit]
+                return all_edges
+
         cursor_clause = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
         query = (
