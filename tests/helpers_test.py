@@ -26,6 +26,7 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
+from graphiti_core.prompts.prompt_helpers import to_prompt_json
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
@@ -314,6 +315,45 @@ async def assert_entity_edge_equals(
     assert retrieved.valid_at == sample.valid_at
     assert retrieved.invalid_at == sample.invalid_at
     assert retrieved.attributes == sample.attributes
+
+
+def test_to_prompt_json_datetime():
+    from datetime import date, datetime, timezone
+
+    # Test datetime with timezone
+    data = {'signed_at': datetime(2024, 3, 15, tzinfo=timezone.utc)}
+    result = to_prompt_json(data)
+    assert '"2024-03-15T00:00:00+00:00"' in result
+
+    # Test date object
+    data = {'date_of_birth': date(1990, 5, 20)}
+    result = to_prompt_json(data)
+    assert '"1990-05-20"' in result
+
+    # Test mixed data
+    data = {
+        'name': 'Test',
+        'signed_at': datetime(2024, 3, 15, 10, 30, tzinfo=timezone.utc),
+        'date_of_birth': date(1990, 5, 20),
+    }
+    result = to_prompt_json(data)
+    assert '"2024-03-15T10:30:00+00:00"' in result
+    assert '"1990-05-20"' in result
+
+    # Test already serializable data remains unchanged
+    data = {'key': 'value', 'number': 42}
+    result = to_prompt_json(data)
+    assert '"key": "value"' in result
+    assert '"number": 42' in result
+
+    # Test non-serializable object falls back to str()
+    class Custom:
+        def __str__(self):
+            return 'custom'
+
+    data = {'obj': Custom()}
+    result = to_prompt_json(data)
+    assert '"custom"' in result
 
 
 if __name__ == '__main__':
