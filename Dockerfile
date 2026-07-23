@@ -44,20 +44,19 @@ COPY ./server/graph_service ./graph_service
 # Then install graphiti-core from PyPI at the desired version
 # This prevents the stale lockfile from pinning an old graphiti-core version
 ARG INSTALL_FALKORDB=false
+ARG INSTALL_NEPTUNE=false
+ARG INSTALL_KUZU=false
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev && \
+    EXTRA="" && \
+    if [ "$INSTALL_FALKORDB" = "true" ]; then EXTRA="[falkordb]"; \
+    elif [ "$INSTALL_NEPTUNE" = "true" ]; then EXTRA="[neptune]"; \
+    elif [ "$INSTALL_KUZU" = "true" ]; then EXTRA="[kuzu]"; \
+    fi && \
     if [ -n "$GRAPHITI_VERSION" ]; then \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
-        else \
-            uv pip install --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
-        fi; \
+        uv pip install --upgrade "graphiti-core${EXTRA}==$GRAPHITI_VERSION"; \
     else \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --upgrade "graphiti-core[falkordb]"; \
-        else \
-            uv pip install --upgrade graphiti-core; \
-        fi; \
+        uv pip install --upgrade "graphiti-core${EXTRA}"; \
     fi
 
 # Change ownership to app user

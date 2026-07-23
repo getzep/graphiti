@@ -34,10 +34,10 @@ ARG GRAPHITI_CORE_VERSION=0.29.1
 COPY pyproject.toml uv.lock ./
 
 # Remove the local path override for graphiti-core in Docker builds
-# Install with BOTH neo4j and falkordb extras for maximum flexibility
+# Install with all database extras for maximum flexibility
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
-    sed -i "s/graphiti-core\[falkordb\][>=]\+[0-9]\+\.[0-9]\+\.[0-9]\+/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
+    sed -i "s/graphiti-core\[falkordb\][>=]\+[0-9]\+\.[0-9]\+\.[0-9]\+/graphiti-core[neo4j,falkordb,neptune]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \
     uv lock

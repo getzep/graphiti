@@ -16,12 +16,13 @@ limitations under the License.
 
 import asyncio
 import datetime
+import json
 import logging
 from collections.abc import Coroutine
 from typing import Any
 
 import boto3
-from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
+from botocore.config import Config
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
@@ -58,6 +59,17 @@ from graphiti_core.driver.operations.search_ops import SearchOperations
 
 logger = logging.getLogger(__name__)
 DEFAULT_SIZE = 10
+
+# read_timeout is kept slightly above the default Neptune cluster
+# `neptune_query_timeout` (120s) so a slow-but-alive query gets a clean
+# botocore timeout from Neptune instead of the socket being torn down first.
+# `standard` retry mode retries transient connection errors (e.g. the
+# connection getting reset mid-response) instead of surfacing them directly.
+NEPTUNE_BOTO_CONFIG = Config(
+    connect_timeout=10,
+    read_timeout=130,
+    retries={'max_attempts': 3, 'mode': 'standard'},
+)
 
 aoss_indices = [
     {
@@ -136,6 +148,52 @@ aoss_indices = [
 ]
 
 
+class NeptuneDatabaseClient:
+    """Lightweight Neptune Database query client using boto3 directly.
+
+    This replaces langchain_aws's NeptuneGraph, which unconditionally calls the
+    Summary/Statistics API on construction—requiring engine >=1.2.1.0 with
+    statistics enabled.  Graphiti only needs openCypher query execution, not
+    langchain's schema introspection, so we skip that overhead entirely.
+    """
+
+    def __init__(self, host: str, port: int = 8182):
+        session = boto3.Session()
+        self.client = session.client(
+            'neptunedata',
+            endpoint_url=f'https://{host}:{port}',
+            config=NEPTUNE_BOTO_CONFIG,
+        )
+
+    def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
+        kwargs: dict[str, Any] = {'openCypherQuery': query}
+        if params:
+            kwargs['parameters'] = json.dumps(params)
+        return self.client.execute_open_cypher_query(**kwargs)['results']
+
+
+class NeptuneAnalyticsClient:
+    """Lightweight Neptune Analytics query client using boto3 directly.
+
+    Same rationale as NeptuneDatabaseClient—avoids the langchain_aws
+    NeptuneAnalyticsGraph class and its mandatory schema introspection.
+    """
+
+    def __init__(self, graph_identifier: str):
+        session = boto3.Session()
+        self.client = session.client('neptune-graph', config=NEPTUNE_BOTO_CONFIG)
+        self.graph_identifier = graph_identifier
+
+    def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
+        resp = self.client.execute_query(
+            graphIdentifier=self.graph_identifier,
+            queryString=query,
+            parameters=params or {},
+            language='OPEN_CYPHER',
+        )
+        return json.loads(resp['payload'].read().decode('UTF-8'))['results']
+
+
 class NeptuneDriver(GraphDriver):
     provider: GraphProvider = GraphProvider.NEPTUNE
 
@@ -148,18 +206,20 @@ class NeptuneDriver(GraphDriver):
             port (int, optional): The Neptune Database port, ignored for Neptune Analytics. Defaults to 8182.
             aoss_port (int, optional): The OpenSearch port. Defaults to 443.
         """
+        self._database = 'default'
+
         if not host:
             raise ValueError('You must provide an endpoint to create a NeptuneDriver')
 
         if host.startswith('neptune-db://'):
             # This is a Neptune Database Cluster
             endpoint = host.replace('neptune-db://', '')
-            self.client = NeptuneGraph(endpoint, port)
+            self.client = NeptuneDatabaseClient(endpoint, port)
             logger.debug('Creating Neptune Database session for %s', host)
         elif host.startswith('neptune-graph://'):
             # This is a Neptune Analytics Graph
             graphId = host.replace('neptune-graph://', '')
-            self.client = NeptuneAnalyticsGraph(graphId)
+            self.client = NeptuneAnalyticsClient(graphId)
             logger.debug('Creating Neptune Graph session for %s', host)
         else:
             raise ValueError(
@@ -281,13 +341,20 @@ class NeptuneDriver(GraphDriver):
         self, cypher_query_, **kwargs: Any
     ) -> tuple[list[dict[str, Any]], None, None]:
         params = dict(kwargs)
+        # Unwrap nested 'params' dict (legacy search_utils compatibility)
+        if 'params' in params and isinstance(params['params'], dict):
+            nested = params.pop('params')
+            params.update(nested)
+        # Remove kwargs that are not openCypher parameters
+        for key in ('routing_', 'database_', 'search_vector', 'min_score'):
+            params.pop(key, None)
         if isinstance(cypher_query_, list):
             result: list[dict[str, Any]] = []
             for q in cypher_query_:
-                result, _, _ = self._run_query(q[0], q[1])
+                result, _, _ = await asyncio.to_thread(self._run_query, q[0], q[1])
             return result, None, None
         else:
-            return self._run_query(cypher_query_, params)
+            return await asyncio.to_thread(self._run_query, cypher_query_, params)
 
     def _run_query(self, cypher_query_, params):
         cypher_query_ = str(self._sanitize_parameters(cypher_query_, params))
@@ -358,8 +425,12 @@ class NeptuneDriver(GraphDriver):
                         if p in d:
                             item[p] = d[p]
                     to_index.append(item)
-                success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
-                return success
+                try:
+                    success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
+                    return success
+                except Exception as e:
+                    logger.error('save_to_aoss failed for index %s: %s', name, e)
+                    return 0
 
         return 0
 

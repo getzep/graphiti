@@ -8,36 +8,36 @@
 server:
   transport: "http"  # Options: stdio, sse (deprecated), http
   host: "0.0.0.0"
-  port: 8000
-  
+  port: ${PORT:8000}
+
 llm:
-  provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: ${MODEL_NAME:gpt-5.5}
+  provider: ${LLM_PROVIDER:openai}  # Options: openai, azure_openai, anthropic, gemini, groq
+  model: ${MODEL_NAME:gpt-4o-mini}
   max_tokens: 4096
-  
+
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
-      
+
     azure_openai:
       api_key: ${AZURE_OPENAI_API_KEY}
       api_url: ${AZURE_OPENAI_ENDPOINT}
       api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
       deployment_name: ${AZURE_OPENAI_DEPLOYMENT}
       use_azure_ad: ${USE_AZURE_AD:false}
-      
+
     anthropic:
       api_key: ${ANTHROPIC_API_KEY}
       api_url: ${ANTHROPIC_API_URL:https://api.anthropic.com}
       max_retries: 3
-      
+
     gemini:
       api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_PROJECT_ID:}
       location: ${GOOGLE_LOCATION:us-central1}
-      
+
     groq:
       api_key: ${GROQ_API_KEY}
       api_url: ${GROQ_API_URL:https://api.groq.com/openai/v1}
@@ -46,32 +46,32 @@ embedder:
   provider: "openai"  # Options: openai, azure_openai, gemini, voyage
   model: ${EMBEDDER_MODEL:text-embedding-3-small}
   dimensions: 1536
-  
+
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
-      
+
     azure_openai:
       api_key: ${AZURE_OPENAI_API_KEY}
       api_url: ${AZURE_OPENAI_EMBEDDINGS_ENDPOINT}
       api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
       deployment_name: ${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}
       use_azure_ad: ${USE_AZURE_AD:false}
-      
+
     gemini:
       api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_PROJECT_ID:}
       location: ${GOOGLE_LOCATION:us-central1}
-      
+
     voyage:
       api_key: ${VOYAGE_API_KEY}
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+  provider: ${DB_BACKEND:falkordb}  # Options: neo4j, falkordb, neptune
 
   providers:
     falkordb:
@@ -85,6 +85,12 @@ database:
       password: ${NEO4J_PASSWORD}
       database: ${NEO4J_DATABASE:neo4j}
       use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
+
+    neptune:
+      host: ${NEPTUNE_HOST:}
+      aoss_host: ${AOSS_HOST:}
+      port: ${NEPTUNE_PORT:8182}
+      aoss_port: ${AOSS_PORT:443}
 
 graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}

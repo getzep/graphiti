@@ -68,6 +68,8 @@ class NeptuneNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
+        # NEXT_EPISODE edges are saved individually since no bulk query exists
+        # for this edge type in the codebase.
         for edge in edges:
             await self.save(executor, edge, tx=tx)
 

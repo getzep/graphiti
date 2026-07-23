@@ -70,12 +70,17 @@ class NeptuneEpisodicEdgeOperations(EpisodicEdgeOperations):
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
-        query = get_episodic_edge_save_bulk_query(GraphProvider.NEPTUNE)
         edge_dicts = [e.model_dump() for e in edges]
-        if tx is not None:
-            await tx.run(query, episodic_edges=edge_dicts)
-        else:
-            await executor.execute_query(query, episodic_edges=edge_dicts)
+        if not edge_dicts:
+            return
+
+        query = get_episodic_edge_save_bulk_query(GraphProvider.NEPTUNE)
+        for i in range(0, len(edge_dicts), batch_size):
+            chunk = edge_dicts[i : i + batch_size]
+            if tx is not None:
+                await tx.run(query, episodic_edges=chunk)
+            else:
+                await executor.execute_query(query, episodic_edges=chunk)
 
     async def delete(
         self,

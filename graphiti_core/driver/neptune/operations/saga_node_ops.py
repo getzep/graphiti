@@ -68,6 +68,8 @@ class NeptuneSagaNodeOperations(SagaNodeOperations):
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
+        # Saga nodes are saved individually since no bulk query exists for
+        # this node type in the codebase.
         for node in nodes:
             await self.save(executor, node, tx=tx)
 
