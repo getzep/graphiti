@@ -130,6 +130,13 @@ def _build_falkor_fulltext_query(
 
     sanitized_query = ' | '.join(filtered_words)
 
+    # Short-circuit when every input token was a stopword; otherwise we
+    # emit `(@group_id:"...") ()`, which FalkorDB/RediSearch rejects
+    # with `Syntax error at offset N near <group_id>`. Callers already
+    # special-case `''` as 'no candidates'.
+    if not filtered_words:
+        return ''
+
     if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
         return ''
 
