@@ -395,6 +395,7 @@ class FalkorDriver(GraphDriver):
                 '|': ' ',
                 '/': ' ',
                 '\\': ' ',
+                '`': ' ',
             }
         )
         sanitized = query.translate(separator_map)
@@ -435,7 +436,18 @@ class FalkorDriver(GraphDriver):
         # Remove stopwords and empty tokens from the sanitized query
         query_words = sanitized_query.split()
         filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
+
+        if not filtered_words:
+            return ''
+
         sanitized_query = ' | '.join(filtered_words)
+
+        # Short-circuit when every input token was a stopword; otherwise we
+        # emit `(@group_id:"...") ()`, which FalkorDB/RediSearch rejects
+        # with `Syntax error at offset N near <group_id>`. Callers already
+        # special-case `''` as 'no candidates'.
+        if not filtered_words:
+            return ''
 
         # If the query is too long return no query
         if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
