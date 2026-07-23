@@ -1,0 +1,4 @@
+# Convenience file - run `docker compose up` from this directory, consistent with README
+# See docker/ for full compose configurations
+include:
+  - docker/docker-compose.yml

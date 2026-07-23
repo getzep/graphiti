@@ -20,7 +20,7 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Search Capabilities**: Search for facts (edges) and node summaries using semantic and hybrid search
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
-- **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
+- **Graph Database Support**: Multiple backend options including Neo4j (default) and FalkorDB
 - **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
 - **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
@@ -59,15 +59,15 @@ cd graphiti && pwd
 
 `cd graphiti/mcp_server`
 
-2. Start the combined FalkorDB + MCP server using Docker Compose (recommended)
+2. Start the Neo4j + MCP server using Docker Compose (recommended)
 
 ```bash
 docker compose up
 ```
 
-This starts both FalkorDB and the MCP server in a single container.
+This starts both Neo4j and the MCP server as separate containers.
 
-**Alternative**: Run with separate containers using Neo4j:
+**Alternative**: Run with a combined FalkorDB + MCP server container:
 ```bash
 docker compose -f docker/docker-compose-neo4j.yml up
 ```
@@ -78,9 +78,9 @@ docker compose -f docker/docker-compose-neo4j.yml up
 
 ### Prerequisites
 
-1. Docker and Docker Compose (for the default FalkorDB setup)
+1. Docker and Docker Compose (for the default Neo4j setup)
 2. OpenAI API key for LLM operations (or API keys for other supported LLM providers)
-3. (Optional) Python 3.10+ if running the MCP server standalone with an external FalkorDB instance
+3. (Optional) Python 3.10+ if running the MCP server standalone with an external Neo4j instance
 
 ### Setup
 
@@ -106,33 +106,19 @@ The server can be configured using a `config.yaml` file, environment variables, 
 
 The MCP server comes with sensible defaults:
 - **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
-- **Database**: FalkorDB (combined in single container with MCP server)
+- **Database**: Neo4j (separate container)
 - **LLM**: OpenAI with model gpt-5.5
 - **Embedder**: OpenAI text-embedding-3-small
 
 ### Database Configuration
 
-#### FalkorDB (Default)
+#### Neo4j (Default)
 
-FalkorDB is a Redis-based graph database that comes bundled with the MCP server in a single Docker container. This is the default and recommended setup.
-
-```yaml
-database:
-  provider: "falkordb"  # Default
-  providers:
-    falkordb:
-      uri: "redis://localhost:6379"
-      password: ""  # Optional
-      database: "default_db"  # Optional
-```
-
-#### Neo4j
-
-For production use or when you need a full-featured graph database, Neo4j is recommended:
+Neo4j is the default and recommended database for production use or when you need a full-featured graph database:
 
 ```yaml
 database:
-  provider: "neo4j"
+  provider: "neo4j"  # Default
   providers:
     neo4j:
       uri: "bolt://localhost:7687"
@@ -143,7 +129,7 @@ database:
 
 #### FalkorDB
 
-FalkorDB is another graph database option based on Redis:
+FalkorDB is a Redis-based graph database that can be bundled with the MCP server in a single Docker container:
 
 ```yaml
 database:
@@ -168,7 +154,7 @@ llm:
   model: "gpt-5.5"  # Default model
 
 database:
-  provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
+  provider: "neo4j"  # Default. Options: "neo4j", "falkordb"
 ```
 
 ### Using Ollama for Local LLM
@@ -253,50 +239,18 @@ You can set these variables in a `.env` file in the project directory.
 
 ## Running the Server
 
-### Default Setup (FalkorDB Combined Container)
+### Default Setup (Neo4j)
 
-To run the Graphiti MCP server with the default FalkorDB setup:
+To run the Graphiti MCP server with the default Neo4j setup:
 
 ```bash
 docker compose up
 ```
 
-This starts a single container with:
+This starts separate containers with:
 - HTTP transport on `http://localhost:8000/mcp/`
-- FalkorDB graph database on `localhost:6379`
-- FalkorDB web UI on `http://localhost:3000`
-- OpenAI LLM with gpt-5.5 model
-
-### Running with Neo4j
-
-#### Option 1: Using Docker Compose
-
-The easiest way to run with Neo4j is using the provided Docker Compose configuration:
-
-```bash
-# This starts both Neo4j and the MCP server
-docker compose -f docker/docker-compose.neo4j.yaml up
-```
-
-#### Option 2: Direct Execution with Existing Neo4j
-
-If you have Neo4j already running:
-
-```bash
-# Set environment variables
-export NEO4J_URI="bolt://localhost:7687"
-export NEO4J_USER="neo4j"
-export NEO4J_PASSWORD="your_password"
-
-# Run with Neo4j
-uv run main.py --database-provider neo4j
-```
-
-Or use the Neo4j configuration file:
-
-```bash
-uv run main.py --config config/config-docker-neo4j.yaml
-```
+- Neo4j graph database on `localhost:7687`
+- Neo4j browser UI on `http://localhost:7474`
 
 ### Running with FalkorDB
 
@@ -324,12 +278,43 @@ Or use the FalkorDB configuration file:
 uv run main.py --config config/config-docker-falkordb.yaml
 ```
 
+### Running with Neo4j
+
+#### Option 1: Using Docker Compose
+
+The easiest way to run with Neo4j is using the provided Docker Compose configuration:
+
+```bash
+# This starts both Neo4j and the MCP server
+docker compose -f docker/docker-compose-neo4j.yml up
+```
+
+#### Option 2: Direct Execution with Existing Neo4j
+
+If you have Neo4j already running:
+
+```bash
+# Set environment variables
+export NEO4J_URI="bolt://localhost:7687"
+export NEO4J_USER="neo4j"
+export NEO4J_PASSWORD="your_password"
+
+# Run with Neo4j
+uv run main.py --database-provider neo4j
+```
+
+Or use the Neo4j configuration file:
+
+```bash
+uv run main.py --config config/config-docker-neo4j.yaml
+```
+
 ### Available Command-Line Arguments
 
 - `--config`: Path to YAML configuration file (default: config.yaml)
 - `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
-- `--database-provider`: Database provider to use (falkordb, neo4j) - default: falkordb
+- `--database-provider`: Database provider to use (neo4j, falkordb) - default: neo4j
 - `--model`: Model name to use with the LLM client
 - `--temperature`: Temperature setting for the LLM (0.0-2.0)
 - `--transport`: Choose the transport method (http or stdio, default: http)
@@ -419,20 +404,12 @@ Before running Docker Compose, configure your API keys using a `.env` file (reco
 cd graphiti/mcp_server
 ```
 
-##### Option 1: FalkorDB Combined Container (Default)
-
-Single container with both FalkorDB and MCP server - simplest option:
-
-```bash
-docker compose up
-```
-
-##### Option 2: Neo4j Database
+##### Option 1: Neo4j Database (Default)
 
 Separate containers with Neo4j and MCP server:
 
 ```bash
-docker compose -f docker/docker-compose-neo4j.yml up
+docker compose up
 ```
 
 Default Neo4j credentials:
@@ -441,18 +418,24 @@ Default Neo4j credentials:
 - Bolt URI: `bolt://neo4j:7687`
 - Browser UI: `http://localhost:7474`
 
-##### Option 3: FalkorDB with Separate Containers
+##### Option 2: FalkorDB Combined Container
 
-Alternative setup with separate FalkorDB and MCP server containers:
+Single container with both FalkorDB and MCP server:
 
 ```bash
-docker compose -f docker/docker-compose-falkordb.yml up
+docker compose -f docker/docker-compose.falkordb.yaml up
 ```
 
 FalkorDB configuration:
 - Redis port: `6379`
 - Web UI: `http://localhost:3000`
 - Connection: `redis://falkordb:6379`
+
+##### Option 3: Neo4j with Separate Containers (explicit)
+
+```bash
+docker compose -f docker/docker-compose-neo4j.yml up
+```
 
 #### Accessing the MCP Server
 
@@ -670,8 +653,9 @@ The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Deskto
 - Python 3.10 or higher
 - OpenAI API key (for LLM operations and embeddings) or other LLM provider API keys
 - MCP-compatible client
-- Docker and Docker Compose (for the default FalkorDB combined container)
-- (Optional) Neo4j database (version 5.26 or later) if not using the default FalkorDB setup
+- Docker and Docker Compose (for the default Neo4j setup)
+- Neo4j database (version 5.26 or later) — included in the default Docker Compose setup
+- (Optional) FalkorDB if using the alternative combined container setup
 
 ## Telemetry
 
