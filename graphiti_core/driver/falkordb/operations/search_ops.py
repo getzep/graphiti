@@ -84,6 +84,7 @@ _SEPARATOR_MAP = str.maketrans(
         '|': ' ',
         '/': ' ',
         '\\': ' ',
+        '`': ' ',
     }
 )
 
@@ -123,6 +124,10 @@ def _build_falkor_fulltext_query(
     # Remove stopwords and empty tokens
     query_words = sanitized_query.split()
     filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
+
+    if not filtered_words:
+        return ''
+
     sanitized_query = ' | '.join(filtered_words)
 
     # Short-circuit when every input token was a stopword; otherwise we
