@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_base_client import DEFAULT_MODEL, DEFAULT_REASONING
 from graphiti_core.llm_client.openai_client import OpenAIClient
+from graphiti_core.prompts.models import Message
 
 
 class DummyResponses:
@@ -219,3 +220,26 @@ async def test_create_completion_keeps_temperature_for_non_reasoning_model():
 
     call_args = dummy.chat.completions.create_calls[0]
     assert call_args['temperature'] == 0.4
+
+
+@pytest.mark.asyncio
+async def test_generate_response_does_not_mutate_caller_messages():
+    dummy = DummyOpenAIClient()
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+    messages = [
+        Message(role='system', content='System message'),
+        Message(role='user', content='User message\x00'),
+    ]
+    original = [message.model_dump() for message in messages]
+
+    await client.generate_response(
+        messages,
+        group_id='test-group',
+        attribute_extraction=True,
+    )
+
+    assert [message.model_dump() for message in messages] == original
+    call_args = dummy.chat.completions.create_calls[0]
+    assert 'ATTRIBUTE EXTRACTION:' in call_args['messages'][0]['content']
+    assert 'same language' in call_args['messages'][0]['content']
+    assert '\x00' not in call_args['messages'][-1]['content']
