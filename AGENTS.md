@@ -20,3 +20,26 @@ Author tests alongside features under `tests/`, naming files `test_<feature>.py`
 
 ## Commit & Pull Request Guidelines
 Commits use an imperative, present-tense summary (for example, `add async cache invalidation`) optionally suffixed with the PR number as seen in history (`(#927)`). Squash fixups and keep unrelated changes isolated. Pull requests should include: a concise description, linked tracking issue, notes about schema or API impacts, and screenshots or logs when behavior changes. Confirm `make lint` and `make test` pass locally, and update docs or examples when public interfaces shift.
+
+## Cursor Cloud specific instructions
+
+Dependencies are installed by the startup update script (`uv sync` in the repo root, `server/`, and `mcp_server/`). `uv` lives at `~/.local/bin`; if it is not on `PATH`, prefix commands with `PATH="$HOME/.local/bin:$PATH"`. Set `GRAPHITI_TELEMETRY_ENABLED=false` when running anything to avoid PostHog network calls.
+
+### Graph databases (Neo4j + FalkorDB via Docker)
+Docker has no systemd here — start the daemon manually once per VM: `sudo dockerd > /tmp/dockerd.log 2>&1 &`. Then start the DBs on the host network exactly as CI does (see `.github/workflows/unit_tests.yml`):
+- `sudo docker run -d --name falkordb --network host falkordb/falkordb:latest` (port 6379)
+- `sudo docker run -d --name neo4j --network host -e NEO4J_AUTH=neo4j/testpass -e NEO4J_PLUGINS='["apoc"]' neo4j:5.26-community` (bolt 7687, http 7474)
+
+### Tests (non-obvious)
+- `make test` does NOT set `DISABLE_NEO4J`, so the `graph_driver` fixture stays parametrized on Neo4j and the suite REQUIRES a reachable Neo4j at `bolt://localhost:7687`. With no Neo4j, those tests hang on the driver's connection retry (not an env bug). Run it as `NEO4J_PASSWORD=testpass make test`.
+- `tests/test_add_triplet.py` has pre-existing failures (its mock embedder doesn't stub `create_batch`, so `zip(strict=True)` raises). CI never runs this file, so ignore those 11 failures — they are unrelated to environment setup.
+- The authoritative, fully-green no-DB unit gate is the CI command in `.github/workflows/unit_tests.yml` (`DISABLE_NEO4J=1 DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1` plus the `--ignore` list). The DB-backed unit tests are the `database-integration-tests` job in the same file (needs Neo4j + FalkorDB, uses mock LLMs, no API key).
+- `server/` and `mcp_server/` test suites are live end-to-end tests marked `integration`; they self-skip with exit code 5 when `OPENAI_API_KEY` is unset. This skip is expected, not a failure.
+
+### Running the services (dev mode)
+All three run without a valid OpenAI key for startup/health only; real ingest/search (LLM extraction + embeddings) needs a real `OPENAI_API_KEY`.
+- REST API (`server/`): `OPENAI_API_KEY=<placeholder-or-real> DB_BACKEND=falkordb FALKORDB_HOST=localhost FALKORDB_PORT=6379 uv run uvicorn graph_service.main:app --reload --port 8000`. Health at `/healthcheck`, Swagger at `/docs`. `Settings` requires `OPENAI_API_KEY` to be present (any value) or startup fails.
+- MCP server (`mcp_server/`): `OPENAI_API_KEY=<...> FALKORDB_URI=redis://localhost:6379 uv run python main.py --transport http --host 0.0.0.0 --port 8001 --database-provider falkordb`. Serves streamable HTTP MCP at `/mcp/` (use port 8001 if 8000 is taken by the REST server).
+
+### Backend gotcha
+The FalkorDB async driver drops the connection ("Connection closed by server") when Graphiti issues concurrent queries on one connection (e.g. the gather inside `Graphiti.search`). For local hybrid-search work, prefer the Neo4j backend, which handles concurrent queries reliably.
