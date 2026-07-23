@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.driver import COMMUNITY_INDEX_NAME, GraphProvider
 from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.driver.record_parsers import community_node_from_record
@@ -62,7 +62,7 @@ class NeptuneCommunityNodeOperations(CommunityNodeOperations):
 
         if self._driver is not None:
             self._driver.save_to_aoss(
-                'community_name',
+                COMMUNITY_INDEX_NAME,
                 [{'uuid': node.uuid, 'name': node.name, 'group_id': node.group_id}],
             )
 
