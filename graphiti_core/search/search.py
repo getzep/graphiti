@@ -222,6 +222,7 @@ async def search(
                 config.reranker_min_score,
                 search_tracer,
             ),
+            max_coroutines=getattr(clients, 'max_coroutines', None),
         )
         span.add_attributes(
             {
