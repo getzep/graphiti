@@ -60,8 +60,14 @@ COPY ./server/graph_service ./graph_service
 # This prevents the stale lockfile from pinning an old graphiti-core version
 # When socket_api_key is mounted (official releases), route through sfw;
 # otherwise install directly so public docker builds keep working.
+#
+# sfw can only inspect packages that are actually downloaded, so an enforced
+# build must defeat both caches or a newly flagged package would ship unscanned:
+# SOCKET_SCAN_ID (unique per release run) invalidates this layer, and
+# UV_NO_CACHE stops uv serving wheels from the cache mount below.
 ARG INSTALL_FALKORDB=false
 ARG SOCKET_FIREWALL_ENABLED=false
+ARG SOCKET_SCAN_ID=
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=secret,id=socket_api_key \
     set -eu; \
@@ -73,6 +79,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         exit 1; \
       fi; \
       export SOCKET_API_KEY="$(cat /run/secrets/socket_api_key)"; \
+      export UV_NO_CACHE=1; \
+      echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID})"; \
       UV_CMD="sfw uv"; \
     else \
       echo "socket_api_key absent; installing without Socket Firewall"; \

@@ -82,7 +82,9 @@ jobs:
             exit 1
           fi
 
-          work="$(mktemp -d)"
+          # Stable path so the cache-bust step below reuses this exact context.
+          work="$RUNNER_TEMP/sfw-guard"
+          mkdir -p "$work"
           cat > "$work/Dockerfile" <<'EOF'
           # syntax=docker/dockerfile:1.9
           FROM python:3.12-slim
@@ -103,9 +105,12 @@ jobs:
           RUN sh /uv-installer.sh && rm /uv-installer.sh
           ENV PATH="/root/.local/bin:$PATH"
           ARG SOCKET_FIREWALL_ENABLED=false
+          ARG SOCKET_SCAN_ID=
           # Mirrors Graphiti's conditional enforcement: sfw when secret present,
-          # direct install when absent (public OSS builds).
-          RUN --mount=type=secret,id=socket_api_key \
+          # direct install when absent (public OSS builds). SOCKET_SCAN_ID and
+          # UV_NO_CACHE mirror the release cache-bypass so sfw sees every fetch.
+          RUN --mount=type=cache,target=/root/.cache/uv \
+              --mount=type=secret,id=socket_api_key \
               set -eu; \
               export SFW_TELEMETRY_DISABLED=true; \
               export SFW_CUSTOM_REGISTRIES="wrap:files.pythonhosted.org"; \
@@ -115,11 +120,14 @@ jobs:
                   exit 1; \
                 fi; \
                 export SOCKET_API_KEY="$(cat /run/secrets/socket_api_key)"; \
+                export UV_NO_CACHE=1; \
+                echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID})"; \
                 sfw uv pip install --system six==1.17.0; \
               else \
                 echo "socket_api_key absent; installing without Socket Firewall"; \
                 uv pip install --system six==1.17.0; \
-              fi
+              fi; \
+              date +%s%N > /socket-scan-stamp
           EOF
 
           # --no-cache on both: a secret mount's cache key does not depend on
@@ -136,3 +144,43 @@ jobs:
             -t sfw-guard-fallback "$work"
 
           echo "Conditional Socket Firewall Docker paths verified in both directions"
+
+      - name: Verify a new scan id defeats the layer cache
+        env:
+          SOCKET_API_KEY: ${{ secrets.SOCKET_API_KEY }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/sfw-guard"
+
+          # Deliberately no --no-cache here: the point is to prove that changing
+          # SOCKET_SCAN_ID alone re-runs the install layer. If it did not, a
+          # release could reuse a layer built before a package was flagged.
+          build() {
+            DOCKER_BUILDKIT=1 docker build \
+              --build-arg SOCKET_FIREWALL_ENABLED=true \
+              --build-arg "SOCKET_SCAN_ID=$1" \
+              --secret id=socket_api_key,env=SOCKET_API_KEY \
+              -t "sfw-cachebust:$1" "$work"
+          }
+
+          # Compare a stamp written during the install layer rather than reading
+          # the build log: BuildKit echoes the instruction text even for CACHED
+          # steps, so grepping the log would pass whether or not it re-ran.
+          stamp() { docker run --rm "sfw-cachebust:$1" cat /socket-scan-stamp; }
+
+          build scan-a; first="$(stamp scan-a)"
+          build scan-a; repeat="$(stamp scan-a)"
+          build scan-b; changed="$(stamp scan-b)"
+
+          # Positive control: without it, a build that never caches would make
+          # the assertion below pass vacuously.
+          if [ "$first" != "$repeat" ]; then
+            echo "::error::install layer re-ran for an unchanged SOCKET_SCAN_ID; the cache-bust test proves nothing."
+            exit 1
+          fi
+
+          if [ "$first" = "$changed" ]; then
+            echo "::error::install layer was served from cache despite a new SOCKET_SCAN_ID; sfw would not have seen these downloads."
+            exit 1
+          fi
+          echo "Changing SOCKET_SCAN_ID re-runs the sfw-brokered install layer"

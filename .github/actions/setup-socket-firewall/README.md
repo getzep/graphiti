@@ -51,3 +51,22 @@ layers from public fallback layers in the BuildKit cache. In enforced mode, a
 missing or empty `socket_api_key` fails the build. Dockerfiles default the
 argument to `false` and install directly so community `docker build` / Compose
 usage continues to work without a Socket key.
+
+### Cache bypass on enforced builds
+
+`sfw` inspects network requests, so anything served from cache is never
+scanned. Two caches would otherwise hide dependencies from an enforced release
+build:
+
+- the **BuildKit layer cache**, which skips the install step entirely when its
+  inputs are unchanged
+- the **`uv` cache mount**, which lets `uv` resolve wheels from disk without
+  contacting PyPI even when the step does run
+
+Enforced builds defeat both. Release workflows pass
+`SOCKET_SCAN_ID=<run_id>-<run_attempt>`, which is unique per run and invalidates
+the install layer, and the enforced branch exports `UV_NO_CACHE=1`. Without
+these, an image whose dependencies had not changed could ship a package that
+Socket flagged after the layer was first built. Community builds leave
+`SOCKET_SCAN_ID` empty and keep both caches, so unauthenticated builds stay
+fast.

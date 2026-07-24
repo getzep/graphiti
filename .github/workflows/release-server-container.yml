@@ -140,6 +140,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             SOCKET_FIREWALL_ENABLED=true
+            SOCKET_SCAN_ID=${{ github.run_id }}-${{ github.run_attempt }}
             GRAPHITI_VERSION=${{ steps.version.outputs.version }}
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
             VCS_REF=${{ github.sha }}
