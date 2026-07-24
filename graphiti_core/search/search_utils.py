@@ -279,7 +279,7 @@ async def edge_fulltext_search(
             """
             + get_entity_edge_return_query(driver.provider)
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, e.uuid ASC
             LIMIT $limit
             """
         )
@@ -426,7 +426,7 @@ async def edge_similarity_search(
             """
             + get_entity_edge_return_query(driver.provider)
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, e.uuid ASC
             LIMIT $limit
             """
         )
@@ -649,7 +649,7 @@ async def node_fulltext_search(
             + filter_query
             + """
             WITH n, score
-            ORDER BY score DESC
+            ORDER BY score DESC, n.uuid ASC
             LIMIT $limit
             RETURN
             """
@@ -768,7 +768,7 @@ async def node_similarity_search(
             """
             + get_entity_node_return_query(driver.provider)
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, n.uuid ASC
             LIMIT $limit
             """
         )
@@ -955,7 +955,7 @@ async def episode_fulltext_search(
             """
             + EPISODIC_NODE_RETURN
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, e.uuid ASC
             LIMIT $limit
             """
         )
@@ -1044,7 +1044,7 @@ async def community_fulltext_search(
             """
             + COMMUNITY_NODE_RETURN
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, c.uuid ASC
             LIMIT $limit
             """
         )
@@ -1157,7 +1157,7 @@ async def community_similarity_search(
             """
             + COMMUNITY_NODE_RETURN
             + """
-            ORDER BY score DESC
+            ORDER BY score DESC, c.uuid ASC
             LIMIT $limit
             """
         )
@@ -1785,8 +1785,8 @@ def rrf(
         for i, uuid in enumerate(result):
             scores[uuid] += 1 / (i + rank_const)
 
-    scored_uuids = [term for term in scores.items()]
-    scored_uuids.sort(reverse=True, key=lambda term: term[1])
+    scored_uuids = list(scores.items())
+    scored_uuids.sort(key=lambda term: (-term[1], term[0]))
 
     sorted_uuids = [term[0] for term in scored_uuids]
 
