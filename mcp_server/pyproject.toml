@@ -11,6 +11,8 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0.3",
     "typing-extensions>=4.0.0",
+    "uvicorn>=0.34.3",
+    "starlette>=0.37.0",
 ]
 
 [project.optional-dependencies]

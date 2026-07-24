@@ -5,6 +5,7 @@ Graphiti MCP Server - Exposes Graphiti functionality through the Model Context P
 
 import argparse
 import asyncio
+import hmac
 import logging
 import os
 import sys
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+import uvicorn
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
@@ -20,8 +22,10 @@ from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from config.schema import GraphitiConfig, ServerConfig
 from models.response_types import (
@@ -121,6 +125,33 @@ def configure_uvicorn_logging():
         uvicorn_logger.propagate = False
 
 
+class BearerTokenMiddleware:
+    """ASGI middleware that validates Bearer token against MCP_API_KEY env var.
+
+    When MCP_API_KEY is set, all HTTP requests (except /health) must include
+    a valid Authorization: Bearer <token> header. Returns 401 if missing or invalid.
+    """
+
+    EXEMPT_PATHS = {'/health'}
+
+    def __init__(self, app: ASGIApp, api_key: str):
+        self.app = app
+        self.api_key = api_key
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope['type'] == 'http' and scope.get('path') not in self.EXEMPT_PATHS:
+            headers = dict(scope.get('headers', []))
+            auth = headers.get(b'authorization', b'').decode()
+            token = auth[7:] if auth.startswith('Bearer ') else ''
+            # Timing-safe, exact comparison. compare_digest short-circuits on
+            # length mismatch, so a token that is a prefix of the key is rejected.
+            if not token or not hmac.compare_digest(token, self.api_key):
+                response = Response('Unauthorized', status_code=401)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
 logger = logging.getLogger(__name__)
 
 # Create global config instance - will be properly initialized later
@@ -167,10 +198,29 @@ When searching, use specific queries and consider filtering by group_id, type, o
 server requires a configured database and valid API keys for language-model operations.
 """
 
+# Configure transport security for DNS rebinding protection.
+# FastMCP auto-enables this with a localhost-only allowlist when constructed with the
+# default 127.0.0.1 host. When MCP_HOSTNAMES is set (comma-separated), add each entry to
+# the allowed hosts so non-localhost connections (e.g. from LAN clients or alternative
+# DNS names) are accepted; otherwise fall back to FastMCP's localhost-only defaults.
+def _build_transport_security(raw: str) -> TransportSecuritySettings | None:
+    hostnames = [h.strip() for h in raw.split(',') if h.strip()]
+    if not hostnames:
+        return None  # fall back to FastMCP localhost-only defaults
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[f'{h}:*' for h in hostnames]
+        + ['127.0.0.1:*', 'localhost:*', '[::1]:*'],
+    )
+
+
+_transport_security = _build_transport_security(os.environ.get('MCP_HOSTNAMES', ''))
+
 # MCP server instance
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    transport_security=_transport_security,
 )
 
 # Global services
@@ -1229,6 +1279,15 @@ async def initialize_server() -> ServerConfig:
     return config.server
 
 
+def _wrap_with_auth(app: ASGIApp) -> ASGIApp:
+    """Wrap the ASGI app with Bearer token auth if MCP_API_KEY is set."""
+    mcp_api_key = os.environ.get('MCP_API_KEY')
+    if mcp_api_key:
+        logger.info('Bearer token authentication enabled for MCP endpoint')
+        return BearerTokenMiddleware(app, mcp_api_key)
+    return app
+
+
 async def run_mcp_server():
     """Run the MCP server in the current event loop."""
     # Initialize the server
@@ -1243,7 +1302,20 @@ async def run_mcp_server():
             f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
         )
         logger.info(f'Access the server at: http://{mcp.settings.host}:{mcp.settings.port}/sse')
-        await mcp.run_sse_async()
+
+        app = mcp.sse_app()
+        app = _wrap_with_auth(app)
+
+        configure_uvicorn_logging()
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host=mcp.settings.host,
+                port=mcp.settings.port,
+                log_level=mcp.settings.log_level.lower(),
+            )
+        )
+        await server.serve()
     elif mcp_config.transport == 'http':
         # Use localhost for display if binding to 0.0.0.0
         display_host = 'localhost' if mcp.settings.host == '0.0.0.0' else mcp.settings.host
@@ -1263,10 +1335,20 @@ async def run_mcp_server():
         logger.info('=' * 60)
         logger.info('For MCP clients, connect to the /mcp/ endpoint above')
 
+        app = mcp.streamable_http_app()
+        app = _wrap_with_auth(app)
+
         # Configure uvicorn logging to match our format
         configure_uvicorn_logging()
-
-        await mcp.run_streamable_http_async()
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host=mcp.settings.host,
+                port=mcp.settings.port,
+                log_level=mcp.settings.log_level.lower(),
+            )
+        )
+        await server.serve()
     else:
         raise ValueError(
             f'Unsupported transport: {mcp_config.transport}. Use "sse", "stdio", or "http"'
