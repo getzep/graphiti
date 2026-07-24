@@ -600,6 +600,34 @@ graphiti = Graphiti(
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
 
+For a hosted OpenAI-compatible gateway, keep `OpenAIGenericClient` and point `base_url` at the provider's `/v1`
+endpoint. For example, [DaoXE](https://daoxe.com) exposes multi-protocol access (OpenAI Chat Completions, OpenAI
+Responses, and Anthropic Messages); Graphiti's Python path below uses Chat Completions at `https://daoxe.com/v1`.
+
+Use the model IDs from your DaoXE account catalog (IDs are account-scoped and change over time — do not hardcode a
+static public list). Embeddings may need a separate embedding-capable model or provider if your catalog does not
+include one.
+
+```python
+import os
+
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+# Chat Completions base. Prefer models that reliably return structured JSON for Graphiti extraction.
+llm_config = LLMConfig(
+    api_key=os.environ["DAOXE_API_KEY"],
+    model=os.environ["DAOXE_MODEL"],  # e.g. an account-scoped chat model id from https://daoxe.com
+    small_model=os.environ.get("DAOXE_SMALL_MODEL", os.environ["DAOXE_MODEL"]),
+    base_url="https://daoxe.com/v1",
+)
+
+llm_client = OpenAIGenericClient(config=llm_config)
+```
+
+If you are in mainland China and cannot reach `daoxe.com`, use the regional endpoint documented on the DaoXE site
+instead of hardcoding an alternate host here.
+
 ### Structured output and small models
 
 Graphiti depends on structured (JSON) output for entity/edge extraction and deduplication, and works best with models
