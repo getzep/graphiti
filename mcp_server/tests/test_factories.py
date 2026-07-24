@@ -14,11 +14,15 @@ from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
 from config.schema import (
+    AnthropicProviderConfig,
     AzureOpenAIProviderConfig,
+    GeminiProviderConfig,
+    GroqProviderConfig,
     LLMConfig,
     LLMProvidersConfig,
     OpenAIProviderConfig,
 )
+from services import factories
 from services.factories import (
     LLMClientFactory,
     is_non_openai_provider,
@@ -152,3 +156,69 @@ class TestAzureReasoningEffort:
         client = LLMClientFactory.create(self._config('gpt-4.1'))
         assert isinstance(client, AzureOpenAILLMClient)
         assert client.reasoning is None
+
+
+class TestNonOpenAITemperatureDefault:
+    """Anthropic/Gemini/Groq pass temperature to their APIs verbatim.
+
+    The MCP temperature defaults to None; sending it through would be rejected
+    (e.g. Anthropic 400, #1103). The factory must omit it when unset so core's
+    LLMConfig default (1.0) applies, while preserving an explicit value.
+    """
+
+    class _DummyClient:
+        def __init__(self, config, **kwargs):
+            self.config = config
+            self.temperature = config.temperature
+            self.kwargs = kwargs
+
+    @staticmethod
+    def _config(provider: str, temperature: float | None) -> LLMConfig:
+        providers = LLMProvidersConfig()
+        if provider == 'anthropic':
+            providers.anthropic = AnthropicProviderConfig(api_key='test-anthropic-key')
+            model = 'claude-sonnet-4-5-20250929'
+        elif provider == 'gemini':
+            providers.gemini = GeminiProviderConfig(api_key='test-gemini-key')
+            model = 'gemini-2.5-pro'
+        elif provider == 'groq':
+            providers.groq = GroqProviderConfig(
+                api_key='test-groq-key', api_url='https://api.groq.com/openai/v1'
+            )
+            model = 'llama-3.3-70b-versatile'
+        else:
+            raise ValueError(f'Unsupported provider for test: {provider}')
+        return LLMConfig(
+            provider=provider,
+            model=model,
+            temperature=temperature,
+            max_tokens=2048,
+            providers=providers,
+        )
+
+    @pytest.mark.parametrize(
+        ('provider', 'has_flag', 'client_attr'),
+        [
+            ('anthropic', 'HAS_ANTHROPIC', 'AnthropicClient'),
+            ('gemini', 'HAS_GEMINI', 'GeminiClient'),
+            ('groq', 'HAS_GROQ', 'GroqClient'),
+        ],
+    )
+    def test_none_temperature_falls_back_to_core_default(
+        self, monkeypatch, provider, has_flag, client_attr
+    ):
+        monkeypatch.setattr(factories, has_flag, True)
+        monkeypatch.setattr(factories, client_attr, self._DummyClient, raising=False)
+
+        client = LLMClientFactory.create(self._config(provider, temperature=None))
+
+        # core LLMConfig default temperature is 1.0 (not None)
+        assert client.temperature == 1
+
+    def test_explicit_temperature_is_preserved(self, monkeypatch):
+        monkeypatch.setattr(factories, 'HAS_ANTHROPIC', True)
+        monkeypatch.setattr(factories, 'AnthropicClient', self._DummyClient, raising=False)
+
+        client = LLMClientFactory.create(self._config('anthropic', temperature=0.42))
+
+        assert client.temperature == 0.42
