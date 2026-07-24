@@ -16,7 +16,7 @@ limitations under the License.
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SearchInterface(BaseModel):
@@ -32,6 +32,8 @@ class SearchInterface(BaseModel):
         - EntityNode, EpisodicNode, CommunityNode from graphiti_core.nodes
         - EntityEdge from graphiti_core.edges
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     async def edge_fulltext_search(
         self,
@@ -347,5 +349,3 @@ class SearchInterface(BaseModel):
         """
         raise NotImplementedError
 
-    class Config:
-        arbitrary_types_allowed = True
