@@ -230,8 +230,8 @@ class FalkorDriver(GraphDriver):
         return self._graph_ops
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
-        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
-        if graph_name is None:
+        # FalkorDB requires a non-empty database name for multi-tenant graphs; the default is "default_db"
+        if not graph_name:
             graph_name = self._database
         return self.client.select_graph(graph_name)
 
@@ -325,6 +325,13 @@ class FalkorDriver(GraphDriver):
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
         """
+        # An empty group_id must not become an empty graph name: falkordb-py's
+        # select_graph('') raises a misleading TypeError ("Expected a string
+        # parameter, but received <class 'str'>"). Fall back to the current
+        # database instead. See #1650.
+        if not database:
+            database = self._database
+
         if database == self._database:
             cloned = self
         elif database == self.default_group_id:
