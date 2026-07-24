@@ -186,7 +186,7 @@ def test_lucene_sanitize():
     queries = [
         (
             'This has every escape character + - && || ! ( ) { } [ ] ^ " ~ * ? : \\ /',
-            '\\This has every escape character \\+ \\- \\&\\& \\|\\| \\! \\( \\) \\{ \\} \\[ \\] \\^ \\" \\~ \\* \\? \\: \\\\ \\/',
+            'This has every escape character \\+ \\- \\&\\& \\|\\| \\! \\( \\) \\{ \\} \\[ \\] \\^ \\" \\~ \\* \\? \\: \\\\ \\/',
         ),
         ('this has no escape characters', 'this has no escape characters'),
     ]
@@ -194,6 +194,29 @@ def test_lucene_sanitize():
     for query, assert_result in queries:
         result = lucene_sanitize(query)
         assert assert_result == result
+
+
+def test_lucene_sanitize_preserves_uppercase_words():
+    # Regression test for #1302: lucene_sanitize must NOT escape individual
+    # uppercase letters (O R N T A D). Only the Lucene boolean operators
+    # AND / OR / NOT should be escaped, and only as whole words.
+    queries = [
+        # Plain uppercase tokens must be left untouched.
+        ('NORD stream', 'NORD stream'),
+        ('EBITDA forecast', 'EBITDA forecast'),
+        ('DATA', 'DATA'),
+        # Boolean operators are still escaped, but only as whole words.
+        ('cats AND dogs', 'cats \\AND dogs'),
+        ('foo OR bar', 'foo \\OR bar'),
+        ('NOT spam', '\\NOT spam'),
+        # A whole-word operator embedded in another word must NOT be escaped.
+        ('ANDES mountains', 'ANDES mountains'),
+        ('NORTH', 'NORTH'),
+    ]
+
+    for query, assert_result in queries:
+        result = lucene_sanitize(query)
+        assert assert_result == result, f'{query!r} -> {result!r} (expected {assert_result!r})'
 
 
 async def get_node_count(driver: GraphDriver, uuids: list[str]) -> int:
