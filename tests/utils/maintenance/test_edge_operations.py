@@ -330,6 +330,69 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
     assert resolved_edge.uuid == related_edge_0.uuid
     assert episode.uuid in resolved_edge.episodes
 
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_resolves_cross_list_duplicates(mock_llm_client):
+    """Test that resolve_extracted_edge correctly handles duplicate citations pointing to invalidation candidates (existing_edges)."""
+    # LLM identifies the candidate in existing_edges as a duplicate
+    # len(related_edges) = 0, so index 0 corresponds to existing_edges[0]
+    mock_llm_client.generate_response.return_value = {
+        'duplicate_facts': [0],
+        'contradicted_facts': [],
+    }
+
+    extracted_edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='test_edge',
+        group_id='group_1',
+        fact='User likes yoga',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Episode content',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    existing_edge_0 = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='other_target_uuid',
+        name='test_edge',
+        group_id='group_1',
+        fact='User practices yoga',
+        episodes=['episode_1'],
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+        valid_at=None,
+        invalid_at=None,
+    )
+
+    resolved_edge, invalidated, duplicates = await resolve_extracted_edge(
+        mock_llm_client,
+        extracted_edge,
+        [],  # empty related_edges
+        [existing_edge_0],  # existing_edges (invalidation candidates)
+        episode,
+        edge_type_candidates=None,
+    )
+
+    # Verify LLM was called
+    mock_llm_client.generate_response.assert_called_once()
+
+    # Verify that the duplicate was correctly identified from existing_edges
+    assert len(duplicates) == 1
+    assert existing_edge_0 in duplicates
+    assert resolved_edge.uuid == existing_edge_0.uuid
+    assert episode.uuid in resolved_edge.episodes
+    assert invalidated == []
+
 
 @pytest.mark.asyncio
 async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
