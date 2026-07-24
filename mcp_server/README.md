@@ -251,6 +251,25 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 
 You can set these variables in a `.env` file in the project directory.
 
+### Search tuning (env vars, prefix `SEARCH__`)
+
+These knobs tune the `search_memory_facts` and `search_nodes` tools. They are
+nested config, so the env prefix is `SEARCH__` (double underscore).
+
+| Var | Default | Purpose |
+|---|---|---|
+| `SEARCH__RERANKER` | `rrf` | `rrf` (reciprocal-rank fusion; relevance-ordered and diverse — the reliable default), `mmr` (diversity-aware but miscalibrated for low-magnitude embedding similarities — validate before use), or `cross_encoder`. |
+| `SEARCH__MMR_LAMBDA` | `0.5` | MMR relevance/diversity tradeoff; 1.0 = no diversity. Only used when reranker is `mmr`. |
+| `SEARCH__RERANKER_MIN_SCORE` | `0.0` | Min score to keep a result. Only meaningful for `cross_encoder`; ignored for `mmr` (which must not filter) and left at 0 for `rrf`. |
+| `SEARCH__MAX_FACTS` | `6` | Default result count for `search_memory_facts`. |
+| `SEARCH__MAX_NODES` | `6` | Default result count for `search_nodes`. |
+| `SEARCH__EXCLUDE_INVALIDATED` | `true` | Exclude superseded/expired facts by default. Per-call override: `include_invalidated=true`. |
+
+**Cross-encoder caveat:** `SEARCH__RERANKER=cross_encoder` gives a true relevance
+floor but requires a cross-encoder client configured on the Graphiti instance and
+adds a model call per search (latency + another provider dependency). It is **not**
+the default; validate reliability before enabling.
+
 ## Running the Server
 
 ### Default Setup (FalkorDB Combined Container)

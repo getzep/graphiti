@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -247,6 +247,38 @@ class EdgeTypeMapEntry(BaseModel):
     )
 
 
+class SearchTuningConfig(BaseModel):
+    """Tuning knobs for the MCP search tools (search_nodes / search_memory_facts)."""
+
+    reranker: Literal['rrf', 'mmr', 'cross_encoder'] = Field(
+        default='rrf',
+        description="Reranker for hybrid search. 'rrf' is plain reciprocal-rank "
+        "fusion (the reliable default: relevance-ordered, diverse). 'mmr' penalizes "
+        'redundancy but is miscalibrated for low-magnitude embedding similarities '
+        '(it can rank outliers over relevant clustered facts); validate before use. '
+        "'cross_encoder' scores true relevance but requires a configured "
+        'cross-encoder client and adds a model call per search.',
+    )
+    mmr_lambda: float = Field(
+        default=0.5,
+        description='MMR relevance/diversity tradeoff (1.0 = pure relevance, no '
+        'diversity; lower = more diversity). Only used when reranker == mmr.',
+    )
+    reranker_min_score: float = Field(
+        default=0.0,
+        description='Minimum reranker score to keep a result. Meaningful only for '
+        'cross_encoder (0-1 calibrated); ignored for mmr (which must not filter) '
+        'and left at 0 for rrf.',
+    )
+    max_facts: int = Field(default=6, description='Default max facts for search_memory_facts')
+    max_nodes: int = Field(default=6, description='Default max nodes for search_nodes')
+    exclude_invalidated: bool = Field(
+        default=True,
+        description='Exclude superseded/expired edges from fact search by default. '
+        'Clients can opt back in per call with include_invalidated=True.',
+    )
+
+
 class GraphitiAppConfig(BaseModel):
     """Graphiti-specific configuration."""
 
@@ -271,6 +303,7 @@ class GraphitiConfig(BaseSettings):
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
+    search: SearchTuningConfig = Field(default_factory=SearchTuningConfig)
 
     # Additional server options
     destroy_graph: bool = Field(default=False, description='Clear graph on startup')

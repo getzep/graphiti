@@ -8,7 +8,7 @@ from graphiti_core.nodes import EntityNode
 from models.response_types import EdgeResult, NodeResult
 
 
-def to_node_result(node: EntityNode) -> NodeResult:
+def to_node_result(node: EntityNode, score: float | None = None) -> NodeResult:
     """Build a NodeResult TypedDict from an EntityNode, dropping embeddings."""
     attrs = node.attributes if node.attributes else {}
     attrs = {k: v for k, v in attrs.items() if 'embedding' not in k.lower()}
@@ -20,10 +20,11 @@ def to_node_result(node: EntityNode) -> NodeResult:
         summary=node.summary,
         group_id=node.group_id,
         attributes=attrs,
+        score=score,
     )
 
 
-def to_edge_result(edge: EntityEdge) -> EdgeResult:
+def to_edge_result(edge: EntityEdge, score: float | None = None) -> EdgeResult:
     """Build an EdgeResult TypedDict from an EntityEdge."""
     return EdgeResult(
         uuid=edge.uuid,
@@ -35,6 +36,7 @@ def to_edge_result(edge: EntityEdge) -> EdgeResult:
         created_at=edge.created_at.isoformat() if edge.created_at else None,
         valid_at=edge.valid_at.isoformat() if edge.valid_at else None,
         invalid_at=edge.invalid_at.isoformat() if edge.invalid_at else None,
+        score=score,
     )
 
 
@@ -61,13 +63,14 @@ def format_node_result(node: EntityNode) -> dict[str, Any]:
     return result
 
 
-def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
-    """Format an entity edge into a readable result.
+def format_fact_result(edge: EntityEdge, score: float | None = None) -> dict[str, Any]:
+    """Format an entity edge into a readable result, including its rerank score.
 
     Since EntityEdge is a Pydantic BaseModel, we can use its built-in serialization capabilities.
 
     Args:
         edge: The EntityEdge to format
+        score: Optional reranker score for this edge
 
     Returns:
         A dictionary representation of the edge with serialized dates and excluded embeddings
@@ -79,4 +82,5 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
         },
     )
     result.get('attributes', {}).pop('fact_embedding', None)
+    result['score'] = score
     return result
