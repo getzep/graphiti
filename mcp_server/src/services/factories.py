@@ -163,7 +163,11 @@ class LLMClientFactory:
                 if use_generic_client:
                     # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
                     # This uses the standard Chat Completions API instead of Responses API
-                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens)
+                    return OpenAIGenericClient(
+                        config=llm_config,
+                        max_tokens=config.max_tokens,
+                        structured_output_mode=config.structured_output_mode,
+                    )
                 else:
                     # Use OpenAIClient for official OpenAI API (supports Responses API).
                     # Reasoning models get a reasoning effort; others must not.
