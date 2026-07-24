@@ -768,14 +768,18 @@ class GraphOperationsInterface(BaseModel):
     async def remove_communities(
         self,
         driver: Any,
+        group_ids: list[str] | None = None,
     ) -> None:
         """
-        Delete all community nodes from the graph.
+        Delete community nodes from the graph.
 
-        This removes all Community-labeled nodes and their relationships.
+        This removes Community-labeled nodes and their relationships. When
+        group_ids is provided, only communities in those groups are removed;
+        otherwise all communities are removed.
 
         Args:
             driver: GraphDriver instance
+            group_ids: Optional list of group ids to scope the removal to
         """
         raise NotImplementedError
 
