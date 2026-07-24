@@ -1719,6 +1719,61 @@ async def get_edge_invalidation_candidates(
                     }) AS matches
                 """
             )
+        elif driver.provider == GraphProvider.NEO4J:
+            # Bound the per-edge candidate set INSIDE a subquery, before collect().
+            #
+            # The portable form below (collect(...)[..$limit]) materialises every matching
+            # edge - each carrying fact_embedding, plus properties(e) which repeats the same
+            # embedding - and only then keeps $limit of them. Because the match is on either
+            # endpoint, an entity with a high RELATES_TO degree pulls its whole neighbourhood
+            # into transaction memory to return 10 rows.
+            #
+            # Measured on Neo4j 5.26 with ~101k RELATES_TO edges and 1024-dim embeddings: a
+            # single call peaked at 712 MiB against a 716.8 MiB transaction pool, and still
+            # exhausted the pool after it was raised to 1.4 GiB. Cost scales with the degree
+            # of the busiest entity, so it grows without bound as a graph fills up.
+            #
+            # Neo4j's CALL subquery applies ORDER BY + LIMIT per `edge` row, so only $limit
+            # rows per candidate ever materialise. Same rows returned, same order.
+            query = (
+                """
+                UNWIND $edges AS edge
+                CALL {
+                    WITH edge
+                    MATCH (n:Entity)-[e:RELATES_TO {group_id: edge.group_id}]->(m:Entity)
+                    WHERE n.uuid IN [edge.source_node_uuid, edge.target_node_uuid] OR m.uuid IN [edge.target_node_uuid, edge.source_node_uuid]
+                """
+                + filter_query
+                + """
+                    WITH e, """
+                + get_vector_cosine_func_query(
+                    'e.fact_embedding', 'edge.fact_embedding', driver.provider
+                )
+                + """ AS score
+                    WHERE score > $min_score
+                    RETURN e, score
+                    ORDER BY score DESC
+                    LIMIT $limit
+                }
+                RETURN
+                    edge.uuid AS search_edge_uuid,
+                    collect({
+                        uuid: e.uuid,
+                        source_node_uuid: startNode(e).uuid,
+                        target_node_uuid: endNode(e).uuid,
+                        created_at: e.created_at,
+                        name: e.name,
+                        group_id: e.group_id,
+                        fact: e.fact,
+                        fact_embedding: e.fact_embedding,
+                        episodes: e.episodes,
+                        expired_at: e.expired_at,
+                        valid_at: e.valid_at,
+                        invalid_at: e.invalid_at,
+                        attributes: properties(e)
+                    }) AS matches
+                """
+            )
         else:
             query = (
                 """
