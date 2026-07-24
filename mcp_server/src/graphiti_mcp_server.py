@@ -126,6 +126,28 @@ logger = logging.getLogger(__name__)
 # Create global config instance - will be properly initialized later
 config: GraphitiConfig
 
+
+def _get_graphiti_core_version(
+    version_file: Path = Path('/app/.graphiti-core-version'),
+) -> str | None:
+    try:
+        import graphiti_core
+
+        graphiti_version = getattr(graphiti_core, '__version__', None)
+    except Exception:
+        graphiti_version = None
+
+    if graphiti_version and graphiti_version != 'unknown':
+        return graphiti_version
+
+    if version_file.exists():
+        graphiti_version = version_file.read_text().strip()
+        if graphiti_version:
+            return graphiti_version
+
+    return None
+
+
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
 Graphiti is a memory service for AI agents built on a temporally-aware knowledge graph. It performs
@@ -1183,20 +1205,11 @@ async def initialize_server() -> ServerConfig:
     logger.info(f'  - Group ID: {config.graphiti.group_id}')
     logger.info(f'  - Transport: {config.server.transport}')
 
-    # Log graphiti-core version
-    try:
-        import graphiti_core
-
-        graphiti_version = getattr(graphiti_core, '__version__', 'unknown')
+    graphiti_version = _get_graphiti_core_version()
+    if graphiti_version:
         logger.info(f'  - Graphiti Core: {graphiti_version}')
-    except Exception:
-        # Check for Docker-stored version file
-        version_file = Path('/app/.graphiti-core-version')
-        if version_file.exists():
-            graphiti_version = version_file.read_text().strip()
-            logger.info(f'  - Graphiti Core: {graphiti_version}')
-        else:
-            logger.info('  - Graphiti Core: version unavailable')
+    else:
+        logger.info('  - Graphiti Core: version unavailable')
 
     # Handle graph destruction if requested
     if hasattr(config, 'destroy_graph') and config.destroy_graph:
