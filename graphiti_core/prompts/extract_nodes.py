@@ -520,6 +520,8 @@ Each summary must be under {MAX_SUMMARY_CHARS} characters.
 
 {summary_instructions}
 
+{context['custom_extraction_instructions']}
+
 <MESSAGES>
 {to_prompt_json(context['previous_episodes'])}
 {to_prompt_json(context['episode_content'])}
@@ -625,6 +627,8 @@ Preserve all material names, roles, dates, counts, and changes over time that ar
 
 For each entity below, generate an updated summary using ONLY the provided EPISODES and any \
 existing summary already on the entity.
+
+{context['custom_extraction_instructions']}
 
 <EPISODES>
 {to_prompt_json(context['previous_episodes'])}
