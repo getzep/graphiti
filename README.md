@@ -600,6 +600,25 @@ graphiti = Graphiti(
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
 
+For a hosted OpenAI-compatible provider, keep the same client and point `base_url` at the provider's `/v1` endpoint.
+For example, TokenLab can be configured with:
+
+```python
+import os
+
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+llm_config = LLMConfig(
+    api_key=os.environ["TOKENLAB_API_KEY"],
+    model="claude-sonnet-5",
+    small_model="gpt-5.4-mini",
+    base_url="https://api.tokenlab.sh/v1",
+)
+
+llm_client = OpenAIGenericClient(config=llm_config)
+```
+
 ### Structured output and small models
 
 Graphiti depends on structured (JSON) output for entity/edge extraction and deduplication, and works best with models
