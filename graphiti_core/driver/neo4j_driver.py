@@ -183,7 +183,8 @@ class Neo4jDriver(GraphDriver):
                 self._init_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await self._init_task
-            else:
+            elif not self._init_task.cancelled():
+                # Retrieve any exception so it doesn't go unobserved
                 self._init_task.exception()
         await self.client.close()
 

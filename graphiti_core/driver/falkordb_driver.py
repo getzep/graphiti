@@ -278,7 +278,8 @@ class FalkorDriver(GraphDriver):
                 self._init_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await self._init_task
-            else:
+            elif not self._init_task.cancelled():
+                # Retrieve any exception so it doesn't go unobserved
                 self._init_task.exception()
         if hasattr(self.client, 'aclose'):
             await self.client.aclose()  # type: ignore[reportUnknownMemberType]
