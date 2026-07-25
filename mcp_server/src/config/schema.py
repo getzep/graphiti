@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -190,6 +190,13 @@ class FalkorDBProviderConfig(BaseModel):
     username: str | None = None
     password: str | None = None
     database: str = 'default_db'
+    group_routing: Literal['database', 'record'] = Field(
+        default='database',
+        description=(
+            'FalkorDB group routing mode: database maps each group_id to its own graph; '
+            'record keeps database fixed and filters records by group_id.'
+        ),
+    )
 
 
 class DatabaseProvidersConfig(BaseModel):
@@ -324,6 +331,10 @@ class GraphitiConfig(BaseSettings):
         # Override database settings
         if hasattr(args, 'database_provider') and args.database_provider:
             self.database.provider = args.database_provider
+        if hasattr(args, 'falkordb_group_routing') and args.falkordb_group_routing:
+            if self.database.providers.falkordb is None:
+                self.database.providers.falkordb = FalkorDBProviderConfig()
+            self.database.providers.falkordb.group_routing = args.falkordb_group_routing
 
         # Override Graphiti settings
         if hasattr(args, 'group_id') and args.group_id:

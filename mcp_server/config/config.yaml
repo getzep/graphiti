@@ -78,6 +78,7 @@ database:
       uri: ${FALKORDB_URI:redis://localhost:6379}
       password: ${FALKORDB_PASSWORD:}
       database: ${FALKORDB_DATABASE:default_db}
+      group_routing: ${FALKORDB_GROUP_ROUTING:database}
 
     neo4j:
       uri: ${NEO4J_URI:bolt://localhost:7687}

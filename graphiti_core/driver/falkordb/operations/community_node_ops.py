@@ -17,7 +17,10 @@ limitations under the License.
 import logging
 from typing import Any
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.falkordb.operations.group_routing import (
+    should_route_group_ids_to_databases,
+)
 from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.driver.record_parsers import community_node_from_record
@@ -163,11 +166,7 @@ class FalkorCommunityNodeOperations(CommunityNodeOperations):
         # namespace/ops path receives the base driver (default_db), so a
         # single-group read must be cloned to the group's graph or it queries
         # an empty default database and returns nothing.
-        if (
-            isinstance(executor, GraphDriver)
-            and executor.provider == GraphProvider.FALKORDB
-            and group_ids
-        ):
+        if should_route_group_ids_to_databases(executor, group_ids):
             if len(group_ids) == 1:
                 executor = executor.clone(database=group_ids[0])
             else:

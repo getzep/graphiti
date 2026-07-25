@@ -479,6 +479,7 @@ class DatabaseDriverFactory:
                     'username': username,
                     'password': password,
                     'database': falkor_config.database,
+                    'group_routing': falkor_config.group_routing,
                 }
 
             case _:

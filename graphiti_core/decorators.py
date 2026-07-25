@@ -60,7 +60,7 @@ def handle_multiple_group_ids(func: F) -> F:
         if is_falkor and group_ids and len(group_ids) == 1:
             gid = group_ids[0]
             driver = self.clients.driver
-            if gid != getattr(driver, '_database', None):
+            if driver.should_route_group_id_to_database(gid):
                 return await func(
                     self,
                     *args,
@@ -72,6 +72,11 @@ def handle_multiple_group_ids(func: F) -> F:
         if is_falkor and group_ids and len(group_ids) > 1:
             # Execute for each group_id concurrently
             driver = self.clients.driver
+            routed_group_ids = [
+                gid for gid in group_ids if driver.should_route_group_id_to_database(gid)
+            ]
+            if not routed_group_ids:
+                return await func(self, *args, **kwargs)
 
             async def execute_for_group(gid: str):
                 # Remove group_ids from args if it was passed positionally

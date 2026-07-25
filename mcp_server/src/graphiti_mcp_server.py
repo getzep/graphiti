@@ -235,6 +235,7 @@ class GraphitiService:
                         username=db_config.get('username'),
                         password=db_config['password'],
                         database=db_config['database'],
+                        group_routing=db_config['group_routing'],
                     )
 
                     self.client = Graphiti(
@@ -1132,6 +1133,14 @@ async def initialize_server() -> ServerConfig:
         '--database-provider',
         choices=['neo4j', 'falkordb'],
         help='Database provider to use',
+    )
+    parser.add_argument(
+        '--falkordb-group-routing',
+        choices=['database', 'record'],
+        help=(
+            'FalkorDB group routing mode. database maps each group_id to its own graph; '
+            'record keeps the configured Falkor graph fixed and filters by group_id.'
+        ),
     )
 
     # LLM configuration arguments

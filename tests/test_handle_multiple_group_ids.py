@@ -23,14 +23,23 @@ from graphiti_core.driver.driver import GraphProvider
 
 
 class _FakeDriver:
-    def __init__(self, database: str, provider: GraphProvider = GraphProvider.FALKORDB):
+    def __init__(
+        self,
+        database: str,
+        provider: GraphProvider = GraphProvider.FALKORDB,
+        group_routing: str = 'database',
+    ):
         self._database = database
         self.provider = provider
+        self.group_routing = group_routing
         self.clone_calls: list[str] = []
 
     def clone(self, database: str) -> '_FakeDriver':
         self.clone_calls.append(database)
-        return _FakeDriver(database, self.provider)
+        return _FakeDriver(database, self.provider, self.group_routing)
+
+    def should_route_group_id_to_database(self, group_id: str) -> bool:
+        return self.group_routing == 'database' and group_id != self._database
 
 
 class _Host:
@@ -90,6 +99,32 @@ async def test_falkor_multi_group_ids_still_clones_each():
     assert host.clients.driver is driver
     assert set(host.seen_drivers) == {'a', 'b'}
     assert sorted(result) == ["q:a:['a']", "q:b:['b']"]
+
+
+@pytest.mark.asyncio
+async def test_falkor_record_group_routing_keeps_single_group_on_current_database():
+    driver = _FakeDriver('graphiti_personal', group_routing='record')
+    host = _Host(driver)
+
+    result = await host.search('q', group_ids=['harmony-cloud-shared-brain'])
+
+    assert driver.clone_calls == []
+    assert host.clients.driver is driver
+    assert host.seen_drivers == [None]
+    assert result == ["q:None:['harmony-cloud-shared-brain']"]
+
+
+@pytest.mark.asyncio
+async def test_falkor_record_group_routing_keeps_multi_group_search_in_one_database():
+    driver = _FakeDriver('graphiti_personal', group_routing='record')
+    host = _Host(driver)
+
+    result = await host.search('q', group_ids=['harmony-cloud-shared-brain', 'codex'])
+
+    assert driver.clone_calls == []
+    assert host.clients.driver is driver
+    assert host.seen_drivers == [None]
+    assert result == ["q:None:['harmony-cloud-shared-brain', 'codex']"]
 
 
 @pytest.mark.asyncio
