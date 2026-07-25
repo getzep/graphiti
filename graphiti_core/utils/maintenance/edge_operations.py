@@ -761,9 +761,8 @@ async def resolve_extracted_edge(
         # directly instead of discarding a correct verdict as "invalid."
         resolved_edge = existing_edges[cross_list_duplicates[0] - len(related_edges)]
     
-    if (duplicate_fact_ids or cross_list_duplicates) and episode is not None:
-        if episode.uuid not in resolved_edge.episodes:
-            resolved_edge.episodes.append(episode.uuid)
+    if (duplicate_fact_ids or cross_list_duplicates) and episode is not None and episode.uuid not in resolved_edge.episodes:
+        resolved_edge.episodes.append(episode.uuid)
 
     if related_edges or existing_edges:
         invalid_contradictions = [i for i in contradicted_facts if i < 0 or i > max_valid_idx]
