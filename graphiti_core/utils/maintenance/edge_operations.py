@@ -750,7 +750,7 @@ async def resolve_extracted_edge(
             truly_invalid_duplicates,
             max_valid_idx,
         )
-    
+
     resolved_edge = extracted_edge
     for duplicate_facts_id in duplicate_fact_ids:
         resolved_edge = related_edges[duplicate_facts_id]
@@ -760,8 +760,12 @@ async def resolve_extracted_edge(
         # Duplicate cited only against an invalidation candidate — merge into it
         # directly instead of discarding a correct verdict as "invalid."
         resolved_edge = existing_edges[cross_list_duplicates[0] - len(related_edges)]
-    
-    if (duplicate_fact_ids or cross_list_duplicates) and episode is not None and episode.uuid not in resolved_edge.episodes:
+
+    if (
+        (duplicate_fact_ids or cross_list_duplicates)
+        and episode is not None
+        and episode.uuid not in resolved_edge.episodes
+    ):
         resolved_edge.episodes.append(episode.uuid)
 
     if related_edges or existing_edges:
@@ -851,7 +855,9 @@ async def resolve_extracted_edge(
     )
     duplicate_edges: list[EntityEdge] = [related_edges[idx] for idx in duplicate_fact_ids]
     if not duplicate_fact_ids and cross_list_duplicates:
-        duplicate_edges = [existing_edges[idx - len(related_edges)] for idx in cross_list_duplicates]
+        duplicate_edges = [
+            existing_edges[idx - len(related_edges)] for idx in cross_list_duplicates
+        ]
 
     return resolved_edge, invalidated_edges, duplicate_edges
 

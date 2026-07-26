@@ -330,6 +330,7 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
     assert resolved_edge.uuid == related_edge_0.uuid
     assert episode.uuid in resolved_edge.episodes
 
+
 @pytest.mark.asyncio
 async def test_resolve_extracted_edge_resolves_cross_list_duplicates(mock_llm_client):
     """Test that resolve_extracted_edge correctly handles duplicate citations pointing to invalidation candidates (existing_edges)."""
