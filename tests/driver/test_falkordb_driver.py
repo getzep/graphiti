@@ -463,3 +463,52 @@ class TestFalkorDriverIntegration:
 
         except Exception as e:
             pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_retrieve_episodes_with_non_utc_valid_at(self):
+        """Episodes saved with a non-UTC offset must be found by a UTC reference time.
+
+        Regression test: valid_at was serialized with its original offset and
+        compared lexicographically against a UTC reference string, so an episode
+        at 10:00 UTC written as 13:00+03:00 was missed by a 10:30 UTC reference.
+        """
+        pytest.importorskip('falkordb')
+
+        from datetime import timedelta
+
+        from graphiti_core.nodes import EpisodeType, EpisodicNode
+        from graphiti_core.utils.datetime_utils import utc_now
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_tz_episodes')
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            tz_plus_3 = timezone(timedelta(hours=3))
+            episode = EpisodicNode(
+                name='ep-tz',
+                group_id='tz_group',
+                source=EpisodeType.text,
+                source_description='test',
+                content='timezone regression content',
+                # 13:00+03:00 is 10:00 UTC
+                valid_at=datetime(2024, 1, 1, 13, 0, tzinfo=tz_plus_3),
+                created_at=utc_now(),
+            )
+            await driver.episode_node_ops.save(driver, episode)
+
+            reference = datetime(2024, 1, 1, 10, 30, tzinfo=timezone.utc)
+            episodes = await driver.episode_node_ops.retrieve_episodes(
+                driver, reference, last_n=5, group_ids=['tz_group']
+            )
+
+            assert [e.name for e in episodes] == ['ep-tz']
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()
