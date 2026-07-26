@@ -365,9 +365,16 @@ class EntityEdge(Edge):
             for k, v in (self.attributes or {}).items():
                 if k not in edge_data:
                     edge_data[k] = v
+            extra_params: dict[str, Any] = {}
+            if driver.provider == GraphProvider.FALKORDB:
+                # Pass the MATCH keys separately so `SET e = $edge_data` does not
+                # persist them as edge properties that leak into attributes.
+                extra_params['source_uuid'] = edge_data.pop('source_uuid')
+                extra_params['target_uuid'] = edge_data.pop('target_uuid')
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
                 edge_data=edge_data,
+                **extra_params,
             )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
