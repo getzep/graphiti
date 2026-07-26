@@ -677,7 +677,7 @@ class FalkorSearchOperations(SearchOperations):
                 scores[uuid] = float('inf')
 
         sorted_uuids = list(node_uuids)
-        sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+        sorted_uuids.sort(reverse=True, key=lambda cur_uuid: scores[cur_uuid])
 
         reranked_uuids = [u for u in sorted_uuids if scores[u] >= min_score]
 
