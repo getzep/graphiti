@@ -64,8 +64,8 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
     match provider:
         case GraphProvider.FALKORDB:
             return """
-                MATCH (source:Entity {uuid: $edge_data.source_uuid})
-                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MATCH (source:Entity {uuid: $source_uuid})
+                MATCH (target:Entity {uuid: $target_uuid})
                 MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
                 SET e = $edge_data
                 SET e.fact_embedding = vecf32($edge_data.fact_embedding)
