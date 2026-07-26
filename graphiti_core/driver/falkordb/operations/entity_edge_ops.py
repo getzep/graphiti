@@ -41,8 +41,6 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
     ) -> None:
         edge_data: dict[str, Any] = {
             'uuid': edge.uuid,
-            'source_uuid': edge.source_node_uuid,
-            'target_uuid': edge.target_node_uuid,
             'name': edge.name,
             'fact': edge.fact,
             'fact_embedding': edge.fact_embedding,
@@ -57,9 +55,19 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
 
         query = get_entity_edge_save_query(GraphProvider.FALKORDB)
         if tx is not None:
-            await tx.run(query, edge_data=edge_data)
+            await tx.run(
+                query,
+                edge_data=edge_data,
+                source_uuid=edge.source_node_uuid,
+                target_uuid=edge.target_node_uuid,
+            )
         else:
-            await executor.execute_query(query, edge_data=edge_data)
+            await executor.execute_query(
+                query,
+                edge_data=edge_data,
+                source_uuid=edge.source_node_uuid,
+                target_uuid=edge.target_node_uuid,
+            )
 
         logger.debug(f'Saved Edge to Graph: {edge.uuid}')
 
