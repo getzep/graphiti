@@ -161,6 +161,7 @@ def test_cli_override():
         embedder_provider = 'voyage'
         embedder_model = 'voyage-3'
         database_provider = 'falkordb'
+        falkordb_group_routing = 'record'
         group_id = 'test-group'
         user_id = 'test-user'
 
@@ -169,6 +170,10 @@ def test_cli_override():
 
     assert config.server.host == '127.0.0.1', f'Expected host 127.0.0.1, got {config.server.host}'
     assert config.server.port == 9999, f'Expected port 9999, got {config.server.port}'
+    assert config.database.providers.falkordb is not None, (
+        'Expected FalkorDB provider config to exist'
+    )
+    assert config.database.providers.falkordb.group_routing == 'record'
 
     print('✓ CLI overrides applied successfully')
     print(f'  - Transport: {config.server.transport}')
@@ -194,6 +199,7 @@ def test_cli_override():
         embedder_provider = None
         embedder_model = None
         database_provider = None
+        falkordb_group_routing = None
         group_id = None
         user_id = None
 

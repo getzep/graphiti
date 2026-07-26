@@ -311,6 +311,17 @@ class Graphiti:
         else:
             return 'unknown'
 
+    def _resolve_group_id_for_write(self, group_id: str | None) -> str:
+        if group_id is None:
+            return get_default_group_id(self.driver.provider)
+
+        validate_group_id(group_id)
+        if self.driver.should_route_group_id_to_database(group_id):
+            self.driver = self.driver.clone(database=group_id)
+            self.clients.driver = self.driver
+
+        return group_id
+
     async def close(self):
         """
         Close the connection to the Neo4j database.
@@ -1070,16 +1081,7 @@ class Graphiti:
         validate_entity_types(entity_types)
         validate_excluded_entity_types(excluded_entity_types, entity_types)
 
-        if group_id is None:
-            # if group_id is None, use the default group id by the provider
-            # and the preset database name will be used
-            group_id = get_default_group_id(self.driver.provider)
-        else:
-            validate_group_id(group_id)
-            if group_id != self.driver._database:
-                # if group_id is provided, use it as the database name
-                self.driver = self.driver.clone(database=group_id)
-                self.clients.driver = self.driver
+        group_id = self._resolve_group_id_for_write(group_id)
 
         with self.tracer.start_span('add_episode') as span:
             try:
@@ -1299,15 +1301,7 @@ class Graphiti:
                 start = time()
                 now = utc_now()
 
-                # if group_id is None, use the default group id by the provider
-                if group_id is None:
-                    group_id = get_default_group_id(self.driver.provider)
-                else:
-                    validate_group_id(group_id)
-                    if group_id != self.driver._database:
-                        # if group_id is provided, use it as the database name
-                        self.driver = self.driver.clone(database=group_id)
-                        self.clients.driver = self.driver
+                group_id = self._resolve_group_id_for_write(group_id)
 
                 # Create default edge type map
                 edge_type_map_default = (

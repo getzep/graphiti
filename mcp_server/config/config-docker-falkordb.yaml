@@ -75,6 +75,7 @@ database:
       uri: ${FALKORDB_URI:redis://falkordb:6379}
       password: ${FALKORDB_PASSWORD:}
       database: ${FALKORDB_DATABASE:default_db}
+      group_routing: ${FALKORDB_GROUP_ROUTING:database}
 
 graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}

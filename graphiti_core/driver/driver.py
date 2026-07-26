@@ -132,6 +132,10 @@ class GraphDriver(QueryExecutor, ABC):
         """Clone the driver with a different database or graph name."""
         return self
 
+    def should_route_group_id_to_database(self, group_id: str) -> bool:  # noqa: ARG002
+        """Return true when a group_id should select a physical database/graph."""
+        return False
+
     def build_fulltext_query(
         self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
     ) -> str:

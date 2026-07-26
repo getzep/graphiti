@@ -324,12 +324,40 @@ Or use the FalkorDB configuration file:
 uv run main.py --config config/config-docker-falkordb.yaml
 ```
 
+#### FalkorDB Group Routing
+
+By default, FalkorDB keeps the existing Graphiti behavior: a non-default
+`group_id` selects a physical Falkor graph with the same name. For deployments
+that already use one shared Falkor graph and want project or tenant isolation by
+record property, opt in to fixed-graph routing:
+
+```yaml
+database:
+  providers:
+    falkordb:
+      database: graphiti_personal
+      group_routing: record
+```
+
+With `group_routing: record`, episode writes, searches, retrievals, and
+group-scoped cleanup stay inside the configured Falkor graph and continue to use
+`group_id` as the record-level scope/filter. The default `group_routing:
+database` remains graph-per-group for upstream compatibility.
+
+Equivalent direct run:
+
+```bash
+FALKORDB_DATABASE=graphiti_personal FALKORDB_GROUP_ROUTING=record \
+  uv run main.py --database-provider falkordb --falkordb-group-routing record
+```
+
 ### Available Command-Line Arguments
 
 - `--config`: Path to YAML configuration file (default: config.yaml)
 - `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
 - `--database-provider`: Database provider to use (falkordb, neo4j) - default: falkordb
+- `--falkordb-group-routing`: FalkorDB group routing mode (`database` or `record`) - default: database
 - `--model`: Model name to use with the LLM client
 - `--temperature`: Temperature setting for the LLM (0.0-2.0)
 - `--transport`: Choose the transport method (http or stdio, default: http)

@@ -136,6 +136,7 @@ class FalkorDriver(GraphDriver):
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
         database: str = 'default_db',
+        group_routing: str = 'database',
     ):
         """
         Initialize the FalkorDB driver.
@@ -151,9 +152,15 @@ class FalkorDriver(GraphDriver):
         password (str | None): The password for authentication (if required).
         falkor_db (FalkorDB | None): An existing FalkorDB instance to use instead of creating a new one.
         database (str): The name of the database to connect to. Defaults to 'default_db'.
+        group_routing (str): How FalkorDB maps group_id values. ``database`` preserves
+            the upstream graph-per-group behavior. ``record`` keeps the configured
+            database fixed and treats group_id as a record-level scope.
         """
         super().__init__()
+        if group_routing not in {'database', 'record'}:
+            raise ValueError("group_routing must be either 'database' or 'record'")
         self._database = database
+        self.group_routing = group_routing
         if falkor_db is not None:
             # If a FalkorDB instance is provided, use it directly
             self.client = falkor_db
@@ -328,12 +335,19 @@ class FalkorDriver(GraphDriver):
         if database == self._database:
             cloned = self
         elif database == self.default_group_id:
-            cloned = FalkorDriver(falkor_db=self.client)
+            cloned = FalkorDriver(falkor_db=self.client, group_routing=self.group_routing)
         else:
             # Create a new instance of FalkorDriver with the same connection but a different database
-            cloned = FalkorDriver(falkor_db=self.client, database=database)
+            cloned = FalkorDriver(
+                falkor_db=self.client,
+                database=database,
+                group_routing=self.group_routing,
+            )
 
         return cloned
+
+    def should_route_group_id_to_database(self, group_id: str) -> bool:
+        return self.group_routing == 'database' and group_id != self._database
 
     async def health_check(self) -> None:
         """Check FalkorDB connectivity by running a simple query."""
