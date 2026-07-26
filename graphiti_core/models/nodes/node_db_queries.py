@@ -201,6 +201,9 @@ def get_entity_node_save_bulk_query(
         case GraphProvider.FALKORDB:
             queries = []
             for node in nodes:
+                # Exclude the labels list so it is not persisted as a node property
+                # by `SET n = node`.
+                node_data = {k: v for k, v in node.items() if k != 'labels'}
                 for label in node['labels']:
                     queries.append(
                         (
@@ -213,7 +216,7 @@ def get_entity_node_save_bulk_query(
                             SET n.name_embedding = vecf32(node.name_embedding)
                             RETURN n.uuid AS uuid
                             """,
-                            {'nodes': [node]},
+                            {'nodes': [node_data]},
                         )
                     )
             return queries
