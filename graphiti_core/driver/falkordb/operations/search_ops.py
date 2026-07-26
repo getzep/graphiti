@@ -674,7 +674,7 @@ class FalkorSearchOperations(SearchOperations):
 
         for uuid in node_uuids:
             if uuid not in scores:
-                scores[uuid] = float('inf')
+                scores[uuid] = 0
 
         sorted_uuids = list(node_uuids)
         sorted_uuids.sort(reverse=True, key=lambda cur_uuid: scores[cur_uuid])
