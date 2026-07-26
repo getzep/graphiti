@@ -400,6 +400,40 @@ class TestDatetimeConversion:
         assert convert_datetimes_to_strings(None) is None
         assert convert_datetimes_to_strings(True) is True
 
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_static_method_handles_datetime_values(self):
+        """FalkorDriver.convert_datetimes_to_strings must not raise on datetime values.
+
+        Regression test: isinstance() was called with the datetime module instead
+        of the datetime.datetime class, raising TypeError for any datetime input.
+        """
+        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        result = FalkorDriver.convert_datetimes_to_strings({'ts': test_datetime, 'n': 5})
+
+        assert result == {'ts': test_datetime.isoformat(), 'n': 5}
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_convert_normalizes_non_utc_offsets(self):
+        """Non-UTC offsets must be normalized to UTC before serialization.
+
+        FalkorDB stores datetimes as ISO strings and compares them
+        lexicographically, which is only correct when all offsets match.
+        """
+        from datetime import timedelta
+
+        from graphiti_core.driver.falkordb_driver import convert_datetimes_to_strings
+
+        tz_plus_3 = timezone(timedelta(hours=3))
+        # 13:00+03:00 is 10:00 UTC
+        aware_non_utc = datetime(2024, 1, 1, 13, 0, 0, tzinfo=tz_plus_3)
+
+        assert convert_datetimes_to_strings(aware_non_utc) == '2024-01-01T10:00:00+00:00'
+
+        # naive datetimes are assumed UTC and serialized with an explicit offset
+        naive = datetime(2024, 1, 1, 10, 0, 0)
+        assert convert_datetimes_to_strings(naive) == '2024-01-01T10:00:00+00:00'
+
 
 # Simple integration test
 class TestFalkorDriverIntegration:
