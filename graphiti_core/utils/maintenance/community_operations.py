@@ -250,6 +250,9 @@ async def remove_communities(driver: GraphDriver, group_ids: list[str] | None = 
         except NotImplementedError:
             pass
 
+    if driver.graph_ops:
+        return await driver.graph_ops.remove_communities(driver, group_ids=group_ids)
+
     if group_ids:
         await driver.execute_query(
             """
