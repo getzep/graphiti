@@ -202,6 +202,7 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
+        e.reference_time AS reference_time,
         properties(e) AS attributes
     """
 
@@ -217,6 +218,7 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
+        e.reference_time AS reference_time,
     """ + (
         'e.attributes AS attributes'
         if provider == GraphProvider.KUZU
