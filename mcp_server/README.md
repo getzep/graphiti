@@ -153,7 +153,19 @@ database:
       uri: "redis://localhost:6379"
       password: ""  # Optional
       database: "default_db"  # Optional
+      group_routing: "database"  # Optional: "database" (default) or "record"
 ```
+
+`group_routing` controls how `group_id` maps to storage:
+
+- `database` (default): each `group_id` selects — and creates — its own FalkorDB
+  graph.
+- `record`: the graph named above stays fixed and `group_id` is applied as a
+  record-level tenant filter, so several projects share one physical graph while
+  their episodes, search results, and group-scoped cleanup stay isolated.
+
+Set it with the `FALKORDB_GROUP_ROUTING` environment variable when using the
+shipped `config.yaml`.
 
 ### Configuration File (config.yaml)
 

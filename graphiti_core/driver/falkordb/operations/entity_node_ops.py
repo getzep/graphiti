@@ -180,13 +180,15 @@ class FalkorEntityNodeOperations(EntityNodeOperations):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ) -> list[EntityNode]:
-        # For FalkorDB, route each group_id to its own graph database. The
-        # namespace/ops path receives the base driver (default_db), so a
-        # single-group read must be cloned to the group's graph or it queries
-        # an empty default database and returns nothing.
+        # With graph-per-group routing (the FalkorDB default), each group_id
+        # lives in its own graph database. The namespace/ops path receives the
+        # base driver (default_db), so a single-group read must be cloned to the
+        # group's graph or it queries an empty default database and returns
+        # nothing. Under record-level routing the graph is fixed and the
+        # group_id filter in the query below is the only scoping needed.
         if (
             isinstance(executor, GraphDriver)
-            and executor.provider == GraphProvider.FALKORDB
+            and executor.routes_group_ids_to_databases
             and group_ids
         ):
             if len(group_ids) == 1:

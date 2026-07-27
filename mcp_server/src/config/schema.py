@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -190,6 +190,14 @@ class FalkorDBProviderConfig(BaseModel):
     username: str | None = None
     password: str | None = None
     database: str = 'default_db'
+    group_routing: Literal['database', 'record'] = Field(
+        default='database',
+        description=(
+            "How group_id maps to storage. 'database' (default) gives each group_id "
+            "its own FalkorDB graph. 'record' keeps the configured graph fixed and "
+            'applies group_id as a record-level tenant filter.'
+        ),
+    )
 
 
 class DatabaseProvidersConfig(BaseModel):
