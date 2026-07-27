@@ -178,13 +178,24 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
     async def remove_communities(
         self,
         executor: QueryExecutor,
+        group_ids: list[str] | None = None,
     ) -> None:
-        await executor.execute_query(
-            """
-            MATCH (c:Community)
-            DETACH DELETE c
-            """
-        )
+        if group_ids:
+            await executor.execute_query(
+                """
+                MATCH (c:Community)
+                WHERE c.group_id IN $group_ids
+                DETACH DELETE c
+                """,
+                group_ids=group_ids,
+            )
+        else:
+            await executor.execute_query(
+                """
+                MATCH (c:Community)
+                DETACH DELETE c
+                """
+            )
 
     async def determine_entity_community(
         self,
