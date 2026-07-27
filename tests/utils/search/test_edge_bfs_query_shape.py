@@ -62,10 +62,11 @@ async def test_edge_bfs_search_consumes_path_relationships_directly():
     assert "WHERE type(e) = 'RELATES_TO'" in driver.cypher_query
     # The expensive per-row re-MATCH must be gone.
     assert 'uuid: rel.uuid' not in driver.cypher_query
-    # Downstream bindings stay intact: filters and the return still see e, n, m.
+    # Downstream filters still see the relationship. The return helper derives
+    # direction from it so undirected matching cannot swap edge endpoints.
     assert 'e.group_id IN $group_ids' in driver.cypher_query
-    assert 'n.uuid AS source_node_uuid' in driver.cypher_query
-    assert 'm.uuid AS target_node_uuid' in driver.cypher_query
+    assert 'startNode(e).uuid AS source_node_uuid' in driver.cypher_query
+    assert 'endNode(e).uuid AS target_node_uuid' in driver.cypher_query
 
 
 @pytest.mark.asyncio
