@@ -17,6 +17,8 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+import re
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -123,7 +125,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
-    default_group_id: str = '\\_'
+    default_group_id: str = '_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
     aoss_client: None = None
 
@@ -172,14 +174,12 @@ class FalkorDriver(GraphDriver):
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
 
+        self._init_task: asyncio.Task | None = None
         # Schedule the indices and constraints to be built
         try:
-            # Try to get the current event loop
             loop = asyncio.get_running_loop()
-            # Schedule the build_indices_and_constraints to run
-            loop.create_task(self.build_indices_and_constraints())
+            self._init_task = loop.create_task(self.build_indices_and_constraints())
         except RuntimeError:
-            # No event loop running, this will be handled later
             pass
 
     # --- Operations properties ---
@@ -273,6 +273,14 @@ class FalkorDriver(GraphDriver):
 
     async def close(self) -> None:
         """Close the driver connection."""
+        if self._init_task is not None:
+            if not self._init_task.done():
+                self._init_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._init_task
+            elif not self._init_task.cancelled():
+                # Retrieve any exception so it doesn't go unobserved
+                self._init_task.exception()
         if hasattr(self.client, 'aclose'):
             await self.client.aclose()  # type: ignore[reportUnknownMemberType]
         elif hasattr(self.client.connection, 'aclose'):
@@ -394,6 +402,7 @@ class FalkorDriver(GraphDriver):
                 '|': ' ',
                 '/': ' ',
                 '\\': ' ',
+                '`': ' ',
             }
         )
         sanitized = query.translate(separator_map)
@@ -418,9 +427,14 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+            # Quote group_ids and escape non-alphanumeric chars (e.g. '_' in the
+            # default group_id, or hyphens). RediSearch treats these as token
+            # separators/operators, which otherwise causes a syntax error or a
+            # failure to match. group_ids are restricted to [a-zA-Z0-9_-] by
+            # validate_group_ids above.
+            escaped_group_ids = [
+                '"' + re.sub(r'([^a-zA-Z0-9])', r'\\\1', gid) + '"' for gid in group_ids
+            ]
             group_values = '|'.join(escaped_group_ids)
             group_filter = f'(@group_id:{group_values})'
 
@@ -429,7 +443,18 @@ class FalkorDriver(GraphDriver):
         # Remove stopwords and empty tokens from the sanitized query
         query_words = sanitized_query.split()
         filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
+
+        if not filtered_words:
+            return ''
+
         sanitized_query = ' | '.join(filtered_words)
+
+        # Short-circuit when every input token was a stopword; otherwise we
+        # emit `(@group_id:"...") ()`, which FalkorDB/RediSearch rejects
+        # with `Syntax error at offset N near <group_id>`. Callers already
+        # special-case `''` as 'no candidates'.
+        if not filtered_words:
+            return ''
 
         # If the query is too long return no query
         if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:

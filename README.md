@@ -87,6 +87,10 @@ Graphiti is the open-source temporal context graph engine at the core of
 [Zep's](https://www.getzep.com) context infrastructure for AI agents. Zep manages context graphs at scale, providing
 governed, low-latency context retrieval and assembly for production agent deployments.
 
+Under the hood, Zep is powered by a proprietary graph database — the
+[Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs
+with low-latency retrieval, so production deployments don't require a separate third-party graph database.
+
 Using Graphiti, we've demonstrated Zep is
 the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
 
@@ -105,6 +109,7 @@ applications.
 |--------|-----|---------|
 | **What they are** | Managed context graph infrastructure for AI agents | Open-source temporal context graph engine |
 | **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
+| **Graph database** | Proprietary [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs with low-latency retrieval; no third-party graph database vendor required | Bring your own third-party graph database |
 | **User & conversation management** | Built-in users, threads, and message storage | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
 | **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
