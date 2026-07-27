@@ -63,6 +63,20 @@ class GraphProvider(Enum):
     NEPTUNE = 'neptune'
 
 
+class GroupRouting(Enum):
+    """How a driver maps ``group_id`` onto physical storage.
+
+    ``DATABASE``: every ``group_id`` selects (and creates) its own database/graph.
+        This is FalkorDB's historical behavior.
+    ``RECORD``: the configured database/graph stays fixed and ``group_id`` is only
+        a record-level property used for filtering. Every provider other than
+        FalkorDB works this way.
+    """
+
+    DATABASE = 'database'
+    RECORD = 'record'
+
+
 class GraphDriverSession(ABC):
     provider: GraphProvider
 
@@ -94,9 +108,19 @@ class GraphDriver(QueryExecutor, ABC):
     )
     _database: str
     default_group_id: str = ''
+    group_routing: GroupRouting = GroupRouting.RECORD
     # Legacy interfaces (kept for backwards compatibility during Phase 1)
     search_interface: SearchInterface | None = None
     graph_operations_interface: GraphOperationsInterface | None = None
+
+    @property
+    def routes_group_ids_to_databases(self) -> bool:
+        """Whether a ``group_id`` selects a separate physical database/graph.
+
+        When ``False``, ``group_id`` is a record-level scope and group-filtered
+        queries run against the driver's configured database.
+        """
+        return self.group_routing is GroupRouting.DATABASE
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:

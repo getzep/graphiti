@@ -34,7 +34,12 @@ else:
             'Install it with: pip install graphiti-core[falkordb]'
         ) from None
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.driver import (
+    GraphDriver,
+    GraphDriverSession,
+    GraphProvider,
+    GroupRouting,
+)
 from graphiti_core.driver.falkordb import STOPWORDS as STOPWORDS
 from graphiti_core.driver.falkordb.operations.community_edge_ops import (
     FalkorCommunityEdgeOperations,
@@ -127,6 +132,7 @@ class FalkorDriver(GraphDriver):
     default_group_id: str = '_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
     aoss_client: None = None
+    group_routing: GroupRouting = GroupRouting.DATABASE
 
     def __init__(
         self,
@@ -136,6 +142,7 @@ class FalkorDriver(GraphDriver):
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
         database: str = 'default_db',
+        group_routing: GroupRouting | str = GroupRouting.DATABASE,
     ):
         """
         Initialize the FalkorDB driver.
@@ -151,9 +158,21 @@ class FalkorDriver(GraphDriver):
         password (str | None): The password for authentication (if required).
         falkor_db (FalkorDB | None): An existing FalkorDB instance to use instead of creating a new one.
         database (str): The name of the database to connect to. Defaults to 'default_db'.
+        group_routing (GroupRouting | str): How ``group_id`` maps to storage.
+            ``'database'`` (default) keeps the historical behavior where each
+            ``group_id`` selects its own FalkorDB graph. ``'record'`` pins every
+            operation to ``database`` and treats ``group_id`` as a record-level
+            tenant scope, so a single shared graph holds all groups.
         """
         super().__init__()
         self._database = database
+        try:
+            self.group_routing = GroupRouting(group_routing)
+        except ValueError as e:
+            raise ValueError(
+                f'Invalid group_routing {group_routing!r}. '
+                f'Expected one of: {", ".join(m.value for m in GroupRouting)}.'
+            ) from e
         if falkor_db is not None:
             # If a FalkorDB instance is provided, use it directly
             self.client = falkor_db
@@ -325,13 +344,21 @@ class FalkorDriver(GraphDriver):
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
         """
+        if self.group_routing is GroupRouting.RECORD:
+            # Record-level routing pins every operation to the configured graph;
+            # group_id is applied as a filter on records instead of selecting a
+            # graph, so a group_id must never re-point the driver.
+            return self
+
         if database == self._database:
             cloned = self
         elif database == self.default_group_id:
-            cloned = FalkorDriver(falkor_db=self.client)
+            cloned = FalkorDriver(falkor_db=self.client, group_routing=self.group_routing)
         else:
             # Create a new instance of FalkorDriver with the same connection but a different database
-            cloned = FalkorDriver(falkor_db=self.client, database=database)
+            cloned = FalkorDriver(
+                falkor_db=self.client, database=database, group_routing=self.group_routing
+            )
 
         return cloned
 

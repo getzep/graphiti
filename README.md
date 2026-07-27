@@ -400,6 +400,32 @@ driver = FalkorDriver(
 graphiti = Graphiti(graph_driver=driver)
 ```
 
+#### FalkorDB with a Single Shared Graph (`group_routing`)
+
+By default FalkorDB maps every `group_id` to its own graph, so a new `group_id`
+selects (and creates) a separate physical graph. Set `group_routing="record"` to
+keep the configured graph fixed and use `group_id` purely as a record-level
+tenant scope — writes, search, retrieval, and group-scoped cleanup all stay
+inside that one graph.
+
+```python
+driver = FalkorDriver(
+    host="localhost",
+    port=6379,
+    database="graphiti_personal",  # every group lives in this graph
+    group_routing="record",  # default is "database" (graph per group_id)
+)
+
+graphiti = Graphiti(graph_driver=driver)
+
+# Both projects share `graphiti_personal`, isolated by group_id
+await graphiti.add_episode(..., group_id="project_a")
+await graphiti.search("...", group_ids=["project_a"])
+```
+
+The option is FalkorDB-specific and defaults to the existing graph-per-group
+behavior; other providers already treat `group_id` as a record-level scope.
+
 #### Kuzu
 
 > [!WARNING]

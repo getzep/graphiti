@@ -19,18 +19,31 @@ from types import SimpleNamespace
 import pytest
 
 from graphiti_core.decorators import handle_multiple_group_ids
-from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.driver import GraphProvider, GroupRouting
 
 
 class _FakeDriver:
-    def __init__(self, database: str, provider: GraphProvider = GraphProvider.FALKORDB):
+    def __init__(
+        self,
+        database: str,
+        provider: GraphProvider = GraphProvider.FALKORDB,
+        group_routing: GroupRouting = GroupRouting.DATABASE,
+    ):
         self._database = database
         self.provider = provider
+        self.group_routing = group_routing
         self.clone_calls: list[str] = []
+
+    @property
+    def routes_group_ids_to_databases(self) -> bool:
+        return self.group_routing is GroupRouting.DATABASE
 
     def clone(self, database: str) -> '_FakeDriver':
         self.clone_calls.append(database)
-        return _FakeDriver(database, self.provider)
+        if self.group_routing is GroupRouting.RECORD:
+            # Mirrors FalkorDriver.clone: record routing never re-points the driver.
+            return self
+        return _FakeDriver(database, self.provider, self.group_routing)
 
 
 class _Host:
@@ -90,6 +103,34 @@ async def test_falkor_multi_group_ids_still_clones_each():
     assert host.clients.driver is driver
     assert set(host.seen_drivers) == {'a', 'b'}
     assert sorted(result) == ["q:a:['a']", "q:b:['b']"]
+
+
+@pytest.mark.asyncio
+async def test_falkor_record_routing_single_group_id_stays_on_fixed_graph():
+    """Record routing keeps the configured graph; group_id only filters records (#1684)."""
+    driver = _FakeDriver('graphiti_personal', group_routing=GroupRouting.RECORD)
+    host = _Host(driver)
+
+    result = await host.search('q', group_ids=['projecta'])
+
+    assert driver.clone_calls == []
+    assert host.clients.driver is driver
+    assert host.clients.driver._database == 'graphiti_personal'
+    assert host.seen_drivers == [None]
+    assert result == ["q:None:['projecta']"]
+
+
+@pytest.mark.asyncio
+async def test_falkor_record_routing_multi_group_ids_run_as_one_query():
+    """Record routing needs no per-group fan-out: one query filters all group_ids."""
+    driver = _FakeDriver('graphiti_personal', group_routing=GroupRouting.RECORD)
+    host = _Host(driver)
+
+    result = await host.search('q', group_ids=['a', 'b'])
+
+    assert driver.clone_calls == []
+    assert host.seen_drivers == [None]
+    assert result == ["q:None:['a', 'b']"]
 
 
 @pytest.mark.asyncio

@@ -235,6 +235,7 @@ class GraphitiService:
                         username=db_config.get('username'),
                         password=db_config['password'],
                         database=db_config['database'],
+                        group_routing=db_config.get('group_routing', 'database'),
                     )
 
                     self.client = Graphiti(

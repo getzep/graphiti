@@ -35,6 +35,11 @@ def handle_multiple_group_ids(func: F) -> F:
     call-scoped driver clone. Without this, add_episode re-binds the shared
     driver for writes while search/retrieve with one group_id query the
     driver's default database and silently return empty results (#1659).
+
+    Both behaviors only apply when the driver maps group_ids to databases. Under
+    record-level routing (``FalkorDriver(group_routing='record')``) the graph is
+    fixed and the query's own group_id filter scopes the results, so the call
+    runs unchanged — including multiple group_ids in a single query.
     """
 
     @functools.wraps(func)
@@ -49,15 +54,16 @@ def handle_multiple_group_ids(func: F) -> F:
         if group_ids is None and group_ids_pos is not None and len(args) > group_ids_pos:
             group_ids = args[group_ids_pos]
 
-        is_falkor = (
+        routes_group_to_graph = (
             hasattr(self, 'clients')
             and hasattr(self.clients, 'driver')
             and self.clients.driver.provider == GraphProvider.FALKORDB
+            and self.clients.driver.routes_group_ids_to_databases
         )
 
         # FalkorDB: one group_id still needs the graph named after that id.
         # Clone is call-scoped so we never reassign self.driver / self.clients.driver.
-        if is_falkor and group_ids and len(group_ids) == 1:
+        if routes_group_to_graph and group_ids and len(group_ids) == 1:
             gid = group_ids[0]
             driver = self.clients.driver
             if gid != getattr(driver, '_database', None):
@@ -69,7 +75,7 @@ def handle_multiple_group_ids(func: F) -> F:
             return await func(self, *args, **kwargs)
 
         # FalkorDB with multiple group_ids: run per graph and merge
-        if is_falkor and group_ids and len(group_ids) > 1:
+        if routes_group_to_graph and group_ids and len(group_ids) > 1:
             # Execute for each group_id concurrently
             driver = self.clients.driver
 
