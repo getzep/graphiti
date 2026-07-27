@@ -253,6 +253,7 @@ async def edge_fulltext_search(
                     e.expired_at AS expired_at,
                     e.valid_at AS valid_at,
                     e.invalid_at AS invalid_at,
+                    e.reference_time AS reference_time,
                     properties(e) AS attributes
                 ORDER BY score DESC LIMIT $limit
                             """
@@ -398,6 +399,7 @@ async def edge_similarity_search(
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at,
+                    r.reference_time AS reference_time,
                     properties(r) AS attributes
                 ORDER BY i.score DESC
                 LIMIT $limit
@@ -540,6 +542,7 @@ async def edge_bfs_search(
                     e.expired_at AS expired_at,
                     e.valid_at AS valid_at,
                     e.invalid_at AS invalid_at,
+                    e.reference_time AS reference_time,
                     properties(e) AS attributes
                 LIMIT $limit
                 """
