@@ -222,8 +222,8 @@ operations.
    `tests/driver/`.
 
 For reference implementations, start with `graphiti_core/driver/neo4j_driver.py`,
-`graphiti_core/driver/falkordb_driver.py`, `graphiti_core/driver/kuzu_driver.py`, and
-`graphiti_core/driver/neptune_driver.py`.
+`graphiti_core/driver/falkordb_driver.py`, and `graphiti_core/driver/neptune_driver.py`
+(`graphiti_core/driver/kuzu_driver.py` is deprecated — don't model new drivers on it).
 
 ### Testing
 

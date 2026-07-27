@@ -384,17 +384,72 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are an entity attribute extraction specialist. NEVER hallucinate or infer values not explicitly stated.',
+            content=(
+                'You are an entity attribute extraction specialist. '
+                'You ONLY emit attribute values that are explicitly stated in MESSAGES or '
+                'already present on the ENTITY. You output strictly the JSON specified by the '
+                'response schema — no reasoning, no explanation, no commentary in any field.'
+            ),
         ),
         Message(
             role='user',
-            content=f"""
-Given the MESSAGES and the following ENTITY, update any of its attributes based on the information provided
-in MESSAGES. Use the provided attribute descriptions to better understand how each attribute should be determined.
+            content=f"""\
+Given the MESSAGES and the following ENTITY, update its attributes.
 
-Guidelines:
-1. NEVER hallucinate or infer property values — only use values explicitly stated in the MESSAGES.
-2. Only use the provided MESSAGES and ENTITY to set attribute values.
+HARD RULES — violating any of these is a failure:
+
+1. Each attribute value MUST be one of:
+   (a) a clean value copied or directly normalized from text in MESSAGES,
+   (b) the existing value already on the ENTITY (preserved unchanged), or
+   (c) null / omitted, when neither (a) nor (b) applies.
+
+2. NEVER write reasoning, justification, or commentary into any field. Specifically:
+   - NEVER include parenthetical explanations like "(implied by ...)", "(Context: ...)",
+     "(not explicitly stated ...)", "(based on ...)".
+   - NEVER include first-person or deliberative phrases like "I should...", "However...",
+     "Sticking to...", "Since no...", "the instruction is to...", "must be kept...",
+     "if no value is present...".
+   - NEVER list alternatives or candidates inside one field ("X, or Y, or maybe Z").
+   - NEVER explain why a value is null. If unknown, set the field to null and stop.
+
+3. Each attribute schema description (e.g. an "Industry sector" field whose description
+   reads "Industry classification, single word where possible") tells you the FORMAT a
+   real value should take. The description text is NEVER itself a value. NEVER copy
+   schema description text into the field.
+
+4. The literal strings "null", "N/A", "Not specified", "unknown", "none", "not provided",
+   or any sentence describing absence are NOT valid values. If no value is supported by
+   MESSAGES, set the field to null (or omit it) — do not write a sentence.
+
+5. Each attribute value must be a short, well-formed instance of the type the field
+   describes (a phone number, an industry name, a URL, a postal address). If you cannot
+   produce a clean value of that type from MESSAGES, the field is null.
+
+6. NEVER infer attribute values from the entity's name, from related entities, from
+   generic world knowledge, or from prior summaries. Only verbatim or directly normalized
+   text from MESSAGES qualifies as a new value.
+
+7. If MESSAGES contain no information about an attribute, leave the existing entity
+   value unchanged. If the entity has no existing value, the field is null.
+
+EXAMPLES
+
+ENTITY: {{"name": "Sam Rivera", "phones": "415-555-0142"}}
+MESSAGES contain no phone information for Sam.
+GOOD → "phones": "415-555-0142"   (preserved existing value)
+BAD  → "phones": "415-555-0142 (implied by original entity, but no new information in
+        messages, retaining original value as per instruction...)"
+
+ENTITY: {{"name": "Northwind", "industry": null}}
+MESSAGES mention Northwind only as the platform some content was posted to.
+GOOD → "industry": null   (no explicit industry classification was stated)
+BAD  → "industry": "Content platform, SaaS (implied by usage context, though not stated
+        explicitly as industry classification...)"
+
+ENTITY: {{"name": "Priya"}}
+MESSAGES contain no phone for Priya, but discuss a project she contributed to.
+GOOD → "phones": null
+BAD  → "phones": "Worked with Lin and Marco on the Q3 launch..."   (off-topic content dump)
 
 <MESSAGES>
 {to_prompt_json(context['previous_episodes'])}

@@ -8,7 +8,7 @@ services:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
       - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
     volumes:
-      - falkordb_data:/data
+      - falkordb_data:/var/lib/falkordb/data
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 10s
@@ -39,7 +39,6 @@ services:
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
-      - PATH=/root/.local/bin:${PATH}
     volumes:
       - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
     ports:

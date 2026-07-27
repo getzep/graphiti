@@ -258,8 +258,10 @@ class GLiNER2Client(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
     ) -> dict[str, typing.Any]:
-        # Delegate non-extraction operations to the LLM client
+        # Delegate non-extraction operations to the wrapped LLM client.
         if not self._is_gliner2_operation(response_model):
             return await self.llm_client.generate_response(
                 messages,
@@ -268,6 +270,7 @@ class GLiNER2Client(LLMClient):
                 model_size=model_size,
                 group_id=group_id,
                 prompt_name=prompt_name,
+                attribute_extraction=attribute_extraction,
             )
 
         if max_tokens is None:

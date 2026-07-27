@@ -69,12 +69,12 @@ services:
       context: .
     profiles: ["falkordb"]
     ports:
-      - "8001:8001"
+      - "8001:8000"
     depends_on:
       falkordb:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/healthcheck')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -84,7 +84,7 @@ services:
       - FALKORDB_PORT=6379
       - FALKORDB_DATABASE=default_db
       - GRAPHITI_BACKEND=falkordb
-      - PORT=8001
+      - PORT=8000
       - db_backend=falkordb
 
 volumes:

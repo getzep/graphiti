@@ -1,0 +1,98 @@
+name: Server Tests
+
+# Live end-to-end regression tests for the Graphiti graph_service (REST API)
+# against FalkorDB and a real OpenAI model. Spawns the FastAPI server as a
+# subprocess and exercises the public API end to end (ingest -> async process ->
+# search -> delete). Runs on PRs and pushes to main that touch the server. The
+# OpenAI key comes from the `development` GitHub environment; fork PRs receive no
+# secrets, so the suite skips itself there (the test module skips when
+# OPENAI_API_KEY is unset).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server-tests.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server-tests.yml"
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref so repeated pushes don't keep paying for
+# real OpenAI calls.
+concurrency:
+  group: server-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-server-tests:
+    runs-on: depot-ubuntu-22.04
+    environment: development
+    # Insurance against a hung server subprocess / uv sync.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.10"
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
+        with:
+          version: "latest"
+      - name: Start FalkorDB
+        # Run the database on the host network rather than a `services:` block: on
+        # the depot-ubuntu runner pool bridge-network NAT silently drops packets to
+        # published service-container ports. Readiness is checked via `docker exec`.
+        run: docker run -d --name falkordb --network host falkordb/falkordb:latest
+      - name: Install dependencies
+        working-directory: server
+        run: uv sync --extra dev
+      - name: Wait for FalkorDB
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec falkordb redis-cli ping 2>/dev/null | grep -q PONG; then
+              echo "falkordb ready after ${i}s"; break
+            fi
+            if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
+            sleep 1
+          done
+      - name: Run live server integration tests
+        working-directory: server
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DB_BACKEND: falkordb
+          FALKORDB_HOST: localhost
+          FALKORDB_PORT: "6379"
+          # gpt-5.5 is the graphiti-core default, but it requires a key/account
+          # with fast gpt-5.5 access; CI pins a lighter, broadly-available model so
+          # the live test stays fast and reliable. It exercises the same pipeline.
+          MODEL_NAME: gpt-4.1-mini
+          # Raise episode/LLM-call concurrency so the live episode processes quickly.
+          SEMAPHORE_LIMIT: "20"
+        # pytest exits 5 when no tests are collected. The legitimate case is a fork
+        # PR with no OPENAI_API_KEY: the suite self-skips at module level. When the
+        # key IS present (same-repo run) exit 5 is unexpected — the live suite should
+        # have run — so fail loudly rather than report a green build that tested
+        # nothing. Likely causes: FalkorDB became unreachable (the suite also skips at
+        # module level when it can't connect, even though the prior step gated it), or
+        # the `integration` marker was renamed/removed so the selection matches
+        # nothing. Real failures (exit 1), import errors (exit 2), and usage errors
+        # such as a renamed test-file path (exit 4) always fail the job too.
+        run: |
+          set +e
+          uv run pytest tests/test_live_falkordb_int.py -m integration -p no:cacheprovider
+          code=$?
+          if [ "$code" -eq 5 ]; then
+            if [ -z "$OPENAI_API_KEY" ]; then
+              echo 'No live tests ran (no OPENAI_API_KEY — fork PR self-skip); treating as success.'
+              exit 0
+            fi
+            echo 'pytest collected no tests but OPENAI_API_KEY is set — the live suite should have run. FalkorDB likely became unreachable, or the integration test selection broke (renamed marker). Failing.' >&2
+            exit 1
+          fi
+          exit "$code"

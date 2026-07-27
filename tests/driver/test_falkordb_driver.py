@@ -160,6 +160,26 @@ class TestFalkorDriver:
         call_args = mock_graph.query.call_args[0]
         assert call_args[1]['created_at'] == test_datetime.isoformat()
 
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_execute_query_strips_nul_bytes_from_parameters(self):
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+        mock_result.header = []
+        mock_result.result_set = []
+        mock_graph.query = AsyncMock(return_value=mock_result)
+        self.mock_client.select_graph.return_value = mock_graph
+
+        await self.driver.execute_query(
+            'CREATE (n:Node) SET n.content = $content',
+            content='Seamless Recruiting \x00 Onboarding',
+            nested={'values': ['ok\x00', 'clean']},
+        )
+
+        call_args = mock_graph.query.call_args[0]
+        assert call_args[1]['content'] == 'Seamless Recruiting  Onboarding'
+        assert call_args[1]['nested'] == {'values': ['ok', 'clean']}
+
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_session_creation(self):
         """Test session creation with specific database."""
@@ -297,6 +317,25 @@ class TestFalkorDriverSession:
         self.mock_graph.query.assert_called_once()
         call_args = self.mock_graph.query.call_args[0]
         assert call_args[1]['created_at'] == test_datetime.isoformat()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_run_strips_nul_bytes_from_list_query_parameters(self):
+        self.mock_graph.query = AsyncMock()
+
+        queries = [
+            (
+                'CREATE (n:Node) SET n.content = $content',
+                {'content': 'a\x00b', 'items': ('x\x00', 'y')},
+            )
+        ]
+
+        await self.session.run(queries)
+
+        self.mock_graph.query.assert_called_once_with(
+            'CREATE (n:Node) SET n.content = $content',
+            {'content': 'ab', 'items': ('x', 'y')},
+        )
 
 
 class TestDatetimeConversion:

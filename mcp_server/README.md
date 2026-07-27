@@ -107,7 +107,7 @@ The server can be configured using a `config.yaml` file, environment variables, 
 The MCP server comes with sensible defaults:
 - **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
 - **Database**: FalkorDB (combined in single container with MCP server)
-- **LLM**: OpenAI with model gpt-5-mini
+- **LLM**: OpenAI with model gpt-5.5
 - **Embedder**: OpenAI text-embedding-3-small
 
 ### Database Configuration
@@ -165,7 +165,7 @@ server:
 
 llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
-  model: "gpt-4.1"  # Default model
+  model: "gpt-5.5"  # Default model
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
@@ -189,6 +189,13 @@ embedder:
 
 Make sure Ollama is running locally with: `ollama serve`
 
+> [!IMPORTANT]
+> Graphiti relies on structured (JSON) output for entity/edge extraction and deduplication, and reliability varies on
+> small or local models. Prefer the most capable model your hardware can run — very small models frequently emit JSON
+> that doesn't match the expected schema, which surfaces as ingestion failures. For background and the
+> `structured_output_mode` (`json_schema` vs `json_object`) trade-off, see the core README's
+> [Structured output and small models](../README.md#structured-output-and-small-models) section.
+
 ### Entity Types
 
 Graphiti MCP Server includes built-in entity types for structured knowledge extraction. These entity types are always enabled and configured via the `entity_types` section in your `config.yaml`:
@@ -200,6 +207,7 @@ Graphiti MCP Server includes built-in entity types for structured knowledge extr
 - **Procedure**: Standard operating procedures and sequential instructions
 - **Location**: Physical or virtual places where activities occur
 - **Event**: Time-bound activities, occurrences, or experiences
+- **Person**: An individual human referenced in the content
 - **Organization**: Companies, institutions, groups, or formal entities
 - **Document**: Information content in various forms (books, articles, reports, videos, etc.)
 - **Topic**: Subject of conversation, interest, or knowledge domain (used as a fallback)
@@ -218,6 +226,8 @@ graphiti:
 ```
 
 The MCP server automatically uses these entity types during episode ingestion to extract and structure information from conversations and documents.
+
+> **Upgrade note:** These built-in types are now registered as rich models with typed attributes (e.g. a `description`), so extraction stores those attributes on entities. The shipped default `config.yaml` enables them, so an existing deployment on the default config switches from attribute-free to rich-attribute extraction. To keep the previous behavior, set `graphiti.entity_types` to an empty list (or remove the entries).
 
 ### Environment Variables
 
@@ -255,7 +265,7 @@ This starts a single container with:
 - HTTP transport on `http://localhost:8000/mcp/`
 - FalkorDB graph database on `localhost:6379`
 - FalkorDB web UI on `http://localhost:3000`
-- OpenAI LLM with gpt-5-mini model
+- OpenAI LLM with gpt-5.5 model
 
 ### Running with Neo4j
 
@@ -516,7 +526,7 @@ To use the Graphiti MCP server with other MCP-compatible clients, configure it t
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password",
         "OPENAI_API_KEY": "sk-XXXXXXXX",
-        "MODEL_NAME": "gpt-4.1-mini"
+        "MODEL_NAME": "gpt-5.5"
       }
     }
   }
@@ -540,15 +550,26 @@ For HTTP transport (default), you can use this configuration:
 
 The Graphiti MCP server exposes the following tools:
 
-- `add_episode`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
-- `search_nodes`: Search the knowledge graph for relevant node summaries
-- `search_facts`: Search the knowledge graph for relevant facts (edges between entities)
-- `delete_entity_edge`: Delete an entity edge from the knowledge graph
-- `delete_episode`: Delete an episode from the knowledge graph
-- `get_entity_edge`: Get an entity edge by its UUID
-- `get_episodes`: Get the most recent episodes for a specific group
-- `clear_graph`: Clear all data from the knowledge graph and rebuild indices
-- `get_status`: Get the status of the Graphiti MCP server and Neo4j connection
+- `add_memory`: Add an episode to the knowledge graph (supports text, JSON, and message formats).
+  Supports the bi-temporal `reference_time`, `excluded_entity_types`, `custom_extraction_instructions`,
+  `previous_episode_uuids`, `update_communities`, and `saga` / `saga_previous_episode_uuid`.
+- `add_triplet`: Add a single fact (source entity -> fact -> target entity) directly, bypassing extraction.
+- `search_nodes`: Search the knowledge graph for relevant entities; supports `entity_types` and `center_node_uuid`.
+- `search_memory_facts`: Search for relevant facts (edges); supports `edge_types`, `center_node_uuid`,
+  and `valid_at` / `invalid_at` date-range filters.
+- `summarize_saga`: Generate or refresh the running summary of a saga's episodes.
+- `build_communities`: Detect entity communities and produce higher-level community summaries.
+- `get_episode_entities`: Trace provenance — the entities and facts created by specific episode UUIDs.
+- `delete_entity_edge`: Delete an entity edge from the knowledge graph.
+- `delete_episode`: Delete an episode and cascade-delete the entities/facts it solely created.
+- `get_entity_edge`: Get an entity edge by its UUID.
+- `get_episodes`: Get the most recent episodes for a specific group.
+- `clear_graph`: Clear all data from the knowledge graph for the given group(s).
+- `get_status`: Get the status of the Graphiti MCP server and database connection.
+
+Custom entity types and edge (fact) types — including which edge types may connect which entity types —
+can be configured under the `graphiti` section of `config/config.yaml`. See the `entity_types`,
+`edge_types`, and `edge_type_map` keys there.
 
 ## Working with JSON Data
 
