@@ -24,6 +24,7 @@ from graphiti_core.utils.maintenance.community_operations import remove_communit
 def _mock_driver():
     driver = MagicMock()
     driver.graph_operations_interface = None
+    driver.graph_ops = None
     driver.execute_query = AsyncMock()
     return driver
 
@@ -80,4 +81,18 @@ async def test_remove_communities_scoped_via_graph_operations_interface():
     driver.graph_operations_interface.remove_communities.assert_awaited_once_with(
         driver, group_ids=['group_a']
     )
+    driver.execute_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_remove_communities_scoped_via_graph_ops():
+    driver = MagicMock()
+    driver.graph_operations_interface = None
+    driver.graph_ops = MagicMock()
+    driver.graph_ops.remove_communities = AsyncMock()
+    driver.execute_query = AsyncMock()
+
+    await remove_communities(driver, group_ids=['group_a'])
+
+    driver.graph_ops.remove_communities.assert_awaited_once_with(driver, group_ids=['group_a'])
     driver.execute_query.assert_not_awaited()

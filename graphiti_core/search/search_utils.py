@@ -242,18 +242,9 @@ async def edge_fulltext_search(
                 AND id(e)=id
                 WITH e, id.score as score, startNode(e) AS n, endNode(e) AS m
                 RETURN
-                    e.uuid AS uuid,
-                    e.group_id AS group_id,
-                    n.uuid AS source_node_uuid,
-                    m.uuid AS target_node_uuid,
-                    e.created_at AS created_at,
-                    e.name AS name,
-                    e.fact AS fact,
-                    split(e.episodes, ",") AS episodes,
-                    e.expired_at AS expired_at,
-                    e.valid_at AS valid_at,
-                    e.invalid_at AS invalid_at,
-                    properties(e) AS attributes
+                """
+                + get_entity_edge_return_query(GraphProvider.NEPTUNE)
+                + """
                 ORDER BY score DESC LIMIT $limit
                             """
             )
@@ -529,18 +520,9 @@ async def edge_bfs_search(
                 + filter_query
                 + """
                 RETURN DISTINCT
-                    e.uuid AS uuid,
-                    e.group_id AS group_id,
-                    startNode(e).uuid AS source_node_uuid,
-                    endNode(e).uuid AS target_node_uuid,
-                    e.created_at AS created_at,
-                    e.name AS name,
-                    e.fact AS fact,
-                    split(e.episodes, ',') AS episodes,
-                    e.expired_at AS expired_at,
-                    e.valid_at AS valid_at,
-                    e.invalid_at AS invalid_at,
-                    properties(e) AS attributes
+                """
+                + get_entity_edge_return_query(GraphProvider.NEPTUNE)
+                + """
                 LIMIT $limit
                 """
             )

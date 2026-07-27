@@ -23,6 +23,7 @@ from typing import Any
 import pytest
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.neptune.operations.search_ops import NeptuneSearchOperations
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import edge_bfs_search, edge_fulltext_search
 
@@ -42,6 +43,18 @@ class RecordingDriver:
         self.cypher_query = cypher_query_
         self.params = kwargs
         return [], None, None
+
+
+class RecordingNeptuneDriver(RecordingDriver):
+    provider = GraphProvider.NEPTUNE
+
+    def run_aoss_query(self, index_name: str, query: str):
+        return {
+            'hits': {
+                'total': {'value': 1},
+                'hits': [{'_source': {'uuid': 'edge-uuid'}, '_score': 1}],
+            }
+        }
 
 
 @pytest.mark.asyncio
@@ -84,3 +97,40 @@ async def test_edge_fulltext_search_not_rewritten_by_bfs_fix():
 
     assert 'WITH rel AS e, startNode(rel) AS n, endNode(rel) AS m' not in driver.cypher_query
     assert "type(e) = 'RELATES_TO'" not in driver.cypher_query
+
+
+@pytest.mark.asyncio
+async def test_neptune_generic_edge_searches_return_reference_time():
+    driver = RecordingNeptuneDriver()
+
+    await edge_bfs_search(
+        driver,  # type: ignore[arg-type]
+        ['origin-uuid'],
+        2,
+        SearchFilters(),
+        group_ids=['group-a'],
+    )
+    assert 'e.reference_time AS reference_time' in driver.cypher_query
+
+    await edge_fulltext_search(
+        driver,  # type: ignore[arg-type]
+        'api test system',
+        SearchFilters(),
+        group_ids=['group-a'],
+    )
+    assert 'e.reference_time AS reference_time' in driver.cypher_query
+
+
+@pytest.mark.asyncio
+async def test_neptune_operations_bfs_search_returns_reference_time():
+    executor = RecordingNeptuneDriver()
+
+    await NeptuneSearchOperations().edge_bfs_search(
+        executor,  # type: ignore[arg-type]
+        ['origin-uuid'],
+        2,
+        SearchFilters(),
+        group_ids=['group-a'],
+    )
+
+    assert 'e.reference_time AS reference_time' in executor.cypher_query
