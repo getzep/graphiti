@@ -221,7 +221,9 @@ class GraphitiService:
             # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
             # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
             # Reranker setup errors must remain fatal rather than silently restoring that default.
-            cross_encoder_client = CrossEncoderFactory.create(self.config.llm, self.config.embedder)
+            cross_encoder_client = CrossEncoderFactory.create(
+                self.config.llm, self.config.embedder, self.config.reranker
+            )
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)

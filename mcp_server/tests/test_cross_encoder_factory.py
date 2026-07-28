@@ -26,6 +26,7 @@ from config.schema import (
     LLMConfig,
     LLMProvidersConfig,
     OpenAIProviderConfig,
+    RerankerConfig,
     VoyageProviderConfig,
 )
 from services.factories import CrossEncoderFactory
@@ -57,6 +58,28 @@ class TestCrossEncoderFactory:
             providers=EmbedderProvidersConfig(gemini=GeminiProviderConfig(api_key='test-key')),
         )
         assert isinstance(CrossEncoderFactory.create(llm, embedder), GeminiRerankerClient)
+
+    def test_graphiti_config_accepts_explicit_reranker_provider(self):
+        config = GraphitiConfig(reranker={'provider': 'gemini'})
+
+        assert config.model_dump().get('reranker') == {'provider': 'gemini'}
+
+    def test_explicit_gemini_reranker_overrides_provider_inference(self):
+        llm = LLMConfig(
+            provider='openai',
+            providers=LLMProvidersConfig(
+                openai=OpenAIProviderConfig(api_key='openai-key'),
+                gemini=GeminiProviderConfig(api_key='gemini-key'),
+            ),
+        )
+        embedder = EmbedderConfig(
+            provider='openai',
+            providers=EmbedderProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+
+        reranker = CrossEncoderFactory.create(llm, embedder, RerankerConfig(provider='gemini'))
+
+        assert isinstance(reranker, GeminiRerankerClient)
 
     def test_missing_local_reranker_dependency_is_actionable(self, monkeypatch, caplog):
         llm = LLMConfig(
@@ -100,3 +123,35 @@ async def test_graphiti_service_does_not_swallow_reranker_configuration_error(mo
 
     with pytest.raises(ValueError, match='reranker setup failed'):
         await service.initialize()
+
+
+@pytest.mark.asyncio
+async def test_graphiti_service_uses_explicit_reranker_config(monkeypatch):
+    constructed = {}
+    fake_client = Mock()
+    fake_client.build_indices_and_constraints = AsyncMock()
+
+    def capture_graphiti(**kwargs):
+        constructed.update(kwargs)
+        return fake_client
+
+    monkeypatch.setattr(graphiti_mcp_server, 'Graphiti', capture_graphiti)
+    config = GraphitiConfig(
+        llm=LLMConfig(
+            provider='openai',
+            providers=LLMProvidersConfig(
+                openai=OpenAIProviderConfig(api_key='openai-key'),
+                gemini=GeminiProviderConfig(api_key='gemini-key'),
+            ),
+        ),
+        embedder=EmbedderConfig(
+            provider='openai',
+            providers=EmbedderProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        ),
+        reranker=RerankerConfig(provider='gemini'),
+        database=DatabaseConfig(provider='neo4j'),
+    )
+
+    await graphiti_mcp_server.GraphitiService(config).initialize()
+
+    assert isinstance(constructed['cross_encoder'], GeminiRerankerClient)
