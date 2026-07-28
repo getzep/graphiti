@@ -6,7 +6,7 @@ from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
-from config.schema import DatabaseConfig, EmbedderConfig, LLMConfig
+from config.schema import DatabaseConfig, EmbedderConfig, LLMConfig, RerankerConfig
 
 # Try to import FalkorDriver if available
 try:
@@ -414,16 +414,39 @@ class CrossEncoderFactory:
     """Factory for creating cross-encoder (reranker) clients based on configuration.
 
     Graphiti defaults the cross_encoder to OpenAIRerankerClient, which needs an OpenAI API key.
-    To keep the server usable on non-OpenAI setups, pick a reranker from the LLM provider, then
-    the embedder provider, and fall back to the local BGE reranker.
+    To keep the server usable on non-OpenAI setups, honor an explicit reranker provider when
+    configured. Otherwise, pick one from the LLM provider, then the embedder provider, and fall
+    back to the local BGE reranker.
     """
 
     @staticmethod
-    def create(llm_config: LLMConfig, embedder_config: EmbedderConfig) -> CrossEncoderClient:
+    def create(
+        llm_config: LLMConfig,
+        embedder_config: EmbedderConfig,
+        reranker_config: RerankerConfig | None = None,
+    ) -> CrossEncoderClient:
         """Create a cross-encoder client based on the configured providers."""
         import logging
 
         logger = logging.getLogger(__name__)
+
+        provider = reranker_config.provider if reranker_config is not None else 'auto'
+        if provider != 'auto':
+            if provider == 'bge':
+                return CrossEncoderFactory._local_reranker(logger)
+
+            for source, config in (('LLM', llm_config), ('embedder', embedder_config)):
+                explicit_config = config.model_copy(update={'provider': provider})
+                reranker = CrossEncoderFactory._reranker_for_provider(
+                    source, explicit_config, logger
+                )
+                if reranker is not None:
+                    return reranker
+
+            raise ValueError(
+                f"Reranker provider '{provider}' is not configured under "
+                'llm.providers or embedder.providers'
+            )
 
         # Try the LLM provider first, then the embedder, before falling back to a local model.
         for source, config in (('LLM', llm_config), ('embedder', embedder_config)):
@@ -431,8 +454,11 @@ class CrossEncoderFactory:
             if reranker is not None:
                 return reranker
 
-        # No provider reranker available (e.g. Anthropic LLM + Voyage embedder), so use the
-        # local BGE cross-encoder, which needs no API key.
+        return CrossEncoderFactory._local_reranker(logger)
+
+    @staticmethod
+    def _local_reranker(logger) -> CrossEncoderClient:
+        """Create the local BGE fallback reranker."""
         logger.warning(
             'No provider reranker available, using local BGERerankerClient '
             '(downloads BAAI/bge-reranker-v2-m3, ~2.3 GB, on first run)'
