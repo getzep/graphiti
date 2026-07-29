@@ -3,7 +3,7 @@
 Deploy [Graphiti](https://github.com/getzep/graphiti) on Render in one click. Get a hosted
 temporal knowledge-graph API your agents can write memories to and search over time.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Ho1yShif/graphiti)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/render-examples/graphiti)
 
 https://github.com/user-attachments/assets/da4041b7-f59e-4fb3-929b-fae2d6b949b0
 
@@ -59,9 +59,9 @@ from `graphiti-api` over Render's private network.
 
    Everything else is set for you in `render.yaml`. The ones worth knowing about:
 
-   | Variable          | Default   | Notes                                                                             |
-   | ----------------- | --------- | --------------------------------------------------------------------------------- |
-   | `MODEL_NAME`      | `gpt-5.5` | Any OpenAI model id.                                                              |
+   | Variable          | Default   | Notes                                                                                                                                                                                                             |
+   | ----------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `MODEL_NAME`      | `gpt-5.5` | Any OpenAI model id.                                                                                                                                                                                              |
    | `SEMAPHORE_LIMIT` | `10`      | Concurrent LLM calls during ingestion. Deliberately below graphiti-core's default of 20, so a burst of episodes doesn't trip the rate limits on a fresh OpenAI key. Raise it once you know your account's limits. |
 
    The rest is wiring you shouldn't need to touch. `DB_BACKEND` selects the FalkorDB code
