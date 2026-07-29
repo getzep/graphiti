@@ -3,7 +3,7 @@
 Deploy [Graphiti](https://github.com/getzep/graphiti) on Render in one click. Get a hosted
 temporal knowledge-graph API your agents can write memories to and search over time.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/render-examples/graphiti)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/render-examples/graphiti-render)
 
 https://github.com/user-attachments/assets/da4041b7-f59e-4fb3-929b-fae2d6b949b0
 
