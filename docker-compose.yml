@@ -19,6 +19,16 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
+    # Everything else the app reads comes straight from .env, so the settings documented
+    # in .env.example reach the container instead of being silently dropped. Listing them
+    # here one by one would mean a blank value for each one the user left out, and a blank
+    # is not the same as unset: SEMAPHORE_LIMIT is read as int(os.getenv(...)), so '' is a
+    # crash on import. Absent from .env means absent from the environment.
+    env_file:
+      - path: .env
+        required: false
+    # Compose-specific wiring, which has to win over whatever .env says: these hostnames
+    # only make sense on the compose network. environment takes precedence over env_file.
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NEO4J_URI=bolt://neo4j:${NEO4J_PORT:-7687}
@@ -81,6 +91,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    # See the note on the graph service above.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - FALKORDB_HOST=falkordb
