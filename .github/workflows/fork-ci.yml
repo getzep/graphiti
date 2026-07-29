@@ -1,0 +1,60 @@
+# Fork CI — runs on GitHub-hosted runners so this fork gets real checks without
+# depending on getzep's Depot runner pool (`depot-ubuntu-*`), Socket Firewall
+# actions, or organization secrets that the upstream workflows require and that a
+# fork does not have. Kept as a separate file (not an edit to the upstream
+# workflows) so merges from getzep/graphiti stay conflict-free.
+name: Fork CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      # Match the Python version the upstream workflows pin.
+      UV_PYTHON: "3.10"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Install dependencies
+        run: uv sync --all-extras
+      - name: Ruff format check
+        run: uv run ruff format --check
+      - name: Ruff lint
+        run: uv run ruff check
+      - name: Pyright type check
+        run: uv run pyright ./graphiti_core
+      - name: Unit tests (no external dependencies)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DISABLE_NEPTUNE: 1
+          DISABLE_NEO4J: 1
+          DISABLE_FALKORDB: 1
+          DISABLE_KUZU: 1
+        run: |
+          uv run pytest tests/ -m "not integration" \
+            --ignore=tests/test_graphiti_int.py \
+            --ignore=tests/test_graphiti_mock.py \
+            --ignore=tests/test_node_int.py \
+            --ignore=tests/test_edge_int.py \
+            --ignore=tests/test_entity_exclusion_int.py \
+            --ignore=tests/driver/ \
+            --ignore=tests/llm_client/test_anthropic_client_int.py \
+            --ignore=tests/utils/maintenance/test_temporal_operations_int.py \
+            --ignore=tests/cross_encoder/test_bge_reranker_client_int.py \
+            --ignore=tests/evals/
+      - name: Driver unit tests (mocked clients, no database)
+        run: uv run pytest tests/driver/test_drevo_driver.py
