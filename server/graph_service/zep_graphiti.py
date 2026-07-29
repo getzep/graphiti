@@ -10,7 +10,7 @@ from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, No
 from graphiti_core.llm_client import LLMClient, LLMConfig, OpenAIClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
 
-from graph_service.config import Settings, ZepEnvDep
+from graph_service.config import Settings
 from graph_service.dto import FactResult
 
 logger = logging.getLogger(__name__)
@@ -147,20 +147,39 @@ def _create_graphiti_client(settings: Settings) -> ZepGraphiti:
         )
 
 
-async def get_graphiti(settings: ZepEnvDep):
-    client = _create_graphiti_client(settings)
-    try:
-        yield client
-    finally:
-        await client.close()
+# One client for the life of the process, rather than one per request.
+#
+# Both graph drivers fire off build_indices_and_constraints() as an unawaited background task
+# from their constructor. Building a client per request therefore started an index build per
+# request, and closing that client when the request ended cut the task's connection mid-query
+# — which is where the 'Connection closed by server' tracebacks came from. The same close also
+# broke /messages, which hands its ingestion work to the async worker: those jobs outlive the
+# request, so they ran against a client that had already been closed and only survived on the
+# redis client's transparent reconnect.
+#
+# Sharing one client fixes both: the index build happens once, awaited, at startup, and queued
+# jobs keep a client that stays open. It also stops rebuilding the OpenAI clients and the
+# connection pool on every request.
+_graphiti_client: ZepGraphiti | None = None
+
+
+async def get_graphiti() -> ZepGraphiti:
+    if _graphiti_client is None:
+        raise RuntimeError('Graphiti client requested before startup completed')
+    return _graphiti_client
 
 
 async def initialize_graphiti(settings: Settings):
-    client = _create_graphiti_client(settings)
-    try:
-        await client.build_indices_and_constraints()
-    finally:
-        await client.close()
+    global _graphiti_client
+    _graphiti_client = _create_graphiti_client(settings)
+    await _graphiti_client.build_indices_and_constraints()
+
+
+async def shutdown_graphiti():
+    global _graphiti_client
+    if _graphiti_client is not None:
+        await _graphiti_client.close()
+        _graphiti_client = None
 
 
 def get_fact_result_from_edge(edge: EntityEdge):
