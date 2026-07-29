@@ -11,7 +11,12 @@
 #   watch_ingest            follow the ingestion queue draining
 #   ask "who owns X?"       the current answer, one line
 #   timeline "leads the"    every version of that fact, oldest first
-#   clear_group             delete everything in the current group
+#
+# There is deliberately no clear helper. DELETE /group and POST /clear return
+# {"success": true} on this deployment and delete nothing — they query the default
+# graph while the data lives in a graph named after the group_id. To actually erase a
+# group, open a shell on graphiti-falkordb and run `redis-cli GRAPH.DELETE <group>`;
+# to start clean without deleting anything, just `use_group` a new name.
 #
 # Every command is one word with no quoting or line continuations, because a
 # multi-line curl that loses its -H flag mid-paste sends the body without a JSON
@@ -41,8 +46,7 @@ unset _graphiti_sourced
 
 : "${GRAPHITI_URL:?set GRAPHITI_URL first, e.g. export GRAPHITI_URL=https://graphiti-api.onrender.com}"
 : "${GRAPHITI_GROUP:=demo}"
-# The default search string, shared by watch_ingest and clear_group so the fact
-# counts they report are counts of the same thing.
+# The default search string watch_ingest counts facts against.
 : "${GRAPHITI_QUERY:=payments team ledger migration}"
 
 command -v jq >/dev/null || echo 'demo.sh: jq not found — brew install jq'
@@ -97,23 +101,6 @@ ingest() {
     *) jq -c . "$body" 2>/dev/null || cat "$body" ;;
   esac
   rm -f "$tmp" "$body"
-}
-
-# Delete everything in the current group, then report what is left rather than
-# assuming. Named clear_group, not reset or clear, both of which are real
-# terminal commands.
-#
-# Only removes what is in the graph now: anything still on the ingestion queue
-# lands afterwards, so a fresh use_group is the more reliable reset.
-clear_group() {
-  local code left
-  code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "$GRAPHITI_URL/group/$GRAPHITI_GROUP")
-  case "$code" in
-    2*) ;;
-    *) printf '  delete failed on group %s (HTTP %s)\n' "$GRAPHITI_GROUP" "$code" >&2; return 1 ;;
-  esac
-  left=$(_graphiti_count "$GRAPHITI_QUERY")
-  printf '  cleared group %s (now %s facts)\n' "$GRAPHITI_GROUP" "${left:-?}"
 }
 
 # POST /search and emit the raw JSON. $1 query, $2 max_facts (default 10).
@@ -242,7 +229,8 @@ watch_ingest() {
     echo "  group '$GRAPHITI_GROUP' already holds $baseline facts — nothing to watch," >&2
     echo "  since a re-ingest dedupes into them and the count never moves." >&2
     echo "  Start a clean take:  use_group take2 && ingest && watch_ingest" >&2
-    echo "  Or clear this one:   clear_group && ingest && watch_ingest" >&2
+    echo "  (Emptying this group instead needs redis-cli GRAPH.DELETE on" >&2
+    echo "   graphiti-falkordb — the HTTP delete endpoints don't work here.)" >&2
     return 1
   fi
 

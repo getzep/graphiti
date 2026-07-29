@@ -56,6 +56,14 @@ projects:
               - key: OPENAI_API_KEY
                 sync: false
 
+              # The Dockerfile's CMD binds uvicorn to 8000 rather than reading $PORT, so
+              # tell Render the same number up front. Without this it starts out expecting
+              # its default 10000, discovers 8000, and restarts the deploy to rewire the
+              # network — a slower first deploy and a "Restarting deploy" line that reads
+              # like a failure. Keep in step with the CMD and docker-compose.yml.
+              - key: PORT
+                value: '8000'
+
               # Render exposes env vars to the Docker build as build args, which is how
               # the root Dockerfile picks up the graphiti-core FalkorDB extra.
               - key: INSTALL_FALKORDB
