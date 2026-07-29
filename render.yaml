@@ -60,17 +60,10 @@ projects:
               # the root Dockerfile picks up the graphiti-core FalkorDB extra.
               - key: INSTALL_FALKORDB
                 value: 'true'
-              # Pinned for the same reason the FalkorDB image is: left unset, the
-              # Dockerfile installs whatever graphiti-core is newest at build time, so two
-              # forks deployed a month apart run different libraries.
-              #
-              # This is the graphiti-core release to install from PyPI. It is not the same
-              # number as this repo's own version in pyproject.toml, and 0.29.2 in
-              # particular does not work here: on FalkorDB it writes episodes fine but
-              # reads them back empty, so /search and /episodes return nothing. Verify a
-              # round trip before bumping this.
-              - key: GRAPHITI_VERSION
-                value: 0.29.3
+              # The graphiti-core version is deliberately not set here. It is pinned once,
+              # as the GRAPHITI_VERSION build arg default in the Dockerfile, so a bump is
+              # a one-line change rather than three configs to keep in step. Setting it
+              # here would override that pin for this service only.
 
               - key: DB_BACKEND
                 value: falkordb

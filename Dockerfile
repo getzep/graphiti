@@ -1,8 +1,17 @@
 # syntax=docker/dockerfile:1.9
 FROM python:3.12-slim
 
+# The graphiti-core release installed from PyPI below, and the value of the version
+# labels. This default is the single source of truth for the pin: render.yaml,
+# docker-compose.yml, and local builds all inherit it, so a bump happens here and
+# nowhere else. It is a PyPI release number, not this repo's own version.
+#
+# 0.29.2 in particular does not work on FalkorDB: it writes episodes fine but reads them
+# back empty, so /search and /episodes return nothing. Verify a write-then-search round
+# trip before bumping. Release CI overrides this with the version it is publishing.
+ARG GRAPHITI_VERSION=0.29.3
+
 # Inherit build arguments for labels
-ARG GRAPHITI_VERSION
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -45,19 +54,12 @@ COPY ./server/graph_service ./graph_service
 # This prevents the stale lockfile from pinning an old graphiti-core version
 ARG INSTALL_FALKORDB=false
 RUN --mount=type=cache,target=/root/.cache/uv \
+    : "${GRAPHITI_VERSION:?must be a graphiti-core release from PyPI}" && \
     uv sync --frozen --no-dev && \
-    if [ -n "$GRAPHITI_VERSION" ]; then \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
-        else \
-            uv pip install --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
-        fi; \
+    if [ "$INSTALL_FALKORDB" = "true" ]; then \
+        uv pip install --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
     else \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --upgrade "graphiti-core[falkordb]"; \
-        else \
-            uv pip install --upgrade graphiti-core; \
-        fi; \
+        uv pip install --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
     fi
 
 # Change ownership to app user

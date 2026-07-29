@@ -93,9 +93,9 @@ def _create_openai_clients(
     base_url = settings.openai_base_url
 
     embedder_config = OpenAIEmbedderConfig(api_key=api_key, base_url=base_url)
-    # Assigned only when set, rather than passed to the constructor: embedding_model
-    # defaults to a real model name, so handing it None would overwrite that default.
-    # LLMConfig.model below defaults to None, which is why it can be passed straight in.
+    # Assigned only when set, rather than passed to the constructor: embedding_model is
+    # typed str (defaulting to a real model name), so passing None would fail validation.
+    # LLMConfig.model below is str | None, which is why it can be passed straight in.
     if settings.embedding_model_name is not None:
         embedder_config.embedding_model = settings.embedding_model_name
 
@@ -155,7 +155,7 @@ async def get_graphiti(settings: ZepEnvDep):
         await client.close()
 
 
-async def initialize_graphiti(settings: ZepEnvDep):
+async def initialize_graphiti(settings: Settings):
     client = _create_graphiti_client(settings)
     try:
         await client.build_indices_and_constraints()

@@ -60,8 +60,15 @@ from `graphiti-api` over Render's private network.
    | Variable          | Default   | Notes                                                                             |
    | ----------------- | --------- | --------------------------------------------------------------------------------- |
    | `MODEL_NAME`      | `gpt-5.5` | Any OpenAI model id.                                                              |
-   | `GRAPHITI_VERSION` | `0.29.3` | The `graphiti-core` release from PyPI the image is built against — not this repo's own version number. Pinned so every fork deploys the same library. Test a write-then-search round trip before bumping it. |
    | `SEMAPHORE_LIMIT` | `10`      | Concurrent LLM calls during ingestion. Deliberately below graphiti-core's default of 20, so a burst of episodes doesn't trip the rate limits on a fresh OpenAI key. Raise it once you know your account's limits. |
+
+   The `graphiti-core` version is pinned in one place: the `GRAPHITI_VERSION` build arg
+   default in [`Dockerfile`](Dockerfile). Every fork therefore deploys the same library,
+   and local `docker compose` builds match Render without a second pin to keep in step.
+   Bump it there, and verify a write-then-search round trip before you do — `0.29.2`, for
+   one, writes episodes on FalkorDB but reads them back empty. To override it for a single
+   Render service without editing the Dockerfile, add `GRAPHITI_VERSION` as an env var on
+   that service; Render passes env vars to the Docker build as build args.
 
 3. Wait for both services to go live. `graphiti-api` passes its health check at `/healthcheck`.
 
