@@ -168,6 +168,16 @@ export GRAPHITI_URL=https://graphiti-api.onrender.com
    > [graphiti-core](https://github.com/getzep/graphiti) driver issue, not a misconfiguration
    > here. Don't rely on them to erase a tenant's data.
 
+If you'd rather not paste multi-line `curl` commands, [`examples/render/demo.sh`](examples/render/demo.sh)
+wraps the same endpoints in one-word shell functions. Set `GRAPHITI_URL`, `source` the file (it
+defines functions, so running it won't work), and you get `use_group take1` to pick a group,
+`health`, `ingest` to POST the sample episode with its `group_id` rewritten to match, then
+`watch_ingest` to follow the queue draining, `ask "who owns the ledger migration?"` for the
+current answer, and `timeline "leads the payments"` for every version of a fact oldest-first with
+its relationship label and validity window. It's a thin projection over `/search` — the raw
+endpoint returns more fields than it prints. Use a new group per run rather than re-ingesting into
+one that already holds facts: they dedupe into what's there and nothing appears to happen.
+
 Full endpoint list at `$GRAPHITI_URL/docs` (FastAPI's generated OpenAPI docs).
 
 `group_id` partitions the graph. Use one per user, per tenant, or per agent, and search stays
