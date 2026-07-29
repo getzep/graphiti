@@ -5,6 +5,8 @@ temporal knowledge-graph API your agents can write memories to and search over t
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Ho1yShif/graphiti)
 
+https://github.com/user-attachments/assets/da4041b7-f59e-4fb3-929b-fae2d6b949b0
+
 ## What you get
 
 Graphiti turns a stream of conversations or events into a knowledge graph, and keeps track of
