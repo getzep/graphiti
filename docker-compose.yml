@@ -48,14 +48,18 @@ services:
       - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}
 
   falkordb:
-    image: falkordb/falkordb:latest
+    # Kept in step with render.yaml so local dev matches what Render runs.
+    image: falkordb/falkordb:v4.20.1
     profiles: ["falkordb"]
     ports:
       - "6379:6379"
     volumes:
-      - falkordb_data:/data
+      - falkordb_data:/var/lib/falkordb/data
     environment:
-      - FALKORDB_ARGS=--port 6379 --cluster-enabled no
+      # REDIS_ARGS goes to redis-server; FALKORDB_ARGS goes to the module. The flags that
+      # used to sit in FALKORDB_ARGS were redis-server flags in the module's slot, and
+      # both were already the defaults. Append-only matches what render.yaml runs.
+      - REDIS_ARGS=--appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 1s
@@ -66,6 +70,10 @@ services:
     build:
       args:
         INSTALL_FALKORDB: "true"
+        # Same pin as render.yaml. Left unset, the Dockerfile installs whatever
+        # graphiti-core is newest at build time, so local dev would drift off the
+        # version Render runs — the thing pinning was meant to prevent.
+        GRAPHITI_VERSION: ${GRAPHITI_VERSION:-0.29.3}
       context: .
     profiles: ["falkordb"]
     ports:
@@ -83,7 +91,6 @@ services:
       - FALKORDB_HOST=falkordb
       - FALKORDB_PORT=6379
       - FALKORDB_DATABASE=default_db
-      - GRAPHITI_BACKEND=falkordb
       - PORT=8000
       - db_backend=falkordb
 

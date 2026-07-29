@@ -1,0 +1,14 @@
+# The root Dockerfile builds only server/, so exclude the whole repo and add that one
+# subtree back. An allow-list keeps the context minimal without needing an update every
+# time the repo grows a new top-level directory.
+*
+!server/
+
+# Re-exclude what lives under server/ but never belongs in an image layer: a local
+# virtualenv (larger than the image itself), local secrets, and build droppings.
+server/.venv
+server/.env
+server/.env.*
+server/tests
+server/**/__pycache__
+server/**/*.pyc

@@ -1,0 +1,94 @@
+# Graphiti on Render — a temporal knowledge graph API backed by FalkorDB.
+#
+# graphiti-api      public REST service, built from the repo's root Dockerfile
+# graphiti-falkordb the graph store, private: reachable only from graphiti-api
+#
+# Secrets are never written here. OPENAI_API_KEY is declared sync: false, so Render
+# prompts for it at deploy time and stores it outside the repo.
+
+previews:
+  generation: off
+
+projects:
+  - name: graphiti
+    environments:
+      - name: production
+        services:
+          - type: pserv
+            name: graphiti-falkordb
+            runtime: image
+            region: oregon
+            # FalkorDB keeps the whole graph in RAM and only writes the append-only file
+            # to disk, so this plan is the real ceiling on graph size. Standard (2 GB) is
+            # the smallest that leaves room to grow; the disk below just has to outlast it.
+            plan: standard
+            # Pinned, not :latest — every fork deploys this exact version, so an upstream
+            # bump can't break new deploys out from under you. Bump it deliberately.
+            image:
+              url: docker.io/falkordb/falkordb:v4.20.1
+            disk:
+              name: falkordb-data
+              mountPath: /var/lib/falkordb/data
+              sizeGB: 10
+            envVars:
+              # Append-only file, so the graph survives a restart or redeploy.
+              - key: REDIS_ARGS
+                value: --appendonly yes
+              # The image otherwise also serves the FalkorDB Browser UI on :3000. Nothing
+              # uses it here, and leaving it on gives Render's port scanner a second port
+              # to choose from. Off, so 6379 is the only thing listening.
+              - key: BROWSER
+                value: '0'
+
+          - type: web
+            name: graphiti-api
+            runtime: docker
+            region: oregon
+            # The API idles near 100 MB and spends most of each request waiting on OpenAI,
+            # so it needs far less than the graph store does.
+            plan: starter
+            dockerfilePath: ./Dockerfile
+            dockerContext: .
+            healthCheckPath: /healthcheck
+            envVars:
+              # Declared on the service, not in an env var group: sync: false is silently
+              # ignored inside a group, so Render would never prompt for the value.
+              - key: OPENAI_API_KEY
+                sync: false
+
+              # Render exposes env vars to the Docker build as build args, which is how
+              # the root Dockerfile picks up the graphiti-core FalkorDB extra.
+              - key: INSTALL_FALKORDB
+                value: 'true'
+              # Pinned for the same reason the FalkorDB image is: left unset, the
+              # Dockerfile installs whatever graphiti-core is newest at build time, so two
+              # forks deployed a month apart run different libraries.
+              #
+              # This is the graphiti-core release to install from PyPI. It is not the same
+              # number as this repo's own version in pyproject.toml, and 0.29.2 in
+              # particular does not work here: on FalkorDB it writes episodes fine but
+              # reads them back empty, so /search and /episodes return nothing. Verify a
+              # round trip before bumping this.
+              - key: GRAPHITI_VERSION
+                value: 0.29.3
+
+              - key: DB_BACKEND
+                value: falkordb
+              - key: FALKORDB_HOST
+                fromService:
+                  name: graphiti-falkordb
+                  type: pserv
+                  property: host
+              - key: FALKORDB_PORT
+                value: '6379'
+              - key: FALKORDB_DATABASE
+                value: default_db
+
+              # The model Graphiti uses to extract entities and facts. Any OpenAI model id.
+              - key: MODEL_NAME
+                value: gpt-5.5
+              # Concurrent LLM calls during ingestion. Held below graphiti-core's default
+              # of 20 so a burst of episodes doesn't trip OpenAI rate limits on a new key.
+              # Raise it once you know your account's limits.
+              - key: SEMAPHORE_LIMIT
+                value: '10'
