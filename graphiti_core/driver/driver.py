@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from dotenv import load_dotenv
 
+from graphiti_core.driver.capabilities import GraphCapabilities
 from graphiti_core.driver.graph_operations.graph_operations import GraphOperationsInterface
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.driver.search_interface.search_interface import SearchInterface
@@ -61,6 +62,7 @@ class GraphProvider(Enum):
     FALKORDB = 'falkordb'
     KUZU = 'kuzu'
     NEPTUNE = 'neptune'
+    DREVO = 'drevo'
 
 
 class GraphDriverSession(ABC):
@@ -94,6 +96,16 @@ class GraphDriver(QueryExecutor, ABC):
     )
     _database: str
     default_group_id: str = ''
+    # Capabilities a backend declares so the search/index layer can branch on a
+    # capability instead of on provider identity. The base default is permissive
+    # (Neo4j-shaped) to preserve today's behavior for built-in drivers that have
+    # not yet declared their own; connectors for reduced backends override it.
+    capabilities: GraphCapabilities = GraphCapabilities(
+        supports_transactions=True,
+        supports_native_fulltext_search=True,
+        supports_native_vector_search=True,
+        supports_vector_index=True,
+    )
     # Legacy interfaces (kept for backwards compatibility during Phase 1)
     search_interface: SearchInterface | None = None
     graph_operations_interface: GraphOperationsInterface | None = None
