@@ -62,6 +62,12 @@ from `graphiti-api` over Render's private network.
    | `MODEL_NAME`      | `gpt-5.5` | Any OpenAI model id.                                                              |
    | `SEMAPHORE_LIMIT` | `10`      | Concurrent LLM calls during ingestion. Deliberately below graphiti-core's default of 20, so a burst of episodes doesn't trip the rate limits on a fresh OpenAI key. Raise it once you know your account's limits. |
 
+   The rest is wiring you shouldn't need to touch. `DB_BACKEND` selects the FalkorDB code
+   path; `FALKORDB_HOST` is filled in from the private service's hostname, with
+   `FALKORDB_PORT` and `FALKORDB_DATABASE` fixed to match it. `INSTALL_FALKORDB` is a build
+   arg that pulls in the `graphiti-core[falkordb]` extra, and `BROWSER=0` turns off the
+   FalkorDB Browser UI so `6379` is the only port the graph store listens on.
+
    The `graphiti-core` version is pinned in one place: the `GRAPHITI_VERSION` build arg
    default in [`Dockerfile`](Dockerfile). Every fork therefore deploys the same library,
    and local `docker compose` builds match Render without a second pin to keep in step.
@@ -172,6 +178,14 @@ not the disk — is what bounds how many you can keep.
 from the network. To add one anyway, set `REDIS_ARGS` to `--appendonly yes --requirepass <your
 password>` on `graphiti-falkordb`, and set `FALKORDB_PASSWORD` to the same value on
 `graphiti-api`. Render can't interpolate one env var into another, so this is a manual step.
+
+**`graphiti-falkordb` logs a security warning while it starts.** For the first few minutes
+you'll see `Possible SECURITY ATTACK detected ... Connection from 127.0.0.1 aborted` about
+once a minute. That's Render's port scanner sending an HTTP probe to `6379` to work out which
+port the service listens on; FalkorDB speaks the Redis protocol, so it reports the HTTP
+request as a cross-protocol attempt and drops it. It stops once the port is detected, and
+nothing reaches the graph. The startup line about Redis having no authentication is expected
+too — see the note above on why the private network is what isolates it.
 
 **Using Neo4j instead.** Set `DB_BACKEND=neo4j` and supply `NEO4J_URI`, `NEO4J_USER`, and
 `NEO4J_PASSWORD` (e.g. from Neo4j Aura), then drop the `graphiti-falkordb` service from
