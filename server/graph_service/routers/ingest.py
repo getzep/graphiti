@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from functools import partial
 
@@ -9,6 +10,8 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
+logger = logging.getLogger(__name__)
+
 
 class AsyncWorker:
     def __init__(self):
@@ -18,11 +21,24 @@ class AsyncWorker:
     async def worker(self):
         while True:
             try:
-                print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
+                # print, not logger.info: uvicorn leaves the root logger at WARNING, so an
+                # info-level line here never reaches the Render log. Reported after the get,
+                # rather than before it, so it means a job arrived instead of one being awaited.
+                print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 await job()
             except asyncio.CancelledError:
                 break
+            except Exception:
+                # Drop the episode and keep going. This loop is started once per process, so an
+                # exception escaping it ended ingestion for the life of the service — and nothing
+                # awaits self.task, so the traceback went nowhere: /messages carried on answering
+                # 202 into a queue with no reader. An exhausted OPENAI_API_KEY quota was enough
+                # to trigger it.
+                #
+                # No retry: add_episode is not idempotent, and a burst of failures on a dead key
+                # would be retried forever. A caller that needs the episode re-posts it.
+                logger.exception('Episode ingestion failed, dropping the job and continuing')
 
     async def start(self):
         self.task = asyncio.create_task(self.worker())

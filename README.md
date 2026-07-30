@@ -121,6 +121,9 @@ from `graphiti-api` over Render's private network.
 
 Ingestion is asynchronous — `/messages` queues the episode and returns immediately, then
 Graphiti extracts entities and facts in the background. Give it 10–30 seconds before searching.
+`"success": true` means the episode was queued, not that it was ingested: extraction happens
+after the response, so a failure there shows up in the `graphiti-api` logs rather than in the
+reply. Step 3 is how you confirm it actually landed.
 
 Set your URL and key once:
 
@@ -167,6 +170,12 @@ export GRAPHITI_API_KEY=...   # graphiti-api → Environment in the Render Dashb
      -H 'Content-Type: application/json' \
      -d '{"group_ids": ["demo"], "query": "who leads the payments team?", "max_facts": 10}'
    ```
+
+   > `/search` embeds your query before it can search, so it's the first endpoint to fail when
+   > `OPENAI_API_KEY` is unusable — steps 1–3 touch OpenAI either not at all or only in the
+   > background, and keep answering normally. A `429` naming an exhausted quota is billing on
+   > the OpenAI account, not a bad key: a new key on the same account returns the same thing.
+   > A `502` means the key itself was rejected.
 
    Among the results you'll find both sides of the handover, each stamped with when it
    became true:
