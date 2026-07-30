@@ -23,21 +23,20 @@ class AsyncWorker:
             try:
                 job = await self.queue.get()
                 # print, not logger.info: uvicorn leaves the root logger at WARNING, so an
-                # info-level line here never reaches the Render log. Reported after the get,
-                # rather than before it, so it means a job arrived instead of one being awaited.
+                # info-level line here never reaches the Render log. After the get, so it reports
+                # a job that arrived rather than one being awaited.
                 print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 await job()
             except asyncio.CancelledError:
                 break
             except Exception:
-                # Drop the episode and keep going. This loop is started once per process, so an
-                # exception escaping it ended ingestion for the life of the service — and nothing
-                # awaits self.task, so the traceback went nowhere: /messages carried on answering
-                # 202 into a queue with no reader. An exhausted OPENAI_API_KEY quota was enough
-                # to trigger it.
+                # Drop the episode and keep going. This loop runs once per process, so an escaping
+                # exception ended ingestion for the life of the service — silently, since nothing
+                # awaits self.task — while /messages carried on answering 202 into a queue with no
+                # reader. An exhausted OPENAI_API_KEY quota was enough to trigger it.
                 #
-                # No retry: add_episode is not idempotent, and a burst of failures on a dead key
-                # would be retried forever. A caller that needs the episode re-posts it.
+                # No retry: add_episode is not idempotent, and a dead key would be retried
+                # forever. A caller that needs the episode re-posts it.
                 logger.exception('Episode ingestion failed, dropping the job and continuing')
 
     async def start(self):

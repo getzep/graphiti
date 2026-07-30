@@ -262,6 +262,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "graphiti-core" },
     { name = "httpx" },
+    { name = "openai" },
     { name = "pydantic-settings" },
     { name = "uvicorn" },
 ]
@@ -286,6 +287,7 @@ requires-dist = [
     { name = "graphiti-core", specifier = ">=0.28.2" },
     { name = "graphiti-core", extras = ["falkordb"], marker = "extra == 'dev'", specifier = ">=0.28.2" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "openai", specifier = ">=1.92.2" },
     { name = "pydantic", marker = "extra == 'dev'", specifier = ">=2.8.2" },
     { name = "pydantic-settings", specifier = ">=2.4.0" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.380" },

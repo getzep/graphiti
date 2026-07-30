@@ -14,6 +14,7 @@ import openai
 import pytest
 from fastapi.testclient import TestClient
 
+from graph_service.config import get_settings
 from graph_service.main import app
 from graph_service.routers.ingest import AsyncWorker
 from graph_service.zep_graphiti import get_graphiti
@@ -58,8 +59,6 @@ def client(monkeypatch):
     """
     monkeypatch.setenv('GRAPHITI_API_KEY', API_KEY)
     monkeypatch.setenv('OPENAI_API_KEY', 'sk-not-used')
-    from graph_service.config import get_settings
-
     get_settings.cache_clear()
 
     def _client(error: Exception):
@@ -92,8 +91,12 @@ def test_rejected_openai_key_is_reported_as_a_bad_gateway(client):
     assert 'OPENAI_API_KEY' in response.json()['detail']
 
 
-async def _drain(worker: AsyncWorker, jobs: int):
-    """Run the worker until it has taken `jobs` jobs off the queue, or the worker dies."""
+async def _drain(worker: AsyncWorker):
+    """Run the worker until the queue is empty, then let the job it last took finish.
+
+    Polls rather than joins: the worker never calls queue.task_done(), so queue.join() would
+    block forever.
+    """
     await worker.start()
     for _ in range(200):
         if worker.queue.empty():
@@ -122,7 +125,7 @@ async def test_worker_survives_a_failing_job():
 
     await worker.queue.put(failing)
     await worker.queue.put(succeeding)
-    await _drain(worker, jobs=2)
+    await _drain(worker)
 
     assert ran == ['failing', 'succeeding'], 'the worker stopped after the failing job'
 
@@ -137,6 +140,6 @@ async def test_failing_job_is_logged(caplog):
 
     await worker.queue.put(failing)
     with caplog.at_level('ERROR'):
-        await _drain(worker, jobs=1)
+        await _drain(worker)
 
     assert any(r.exc_info for r in caplog.records), 'no traceback was logged'

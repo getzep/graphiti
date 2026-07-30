@@ -13,6 +13,9 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "uvicorn>=0.44.0",
     "httpx>=0.28.1",
+    # Imported directly by main.py, which maps openai's exceptions onto HTTP statuses. A
+    # transitive dependency of graphiti-core too, but declared here so that stays incidental.
+    "openai>=1.92.2",
 ]
 
 [project.optional-dependencies]
