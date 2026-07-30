@@ -17,12 +17,14 @@ limitations under the License.
 from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
+from .ollama_client import OllamaClient
 from .openai_client import OpenAIClient
 from .token_tracker import TokenUsage, TokenUsageTracker
 
 __all__ = [
     'LLMClient',
     'OpenAIClient',
+    'OllamaClient',
     'LLMConfig',
     'RateLimitError',
     'TokenUsage',
