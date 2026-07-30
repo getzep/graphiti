@@ -38,7 +38,12 @@ from models.response_types import (
     SuccessResponse,
     TripletResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import (
+    CrossEncoderFactory,
+    DatabaseDriverFactory,
+    EmbedderFactory,
+    LLMClientFactory,
+)
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
 from utils.type_config import (
@@ -214,6 +219,11 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
+            # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
+            # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
+            # Reranker setup errors must remain fatal rather than silently restoring that default.
+            cross_encoder_client = CrossEncoderFactory.create(self.config.llm, self.config.embedder)
+
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
@@ -234,6 +244,7 @@ class GraphitiService:
                     falkor_driver = FalkorDriver(
                         host=db_config['host'],
                         port=db_config['port'],
+                        username=db_config.get('username'),
                         password=db_config['password'],
                         database=db_config['database'],
                     )
@@ -242,6 +253,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
                 elif db_provider == 'neptune':
@@ -268,6 +280,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
