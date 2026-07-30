@@ -50,6 +50,12 @@ FALKORDB_PORT = int(os.environ.get('FALKORDB_PORT', '6379'))
 
 pytestmark = [pytest.mark.integration]
 
+# The key the live server is spawned with; auth is mandatory, so it needs one to boot. Pinned,
+# not inherited: a root-.env GRAPHITI_API_KEY would reach the subprocess via load_dotenv above
+# and 401 every request here.
+API_KEY = 'srvtest-api-key-Rk4Wm2'
+AUTH_HEADERS = {'Authorization': f'Bearer {API_KEY}'}
+
 
 def _falkordb_reachable(host: str, port: int) -> bool:
     """Best-effort TCP check that a FalkorDB (Redis) endpoint is reachable."""
@@ -116,6 +122,7 @@ def live_server() -> Iterator[tuple[str, str]]:
         # A fresh logical graph per run isolates the test and keeps a long-lived
         # local FalkorDB from accumulating data across runs.
         'FALKORDB_DATABASE': token,
+        'GRAPHITI_API_KEY': API_KEY,
     }
     # Not a context manager: the handle must outlive setup (the subprocess writes
     # to it across the yield) and is closed explicitly in the finally block.
@@ -198,6 +205,7 @@ def _search_until(
 
 
 def test_healthcheck(live_server: tuple[str, str]) -> None:
+    # No auth header: /healthcheck must stay public or Render's poll rolls the deploy back.
     base_url, _ = live_server
     with httpx.Client(base_url=base_url, timeout=10) as client:
         resp = client.get('/healthcheck')
@@ -207,7 +215,7 @@ def test_healthcheck(live_server: tuple[str, str]) -> None:
 
 def test_ingest_search_delete_e2e(live_server: tuple[str, str]) -> None:
     base_url, group_id = live_server
-    with httpx.Client(base_url=base_url, timeout=30) as client:
+    with httpx.Client(base_url=base_url, timeout=30, headers=AUTH_HEADERS) as client:
         try:
             # 1. Ingest a message with clearly-extractable entities and a relationship.
             add = client.post(

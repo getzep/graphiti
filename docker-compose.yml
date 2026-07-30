@@ -3,8 +3,11 @@ services:
     profiles: [""]
     build:
       context: .
+    # Localhost-bound, not the bare "8000:8000": the key below is committed to this repo, so
+    # publishing on every interface would hand the graph to anyone on a shared network. Drop the
+    # prefix to reach this from another machine, and set your own key in the same edit.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test:
         [
@@ -31,6 +34,9 @@ services:
     # only make sense on the compose network. environment takes precedence over env_file.
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Mandatory, so the stack needs one to boot. Named insecure- because it is committed and
+      # protects nothing; the localhost binding above is what does.
+      - GRAPHITI_API_KEY=${GRAPHITI_API_KEY:-insecure-local-dev-key}
       - NEO4J_URI=bolt://neo4j:${NEO4J_PORT:-7687}
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
@@ -48,9 +54,11 @@ services:
       timeout: 10s
       retries: 10
       start_period: 3s
+    # Localhost-bound, as above, with more at stake: NEO4J_PASSWORD defaults to `password` and
+    # Bolt is unmediated write access.
     ports:
-      - "7474:7474" # HTTP
-      - "${NEO4J_PORT:-7687}:${NEO4J_PORT:-7687}" # Bolt
+      - "127.0.0.1:7474:7474" # HTTP
+      - "127.0.0.1:${NEO4J_PORT:-7687}:${NEO4J_PORT:-7687}" # Bolt
     volumes:
       - neo4j_data:/data
     environment:
@@ -60,8 +68,10 @@ services:
     # Kept in step with render.yaml so local dev matches what Render runs.
     image: falkordb/falkordb:v4.20.1
     profiles: ["falkordb"]
+    # Localhost-bound, as above. FalkorDB has no password at all; on Render it is a pserv
+    # reachable only from graphiti-api, and this is the closest local equivalent.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - falkordb_data:/var/lib/falkordb/data
     environment:
@@ -81,8 +91,9 @@ services:
         INSTALL_FALKORDB: "true"
       context: .
     profiles: ["falkordb"]
+    # Localhost-bound, as above.
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     depends_on:
       falkordb:
         condition: service_healthy
@@ -97,6 +108,8 @@ services:
         required: false
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # See the note on the graph service above.
+      - GRAPHITI_API_KEY=${GRAPHITI_API_KEY:-insecure-local-dev-key}
       - FALKORDB_HOST=falkordb
       - FALKORDB_PORT=6379
       - FALKORDB_DATABASE=default_db

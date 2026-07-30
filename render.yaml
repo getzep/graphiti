@@ -56,6 +56,17 @@ projects:
               - key: OPENAI_API_KEY
                 sync: false
 
+              # Bearer token for every endpoint except /healthcheck, and the server will not
+              # start without it, so a fork is closed from the moment it goes live. Read the
+              # value from the Dashboard (Environment tab) after the first deploy.
+              #
+              # generateValue rather than sync: false keeps the one-click path one click.
+              # Generated once and persistent across syncs, so rotation is a manual edit here or
+              # in the Dashboard; a replacement must be 16+ printable-ASCII characters or the
+              # service refuses to start — see graph_service/config.py.
+              - key: GRAPHITI_API_KEY
+                generateValue: true
+
               # The Dockerfile's CMD binds uvicorn to 8000 rather than reading $PORT, so
               # tell Render the same number up front. Without this it starts out expecting
               # its default 10000, discovers 8000, and restarts the deploy to rewire the

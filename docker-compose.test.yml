@@ -1,8 +1,9 @@
 services:
   graph:
     image: graphiti-service:${GITHUB_SHA}
+    # Localhost-bound, as in docker-compose.yml: the key below is committed to this repo.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test:
         [
@@ -19,6 +20,8 @@ services:
         condition: service_healthy
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Auth is mandatory, so the service needs a key to boot.
+      - GRAPHITI_API_KEY=${GRAPHITI_API_KEY:-insecure-local-dev-key}
       - NEO4J_URI=bolt://neo4j:${NEO4J_PORT}
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
@@ -26,9 +29,10 @@ services:
 
   neo4j:
     image: neo4j:5.26.2
+    # Localhost-bound: Bolt is unmediated write access. `graph` uses the compose network.
     ports:
-      - "7474:7474"
-      - "${NEO4J_PORT}:${NEO4J_PORT}"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:${NEO4J_PORT}:${NEO4J_PORT}"
     healthcheck:
       test: wget "http://localhost:${NEO4J_PORT}" || exit 1
       interval: 1s

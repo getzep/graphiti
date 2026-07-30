@@ -38,7 +38,7 @@ Docker has no systemd here — start the daemon manually once per VM: `sudo dock
 
 ### Running the services (dev mode)
 All three run without a valid OpenAI key for startup/health only; real ingest/search (LLM extraction + embeddings) needs a real `OPENAI_API_KEY`.
-- REST API (`server/`): `OPENAI_API_KEY=<placeholder-or-real> DB_BACKEND=falkordb FALKORDB_HOST=localhost FALKORDB_PORT=6379 uv run uvicorn graph_service.main:app --reload --port 8000`. Health at `/healthcheck`, Swagger at `/docs`. `Settings` requires `OPENAI_API_KEY` to be present (any value) or startup fails.
+- REST API (`server/`): `OPENAI_API_KEY=<placeholder-or-real> GRAPHITI_API_KEY=insecure-local-dev-key DB_BACKEND=falkordb FALKORDB_HOST=localhost FALKORDB_PORT=6379 uv run uvicorn graph_service.main:app --reload --port 8000`. Health at `/healthcheck` (the only endpoint that takes no key), Swagger at `/docs`. `Settings` requires `OPENAI_API_KEY` to be present (any value) and `GRAPHITI_API_KEY` to be at least 16 printable-ASCII characters, or startup fails. Every other endpoint needs `Authorization: Bearer $GRAPHITI_API_KEY`; after 10 rejections in a minute the server answers 429 instead of 401.
 - MCP server (`mcp_server/`): `OPENAI_API_KEY=<...> FALKORDB_URI=redis://localhost:6379 uv run python main.py --transport http --host 0.0.0.0 --port 8001 --database-provider falkordb`. Serves streamable HTTP MCP at `/mcp/` (use port 8001 if 8000 is taken by the REST server).
 
 ### Backend gotcha
