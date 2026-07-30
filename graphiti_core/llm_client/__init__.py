@@ -16,15 +16,21 @@ limitations under the License.
 
 from .client import LLMClient
 from .config import LLMConfig
+from .deepseek_client import DeepSeekClient
 from .errors import RateLimitError
+from .kimi_client import KimiClient
 from .ollama_client import OllamaClient
 from .openai_client import OpenAIClient
+from .qwen_client import QwenClient
 from .token_tracker import TokenUsage, TokenUsageTracker
 
 __all__ = [
     'LLMClient',
     'OpenAIClient',
     'OllamaClient',
+    'DeepSeekClient',
+    'KimiClient',
+    'QwenClient',
     'LLMConfig',
     'RateLimitError',
     'TokenUsage',
