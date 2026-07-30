@@ -1,6 +1,5 @@
 """Tests for configurable MCP server instructions."""
 
-import os
 import sys
 from pathlib import Path
 

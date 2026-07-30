@@ -172,6 +172,7 @@ When searching, use specific queries and consider filtering by group_id, type, o
 server requires a configured database and valid API keys for language-model operations.
 """
 
+
 def resolve_server_instructions() -> str:
     """Return the instructions advertised to MCP clients on connect.
 
