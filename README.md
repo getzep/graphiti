@@ -16,7 +16,6 @@ Graphiti
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/getzep/graphiti)](https://github.com/getzep/graphiti/stargazers)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.com/invite/W8Kw6bsgXQ)
 [![arXiv](https://img.shields.io/badge/arXiv-2501.13956-b31b1b.svg?style=flat)](https://arxiv.org/abs/2501.13956)
 [![Release](https://img.shields.io/github/v/release/getzep/graphiti?style=flat&label=Release&color=limegreen)](https://github.com/getzep/graphiti/releases)
 
@@ -714,9 +713,9 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 ## Contributing
 
 We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
-answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
+helping others on GitHub. For detailed guidelines on code contributions, please refer
 to [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
+Open a [GitHub issue](https://github.com/getzep/graphiti/issues) to ask questions, report bugs, or discuss Graphiti.
