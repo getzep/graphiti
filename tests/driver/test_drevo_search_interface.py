@@ -127,3 +127,74 @@ class TestEdgeSimilaritySearch:
         assert 'm.uuid = $target_uuid' in query
         assert kwargs['source_uuid'] == 'src'
         assert kwargs['target_uuid'] == 'tgt'
+
+
+@pytest.mark.asyncio
+class TestNodeFulltextSearch:
+    async def test_ranks_by_term_overlap_and_drops_nonmatching(self):
+        # The mocked DB returns candidates; ranking + the 0-overlap drop happen
+        # in the interim library-side ranker until drevo#208 lands.
+        records = [
+            {'uuid': 'y', 'fulltext_name': 'alpha only', 'fulltext_summary': ''},
+            {'uuid': 'x', 'fulltext_name': 'alpha beta', 'fulltext_summary': ''},
+            {'uuid': 'z', 'fulltext_name': 'nothing', 'fulltext_summary': 'nope'},
+        ]
+        execute_query = AsyncMock(return_value=(records, None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_entity_node_from_record',
+            side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().node_fulltext_search(
+                driver, query='alpha beta', search_filter=SearchFilters(), limit=10
+            )
+
+        assert [n.uuid for n in result] == ['x', 'y']
+
+    async def test_builds_contains_clause_with_term_params(self):
+        execute_query = AsyncMock(return_value=([], None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        await DrevoSearchInterface().node_fulltext_search(
+            driver, query='foo bar', search_filter=SearchFilters(), group_ids=['g1'], limit=10
+        )
+
+        cypher = execute_query.await_args.args[0]
+        kwargs = execute_query.await_args.kwargs
+        assert 'toLower(n.name) CONTAINS $term_0' in cypher
+        assert 'toLower(n.summary) CONTAINS $term_1' in cypher
+        assert 'n.group_id IN $group_ids' in cypher
+        assert kwargs['term_0'] == 'foo'
+        assert kwargs['term_1'] == 'bar'
+
+    async def test_empty_query_short_circuits(self):
+        execute_query = AsyncMock(return_value=([], None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        result = await DrevoSearchInterface().node_fulltext_search(
+            driver, query='   ', search_filter=SearchFilters(), limit=10
+        )
+        assert result == []
+        execute_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+class TestEdgeFulltextSearch:
+    async def test_matches_name_and_fact(self):
+        records = [{'uuid': 'e1', 'fulltext_name': 'rel', 'fulltext_fact': 'alpha beta fact'}]
+        execute_query = AsyncMock(return_value=(records, None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_entity_edge_from_record',
+            side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().edge_fulltext_search(
+                driver, query='alpha beta', search_filter=SearchFilters(), limit=10
+            )
+
+        assert [e.uuid for e in result] == ['e1']
+        cypher = execute_query.await_args.args[0]
+        assert 'toLower(e.name) CONTAINS $term_0' in cypher
+        assert 'toLower(e.fact) CONTAINS $term_0' in cypher

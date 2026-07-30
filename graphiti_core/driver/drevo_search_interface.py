@@ -32,6 +32,43 @@ from graphiti_core.search.search_filters import (
 logger = logging.getLogger(__name__)
 
 
+def _tokenize(query: str) -> list[str]:
+    """Split a fulltext query into lowercased terms."""
+    return [term for term in query.lower().split() if term]
+
+
+def _lexical_match_clause(fields: list[str], term_count: int) -> str:
+    """Build a Cypher predicate matching any term against any field.
+
+    Interim substitute for a real fulltext index: drevo exposes no BM25 search
+    over Bolt/Cypher yet (drevo#208), so the connector filters candidates with
+    ``CONTAINS`` and ranks them by term overlap in Python. Parameters are named
+    ``term_0``..``term_{n-1}``.
+    """
+    clauses = [
+        f'toLower({field}) CONTAINS $term_{i}' for i in range(term_count) for field in fields
+    ]
+    return '(' + ' OR '.join(clauses) + ')'
+
+
+def _rank_by_term_overlap(
+    records: list[dict[str, Any]],
+    text_keys: list[str],
+    terms: list[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Rank rows by how many distinct query terms appear in their text fields."""
+    scored: list[tuple[dict[str, Any], int]] = []
+    for record in records:
+        haystack = ' '.join(str(record.get(key) or '') for key in text_keys).lower()
+        overlap = sum(1 for term in terms if term in haystack)
+        if overlap > 0:
+            scored.append((record, overlap))
+
+    scored.sort(key=lambda item: item[1], reverse=True)
+    return [record for record, _ in scored[:limit]]
+
+
 class DrevoSearchInterface(SearchInterface):
     """Search overlay for the drevo backend.
 
@@ -43,8 +80,12 @@ class DrevoSearchInterface(SearchInterface):
     Vector similarity uses drevo's native ``cosine_similarity(a, b)`` Cypher
     scalar (drevo#202 request #1), so ranking happens server-side in a single
     query — the same shape as the Neo4j inline path, only the scalar differs.
-    Fulltext, BFS, community search and the rerankers are added in subsequent
-    slices; drevo has no Bolt/Cypher full-text search yet (tracked as drevo#208).
+
+    Fulltext (node/edge) is an interim lexical match: drevo has no BM25 search
+    over Bolt/Cypher yet (drevo#208), so candidates are filtered with ``CONTAINS``
+    and ranked by term overlap in Python; it is swapped for the native path once
+    drevo#208 lands. Episode/community fulltext, BFS and the rerankers follow in
+    subsequent slices.
     """
 
     async def node_similarity_search(
@@ -123,3 +164,67 @@ class DrevoSearchInterface(SearchInterface):
             **filter_params,
         )
         return [get_entity_edge_from_record(record, driver.provider) for record in records]
+
+    async def node_fulltext_search(
+        self,
+        driver: Any,
+        query: str,
+        search_filter: Any,
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        terms = _tokenize(query)
+        if not terms:
+            return []
+
+        filter_queries, filter_params = node_search_filter_query_constructor(
+            search_filter, driver.provider
+        )
+        if group_ids is not None:
+            filter_queries.append('n.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+        filter_queries.append(_lexical_match_clause(['n.name', 'n.summary'], len(terms)))
+        filter_query = ' WHERE ' + ' AND '.join(filter_queries)
+
+        term_params = {f'term_{i}': term for i, term in enumerate(terms)}
+        cypher = (
+            f'MATCH (n:Entity){filter_query} RETURN '
+            + get_entity_node_return_query(driver.provider)
+            + ', n.name AS fulltext_name, n.summary AS fulltext_summary'
+        )
+        records, _, _ = await driver.execute_query(cypher, **filter_params, **term_params)
+
+        ranked = _rank_by_term_overlap(records, ['fulltext_name', 'fulltext_summary'], terms, limit)
+        return [get_entity_node_from_record(record, driver.provider) for record in ranked]
+
+    async def edge_fulltext_search(
+        self,
+        driver: Any,
+        query: str,
+        search_filter: Any,
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        terms = _tokenize(query)
+        if not terms:
+            return []
+
+        filter_queries, filter_params = edge_search_filter_query_constructor(
+            search_filter, driver.provider
+        )
+        if group_ids is not None:
+            filter_queries.append('e.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+        filter_queries.append(_lexical_match_clause(['e.name', 'e.fact'], len(terms)))
+        filter_query = ' WHERE ' + ' AND '.join(filter_queries)
+
+        term_params = {f'term_{i}': term for i, term in enumerate(terms)}
+        cypher = (
+            f'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity){filter_query} RETURN '
+            + get_entity_edge_return_query(driver.provider)
+            + ', e.name AS fulltext_name, e.fact AS fulltext_fact'
+        )
+        records, _, _ = await driver.execute_query(cypher, **filter_params, **term_params)
+
+        ranked = _rank_by_term_overlap(records, ['fulltext_name', 'fulltext_fact'], terms, limit)
+        return [get_entity_edge_from_record(record, driver.provider) for record in ranked]
