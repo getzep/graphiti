@@ -23,21 +23,27 @@ API_KEY = 'test-api-key-6Yp2Qk'
 AUTH = {'Authorization': f'Bearer {API_KEY}'}
 
 
-def _openai_error(cls: type[openai.APIStatusError], status: int, message: str):
+def _openai_error(
+    cls: type[openai.APIStatusError], status: int, message: str
+) -> openai.APIStatusError:
     """Build a real openai error, since the handler dispatches on the exception type."""
     request = httpx.Request('POST', 'https://api.openai.com/v1/embeddings')
     response = httpx.Response(status, request=request)
     return cls(message, response=response, body={'error': {'message': message}})
 
 
-QUOTA_ERROR = _openai_error(
-    openai.RateLimitError,
-    429,
-    'You exceeded your current quota, please check your plan and billing details.',
-)
-BAD_KEY_ERROR = _openai_error(
-    openai.AuthenticationError, 401, 'Incorrect API key provided: sk-xxx.'
-)
+# Built per use, not shared as constants: raising one instance in several cases accumulates
+# __traceback__ and __context__ on it, which couples the cases through it.
+def quota_error() -> openai.APIStatusError:
+    return _openai_error(
+        openai.RateLimitError,
+        429,
+        'You exceeded your current quota, please check your plan and billing details.',
+    )
+
+
+def bad_key_error() -> openai.APIStatusError:
+    return _openai_error(openai.AuthenticationError, 401, 'Incorrect API key provided: sk-xxx.')
 
 
 class RaisingGraphiti:
@@ -51,7 +57,7 @@ class RaisingGraphiti:
 
 
 @pytest.fixture
-def client(monkeypatch):
+def build_client(monkeypatch):
     """A TestClient over the real app, with auth satisfied and no lifespan.
 
     No lifespan, so no Graphiti client is built and no index build runs; the dependency override
@@ -61,11 +67,11 @@ def client(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'sk-not-used')
     get_settings.cache_clear()
 
-    def _client(error: Exception):
+    def _build(error: Exception):
         app.dependency_overrides[get_graphiti] = lambda: RaisingGraphiti(error)
         return TestClient(app)
 
-    yield _client
+    yield _build
     app.dependency_overrides.clear()
     get_settings.cache_clear()
 
@@ -73,9 +79,9 @@ def client(monkeypatch):
 SEARCH_BODY = {'group_ids': ['demo'], 'query': 'who leads the payments team?', 'max_facts': 10}
 
 
-def test_exhausted_quota_is_not_an_internal_server_error(client):
+def test_exhausted_quota_is_not_an_internal_server_error(build_client):
     """A refused OpenAI call is upstream's fault, and the response should say which upstream."""
-    response = client(QUOTA_ERROR).post('/search', json=SEARCH_BODY, headers=AUTH)
+    response = build_client(quota_error()).post('/search', json=SEARCH_BODY, headers=AUTH)
 
     assert response.status_code == 429
     detail = response.json()['detail']
@@ -83,12 +89,38 @@ def test_exhausted_quota_is_not_an_internal_server_error(client):
     assert 'quota' in detail.lower()
 
 
-def test_rejected_openai_key_is_reported_as_a_bad_gateway(client):
+def test_rejected_openai_key_is_reported_as_a_bad_gateway(build_client):
     """The caller's key was fine; OPENAI_API_KEY is the one the operator has to go fix."""
-    response = client(BAD_KEY_ERROR).post('/search', json=SEARCH_BODY, headers=AUTH)
+    response = build_client(bad_key_error()).post('/search', json=SEARCH_BODY, headers=AUTH)
 
     assert response.status_code == 502
     assert 'OPENAI_API_KEY' in response.json()['detail']
+
+
+@pytest.mark.parametrize(
+    ('error', 'expected_status'),
+    [
+        pytest.param(
+            _openai_error(openai.InternalServerError, 500, 'The server had an error.'),
+            502,
+            id='openai-broke',
+        ),
+        pytest.param(
+            openai.APIConnectionError(request=httpx.Request('POST', 'https://api.openai.com')),
+            504,
+            id='never-reached-openai',
+        ),
+    ],
+)
+def test_other_openai_failures_are_gateway_errors(build_client, error, expected_status):
+    """The two fallback branches: an error OpenAI returned, and one where it never answered.
+
+    Neither is the caller's fault, so neither may come back as a 5xx pointing at this service.
+    """
+    response = build_client(error).post('/search', json=SEARCH_BODY, headers=AUTH)
+
+    assert response.status_code == expected_status
+    assert 'OpenAI' in response.json()['detail']
 
 
 async def _drain(worker: AsyncWorker):
@@ -118,7 +150,7 @@ async def test_worker_survives_a_failing_job():
 
     async def failing():
         ran.append('failing')
-        raise QUOTA_ERROR
+        raise quota_error()
 
     async def succeeding():
         ran.append('succeeding')
@@ -136,7 +168,7 @@ async def test_failing_job_is_logged(caplog):
     worker = AsyncWorker()
 
     async def failing():
-        raise QUOTA_ERROR
+        raise quota_error()
 
     await worker.queue.put(failing)
     with caplog.at_level('ERROR'):
