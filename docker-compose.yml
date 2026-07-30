@@ -41,6 +41,11 @@ services:
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
       - DB_BACKEND=neo4j
+      # Now that the Dockerfile's CMD honours PORT, pin it: the mapping above and the
+      # healthcheck below both name 8000 literally, so a PORT inherited from .env would
+      # move the server out from under them. Change the left-hand side of the mapping to
+      # publish somewhere else.
+      - PORT=8000
   neo4j:
     image: neo4j:5.26.2
     profiles: [""]
@@ -114,6 +119,9 @@ services:
       - FALKORDB_PORT=6379
       - FALKORDB_DATABASE=default_db
       - DB_BACKEND=falkordb
+      # Pinned for the same reason as the graph service above. Published on 8001 to leave
+      # 8000 free for the neo4j profile; the container still listens on 8000.
+      - PORT=8000
 
 volumes:
   neo4j_data:

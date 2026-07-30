@@ -67,11 +67,12 @@ projects:
               - key: GRAPHITI_API_KEY
                 generateValue: true
 
-              # The Dockerfile's CMD binds uvicorn to 8000 rather than reading $PORT, so
-              # tell Render the same number up front. Without this it starts out expecting
-              # its default 10000, discovers 8000, and restarts the deploy to rewire the
-              # network — a slower first deploy and a "Restarting deploy" line that reads
-              # like a failure. Keep in step with the CMD and docker-compose.yml.
+              # The port uvicorn binds to, and the one Render routes to. Declared rather
+              # than left to Render's detection: without it Render starts out expecting its
+              # default 10000, discovers the real port, and restarts the deploy to rewire
+              # the network — a slower first deploy and a "Restarting deploy" line that
+              # reads like a failure. Safe to change, as the Dockerfile's CMD passes this
+              # through to uvicorn; nothing else has to be edited to match.
               - key: PORT
                 value: '8000'
 

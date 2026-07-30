@@ -76,5 +76,15 @@ USER app
 ENV PORT=8000
 EXPOSE $PORT
 
-# Use uv run with --no-sync to avoid re-syncing on startup
-CMD ["uv", "run", "--no-sync", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form, so $PORT actually reaches uvicorn: the exec form does no variable expansion,
+# which is why this used to hardcode 8000 and ignore the PORT it declares above. `:-8000`
+# covers PORT set but empty, which a dashboard or a .env makes easy and which is not the
+# same as unset. `exec` replaces the shell, so uvicorn is PID 1 and gets SIGTERM directly
+# on deploy or shutdown, rather than the shell absorbing it until the runtime kills us.
+#
+# uvicorn straight from the venv, not `uv run --no-sync uvicorn`: uv is installed under
+# /root/.local/bin, and /root is 0700, so the app user cannot resolve it through PATH. The
+# exec form got away with it because the runtime resolves the binary as root before
+# dropping privileges; a shell doing its own PATH lookup gets EACCES. PATH already puts
+# /app/.venv/bin first, so this is the same interpreter uv run would have selected.
+CMD ["sh", "-c", "exec uvicorn graph_service.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
