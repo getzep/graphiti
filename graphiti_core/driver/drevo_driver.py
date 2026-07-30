@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator, Coroutine
 from contextlib import asynccontextmanager
 
 from graphiti_core.driver.capabilities import GraphCapabilities
+from graphiti_core.driver.drevo_search_interface import DrevoSearchInterface
 from graphiti_core.driver.driver import GraphProvider, _SessionTransaction
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.driver.query_executor import Transaction
@@ -40,22 +41,35 @@ class DrevoDriver(Neo4jDriver):
       ``RUN/PULL/DISCARD/RESET`` (no ``BEGIN/COMMIT``), so ``transaction()`` runs
       in immediate mode instead of Neo4j's begin/commit path.
 
-    drevo *does* provide fulltext and vector search natively, but via the scalar
-    Cypher functions ``keywords(text, k)`` and ``similar(vector, query, threshold)``
-    rather than Neo4j-style index procedures. Wiring those into a drevo-specific
-    search operations implementation (and scored vector ranking, which depends on
-    drevo#202) is a follow-up; until then the capability set below declares no
-    native search so the search layer takes the fallback path.
+    Search is served by :class:`DrevoSearchInterface` (set on the instance below
+    and honored by ``graphiti_core.search.search_utils``): vector similarity is
+    ranked library-side (the current drevo build has no in-query cosine — drevo#202),
+    fulltext is an interim lexical match (no BM25 over Cypher yet — drevo#208), and
+    BFS / rerankers / community embeddings fall back to the Neo4j-compatible inline
+    Cypher that drevo's Cypher subset supports.
     """
 
     provider = GraphProvider.DREVO
 
     capabilities = GraphCapabilities(
         supports_transactions=False,
+        # Neither is native yet: the current drevo build has no in-query cosine
+        # (drevo#202) and no BM25 fulltext over Cypher (drevo#208), so both are
+        # served library-side / lexically by DrevoSearchInterface.
         supports_native_fulltext_search=False,
         supports_native_vector_search=False,
         supports_vector_index=False,
     )
+
+    def __init__(
+        self,
+        uri: str,
+        user: str | None,
+        password: str | None,
+        database: str = 'neo4j',
+    ) -> None:
+        super().__init__(uri, user, password, database)
+        self.search_interface = DrevoSearchInterface()
 
     async def build_indices_and_constraints(self, delete_existing: bool = False) -> None:
         """No-op: drevo manages indexes out-of-band and has no index DDL."""

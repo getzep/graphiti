@@ -78,6 +78,18 @@ class TestDrevoDriver:
         assert caps.supports_vector_index is False
         # Bolt handshake advertises only RUN/PULL/... — no BEGIN/COMMIT
         assert caps.supports_transactions is False
+        # No native cosine (drevo#202) or BM25 fulltext (drevo#208) in the current
+        # build — DrevoSearchInterface serves both library-side / lexically.
+        assert caps.supports_native_vector_search is False
+        assert caps.supports_native_fulltext_search is False
+
+    def test_search_interface_is_wired(self):
+        """search_utils routes all search through driver.search_interface when set,
+        so the drevo overlay must be installed on the instance."""
+        from graphiti_core.driver.drevo_search_interface import DrevoSearchInterface
+
+        driver = self._make_driver()
+        assert isinstance(driver.search_interface, DrevoSearchInterface)
 
     @pytest.mark.asyncio
     async def test_build_indices_is_noop(self):
