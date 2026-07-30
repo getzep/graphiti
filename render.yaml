@@ -3,11 +3,12 @@
 # graphiti-api      public REST service, built from the repo's root Dockerfile
 # graphiti-falkordb the graph store, private: reachable only from graphiti-api
 #
-# Secrets are never written here. OPENAI_API_KEY is declared sync: false, so Render
-# prompts for it at deploy time and stores it outside the repo.
+# No secrets here: OPENAI_API_KEY is sync: false, so Render prompts at deploy time.
 
 previews:
-  generation: off
+  # Quoted, because bare off is a YAML boolean and the schema types this field as a string
+  # enum — unquoted it fails `render blueprints validate`.
+  generation: 'off'
 
 projects:
   - name: graphiti
@@ -18,12 +19,10 @@ projects:
             name: graphiti-falkordb
             runtime: image
             region: oregon
-            # FalkorDB keeps the whole graph in RAM and only writes the append-only file
-            # to disk, so this plan is the real ceiling on graph size. Standard (2 GB) is
-            # the smallest that leaves room to grow; the disk below just has to outlast it.
+            # FalkorDB keeps the whole graph in RAM, so the plan is the real ceiling on
+            # graph size. Standard (2 GB) is the smallest with room to grow.
             plan: standard
-            # Pinned, not :latest — every fork deploys this exact version, so an upstream
-            # bump can't break new deploys out from under you. Bump it deliberately.
+            # Pinned, not :latest, so an upstream bump can't break new deploys.
             image:
               url: docker.io/falkordb/falkordb:v4.20.1
             disk:
@@ -34,9 +33,8 @@ projects:
               # Append-only file, so the graph survives a restart or redeploy.
               - key: REDIS_ARGS
                 value: --appendonly yes
-              # The image otherwise also serves the FalkorDB Browser UI on :3000. Nothing
-              # uses it here, and leaving it on gives Render's port scanner a second port
-              # to choose from. Off, so 6379 is the only thing listening.
+              # The image also serves the FalkorDB Browser on :3000. Unused here, and off
+              # leaves 6379 as the only port Render's scanner can pick.
               - key: BROWSER
                 value: '0'
 
@@ -44,46 +42,40 @@ projects:
             name: graphiti-api
             runtime: docker
             region: oregon
-            # The API idles near 100 MB and spends most of each request waiting on OpenAI,
-            # so it needs far less than the graph store does.
+            # The API idles near 100 MB and spends most of each request waiting on OpenAI.
             plan: starter
             dockerfilePath: ./Dockerfile
             dockerContext: .
             healthCheckPath: /healthcheck
             envVars:
-              # Declared on the service, not in an env var group: sync: false is silently
-              # ignored inside a group, so Render would never prompt for the value.
+              # On the service, not in an env var group: sync: false is silently ignored
+              # inside a group, so Render would never prompt for the value.
               - key: OPENAI_API_KEY
                 sync: false
 
-              # Bearer token for every endpoint except /healthcheck, and the server will not
-              # start without it, so a fork is closed from the moment it goes live. Read the
-              # value from the Dashboard (Environment tab) after the first deploy.
+              # Bearer token for every endpoint except /healthcheck; the server won't start
+              # without it, so a fork is closed from the moment it goes live. Read the value
+              # from the Dashboard (Environment tab) after the first deploy.
               #
-              # generateValue rather than sync: false keeps the one-click path one click.
-              # Generated once and persistent across syncs, so rotation is a manual edit here or
-              # in the Dashboard; a replacement must be 16+ printable-ASCII characters or the
-              # service refuses to start — see graph_service/config.py.
+              # generateValue rather than sync: false keeps the one-click path one click. It
+              # persists across syncs, so rotation is a manual edit here or in the Dashboard;
+              # a replacement must be 16+ printable-ASCII characters (see config.py).
               - key: GRAPHITI_API_KEY
                 generateValue: true
 
-              # The port uvicorn binds to, and the one Render routes to. Declared rather
-              # than left to Render's detection: without it Render starts out expecting its
-              # default 10000, discovers the real port, and restarts the deploy to rewire
-              # the network — a slower first deploy and a "Restarting deploy" line that
-              # reads like a failure. Safe to change, as the Dockerfile's CMD passes this
-              # through to uvicorn; nothing else has to be edited to match.
+              # The port uvicorn binds to and the one Render routes to. Declared so the first
+              # deploy doesn't start on Render's default 10000, detect the real port, and
+              # restart to rewire the network. Safe to change: the CMD passes it through.
               - key: PORT
                 value: '8000'
 
-              # Render exposes env vars to the Docker build as build args, which is how
-              # the root Dockerfile picks up the graphiti-core FalkorDB extra.
+              # Render passes env vars to the Docker build as build args, which is how the
+              # root Dockerfile picks up the graphiti-core FalkorDB extra.
               - key: INSTALL_FALKORDB
                 value: 'true'
-              # The graphiti-core version is deliberately not set here. It is pinned once,
-              # as the GRAPHITI_VERSION build arg default in the Dockerfile, so a bump is
-              # a one-line change rather than three configs to keep in step. Setting it
-              # here would override that pin for this service only.
+              # GRAPHITI_VERSION is deliberately unset: it's pinned once as the Dockerfile's
+              # build-arg default, so a bump is one line. Setting it here overrides that pin
+              # for this service only.
 
               - key: DB_BACKEND
                 value: falkordb
@@ -100,8 +92,7 @@ projects:
               # The model Graphiti uses to extract entities and facts. Any OpenAI model id.
               - key: MODEL_NAME
                 value: gpt-5.5
-              # Concurrent LLM calls during ingestion. Held below graphiti-core's default
-              # of 20 so a burst of episodes doesn't trip OpenAI rate limits on a new key.
-              # Raise it once you know your account's limits.
+              # Concurrent LLM calls during ingestion. Below graphiti-core's default of 20 so
+              # a burst of episodes doesn't trip rate limits on a new OpenAI key.
               - key: SEMAPHORE_LIMIT
                 value: '10'

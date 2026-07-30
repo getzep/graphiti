@@ -63,6 +63,7 @@ from `graphiti-api` over Render's private network.
    | ----------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
    | `MODEL_NAME`      | `gpt-5.5` | Any OpenAI model id.                                                                                                                                                                                              |
    | `SEMAPHORE_LIMIT` | `10`      | Concurrent LLM calls during ingestion. Deliberately below graphiti-core's default of 20, so a burst of episodes doesn't trip the rate limits on a fresh OpenAI key. Raise it once you know your account's limits. |
+   | `PORT`            | `8000`    | The port uvicorn binds to and the one Render routes to. Declared up front so the first deploy doesn't restart to rewire the network after detecting the port itself. Safe to change.                              |
 
    The rest is wiring you shouldn't need to touch. `DB_BACKEND` selects the FalkorDB code
    path; `FALKORDB_HOST` is filled in from the private service's hostname, with

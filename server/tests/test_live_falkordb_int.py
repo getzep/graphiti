@@ -50,9 +50,8 @@ FALKORDB_PORT = int(os.environ.get('FALKORDB_PORT', '6379'))
 
 pytestmark = [pytest.mark.integration]
 
-# The key the live server is spawned with; auth is mandatory, so it needs one to boot. Pinned,
-# not inherited: a root-.env GRAPHITI_API_KEY would reach the subprocess via load_dotenv above
-# and 401 every request here.
+# The key the live server is spawned with; auth is mandatory, so it needs one to boot. Pinned, not
+# inherited: a root-.env key would reach the subprocess via load_dotenv and 401 every request here.
 API_KEY = 'srvtest-api-key-Rk4Wm2'
 AUTH_HEADERS = {'Authorization': f'Bearer {API_KEY}'}
 

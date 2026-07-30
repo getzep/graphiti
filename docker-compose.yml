@@ -3,9 +3,9 @@ services:
     profiles: [""]
     build:
       context: .
-    # Localhost-bound, not the bare "8000:8000": the key below is committed to this repo, so
-    # publishing on every interface would hand the graph to anyone on a shared network. Drop the
-    # prefix to reach this from another machine, and set your own key in the same edit.
+    # Localhost-bound, not the bare "8000:8000": the key below is committed, so publishing on
+    # every interface would hand the graph to anyone on the network. Drop the prefix to reach
+    # this from another machine, and set your own key in the same edit.
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -22,16 +22,15 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
-    # Everything else the app reads comes straight from .env, so the settings documented
-    # in .env.example reach the container instead of being silently dropped. Listing them
-    # here one by one would mean a blank value for each one the user left out, and a blank
-    # is not the same as unset: SEMAPHORE_LIMIT is read as int(os.getenv(...)), so '' is a
-    # crash on import. Absent from .env means absent from the environment.
+    # Everything else comes straight from .env, so the settings documented in .env.example
+    # reach the container. Listing them individually would pass a blank for each one left
+    # out, and blank is not unset: SEMAPHORE_LIMIT is read as int(os.getenv(...)), so '' is a
+    # crash on import.
     env_file:
       - path: .env
         required: false
-    # Compose-specific wiring, which has to win over whatever .env says: these hostnames
-    # only make sense on the compose network. environment takes precedence over env_file.
+    # Compose-specific wiring, which has to win over .env — these hostnames only exist on the
+    # compose network. environment takes precedence over env_file.
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Mandatory, so the stack needs one to boot. Named insecure- because it is committed and
@@ -41,10 +40,9 @@ services:
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
       - DB_BACKEND=neo4j
-      # Now that the Dockerfile's CMD honours PORT, pin it: the mapping above and the
-      # healthcheck below both name 8000 literally, so a PORT inherited from .env would
-      # move the server out from under them. Change the left-hand side of the mapping to
-      # publish somewhere else.
+      # Pinned because the CMD honours PORT: the mapping and healthcheck both name 8000, so a
+      # PORT inherited from .env would move the server out from under them. To publish
+      # elsewhere, change the left-hand side of the mapping.
       - PORT=8000
   neo4j:
     image: neo4j:5.26.2
@@ -59,7 +57,7 @@ services:
       timeout: 10s
       retries: 10
       start_period: 3s
-    # Localhost-bound, as above, with more at stake: NEO4J_PASSWORD defaults to `password` and
+    # Localhost-bound, as above, with more at stake: the password defaults to `password` and
     # Bolt is unmediated write access.
     ports:
       - "127.0.0.1:7474:7474" # HTTP
@@ -73,16 +71,16 @@ services:
     # Kept in step with render.yaml so local dev matches what Render runs.
     image: falkordb/falkordb:v4.20.1
     profiles: ["falkordb"]
-    # Localhost-bound, as above. FalkorDB has no password at all; on Render it is a pserv
-    # reachable only from graphiti-api, and this is the closest local equivalent.
+    # Localhost-bound, as above, and FalkorDB has no password at all. On Render it's a pserv
+    # reachable only from graphiti-api; this is the closest local equivalent.
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - falkordb_data:/var/lib/falkordb/data
     environment:
-      # REDIS_ARGS goes to redis-server; FALKORDB_ARGS goes to the module. The flags that
-      # used to sit in FALKORDB_ARGS were redis-server flags in the module's slot, and
-      # both were already the defaults. Append-only matches what render.yaml runs.
+      # REDIS_ARGS goes to redis-server, FALKORDB_ARGS to the module. The flags that used to
+      # sit in FALKORDB_ARGS were redis-server flags in the module's slot, and both were
+      # already the defaults. Append-only matches render.yaml.
       - REDIS_ARGS=--appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "6379", "ping"]
@@ -119,8 +117,8 @@ services:
       - FALKORDB_PORT=6379
       - FALKORDB_DATABASE=default_db
       - DB_BACKEND=falkordb
-      # Pinned for the same reason as the graph service above. Published on 8001 to leave
-      # 8000 free for the neo4j profile; the container still listens on 8000.
+      # Pinned as on the graph service above. Published on 8001 to leave 8000 free for the
+      # neo4j profile; the container still listens on 8000.
       - PORT=8000
 
 volumes:

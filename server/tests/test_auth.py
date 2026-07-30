@@ -1,9 +1,9 @@
 """Auth tests for the graph endpoints.
 
 Need no OpenAI key and no database, so they run in the default `make test`. Nothing asserts a
-successful response: the app is built without its lifespan, so anything past auth reaches a
-handler with no Graphiti client and fails. Only whether require_api_key let the request through
-is asserted — see _assert_passed_auth.
+successful response: the app is built without its lifespan, so anything past auth reaches a handler
+with no Graphiti client and fails. These assert only whether require_api_key let the request
+through — see _assert_passed_auth.
 
 The real graph_service.main is reloaded per case rather than a stand-in assembled, because its
 wiring is what these guard: the likeliest regression is a router included without the auth
@@ -25,9 +25,9 @@ from graph_service.config import MIN_API_KEY_LENGTH
 SECRET = 'test-api-key-6Yp2Qk'
 assert len(SECRET) >= MIN_API_KEY_LENGTH, 'the fixture key must itself be a valid key'
 
-# The allowlist the app is held to; every other route must carry the auth dependency. An
-# allowlist, not protected prefixes, so an unpredicted route name fails by default. The docs are
-# deliberately public — see main.py.
+# The allowlist the app is held to; every other route must carry the auth dependency. An allowlist,
+# not protected prefixes, so an unpredicted route name fails by default. The docs are deliberately
+# public — see main.py.
 PUBLIC_PATHS = {'/healthcheck', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'}
 DOCS_PATHS = ['/openapi.json', '/docs', '/redoc']
 
@@ -37,9 +37,8 @@ def _fresh_rejection_budget():
     """Empty the failed-auth budget around every case.
 
     Autouse, not optional: the budget lives in graph_service.auth, which build_app does not
-    reload, so rejections would accumulate module-wide. This file provokes more than
-    MAX_FAILED_AUTH of them, so cases asserting 401 would see 429 — order-dependently, which a
-    single -k run would hide.
+    reload, so rejections accumulate module-wide. This file provokes more than MAX_FAILED_AUTH of
+    them, so cases asserting 401 would see 429 — order-dependently, which a single -k run hides.
     """
     auth._recent_rejections.clear()
     yield
@@ -50,20 +49,18 @@ def _fresh_rejection_budget():
 def build_app(monkeypatch):
     """Return a factory that builds the real app with GRAPHITI_API_KEY set to a given value.
 
-    The process environment should be the only input, and two things otherwise get a say:
-    Settings reads env_file='.env' relative to the cwd (server/ under `make test`), and
-    graphiti_core calls load_dotenv() on import, which searches upward from server/.venv and
-    finds the same file whatever the cwd. Either hands a developer with a server/.env the very
-    key test_no_key_means_no_service asserts the absence of, failing the suite on their machine
-    only. So: no env file for Settings, and the environment is set after the import that may
-    inject one.
+    The process environment should be the only input, and two things otherwise get a say: Settings
+    reads env_file='.env' relative to the cwd, and graphiti_core calls load_dotenv() on import,
+    which finds the same file whatever the cwd. Either hands a developer with a server/.env the
+    very key test_no_key_means_no_service asserts the absence of, failing the suite on their
+    machine only. So: no env file for Settings, and the environment is set after the import.
     """
     monkeypatch.setitem(config.Settings.model_config, 'env_file', None)
 
     def _build(graphiti_api_key: str | None):
-        # Imported before the environment is arranged, because this is the import that
-        # triggers load_dotenv() — on the first call, which is the one that matters. Nothing
-        # reads settings yet: the app is assembled at import, get_settings() runs in lifespan.
+        # Imported before the environment is arranged, because this is the import that triggers
+        # load_dotenv(). Nothing reads settings yet: the app is assembled at import, and
+        # get_settings() runs in the lifespan.
         import graph_service.main as main
 
         monkeypatch.setenv('OPENAI_API_KEY', 'unused-by-these-tests')
@@ -90,7 +87,7 @@ def _assert_passed_auth(response):
     """Assert only that require_api_key let the request through.
 
     Not `== 500`: what the handler does next is not this file's business, and pinning it would
-    break the day the fixture gains a lifespan. 401 is the one status meaning auth rejected it.
+    break the day the fixture gains a lifespan.
     """
     assert response.status_code != 401, response.text
 
@@ -99,13 +96,9 @@ def _assert_passed_auth(response):
 def test_no_key_means_no_service(build_app, graphiti_api_key):
     """Auth is mandatory, so a missing key is a startup error and not an open API.
 
-    A service that boots without a key and one that 401s everything both look healthy to Render,
-    and only one is safe. Blank and whitespace count as missing: a stray `GRAPHITI_API_KEY=` must
-    not become a key of '' or ' ' that the deployment accepts.
-
-    Asserted against the lifespan rather than get_settings() alone, because that is what makes it
-    a startup failure — uvicorn runs it before serving, so the process exits. Entering it is
-    enough, since settings are read on the first line.
+    Blank and whitespace count as missing: a stray `GRAPHITI_API_KEY=` must not become a key of ''
+    that the deployment accepts. Asserted against the lifespan rather than get_settings() alone,
+    because that is what makes it a startup failure — uvicorn runs it before serving.
     """
     app = build_app(graphiti_api_key)
     with pytest.raises(ValidationError, match='graphiti_api_key'), TestClient(app):
@@ -115,10 +108,9 @@ def test_no_key_means_no_service(build_app, graphiti_api_key):
 def test_a_guessable_key_is_refused_at_startup(build_app):
     """A key too short to survive guessing fails the deploy, rather than serving traffic.
 
-    The budget stops a stranger working through the keyspace, not a key already at the front of
-    it. Rotation is a hand edit in the Dashboard, and nothing there would reject
-    `GRAPHITI_API_KEY=dev` — this is what does. One character under the floor, so the boundary is
-    pinned rather than a value that would pass a floor set lower by accident.
+    The budget stops a stranger working through the keyspace, not a key already at the front of it.
+    Rotation is a hand edit in the Dashboard, and nothing there rejects `GRAPHITI_API_KEY=dev` —
+    this is what does. One character under the floor, so the boundary itself is pinned.
     """
     app = build_app('k' * (MIN_API_KEY_LENGTH - 1))
     with pytest.raises(ValidationError, match='string_too_short'), TestClient(app):
@@ -149,9 +141,8 @@ def test_configured_key_accepts_the_right_bearer_token(build_app):
         # The right value one byte short: guards against compare_digest becoming a prefix
         # comparison.
         pytest.param({'Authorization': f'Bearer {SECRET[:-1]}'}, id='truncated-key'),
-        # Raw bytes, since httpx refuses a non-ASCII str header. Starlette decodes as
-        # latin-1, so this arrives as a non-ASCII str, which compare_digest refuses to
-        # compare. Must be a 401, not a 500 for anyone sending a stray high byte.
+        # Raw bytes, since httpx refuses a non-ASCII str header. Starlette decodes as latin-1,
+        # so this arrives as a str compare_digest refuses to compare — a 401, not a 500.
         pytest.param({b'Authorization': b'Bearer \xff'}, id='non-ascii-token'),
     ],
 )
@@ -161,14 +152,14 @@ def test_configured_key_rejects_everything_else(build_app, headers):
 
 
 # Every value is over MIN_API_KEY_LENGTH, and the match below pins the pattern error: a short
-# non-ASCII key would fail on length and pass without the ASCII rule existing at all.
+# non-ASCII key would fail on length even with no ASCII rule at all.
 @pytest.mark.parametrize(
     'graphiti_api_key',
     [
         pytest.param('clé-secrète-assez-longue', id='accent'),
         pytest.param('key-with-an-emoji-🔑', id='emoji'),
-        # A tab survives RequiredStr's strip only mid-value, and a control character in a
-        # header is malformed however it is encoded.
+        # A tab survives RequiredStr's strip mid-value, and a control character in a header
+        # is malformed however it is encoded.
         pytest.param('key\twith\ttabs\tin\tit', id='control-char'),
     ],
 )
@@ -176,9 +167,8 @@ def test_a_non_ascii_key_is_refused_at_startup(build_app, graphiti_api_key):
     """A key that can't survive an HTTP header fails the deploy, rather than every request.
 
     Nothing in the Dashboard rejects a passphrase on rotation. Such a key authenticates for a
-    client encoding the header as latin-1 and not for one using UTF-8, so it can't be relied on
-    either way — and the operator who set it sees the same 401 as someone who mistyped it.
-    Failing at startup names the actual problem.
+    client encoding the header as latin-1 but not for one using UTF-8, and the operator who set it
+    sees the same 401 as someone who mistyped it. Failing at startup names the actual problem.
     """
     app = build_app(graphiti_api_key)
     with pytest.raises(ValidationError, match='string_pattern_mismatch'), TestClient(app):
@@ -189,7 +179,7 @@ def test_a_burst_of_wrong_keys_is_rate_limited(build_app):
     """The key can't be brute-forced, and the endpoint isn't a free scanner target.
 
     Exactly MAX_FAILED_AUTH rejections are spent first, pinning the boundary both ways: the last
-    inside the budget still gets its 401, the first past it does not.
+    inside the budget still gets its 401, the first past it doesn't.
     """
     app = build_app(SECRET)
     wrong = {'Authorization': 'Bearer wrong-key-but-long-enough'}
@@ -205,8 +195,8 @@ def test_a_burst_of_wrong_keys_is_rate_limited(build_app):
 def test_the_right_key_is_never_rate_limited(build_app):
     """Why a global budget is safe: it can't lock a real client out.
 
-    Otherwise one stranger guessing keys takes the API down for whoever holds the real one — a
-    worse outcome than the brute-force the budget exists to stop.
+    Otherwise one stranger guessing keys takes the API down for whoever holds the real one — worse
+    than the brute-force the budget exists to stop.
     """
     app = build_app(SECRET)
     wrong = {'Authorization': 'Bearer wrong-key-but-long-enough'}
@@ -250,10 +240,10 @@ def test_healthcheck_stays_public(build_app):
 
 @pytest.mark.parametrize('path', DOCS_PATHS)
 def test_the_docs_are_browsable(build_app, path):
-    """Deliberately public, and worth a test because it is a judgement call, not a default.
+    """Deliberately public, and worth a test because it's a judgement call, not a default.
 
     A browser can't attach a bearer header to a navigation, so protecting these would make them
-    unreachable by clicking a link on any deployment with a key.
+    unreachable by clicking a link.
     """
     app = build_app(SECRET)
     assert TestClient(app).get(path).status_code == 200
@@ -262,8 +252,8 @@ def test_the_docs_are_browsable(build_app, path):
 def test_the_docs_offer_the_bearer_scheme(build_app):
     """Swagger's Authorize button, which keeps the docs usable against a deployment.
 
-    It comes from the routers' dependency, easy to lose by protecting the routes some other way,
-    and its absence would leave Try it out silently 401ing.
+    It comes from the routers' dependency — easy to lose by protecting the routes some other way,
+    which would leave Try it out silently 401ing.
     """
     schema = TestClient(build_app(SECRET)).get('/openapi.json').json()
     assert schema['components']['securitySchemes']['HTTPBearer']['scheme'] == 'bearer'
@@ -273,9 +263,9 @@ def test_the_docs_offer_the_bearer_scheme(build_app):
 def _is_protected(route) -> bool:
     """Whether require_api_key runs before this route's handler.
 
-    Identity, not a name comparison, so a same-named dependency elsewhere can't satisfy it.
-    Anything that is not an APIRoute has no dependant and counts as unprotected — a Mount or
-    WebSocketRoute is exactly what this must not wave through.
+    Identity, not a name comparison, so a same-named dependency elsewhere can't satisfy it. Anything
+    that isn't an APIRoute has no dependant and counts as unprotected — a Mount or WebSocketRoute is
+    exactly what this must not wave through.
     """
     if not isinstance(route, APIRoute):
         return False
@@ -285,8 +275,8 @@ def _is_protected(route) -> bool:
 def test_every_route_but_the_public_ones_is_protected(build_app):
     """The whole surface, not a list of prefixes someone has to remember to extend.
 
-    A router included without the dependency, or a public endpoint added by accident, fails
-    here; adding a route to PUBLIC_PATHS is then a deliberate edit.
+    A router included without the dependency, or a public endpoint added by accident, fails here;
+    adding a route to PUBLIC_PATHS is then a deliberate edit.
     """
     app = build_app(SECRET)
     unprotected = {

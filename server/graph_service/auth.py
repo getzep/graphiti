@@ -1,8 +1,8 @@
 """Bearer-token auth for the graph endpoints.
 
 Every endpoint except /healthcheck requires GRAPHITI_API_KEY, with no way to switch it off: the
-API writes to a shared graph and spends the deployment's OpenAI key on every episode. config.py
-requires the key at startup, so this module can assume there is one.
+API writes to a shared graph and spends the deployment's OpenAI key. config.py requires the key
+at startup, so this module can assume there is one.
 """
 
 import hashlib
@@ -16,22 +16,22 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from graph_service.config import ZepEnvDep
 
-# auto_error=False so a missing or non-Bearer header arrives as None: HTTPBearer answers 403 on
-# its own, and the right answer is a 401 naming the scheme to retry with.
+# auto_error=False so a missing or non-Bearer header arrives as None: HTTPBearer would answer 403
+# on its own, and the right answer is a 401 naming the scheme to retry with.
 _bearer = HTTPBearer(auto_error=False, description='The GRAPHITI_API_KEY set on this service.')
 
 # Rejections allowed per window before answering 429, so the key can't be worked through.
 #
 # Global, not per-IP: behind Render's proxy every request carries the proxy's address, and
-# trusting X-Forwarded-For would hand an attacker the bucket key. It can't lock out a real client
+# trusting X-Forwarded-For would hand an attacker the bucket key. It can't lock out a real client,
 # because require_api_key checks the key before the budget. In-process, so N instances allow N
 # times this — a shared counter would put FalkorDB on the auth path.
 MAX_FAILED_AUTH = 10
 FAILED_AUTH_WINDOW_SECONDS = 60
 
-# The last MAX_FAILED_AUTH rejection times, oldest first. maxlen does the eviction, so the budget
-# is spent exactly when the deque is full and its oldest entry is still in the window. monotonic,
-# so an NTP correction can't resize the window. No lock: single event loop.
+# The last MAX_FAILED_AUTH rejection times, oldest first, so the budget is spent exactly when the
+# deque is full and its oldest entry is still in the window. monotonic, so an NTP correction can't
+# resize the window. No lock: single event loop.
 _recent_rejections: deque[float] = deque(maxlen=MAX_FAILED_AUTH)
 
 

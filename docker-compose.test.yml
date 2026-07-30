@@ -1,7 +1,7 @@
 services:
   graph:
     image: graphiti-service:${GITHUB_SHA}
-    # Localhost-bound, as in docker-compose.yml: the key below is committed to this repo.
+    # Localhost-bound, as in docker-compose.yml: the key below is committed.
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:

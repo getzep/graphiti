@@ -1,7 +1,6 @@
 name: Server Tests
 
-# Tests for the Graphiti graph_service (REST API), in two jobs, both on PRs and pushes to
-# main that touch the server:
+# Tests for graph_service (the REST API), on PRs and pushes to main that touch the server:
 #
 # - unit-tests: everything needing no secrets and no database, notably the auth guards in
 #   tests/test_auth.py. Runs on forks too, so a router included without its auth dependency
@@ -24,8 +23,8 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref so repeated pushes don't keep paying for
-# real OpenAI calls.
+# Cancel superseded runs on the same ref, so repeated pushes don't keep paying for real
+# OpenAI calls.
 concurrency:
   group: server-tests-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -50,8 +49,8 @@ jobs:
         run: uv sync --extra dev
       - name: Run unit tests
         working-directory: server
-        # By marker, not filename, so a new module is picked up by default and only opts
-        # out by marking itself integration. --strict-markers makes a typo an error.
+        # By marker, not filename, so a new module is picked up by default and opts out only
+        # by marking itself integration. --strict-markers makes a typo an error.
         run: uv run pytest -m "not integration" --strict-markers -p no:cacheprovider
 
   live-server-tests:
@@ -70,9 +69,8 @@ jobs:
         with:
           version: "latest"
       - name: Start FalkorDB
-        # Run the database on the host network rather than a `services:` block: on
-        # the depot-ubuntu runner pool bridge-network NAT silently drops packets to
-        # published service-container ports. Readiness is checked via `docker exec`.
+        # Host network rather than a `services:` block: on the depot-ubuntu runner pool,
+        # bridge-network NAT silently drops packets to published service-container ports.
         run: docker run -d --name falkordb --network host falkordb/falkordb:latest
       - name: Install dependencies
         working-directory: server
@@ -93,21 +91,16 @@ jobs:
           DB_BACKEND: falkordb
           FALKORDB_HOST: localhost
           FALKORDB_PORT: "6379"
-          # gpt-5.5 is the graphiti-core default, but it requires a key/account
-          # with fast gpt-5.5 access; CI pins a lighter, broadly-available model so
-          # the live test stays fast and reliable. It exercises the same pipeline.
+          # graphiti-core defaults to gpt-5.5, which needs an account with fast access to it.
+          # A lighter, broadly-available model exercises the same pipeline.
           MODEL_NAME: gpt-4.1-mini
-          # Raise episode/LLM-call concurrency so the live episode processes quickly.
+          # Raised so the live episode processes quickly.
           SEMAPHORE_LIMIT: "20"
-        # pytest exits 5 when no tests are collected. The legitimate case is a fork
-        # PR with no OPENAI_API_KEY: the suite self-skips at module level. When the
-        # key IS present (same-repo run) exit 5 is unexpected — the live suite should
-        # have run — so fail loudly rather than report a green build that tested
-        # nothing. Likely causes: FalkorDB became unreachable (the suite also skips at
-        # module level when it can't connect, even though the prior step gated it), or
-        # the `integration` marker was renamed/removed so the selection matches
-        # nothing. Real failures (exit 1), import errors (exit 2), and usage errors
-        # such as a renamed test-file path (exit 4) always fail the job too.
+        # pytest exits 5 when nothing is collected. The legitimate case is a fork PR with no
+        # OPENAI_API_KEY, where the suite self-skips at module level. With the key present, exit
+        # 5 means the live suite should have run and didn't — FalkorDB unreachable, or the
+        # `integration` marker renamed — so fail rather than report a green build that tested
+        # nothing. Real failures (1), import errors (2), and usage errors (4) fail the job too.
         run: |
           set +e
           uv run pytest tests/test_live_falkordb_int.py -m integration -p no:cacheprovider

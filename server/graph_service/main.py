@@ -17,10 +17,10 @@ async def lifespan(_: FastAPI):
     await shutdown_graphiti()
 
 
-# /docs, /redoc and /openapi.json stay public, departing from the usual advice to gate them: this
-# template's source is public, so the schema is the same map routers/ are, and a browser can't put
-# an Authorization header on a plain navigation. Swagger's Authorize button picks the scheme up
-# from the dependency below. Revisit if this ever ships as a private service.
+# /docs, /redoc and /openapi.json stay public, against the usual advice: this template's source is
+# public, so the schema maps nothing routers/ doesn't, and a browser can't put an Authorization
+# header on a plain navigation. Swagger's Authorize button picks the scheme up from the dependency
+# below. Revisit if this ever ships as a private service.
 app = FastAPI(title='Graphiti API', lifespan=lifespan)
 
 

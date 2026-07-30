@@ -85,17 +85,16 @@ def _create_openai_clients(
 ) -> tuple[OpenAIClient, OpenAIEmbedder, OpenAIRerankerClient]:
     """Build the OpenAI-backed clients Graphiti needs, configured from settings.
 
-    These have to be constructed with the settings rather than patched afterwards: each
-    client builds its AsyncOpenAI in __init__ out of config.api_key and config.base_url,
-    so assigning to the config later leaves the already-built client pointing elsewhere.
+    Constructed with the settings rather than patched afterwards: each client builds its
+    AsyncOpenAI in __init__ from config.api_key and config.base_url, so assigning to the
+    config later leaves the built client pointing elsewhere.
     """
     api_key = settings.openai_api_key
     base_url = settings.openai_base_url
 
     embedder_config = OpenAIEmbedderConfig(api_key=api_key, base_url=base_url)
-    # Assigned only when set, rather than passed to the constructor: embedding_model is
-    # typed str (defaulting to a real model name), so passing None would fail validation.
-    # LLMConfig.model below is str | None, which is why it can be passed straight in.
+    # Assigned only when set, rather than passed to the constructor: embedding_model is typed
+    # str, so None fails validation. LLMConfig.model below is str | None, so it goes straight in.
     if settings.embedding_model_name is not None:
         embedder_config.embedding_model = settings.embedding_model_name
 
@@ -104,8 +103,8 @@ def _create_openai_clients(
             config=LLMConfig(api_key=api_key, base_url=base_url, model=settings.model_name)
         ),
         OpenAIEmbedder(config=embedder_config),
-        # No model override here. The reranker scores passages off logprobs on a one-token
-        # completion, which is a different job from extraction — leave it on its default.
+        # No model override: the reranker scores passages off logprobs on a one-token
+        # completion, a different job from extraction. Leave it on its default.
         OpenAIRerankerClient(config=LLMConfig(api_key=api_key, base_url=base_url)),
     )
 
@@ -131,7 +130,6 @@ def _create_graphiti_client(settings: Settings) -> ZepGraphiti:
             cross_encoder=cross_encoder,
         )
     else:
-        # Validate Neo4j settings are present
         if not all([settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password]):
             raise ValueError(
                 'Neo4j configuration (neo4j_uri, neo4j_user, neo4j_password) is required '
@@ -149,17 +147,14 @@ def _create_graphiti_client(settings: Settings) -> ZepGraphiti:
 
 # One client for the life of the process, rather than one per request.
 #
-# Both graph drivers fire off build_indices_and_constraints() as an unawaited background task
-# from their constructor. Building a client per request therefore started an index build per
-# request, and closing that client when the request ended cut the task's connection mid-query
-# — which is where the 'Connection closed by server' tracebacks came from. The same close also
-# broke /messages, which hands its ingestion work to the async worker: those jobs outlive the
-# request, so they ran against a client that had already been closed and only survived on the
-# redis client's transparent reconnect.
+# Both graph drivers fire off build_indices_and_constraints() as an unawaited background task from
+# their constructor, so a client per request meant an index build per request — and closing that
+# client at the end of the request cut the task's connection mid-query, which is where the
+# 'Connection closed by server' tracebacks came from. It also broke /messages, whose ingestion
+# outlives the request and only survived on the redis client's transparent reconnect.
 #
-# Sharing one client fixes both: the index build happens once, awaited, at startup, and queued
-# jobs keep a client that stays open. It also stops rebuilding the OpenAI clients and the
-# connection pool on every request.
+# Sharing one client fixes both: the index build happens once, awaited, at startup, and queued jobs
+# keep a client that stays open. It also stops rebuilding the OpenAI clients per request.
 _graphiti_client: ZepGraphiti | None = None
 
 
