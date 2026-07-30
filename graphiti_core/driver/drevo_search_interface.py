@@ -22,8 +22,16 @@ from typing import Any
 from graphiti_core.driver.search_interface.search_interface import SearchInterface
 from graphiti_core.edges import get_entity_edge_from_record
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
-from graphiti_core.models.nodes.node_db_queries import get_entity_node_return_query
-from graphiti_core.nodes import get_entity_node_from_record
+from graphiti_core.models.nodes.node_db_queries import (
+    COMMUNITY_NODE_RETURN,
+    EPISODIC_NODE_RETURN,
+    get_entity_node_return_query,
+)
+from graphiti_core.nodes import (
+    get_community_node_from_record,
+    get_entity_node_from_record,
+    get_episodic_node_from_record,
+)
 from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
@@ -228,3 +236,106 @@ class DrevoSearchInterface(SearchInterface):
 
         ranked = _rank_by_term_overlap(records, ['fulltext_name', 'fulltext_fact'], terms, limit)
         return [get_entity_edge_from_record(record, driver.provider) for record in ranked]
+
+    async def episode_fulltext_search(
+        self,
+        driver: Any,
+        query: str,
+        search_filter: Any,
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        # Episodes carry no entity/edge-type filter (search_filter is unused here,
+        # matching the inline path), only group scoping + the lexical match.
+        terms = _tokenize(query)
+        if not terms:
+            return []
+
+        filter_queries: list[str] = []
+        filter_params: dict[str, Any] = {}
+        if group_ids is not None:
+            filter_queries.append('e.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+        filter_queries.append(
+            _lexical_match_clause(['e.content', 'e.source', 'e.source_description'], len(terms))
+        )
+        filter_query = ' WHERE ' + ' AND '.join(filter_queries)
+
+        term_params = {f'term_{i}': term for i, term in enumerate(terms)}
+        cypher = (
+            f'MATCH (e:Episodic){filter_query} RETURN '
+            + EPISODIC_NODE_RETURN
+            + ', e.content AS fulltext_content, e.source AS fulltext_source, '
+            'e.source_description AS fulltext_source_description'
+        )
+        records, _, _ = await driver.execute_query(cypher, **filter_params, **term_params)
+
+        ranked = _rank_by_term_overlap(
+            records,
+            ['fulltext_content', 'fulltext_source', 'fulltext_source_description'],
+            terms,
+            limit,
+        )
+        return [get_episodic_node_from_record(record) for record in ranked]
+
+    async def community_fulltext_search(
+        self,
+        driver: Any,
+        query: str,
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        terms = _tokenize(query)
+        if not terms:
+            return []
+
+        filter_queries: list[str] = []
+        filter_params: dict[str, Any] = {}
+        if group_ids is not None:
+            filter_queries.append('c.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+        filter_queries.append(_lexical_match_clause(['c.name'], len(terms)))
+        filter_query = ' WHERE ' + ' AND '.join(filter_queries)
+
+        term_params = {f'term_{i}': term for i, term in enumerate(terms)}
+        cypher = (
+            f'MATCH (c:Community){filter_query} RETURN '
+            + COMMUNITY_NODE_RETURN
+            + ', c.name AS fulltext_name'
+        )
+        records, _, _ = await driver.execute_query(cypher, **filter_params, **term_params)
+
+        ranked = _rank_by_term_overlap(records, ['fulltext_name'], terms, limit)
+        return [get_community_node_from_record(record) for record in ranked]
+
+    async def community_similarity_search(
+        self,
+        driver: Any,
+        search_vector: list[float],
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+        min_score: float = 0.6,
+    ) -> list[Any]:
+        filter_queries: list[str] = []
+        filter_params: dict[str, Any] = {}
+        if group_ids is not None:
+            filter_queries.append('c.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+        filter_queries.append('c.name_embedding IS NOT NULL')
+        filter_query = ' WHERE ' + ' AND '.join(filter_queries)
+
+        cypher = (
+            f'MATCH (c:Community){filter_query} '
+            'WITH c, cosine_similarity(c.name_embedding, $search_vector) AS score '
+            'WHERE score > $min_score '
+            'RETURN ' + COMMUNITY_NODE_RETURN + ' '
+            'ORDER BY score DESC LIMIT $limit'
+        )
+        records, _, _ = await driver.execute_query(
+            cypher,
+            search_vector=search_vector,
+            min_score=min_score,
+            limit=limit,
+            **filter_params,
+        )
+        return [get_community_node_from_record(record) for record in records]
