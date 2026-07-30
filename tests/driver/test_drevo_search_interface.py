@@ -198,3 +198,80 @@ class TestEdgeFulltextSearch:
         cypher = execute_query.await_args.args[0]
         assert 'toLower(e.name) CONTAINS $term_0' in cypher
         assert 'toLower(e.fact) CONTAINS $term_0' in cypher
+
+
+@pytest.mark.asyncio
+class TestEpisodeFulltextSearch:
+    async def test_matches_content_and_source_fields(self):
+        records = [
+            {
+                'uuid': 'ep1',
+                'fulltext_content': 'alpha beta',
+                'fulltext_source': 'x',
+                'fulltext_source_description': '',
+            },
+            {
+                'uuid': 'ep2',
+                'fulltext_content': 'none',
+                'fulltext_source': '',
+                'fulltext_source_description': '',
+            },
+        ]
+        execute_query = AsyncMock(return_value=(records, None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_episodic_node_from_record',
+            side_effect=lambda record: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().episode_fulltext_search(
+                driver, query='alpha beta', search_filter=SearchFilters(), limit=10
+            )
+
+        assert [n.uuid for n in result] == ['ep1']
+        cypher = execute_query.await_args.args[0]
+        assert 'toLower(e.content) CONTAINS $term_0' in cypher
+        assert 'toLower(e.source_description) CONTAINS $term_1' in cypher
+
+
+@pytest.mark.asyncio
+class TestCommunityFulltextSearch:
+    async def test_matches_name(self):
+        records = [{'uuid': 'c1', 'fulltext_name': 'alpha community'}]
+        execute_query = AsyncMock(return_value=(records, None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_community_node_from_record',
+            side_effect=lambda record: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().community_fulltext_search(
+                driver, query='alpha', group_ids=['g1'], limit=10
+            )
+
+        assert [c.uuid for c in result] == ['c1']
+        cypher = execute_query.await_args.args[0]
+        assert 'toLower(c.name) CONTAINS $term_0' in cypher
+        assert 'c.group_id IN $group_ids' in cypher
+
+
+@pytest.mark.asyncio
+class TestCommunitySimilaritySearch:
+    async def test_uses_native_cosine_on_name_embedding(self):
+        records = [{'uuid': 'c1'}, {'uuid': 'c2'}]
+        execute_query = AsyncMock(return_value=(records, None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_community_node_from_record',
+            side_effect=lambda record: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().community_similarity_search(
+                driver, search_vector=[1.0, 0.0], limit=10, min_score=0.4
+            )
+
+        assert [c.uuid for c in result] == ['c1', 'c2']
+        cypher = execute_query.await_args.args[0]
+        assert 'cosine_similarity(c.name_embedding, $search_vector)' in cypher
+        assert 'ORDER BY score DESC' in cypher
+        assert execute_query.await_args.kwargs['min_score'] == 0.4
