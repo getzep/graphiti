@@ -19,56 +19,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from graphiti_core.driver.drevo_search_interface import (
-    DrevoSearchInterface,
-    rank_uuids_by_cosine,
-)
+from graphiti_core.driver.drevo_search_interface import DrevoSearchInterface
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.search.search_filters import SearchFilters
-
-
-class TestRankUuidsByCosine:
-    """The library-side ranker drevo relies on until drevo#202 lands a native
-    cosine scalar usable in ORDER BY."""
-
-    def test_orders_by_similarity_descending(self):
-        query = [1.0, 0.0, 0.0]
-        rows = [
-            {'uuid': 'far', 'embedding': [0.0, 1.0, 0.0]},  # orthogonal -> ~0.5 normalized
-            {'uuid': 'near', 'embedding': [1.0, 0.0, 0.0]},  # identical -> 1.0
-            {'uuid': 'mid', 'embedding': [1.0, 1.0, 0.0]},
-        ]
-        ranked = rank_uuids_by_cosine(rows, query, min_score=-1.0, limit=10)
-        assert [uuid for uuid, _ in ranked] == ['near', 'mid', 'far']
-        assert ranked[0][1] >= ranked[1][1] >= ranked[2][1]
-
-    def test_min_score_filters(self):
-        query = [1.0, 0.0, 0.0]
-        rows = [
-            {'uuid': 'near', 'embedding': [1.0, 0.0, 0.0]},
-            {'uuid': 'far', 'embedding': [-1.0, 0.0, 0.0]},
-        ]
-        ranked = rank_uuids_by_cosine(rows, query, min_score=0.9, limit=10)
-        assert [uuid for uuid, _ in ranked] == ['near']
-
-    def test_limit_truncates(self):
-        query = [1.0, 0.0]
-        rows = [{'uuid': str(i), 'embedding': [1.0, 0.0]} for i in range(5)]
-        ranked = rank_uuids_by_cosine(rows, query, min_score=0.0, limit=2)
-        assert len(ranked) == 2
-
-    def test_skips_rows_without_embedding_or_uuid(self):
-        query = [1.0, 0.0]
-        rows = [
-            {'uuid': 'ok', 'embedding': [1.0, 0.0]},
-            {'uuid': 'no_emb', 'embedding': None},
-            {'embedding': [1.0, 0.0]},  # missing uuid
-        ]
-        ranked = rank_uuids_by_cosine(rows, query, min_score=0.0, limit=10)
-        assert [uuid for uuid, _ in ranked] == ['ok']
-
-    def test_empty(self):
-        assert rank_uuids_by_cosine([], [1.0, 0.0], min_score=0.0, limit=10) == []
 
 
 def _drevo_driver_stub(execute_query: AsyncMock):
@@ -78,16 +31,11 @@ def _drevo_driver_stub(execute_query: AsyncMock):
 
 @pytest.mark.asyncio
 class TestNodeSimilaritySearch:
-    async def test_ranks_then_fetches_in_ranked_order(self):
-        # First call: candidate uuids+embeddings. Second call: full node records.
-        candidates = [
-            {'uuid': 'a', 'embedding': [0.0, 1.0]},
-            {'uuid': 'b', 'embedding': [1.0, 0.0]},
-        ]
-        node_records = [{'uuid': 'a'}, {'uuid': 'b'}]
-        execute_query = AsyncMock(
-            side_effect=[(candidates, None, None), (node_records, None, None)]
-        )
+    async def test_uses_native_cosine_scalar_server_side(self):
+        # Server-side ORDER BY means the DB returns rows already ranked; the
+        # interface must preserve that order and pass the ranking params through.
+        node_records = [{'uuid': 'b'}, {'uuid': 'a'}]
+        execute_query = AsyncMock(return_value=(node_records, None, None))
         driver = _drevo_driver_stub(execute_query)
 
         with patch(
@@ -98,42 +46,45 @@ class TestNodeSimilaritySearch:
                 driver,
                 search_vector=[1.0, 0.0],
                 search_filter=SearchFilters(),
-                limit=10,
-                min_score=-1.0,
+                limit=5,
+                min_score=0.5,
             )
 
-        # 'b' is identical to the query vector, so it must rank first.
         assert [n.uuid for n in result] == ['b', 'a']
-        # The fetch step must request exactly the ranked uuids.
-        assert execute_query.await_args_list[1].kwargs['uuids'] == ['b', 'a']
 
-    async def test_returns_empty_without_second_query_when_nothing_ranks(self):
-        candidates = [{'uuid': 'a', 'embedding': [-1.0, 0.0]}]
-        execute_query = AsyncMock(side_effect=[(candidates, None, None)])
+        query = execute_query.await_args.args[0]
+        assert 'cosine_similarity(n.name_embedding, $search_vector)' in query
+        assert 'ORDER BY score DESC' in query
+        assert 'n.name_embedding IS NOT NULL' in query
+
+        kwargs = execute_query.await_args.kwargs
+        assert kwargs['search_vector'] == [1.0, 0.0]
+        assert kwargs['min_score'] == 0.5
+        assert kwargs['limit'] == 5
+
+    async def test_group_ids_filter_is_applied(self):
+        execute_query = AsyncMock(return_value=([], None, None))
         driver = _drevo_driver_stub(execute_query)
 
-        result = await DrevoSearchInterface().node_similarity_search(
+        await DrevoSearchInterface().node_similarity_search(
             driver,
             search_vector=[1.0, 0.0],
             search_filter=SearchFilters(),
-            limit=10,
-            min_score=0.9,
+            group_ids=['g1'],
+            limit=5,
+            min_score=0.5,
         )
-        assert result == []
-        assert execute_query.await_count == 1  # no fetch query issued
+
+        query = execute_query.await_args.args[0]
+        assert 'n.group_id IN $group_ids' in query
+        assert execute_query.await_args.kwargs['group_ids'] == ['g1']
 
 
 @pytest.mark.asyncio
 class TestEdgeSimilaritySearch:
-    async def test_ranks_edges_library_side(self):
-        candidates = [
-            {'uuid': 'e1', 'embedding': [1.0, 0.0]},
-            {'uuid': 'e2', 'embedding': [0.0, 1.0]},
-        ]
+    async def test_uses_native_cosine_scalar_on_fact_embedding(self):
         edge_records = [{'uuid': 'e1'}, {'uuid': 'e2'}]
-        execute_query = AsyncMock(
-            side_effect=[(candidates, None, None), (edge_records, None, None)]
-        )
+        execute_query = AsyncMock(return_value=(edge_records, None, None))
         driver = _drevo_driver_stub(execute_query)
 
         with patch(
@@ -147,7 +98,32 @@ class TestEdgeSimilaritySearch:
                 target_node_uuid=None,
                 search_filter=SearchFilters(),
                 limit=10,
-                min_score=-1.0,
+                min_score=0.3,
             )
 
         assert [e.uuid for e in result] == ['e1', 'e2']
+
+        query = execute_query.await_args.args[0]
+        assert 'cosine_similarity(e.fact_embedding, $search_vector)' in query
+        assert 'ORDER BY score DESC' in query
+
+    async def test_source_and_target_filters_applied(self):
+        execute_query = AsyncMock(return_value=([], None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        await DrevoSearchInterface().edge_similarity_search(
+            driver,
+            search_vector=[1.0, 0.0],
+            source_node_uuid='src',
+            target_node_uuid='tgt',
+            search_filter=SearchFilters(),
+            limit=10,
+            min_score=0.3,
+        )
+
+        query = execute_query.await_args.args[0]
+        kwargs = execute_query.await_args.kwargs
+        assert 'n.uuid = $source_uuid' in query
+        assert 'm.uuid = $target_uuid' in query
+        assert kwargs['source_uuid'] == 'src'
+        assert kwargs['target_uuid'] == 'tgt'

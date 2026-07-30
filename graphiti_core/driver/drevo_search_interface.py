@@ -28,40 +28,8 @@ from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
 )
-from graphiti_core.search.search_utils import calculate_cosine_similarity
 
 logger = logging.getLogger(__name__)
-
-
-def rank_uuids_by_cosine(
-    records: list[dict[str, Any]],
-    search_vector: list[float],
-    min_score: float,
-    limit: int,
-    *,
-    uuid_key: str = 'uuid',
-    embedding_key: str = 'embedding',
-) -> list[tuple[str, float]]:
-    """Rank candidate rows by cosine similarity to ``search_vector``, library-side.
-
-    drevo's Cypher subset has no in-query cosine function (only the boolean
-    ``similar()``), so — like the Neptune backend — the connector fetches candidate
-    embeddings and ranks them in Python. Rows without an embedding are skipped;
-    rows scoring at or below ``min_score`` are dropped; the rest are returned as
-    ``(uuid, score)`` sorted by score descending and truncated to ``limit``.
-    """
-    scored: list[tuple[str, float]] = []
-    for record in records:
-        embedding = record.get(embedding_key)
-        uuid = record.get(uuid_key)
-        if embedding is None or uuid is None:
-            continue
-        score = calculate_cosine_similarity(search_vector, list(map(float, embedding)))
-        if score > min_score:
-            scored.append((uuid, score))
-
-    scored.sort(key=lambda item: item[1], reverse=True)
-    return scored[:limit]
 
 
 class DrevoSearchInterface(SearchInterface):
@@ -72,10 +40,11 @@ class DrevoSearchInterface(SearchInterface):
     served here instead of by the inline provider-branched Cypher, which assumes
     Neo4j-style fulltext/vector index procedures that drevo does not implement.
 
-    This first slice implements vector similarity (nodes and edges) using
-    library-side cosine ranking. Native scored vector search over Cypher depends
-    on drevo#202; until then ranking happens in Python. Fulltext, BFS, community
-    search and the rerankers are added in subsequent slices.
+    Vector similarity uses drevo's native ``cosine_similarity(a, b)`` Cypher
+    scalar (drevo#202 request #1), so ranking happens server-side in a single
+    query — the same shape as the Neo4j inline path, only the scalar differs.
+    Fulltext, BFS, community search and the rerankers are added in subsequent
+    slices; drevo has no Bolt/Cypher full-text search yet (tracked as drevo#208).
     """
 
     async def node_similarity_search(
@@ -93,31 +62,25 @@ class DrevoSearchInterface(SearchInterface):
         if group_ids is not None:
             filter_queries.append('n.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
+        # cosine_similarity errors on a null/absent embedding, so exclude those rows.
+        filter_queries.append('n.name_embedding IS NOT NULL')
+        filter_query = ' WHERE ' + ' AND '.join(filter_queries)
 
-        filter_query = (' WHERE ' + ' AND '.join(filter_queries)) if filter_queries else ''
-
-        candidate_query = (
-            f'MATCH (n:Entity){filter_query} RETURN n.uuid AS uuid, n.name_embedding AS embedding'
+        query = (
+            f'MATCH (n:Entity){filter_query} '
+            'WITH n, cosine_similarity(n.name_embedding, $search_vector) AS score '
+            'WHERE score > $min_score '
+            'RETURN ' + get_entity_node_return_query(driver.provider) + ' '
+            'ORDER BY score DESC LIMIT $limit'
         )
-        candidates, _, _ = await driver.execute_query(candidate_query, **filter_params)
-
-        ranked = rank_uuids_by_cosine(candidates, search_vector, min_score, limit)
-        if not ranked:
-            return []
-
-        ordered_uuids = [uuid for uuid, _ in ranked]
-        fetch_query = (
-            'UNWIND $uuids AS uuid MATCH (n:Entity {uuid: uuid}) RETURN '
-            + get_entity_node_return_query(driver.provider)
+        records, _, _ = await driver.execute_query(
+            query,
+            search_vector=search_vector,
+            min_score=min_score,
+            limit=limit,
+            **filter_params,
         )
-        records, _, _ = await driver.execute_query(fetch_query, uuids=ordered_uuids)
-
-        nodes_by_uuid = {}
-        for record in records:
-            node = get_entity_node_from_record(record, driver.provider)
-            nodes_by_uuid[node.uuid] = node
-
-        return [nodes_by_uuid[uuid] for uuid in ordered_uuids if uuid in nodes_by_uuid]
+        return [get_entity_node_from_record(record, driver.provider) for record in records]
 
     async def edge_similarity_search(
         self,
@@ -142,29 +105,21 @@ class DrevoSearchInterface(SearchInterface):
         if target_node_uuid is not None:
             filter_queries.append('m.uuid = $target_uuid')
             filter_params['target_uuid'] = target_node_uuid
+        filter_queries.append('e.fact_embedding IS NOT NULL')
+        filter_query = ' WHERE ' + ' AND '.join(filter_queries)
 
-        filter_query = (' WHERE ' + ' AND '.join(filter_queries)) if filter_queries else ''
-
-        candidate_query = (
+        query = (
             f'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity){filter_query} '
-            'RETURN e.uuid AS uuid, e.fact_embedding AS embedding'
+            'WITH e, n, m, cosine_similarity(e.fact_embedding, $search_vector) AS score '
+            'WHERE score > $min_score '
+            'RETURN ' + get_entity_edge_return_query(driver.provider) + ' '
+            'ORDER BY score DESC LIMIT $limit'
         )
-        candidates, _, _ = await driver.execute_query(candidate_query, **filter_params)
-
-        ranked = rank_uuids_by_cosine(candidates, search_vector, min_score, limit)
-        if not ranked:
-            return []
-
-        ordered_uuids = [uuid for uuid, _ in ranked]
-        fetch_query = (
-            'UNWIND $uuids AS uuid MATCH (n:Entity)-[e:RELATES_TO {uuid: uuid}]->(m:Entity) RETURN '
-            + get_entity_edge_return_query(driver.provider)
+        records, _, _ = await driver.execute_query(
+            query,
+            search_vector=search_vector,
+            min_score=min_score,
+            limit=limit,
+            **filter_params,
         )
-        records, _, _ = await driver.execute_query(fetch_query, uuids=ordered_uuids)
-
-        edges_by_uuid = {}
-        for record in records:
-            edge = get_entity_edge_from_record(record, driver.provider)
-            edges_by_uuid[edge.uuid] = edge
-
-        return [edges_by_uuid[uuid] for uuid in ordered_uuids if uuid in edges_by_uuid]
+        return [get_entity_edge_from_record(record, driver.provider) for record in records]
