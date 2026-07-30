@@ -30,9 +30,9 @@ For **bug reports**, we need enough context to reproduce the problem. Use the [G
 
 Sometimes the most valuable contribution isn't code. If you're using our project in an interesting way, add it to the [examples](https://github.com/getzep/graphiti/tree/main/examples) folder. This helps others discover new possibilities and counts as a meaningful contribution. We regularly feature compelling examples in our blog posts and videos - your work might be showcased to the broader community!
 
-### Help Others in Discord
+### Help Others on GitHub
 
-Join our [Discord server](https://discord.com/invite/W8Kw6bsgXQ) community and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
+Join the conversation on [GitHub Issues](https://github.com/getzep/graphiti/issues) and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
 
 ## What happens next?
 
@@ -56,7 +56,7 @@ PRs submitted without a linked RFC issue will be tagged with `needs-rfc` and wil
 
 Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
 
-1. Share your approach in the issue discussion or [Discord](https://discord.com/invite/W8Kw6bsgXQ) before diving deep into code. This helps ensure your solution adheres to the architecture of Graphiti from the start and saves you from potential rework.
+1. Share your approach in the [issue discussion](https://github.com/getzep/graphiti/issues) before diving deep into code. This helps ensure your solution adheres to the architecture of Graphiti from the start and saves you from potential rework.
 
 2. Fork the repo, make your changes in a branch, and submit a PR. We've included more detailed technical instructions below; be open to feedback during review.
 
@@ -233,6 +233,6 @@ For reference implementations, start with `graphiti_core/driver/neo4j_driver.py`
 
 # Questions?
 
-Stuck on a contribution or have a half-formed idea? Come say hello in our [Discord server](https://discord.com/invite/W8Kw6bsgXQ). Whether you're ready to contribute or just want to learn more, we're happy to have you! It's faster than GitHub issues and you'll find both maintainers and fellow contributors ready to help.
+Stuck on a contribution or have a half-formed idea? Open a [GitHub issue](https://github.com/getzep/graphiti/issues) and say hello. Whether you're ready to contribute or just want to learn more, we're happy to have you! You'll find both maintainers and fellow contributors ready to help.
 
 Thank you for contributing to Graphiti!
