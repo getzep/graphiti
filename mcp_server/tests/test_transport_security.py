@@ -11,7 +11,13 @@ from starlette.requests import Request
 
 from graphiti_mcp_server import _build_transport_security
 
-LOCALHOST_TRIO = ['127.0.0.1:*', 'localhost:*', '[::1]:*']
+# Each host is allowlisted in both forms: the bare host (for the SDK's exact-match
+# path, which is what a portless Host header hits) and 'host:*' (for explicit ports).
+LOCALHOST_TRIO = ['127.0.0.1', '127.0.0.1:*', 'localhost', 'localhost:*', '[::1]', '[::1]:*']
+
+
+def _both(host: str) -> list[str]:
+    return [host, f'{host}:*']
 
 
 def _request_with_host(host: str) -> Request:
@@ -33,13 +39,13 @@ def test_single_hostname():
     settings = _build_transport_security('mem.example.com')
     assert settings is not None
     assert settings.enable_dns_rebinding_protection is True
-    assert settings.allowed_hosts == ['mem.example.com:*'] + LOCALHOST_TRIO
+    assert settings.allowed_hosts == _both('mem.example.com') + LOCALHOST_TRIO
 
 
 def test_csv_trims_and_drops_empties():
     settings = _build_transport_security('a.local, b.example.com ,,')
     assert settings is not None
-    assert settings.allowed_hosts == ['a.local:*', 'b.example.com:*'] + LOCALHOST_TRIO
+    assert settings.allowed_hosts == _both('a.local') + _both('b.example.com') + LOCALHOST_TRIO
 
 
 async def test_middleware_allows_configured_hostname():
@@ -57,6 +63,32 @@ async def test_middleware_allows_localhost():
 async def test_middleware_rejects_unknown_host():
     middleware = TransportSecurityMiddleware(_build_transport_security('mem.example.com'))
     result = await middleware.validate_request(_request_with_host('evil.com:8000'))
+    assert result is not None
+    assert result.status_code == 421
+
+
+async def test_middleware_allows_configured_hostname_without_port():
+    """A client reaching the server on port 80/443 sends a portless Host header.
+
+    The MCP SDK's wildcard matcher requires a port (`host.startswith(base + ':')`),
+    so a `host:*` pattern alone rejects the bare hostname — the exact case
+    MCP_HOSTNAMES exists to enable. The allowlist must carry both forms.
+    """
+    middleware = TransportSecurityMiddleware(_build_transport_security('mem.example.com'))
+    result = await middleware.validate_request(_request_with_host('mem.example.com'))
+    assert result is None
+
+
+async def test_middleware_allows_localhost_without_port():
+    middleware = TransportSecurityMiddleware(_build_transport_security('mem.example.com'))
+    for host in ('127.0.0.1', 'localhost', '[::1]'):
+        result = await middleware.validate_request(_request_with_host(host))
+        assert result is None, f'{host} (portless) should be allowed'
+
+
+async def test_middleware_still_rejects_unknown_host_without_port():
+    middleware = TransportSecurityMiddleware(_build_transport_security('mem.example.com'))
+    result = await middleware.validate_request(_request_with_host('evil.com'))
     assert result is not None
     assert result.status_code == 421
 

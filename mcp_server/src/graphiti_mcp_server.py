@@ -213,9 +213,24 @@ def _build_transport_security(raw: str) -> TransportSecuritySettings | None:
     hostnames = [h.strip() for h in raw.split(',') if h.strip()]
     if not hostnames:
         return None  # fall back to FastMCP localhost-only defaults
+
+    # Each host needs BOTH forms. The SDK matcher (mcp.server.transport_security.
+    # _validate_host) tries an exact match, then treats a trailing ':*' as
+    # "base host followed by a colon" — so a ':*' pattern alone never matches a
+    # portless Host header, which is precisely what a client sends when it reaches
+    # the server on port 80/443 (e.g. behind a reverse proxy). Emit the bare host
+    # for the exact-match path and 'host:*' for any explicit port.
+    def _both(host: str) -> list[str]:
+        return [host, f'{host}:*']
+
+    allowed: list[str] = []
+    for h in hostnames:
+        allowed.extend(_both(h))
+    for h in ('127.0.0.1', 'localhost', '[::1]'):
+        allowed.extend(_both(h))
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[f'{h}:*' for h in hostnames] + ['127.0.0.1:*', 'localhost:*', '[::1]:*'],
+        allowed_hosts=allowed,
     )
 
 
