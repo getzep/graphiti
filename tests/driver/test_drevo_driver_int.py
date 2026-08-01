@@ -85,11 +85,12 @@ async def test_drevo_node_similarity_int():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_NEO4J, reason='neo4j driver package is not installed')
 async def test_drevo_node_fulltext_int():
-    """Interim lexical fulltext (CONTAINS + term overlap) against a live drevo."""
+    """Node full-text against a live drevo, preferring native BM25 fts.search."""
     driver = await _connect_or_skip()
     try:
         await _seed(driver)
-        results = await driver.search_interface.node_fulltext_search(
+        interface = driver.search_interface
+        results = await interface.node_fulltext_search(
             driver,
             query='alpha cats',
             search_filter=SearchFilters(),
@@ -98,6 +99,9 @@ async def test_drevo_node_fulltext_int():
         )
         uuids = [n.uuid for n in results]
         assert uuids == ['int-a'], uuids
+        # On a current drevo (fts.search available) the native BM25 path is taken,
+        # not the lexical fallback.
+        assert interface._native_fts is True, 'expected native fts.search, got fallback'
     finally:
         await driver.execute_query(f'MATCH (n:Entity {{group_id: "{GROUP}"}}) DETACH DELETE n')
         await driver.close()

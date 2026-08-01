@@ -31,6 +31,7 @@ def _drevo_driver_stub(execute_query: AsyncMock):
 
 
 _UNSUPPORTED_COSINE = Exception('unsupported Cypher feature `function call `cosine_similarity``')
+_UNSUPPORTED_FTS = Exception('unsupported procedure `fts.search`')
 
 
 @pytest.mark.asyncio
@@ -226,14 +227,9 @@ class TestEdgeSimilaritySearch:
 
 @pytest.mark.asyncio
 class TestNodeFulltextSearch:
-    async def test_ranks_by_term_overlap_and_drops_nonmatching(self):
-        # The mocked DB returns candidates; ranking + the 0-overlap drop happen
-        # in the interim library-side ranker until drevo#208 lands.
-        records = [
-            {'uuid': 'y', 'fulltext_name': 'alpha only', 'fulltext_summary': ''},
-            {'uuid': 'x', 'fulltext_name': 'alpha beta', 'fulltext_summary': ''},
-            {'uuid': 'z', 'fulltext_name': 'nothing', 'fulltext_summary': 'nope'},
-        ]
+    async def test_uses_native_fts_search(self):
+        # Native BM25: drevo returns rows already ranked (server-side ORDER BY).
+        records = [{'uuid': 'x'}, {'uuid': 'y'}]
         execute_query = AsyncMock(return_value=(records, None, None))
         driver = _drevo_driver_stub(execute_query)
 
@@ -242,26 +238,48 @@ class TestNodeFulltextSearch:
             side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
         ):
             result = await DrevoSearchInterface().node_fulltext_search(
-                driver, query='alpha beta', search_filter=SearchFilters(), limit=10
+                driver,
+                query='alpha beta',
+                search_filter=SearchFilters(),
+                group_ids=['g1'],
+                limit=10,
             )
 
         assert [n.uuid for n in result] == ['x', 'y']
-
-    async def test_builds_contains_clause_with_term_params(self):
-        execute_query = AsyncMock(return_value=([], None, None))
-        driver = _drevo_driver_stub(execute_query)
-
-        await DrevoSearchInterface().node_fulltext_search(
-            driver, query='foo bar', search_filter=SearchFilters(), group_ids=['g1'], limit=10
-        )
-
         cypher = execute_query.await_args.args[0]
         kwargs = execute_query.await_args.kwargs
-        assert 'toLower(n.name) CONTAINS $term_0' in cypher
-        assert 'toLower(n.summary) CONTAINS $term_1' in cypher
+        assert 'CALL fts.search($fts_query, $fts_k)' in cypher
+        assert "'Entity' IN labels(n)" in cypher
         assert 'n.group_id IN $group_ids' in cypher
-        assert kwargs['term_0'] == 'foo'
-        assert kwargs['term_1'] == 'bar'
+        assert 'ORDER BY score DESC' in cypher
+        assert kwargs['fts_query'] == 'alpha beta'
+        assert kwargs['group_ids'] == ['g1']
+        assert 'CONTAINS' not in cypher
+
+    async def test_falls_back_to_lexical_with_warning(self, caplog):
+        lexical_records = [
+            {'uuid': 'x', 'fulltext_name': 'alpha beta', 'fulltext_summary': ''},
+            {'uuid': 'y', 'fulltext_name': 'alpha only', 'fulltext_summary': ''},
+        ]
+        execute_query = AsyncMock(side_effect=[_UNSUPPORTED_FTS, (lexical_records, None, None)])
+        driver = _drevo_driver_stub(execute_query)
+
+        with (
+            patch(
+                'graphiti_core.driver.drevo_search_interface.get_entity_node_from_record',
+                side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = await DrevoSearchInterface().node_fulltext_search(
+                driver, query='alpha beta', search_filter=SearchFilters(), limit=10
+            )
+
+        assert [n.uuid for n in result] == ['x', 'y']  # lexical term-overlap order
+        assert execute_query.await_count == 2
+        fallback_cypher = execute_query.await_args_list[1].args[0]
+        assert 'toLower(n.name) CONTAINS $term_0' in fallback_cypher
+        assert 'fts.search' in caplog.text and 'lexical' in caplog.text
 
     async def test_empty_query_short_circuits(self):
         execute_query = AsyncMock(return_value=([], None, None))
@@ -297,22 +315,39 @@ class TestEdgeFulltextSearch:
 
 @pytest.mark.asyncio
 class TestEpisodeFulltextSearch:
-    async def test_matches_content_and_source_fields(self):
-        records = [
+    async def test_uses_native_fts_search(self):
+        records = [{'uuid': 'ep1'}]
+        execute_query = AsyncMock(return_value=(records, None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_episodic_node_from_record',
+            side_effect=lambda record: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().episode_fulltext_search(
+                driver,
+                query='alpha beta',
+                search_filter=SearchFilters(),
+                group_ids=['g1'],
+                limit=10,
+            )
+
+        assert [n.uuid for n in result] == ['ep1']
+        cypher = execute_query.await_args.args[0]
+        assert 'CALL fts.search($fts_query, $fts_k)' in cypher
+        assert "'Episodic' IN labels(e)" in cypher
+        assert 'e.group_id IN $group_ids' in cypher
+
+    async def test_falls_back_to_lexical(self):
+        lexical_records = [
             {
                 'uuid': 'ep1',
                 'fulltext_content': 'alpha beta',
                 'fulltext_source': 'x',
                 'fulltext_source_description': '',
             },
-            {
-                'uuid': 'ep2',
-                'fulltext_content': 'none',
-                'fulltext_source': '',
-                'fulltext_source_description': '',
-            },
         ]
-        execute_query = AsyncMock(return_value=(records, None, None))
+        execute_query = AsyncMock(side_effect=[_UNSUPPORTED_FTS, (lexical_records, None, None)])
         driver = _drevo_driver_stub(execute_query)
 
         with patch(
@@ -324,15 +359,14 @@ class TestEpisodeFulltextSearch:
             )
 
         assert [n.uuid for n in result] == ['ep1']
-        cypher = execute_query.await_args.args[0]
-        assert 'toLower(e.content) CONTAINS $term_0' in cypher
-        assert 'toLower(e.source_description) CONTAINS $term_1' in cypher
+        fallback_cypher = execute_query.await_args_list[1].args[0]
+        assert 'toLower(e.content) CONTAINS $term_0' in fallback_cypher
 
 
 @pytest.mark.asyncio
 class TestCommunityFulltextSearch:
-    async def test_matches_name(self):
-        records = [{'uuid': 'c1', 'fulltext_name': 'alpha community'}]
+    async def test_uses_native_fts_search(self):
+        records = [{'uuid': 'c1'}]
         execute_query = AsyncMock(return_value=(records, None, None))
         driver = _drevo_driver_stub(execute_query)
 
@@ -346,7 +380,8 @@ class TestCommunityFulltextSearch:
 
         assert [c.uuid for c in result] == ['c1']
         cypher = execute_query.await_args.args[0]
-        assert 'toLower(c.name) CONTAINS $term_0' in cypher
+        assert 'CALL fts.search($fts_query, $fts_k)' in cypher
+        assert "'Community' IN labels(c)" in cypher
         assert 'c.group_id IN $group_ids' in cypher
 
 

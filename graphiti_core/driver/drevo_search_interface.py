@@ -56,6 +56,26 @@ def _is_cosine_unsupported_error(exc: Exception) -> bool:
     return 'unsupported' in message and 'cosine_similarity' in message
 
 
+def _is_fts_unsupported_error(exc: Exception) -> bool:
+    """True if ``exc`` is drevo rejecting the ``fts.search`` procedure.
+
+    Older drevo builds (before the FTS-over-Cypher work, drevo#208/#227) answer a
+    ``CALL fts.search(...)`` with an "unsupported"/"unknown procedure" database
+    error. Matched on the message to stay decoupled from the neo4j driver; any
+    other error propagates.
+    """
+    message = str(exc).lower()
+    return 'fts.search' in message and (
+        'unsupported' in message or 'unknown' in message or 'no such procedure' in message
+    )
+
+
+# fts.search returns the global BM25 top-k, which we then post-filter by label and
+# group. Over-fetch so enough survive the filter to fill `limit`.
+def _fts_k(limit: int) -> int:
+    return max(limit * 10, 100)
+
+
 def _rank_records_by_cosine(
     records: list[dict[str, Any]],
     search_vector: list[float],
@@ -131,16 +151,19 @@ class DrevoSearchInterface(SearchInterface):
     Neo4j-style fulltext/vector index procedures that drevo does not implement.
 
     Vector similarity prefers drevo's native ``cosine_similarity`` scalar (drevo#202)
-    for a single server-side ranked query. If the connected drevo is an older build
-    that rejects the scalar, it logs one warning and falls back to library-side
-    ranking (fetch embeddings, score in Python) for the rest of the session. Fulltext
-    is an interim lexical ``CONTAINS`` + term-overlap match until drevo exposes BM25
-    over Cypher (drevo#208). BFS, rerankers and community embeddings are not
-    overridden — they fall back to the inline Neo4j-compatible Cypher drevo supports.
+    for a single server-side ranked query. Node/episode/community full-text prefers
+    drevo's native ``CALL fts.search`` BM25 procedure (drevo#208/#227), post-filtered
+    by label and group. Both fall back — to library-side cosine and lexical
+    ``CONTAINS`` respectively — with one warning if the connected drevo is an older
+    build that rejects the native feature. Edge full-text stays lexical because
+    ``fts.search`` returns nodes only. BFS, rerankers and community embeddings are
+    not overridden — they use the inline Neo4j-compatible Cypher drevo supports.
     """
 
     # None = not yet probed, True = native cosine_similarity works, False = fall back.
     _native_cosine: bool | None = PrivateAttr(default=None)
+    # Same probe-once state for the native fts.search full-text procedure.
+    _native_fts: bool | None = PrivateAttr(default=None)
 
     async def _ranked_similarity(
         self,
@@ -185,6 +208,42 @@ class DrevoSearchInterface(SearchInterface):
         records, _, _ = await driver.execute_query(fallback_cypher, **fallback_params)
         ranked = _rank_records_by_cosine(records, search_vector, min_score, limit, embedding_key)
         return [parse(record) for record in ranked]
+
+    async def _fulltext(
+        self,
+        driver: Any,
+        *,
+        native_cypher: str,
+        native_params: dict[str, Any],
+        parse: Any,
+        fallback: Any,
+    ) -> list[Any]:
+        """Run native ``fts.search`` BM25, falling back to lexical on old drevo.
+
+        Tries the native procedure first (unless a previous call found it
+        unsupported). On the specific "unsupported fts.search" error it logs a
+        single warning and switches to the lexical ``CONTAINS`` fallback for this
+        and all subsequent calls; any other error propagates.
+        """
+        if self._native_fts is not False:
+            try:
+                records, _, _ = await driver.execute_query(native_cypher, **native_params)
+            except Exception as e:
+                if not _is_fts_unsupported_error(e):
+                    raise
+                if self._native_fts is None:
+                    logger.warning(
+                        'drevo rejected the native fts.search procedure (unsupported); '
+                        'falling back to lexical CONTAINS full-text search for this '
+                        'session. Upgrade drevo to a build with fts.search over the '
+                        'indexed node properties (drevo#208/#227) for BM25 ranking.'
+                    )
+                self._native_fts = False
+            else:
+                self._native_fts = True
+                return [parse(record) for record in records]
+
+        return await fallback()
 
     async def node_similarity_search(
         self,
@@ -299,6 +358,49 @@ class DrevoSearchInterface(SearchInterface):
         group_ids: list[str] | None = None,
         limit: int = 100,
     ) -> list[Any]:
+        if not query.strip():
+            return []
+
+        filter_queries, filter_params = node_search_filter_query_constructor(
+            search_filter, driver.provider
+        )
+        if group_ids is not None:
+            filter_queries.append('n.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+        where = " WHERE 'Entity' IN labels(n)"
+        if filter_queries:
+            where += ' AND ' + ' AND '.join(filter_queries)
+
+        native_cypher = (
+            'CALL fts.search($fts_query, $fts_k) YIELD node, score '
+            'WITH node AS n, score' + where + ' '
+            'RETURN ' + get_entity_node_return_query(driver.provider) + ' '
+            'ORDER BY score DESC LIMIT $limit'
+        )
+        native_params = {
+            'fts_query': query,
+            'fts_k': _fts_k(limit),
+            'limit': limit,
+            **filter_params,
+        }
+        return await self._fulltext(
+            driver,
+            native_cypher=native_cypher,
+            native_params=native_params,
+            parse=lambda record: get_entity_node_from_record(record, driver.provider),
+            fallback=lambda: self._lexical_node_fulltext(
+                driver, query, search_filter, group_ids, limit
+            ),
+        )
+
+    async def _lexical_node_fulltext(
+        self,
+        driver: Any,
+        query: str,
+        search_filter: Any,
+        group_ids: list[str] | None,
+        limit: int,
+    ) -> list[Any]:
         terms = _tokenize(query)
         if not terms:
             return []
@@ -363,8 +465,42 @@ class DrevoSearchInterface(SearchInterface):
         group_ids: list[str] | None = None,
         limit: int = 100,
     ) -> list[Any]:
-        # Episodes carry no entity/edge-type filter (search_filter is unused here,
-        # matching the inline path), only group scoping + the lexical match.
+        # Episodes carry no entity/edge-type filter (search_filter unused, matching
+        # the inline path), only group scoping.
+        if not query.strip():
+            return []
+
+        where = " WHERE 'Episodic' IN labels(e)"
+        native_params: dict[str, Any] = {
+            'fts_query': query,
+            'fts_k': _fts_k(limit),
+            'limit': limit,
+        }
+        if group_ids is not None:
+            where += ' AND e.group_id IN $group_ids'
+            native_params['group_ids'] = group_ids
+
+        native_cypher = (
+            'CALL fts.search($fts_query, $fts_k) YIELD node, score '
+            'WITH node AS e, score' + where + ' '
+            'RETURN ' + EPISODIC_NODE_RETURN + ' '
+            'ORDER BY score DESC LIMIT $limit'
+        )
+        return await self._fulltext(
+            driver,
+            native_cypher=native_cypher,
+            native_params=native_params,
+            parse=get_episodic_node_from_record,
+            fallback=lambda: self._lexical_episode_fulltext(driver, query, group_ids, limit),
+        )
+
+    async def _lexical_episode_fulltext(
+        self,
+        driver: Any,
+        query: str,
+        group_ids: list[str] | None,
+        limit: int,
+    ) -> list[Any]:
         terms = _tokenize(query)
         if not terms:
             return []
@@ -402,6 +538,40 @@ class DrevoSearchInterface(SearchInterface):
         query: str,
         group_ids: list[str] | None = None,
         limit: int = 100,
+    ) -> list[Any]:
+        if not query.strip():
+            return []
+
+        where = " WHERE 'Community' IN labels(c)"
+        native_params: dict[str, Any] = {
+            'fts_query': query,
+            'fts_k': _fts_k(limit),
+            'limit': limit,
+        }
+        if group_ids is not None:
+            where += ' AND c.group_id IN $group_ids'
+            native_params['group_ids'] = group_ids
+
+        native_cypher = (
+            'CALL fts.search($fts_query, $fts_k) YIELD node, score '
+            'WITH node AS c, score' + where + ' '
+            'RETURN ' + COMMUNITY_NODE_RETURN + ' '
+            'ORDER BY score DESC LIMIT $limit'
+        )
+        return await self._fulltext(
+            driver,
+            native_cypher=native_cypher,
+            native_params=native_params,
+            parse=get_community_node_from_record,
+            fallback=lambda: self._lexical_community_fulltext(driver, query, group_ids, limit),
+        )
+
+    async def _lexical_community_fulltext(
+        self,
+        driver: Any,
+        query: str,
+        group_ids: list[str] | None,
+        limit: int,
     ) -> list[Any]:
         terms = _tokenize(query)
         if not terms:

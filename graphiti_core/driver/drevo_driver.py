@@ -53,11 +53,10 @@ class DrevoDriver(Neo4jDriver):
 
     capabilities = GraphCapabilities(
         supports_transactions=False,
-        # Native vector similarity via the cosine_similarity scalar (drevo#202);
-        # DrevoSearchInterface falls back to library-side ranking on older builds.
-        # Fulltext is still only an interim lexical match (no BM25 over Cypher yet,
-        # drevo#208).
-        supports_native_fulltext_search=False,
+        # Native BM25 node full-text via fts.search (drevo#208/#227) and native
+        # vector similarity via cosine_similarity (drevo#202); DrevoSearchInterface
+        # falls back to lexical / library-side ranking on older builds.
+        supports_native_fulltext_search=True,
         supports_native_vector_search=True,
         supports_vector_index=False,
     )

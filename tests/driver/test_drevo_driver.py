@@ -78,10 +78,10 @@ class TestDrevoDriver:
         assert caps.supports_vector_index is False
         # Bolt handshake advertises only RUN/PULL/... — no BEGIN/COMMIT
         assert caps.supports_transactions is False
-        # Native vector similarity via cosine_similarity (drevo#202); fulltext has
-        # no BM25 over Cypher yet (drevo#208) so it stays an interim lexical match.
+        # Native vector similarity via cosine_similarity (drevo#202) and native BM25
+        # node full-text via fts.search (drevo#208/#227).
         assert caps.supports_native_vector_search is True
-        assert caps.supports_native_fulltext_search is False
+        assert caps.supports_native_fulltext_search is True
 
     def test_search_interface_is_wired(self):
         """search_utils routes all search through driver.search_interface when set,
