@@ -42,22 +42,23 @@ class DrevoDriver(Neo4jDriver):
       in immediate mode instead of Neo4j's begin/commit path.
 
     Search is served by :class:`DrevoSearchInterface` (set on the instance below
-    and honored by ``graphiti_core.search.search_utils``): vector similarity is
-    ranked library-side (the current drevo build has no in-query cosine — drevo#202),
-    fulltext is an interim lexical match (no BM25 over Cypher yet — drevo#208), and
-    BFS / rerankers / community embeddings fall back to the Neo4j-compatible inline
-    Cypher that drevo's Cypher subset supports.
+    and honored by ``graphiti_core.search.search_utils``): vector similarity uses
+    drevo's native ``cosine_similarity`` scalar (drevo#202), with a library-side
+    fallback for older builds; fulltext is an interim lexical match (no BM25 over
+    Cypher yet — drevo#208); and BFS / rerankers / community embeddings fall back to
+    the Neo4j-compatible inline Cypher that drevo's Cypher subset supports.
     """
 
     provider = GraphProvider.DREVO
 
     capabilities = GraphCapabilities(
         supports_transactions=False,
-        # Neither is native yet: the current drevo build has no in-query cosine
-        # (drevo#202) and no BM25 fulltext over Cypher (drevo#208), so both are
-        # served library-side / lexically by DrevoSearchInterface.
+        # Native vector similarity via the cosine_similarity scalar (drevo#202);
+        # DrevoSearchInterface falls back to library-side ranking on older builds.
+        # Fulltext is still only an interim lexical match (no BM25 over Cypher yet,
+        # drevo#208).
         supports_native_fulltext_search=False,
-        supports_native_vector_search=False,
+        supports_native_vector_search=True,
         supports_vector_index=False,
     )
 

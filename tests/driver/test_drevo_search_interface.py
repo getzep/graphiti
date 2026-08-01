@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -29,21 +30,55 @@ def _drevo_driver_stub(execute_query: AsyncMock):
     return SimpleNamespace(provider=GraphProvider.DREVO, execute_query=execute_query)
 
 
+_UNSUPPORTED_COSINE = Exception('unsupported Cypher feature `function call `cosine_similarity``')
+
+
 @pytest.mark.asyncio
 class TestNodeSimilaritySearch:
-    async def test_ranks_library_side_by_cosine(self):
-        # drevo has no in-query cosine, so the interface fetches embeddings and
-        # ranks in Python. 'b' is identical to the query vector -> ranks first.
-        records = [
-            {'uuid': 'a', '_search_embedding': [0.0, 1.0]},
-            {'uuid': 'b', '_search_embedding': [1.0, 0.0]},
-        ]
+    async def test_uses_native_cosine_when_supported(self):
+        # Native path: drevo ranks server-side, so the DB returns rows already
+        # ordered; the interface preserves that order and threads the params.
+        records = [{'uuid': 'b'}, {'uuid': 'a'}]
         execute_query = AsyncMock(return_value=(records, None, None))
         driver = _drevo_driver_stub(execute_query)
 
         with patch(
             'graphiti_core.driver.drevo_search_interface.get_entity_node_from_record',
             side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().node_similarity_search(
+                driver,
+                search_vector=[1.0, 0.0],
+                search_filter=SearchFilters(),
+                limit=5,
+                min_score=0.5,
+            )
+
+        assert [n.uuid for n in result] == ['b', 'a']
+        assert execute_query.await_count == 1
+        query = execute_query.await_args.args[0]
+        assert 'cosine_similarity(n.name_embedding, $search_vector)' in query
+        assert 'ORDER BY score DESC' in query
+        kwargs = execute_query.await_args.kwargs
+        assert kwargs['search_vector'] == [1.0, 0.0]
+        assert kwargs['min_score'] == 0.5
+        assert kwargs['limit'] == 5
+
+    async def test_falls_back_to_library_side_with_warning(self, caplog):
+        # Old drevo rejects cosine_similarity -> one warning, then library-side.
+        fallback_records = [
+            {'uuid': 'a', '_search_embedding': [0.0, 1.0]},
+            {'uuid': 'b', '_search_embedding': [1.0, 0.0]},
+        ]
+        execute_query = AsyncMock(side_effect=[_UNSUPPORTED_COSINE, (fallback_records, None, None)])
+        driver = _drevo_driver_stub(execute_query)
+
+        with (
+            patch(
+                'graphiti_core.driver.drevo_search_interface.get_entity_node_from_record',
+                side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+            ),
+            caplog.at_level(logging.WARNING),
         ):
             result = await DrevoSearchInterface().node_similarity_search(
                 driver,
@@ -53,34 +88,53 @@ class TestNodeSimilaritySearch:
                 min_score=-1.0,
             )
 
-        assert [n.uuid for n in result] == ['b', 'a']
+        assert [n.uuid for n in result] == ['b', 'a']  # ranked library-side
+        assert execute_query.await_count == 2
+        fallback_query = execute_query.await_args_list[1].args[0]
+        assert 'n.name_embedding AS _search_embedding' in fallback_query
+        assert 'cosine_similarity' not in fallback_query
+        assert 'cosine_similarity' in caplog.text and 'library-side' in caplog.text
 
-        query = execute_query.await_args.args[0]
-        assert 'n.name_embedding AS _search_embedding' in query
-        assert 'n.name_embedding IS NOT NULL' in query
-        assert 'cosine_similarity' not in query  # no in-query cosine on drevo
-
-    async def test_min_score_filters(self):
-        records = [
-            {'uuid': 'near', '_search_embedding': [1.0, 0.0]},
-            {'uuid': 'far', '_search_embedding': [-1.0, 0.0]},
-        ]
-        execute_query = AsyncMock(return_value=(records, None, None))
+    async def test_warns_only_once_then_stays_on_fallback(self, caplog):
+        fallback_records = [{'uuid': 'a', '_search_embedding': [1.0, 0.0]}]
+        # 1st call: native fails then fallback; 2nd call: fallback only (native skipped).
+        execute_query = AsyncMock(
+            side_effect=[
+                _UNSUPPORTED_COSINE,
+                (fallback_records, None, None),
+                (fallback_records, None, None),
+            ]
+        )
         driver = _drevo_driver_stub(execute_query)
+        interface = DrevoSearchInterface()
 
-        with patch(
-            'graphiti_core.driver.drevo_search_interface.get_entity_node_from_record',
-            side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+        with (
+            patch(
+                'graphiti_core.driver.drevo_search_interface.get_entity_node_from_record',
+                side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+            ),
+            caplog.at_level(logging.WARNING),
         ):
-            result = await DrevoSearchInterface().node_similarity_search(
-                driver,
-                search_vector=[1.0, 0.0],
-                search_filter=SearchFilters(),
-                limit=5,
-                min_score=0.9,
+            await interface.node_similarity_search(
+                driver, search_vector=[1.0, 0.0], search_filter=SearchFilters(), min_score=-1.0
+            )
+            await interface.node_similarity_search(
+                driver, search_vector=[1.0, 0.0], search_filter=SearchFilters(), min_score=-1.0
             )
 
-        assert [n.uuid for n in result] == ['near']
+        # 2 (fail+fallback) + 1 (fallback only, native skipped) = 3 calls; 1 warning.
+        assert execute_query.await_count == 3
+        assert caplog.text.count('falling back to slower') == 1
+
+    async def test_non_cosine_error_propagates(self):
+        execute_query = AsyncMock(side_effect=ValueError('some other db error'))
+        driver = _drevo_driver_stub(execute_query)
+
+        with pytest.raises(ValueError):
+            await DrevoSearchInterface().node_similarity_search(
+                driver, search_vector=[1.0, 0.0], search_filter=SearchFilters()
+            )
+        assert execute_query.await_count == 1  # no fallback attempted
 
     async def test_group_ids_filter_is_applied(self):
         execute_query = AsyncMock(return_value=([], None, None))
@@ -95,18 +149,15 @@ class TestNodeSimilaritySearch:
             min_score=0.5,
         )
 
-        query = execute_query.await_args.args[0]
+        query = execute_query.await_args.args[0]  # native query
         assert 'n.group_id IN $group_ids' in query
         assert execute_query.await_args.kwargs['group_ids'] == ['g1']
 
 
 @pytest.mark.asyncio
 class TestEdgeSimilaritySearch:
-    async def test_ranks_library_side_on_fact_embedding(self):
-        records = [
-            {'uuid': 'e2', '_search_embedding': [0.0, 1.0]},
-            {'uuid': 'e1', '_search_embedding': [1.0, 0.0]},
-        ]
+    async def test_uses_native_cosine_on_fact_embedding(self):
+        records = [{'uuid': 'e1'}, {'uuid': 'e2'}]
         execute_query = AsyncMock(return_value=(records, None, None))
         driver = _drevo_driver_stub(execute_query)
 
@@ -121,14 +172,35 @@ class TestEdgeSimilaritySearch:
                 target_node_uuid=None,
                 search_filter=SearchFilters(),
                 limit=10,
-                min_score=-1.0,
+                min_score=0.3,
             )
 
         assert [e.uuid for e in result] == ['e1', 'e2']
-
         query = execute_query.await_args.args[0]
-        assert 'e.fact_embedding AS _search_embedding' in query
-        assert 'cosine_similarity' not in query
+        assert 'cosine_similarity(e.fact_embedding, $search_vector)' in query
+        assert 'ORDER BY score DESC' in query
+
+    async def test_edge_falls_back_library_side(self):
+        fallback_records = [{'uuid': 'e1', '_search_embedding': [1.0, 0.0]}]
+        execute_query = AsyncMock(side_effect=[_UNSUPPORTED_COSINE, (fallback_records, None, None)])
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_entity_edge_from_record',
+            side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().edge_similarity_search(
+                driver,
+                search_vector=[1.0, 0.0],
+                source_node_uuid=None,
+                target_node_uuid=None,
+                search_filter=SearchFilters(),
+                min_score=-1.0,
+            )
+
+        assert [e.uuid for e in result] == ['e1']
+        fallback_query = execute_query.await_args_list[1].args[0]
+        assert 'e.fact_embedding AS _search_embedding' in fallback_query
 
     async def test_source_and_target_filters_applied(self):
         execute_query = AsyncMock(return_value=([], None, None))
@@ -144,7 +216,7 @@ class TestEdgeSimilaritySearch:
             min_score=0.3,
         )
 
-        query = execute_query.await_args.args[0]
+        query = execute_query.await_args.args[0]  # native query
         kwargs = execute_query.await_args.kwargs
         assert 'n.uuid = $source_uuid' in query
         assert 'm.uuid = $target_uuid' in query
@@ -280,11 +352,8 @@ class TestCommunityFulltextSearch:
 
 @pytest.mark.asyncio
 class TestCommunitySimilaritySearch:
-    async def test_ranks_library_side_on_name_embedding(self):
-        records = [
-            {'uuid': 'c2', 'name_embedding': [0.0, 1.0]},
-            {'uuid': 'c1', 'name_embedding': [1.0, 0.0]},
-        ]
+    async def test_uses_native_cosine_on_name_embedding(self):
+        records = [{'uuid': 'c1'}, {'uuid': 'c2'}]
         execute_query = AsyncMock(return_value=(records, None, None))
         driver = _drevo_driver_stub(execute_query)
 
@@ -293,10 +362,26 @@ class TestCommunitySimilaritySearch:
             side_effect=lambda record: SimpleNamespace(uuid=record['uuid']),
         ):
             result = await DrevoSearchInterface().community_similarity_search(
-                driver, search_vector=[1.0, 0.0], limit=10, min_score=-1.0
+                driver, search_vector=[1.0, 0.0], limit=10, min_score=0.4
             )
 
         assert [c.uuid for c in result] == ['c1', 'c2']
         cypher = execute_query.await_args.args[0]
-        assert 'c.name_embedding IS NOT NULL' in cypher
-        assert 'cosine_similarity' not in cypher
+        assert 'cosine_similarity(c.name_embedding, $search_vector)' in cypher
+        assert 'ORDER BY score DESC' in cypher
+
+    async def test_community_falls_back_library_side(self):
+        fallback_records = [{'uuid': 'c1', 'name_embedding': [1.0, 0.0]}]
+        execute_query = AsyncMock(side_effect=[_UNSUPPORTED_COSINE, (fallback_records, None, None)])
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_community_node_from_record',
+            side_effect=lambda record: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().community_similarity_search(
+                driver, search_vector=[1.0, 0.0], min_score=-1.0
+            )
+
+        assert [c.uuid for c in result] == ['c1']
+        assert execute_query.await_count == 2
