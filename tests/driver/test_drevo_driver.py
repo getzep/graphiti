@@ -78,9 +78,9 @@ class TestDrevoDriver:
         assert caps.supports_vector_index is False
         # Bolt handshake advertises only RUN/PULL/... — no BEGIN/COMMIT
         assert caps.supports_transactions is False
-        # No native cosine (drevo#202) or BM25 fulltext (drevo#208) in the current
-        # build — DrevoSearchInterface serves both library-side / lexically.
-        assert caps.supports_native_vector_search is False
+        # Native vector similarity via cosine_similarity (drevo#202); fulltext has
+        # no BM25 over Cypher yet (drevo#208) so it stays an interim lexical match.
+        assert caps.supports_native_vector_search is True
         assert caps.supports_native_fulltext_search is False
 
     def test_search_interface_is_wired(self):

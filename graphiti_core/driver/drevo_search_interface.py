@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pydantic import PrivateAttr
+
 from graphiti_core.driver.search_interface.search_interface import SearchInterface
 from graphiti_core.edges import get_entity_edge_from_record
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
@@ -41,6 +43,19 @@ from graphiti_core.search.search_utils import calculate_cosine_similarity
 logger = logging.getLogger(__name__)
 
 
+def _is_cosine_unsupported_error(exc: Exception) -> bool:
+    """True if ``exc`` is drevo rejecting the ``cosine_similarity`` scalar.
+
+    Older drevo builds (before the Phase-10 scalar, drevo#202) answer a
+    ``cosine_similarity(...)`` call with an "unsupported Cypher feature" database
+    error. We match on the message rather than an exception type to stay decoupled
+    from the neo4j driver, and only this specific signature triggers the fallback —
+    any other error propagates.
+    """
+    message = str(exc).lower()
+    return 'unsupported' in message and 'cosine_similarity' in message
+
+
 def _rank_records_by_cosine(
     records: list[dict[str, Any]],
     search_vector: list[float],
@@ -50,12 +65,12 @@ def _rank_records_by_cosine(
 ) -> list[dict[str, Any]]:
     """Rank rows by cosine similarity of ``embedding_key`` to ``search_vector``.
 
-    The current drevo build has no in-query cosine function — ``cosine_similarity``
-    is documented but unimplemented ("future Phase 10", tracked as drevo#202) — so,
-    like the Neptune backend, the connector fetches candidate embeddings (returned
-    as plain lists over Bolt) and ranks them in Python. Rows without an embedding
-    are skipped; rows scoring at or below ``min_score`` are dropped; the rest are
-    sorted by score descending and truncated to ``limit``.
+    The library-side fallback used when a drevo build lacks the native
+    ``cosine_similarity`` scalar (drevo#202): like the Neptune backend, the
+    connector fetches candidate embeddings (returned as plain lists over Bolt) and
+    ranks them in Python. Rows without an embedding are skipped; rows scoring at or
+    below ``min_score`` are dropped; the rest are sorted by score descending and
+    truncated to ``limit``.
     """
     scored: list[tuple[dict[str, Any], float]] = []
     for record in records:
@@ -115,15 +130,61 @@ class DrevoSearchInterface(SearchInterface):
     served here instead of by the inline provider-branched Cypher, which assumes
     Neo4j-style fulltext/vector index procedures that drevo does not implement.
 
-    Vector similarity ranks library-side: the current drevo build exposes no
-    in-query cosine function (``cosine_similarity`` is documented but unimplemented,
-    "future Phase 10" / drevo#202), so candidate embeddings are fetched and scored
-    in Python. Fulltext is likewise an interim lexical ``CONTAINS`` + term-overlap
-    match until drevo exposes BM25 over Cypher (drevo#208). Both are swapped for
-    native server-side paths once those drevo features land. BFS, rerankers and
-    community embeddings are not overridden — they fall back to the inline
-    Neo4j-compatible Cypher drevo already supports.
+    Vector similarity prefers drevo's native ``cosine_similarity`` scalar (drevo#202)
+    for a single server-side ranked query. If the connected drevo is an older build
+    that rejects the scalar, it logs one warning and falls back to library-side
+    ranking (fetch embeddings, score in Python) for the rest of the session. Fulltext
+    is an interim lexical ``CONTAINS`` + term-overlap match until drevo exposes BM25
+    over Cypher (drevo#208). BFS, rerankers and community embeddings are not
+    overridden — they fall back to the inline Neo4j-compatible Cypher drevo supports.
     """
+
+    # None = not yet probed, True = native cosine_similarity works, False = fall back.
+    _native_cosine: bool | None = PrivateAttr(default=None)
+
+    async def _ranked_similarity(
+        self,
+        driver: Any,
+        *,
+        native_cypher: str,
+        native_params: dict[str, Any],
+        fallback_cypher: str,
+        fallback_params: dict[str, Any],
+        search_vector: list[float],
+        min_score: float,
+        limit: int,
+        embedding_key: str,
+        parse: Any,
+    ) -> list[Any]:
+        """Run native cosine ranking, falling back to library-side on old drevo.
+
+        Tries the native ``cosine_similarity`` query first (unless a previous call
+        already found it unsupported). On the specific "unsupported cosine_similarity"
+        database error it logs a single warning and switches to the library-side
+        fallback for this and all subsequent calls; any other error propagates.
+        """
+        if self._native_cosine is not False:
+            try:
+                records, _, _ = await driver.execute_query(native_cypher, **native_params)
+            except Exception as e:
+                if not _is_cosine_unsupported_error(e):
+                    raise
+                if self._native_cosine is None:
+                    logger.warning(
+                        'drevo rejected the native cosine_similarity() scalar '
+                        '(unsupported Cypher feature); falling back to slower '
+                        'library-side vector ranking for this session. Upgrade drevo '
+                        'to a build with the cosine_similarity scalar (drevo#202) for '
+                        'server-side ranking.'
+                    )
+                self._native_cosine = False
+            else:
+                self._native_cosine = True
+                return [parse(record) for record in records]
+
+        records, _, _ = await driver.execute_query(fallback_cypher, **fallback_params)
+        ranked = _rank_records_by_cosine(records, search_vector, min_score, limit, embedding_key)
+        return [parse(record) for record in ranked]
 
     async def node_similarity_search(
         self,
@@ -143,17 +204,36 @@ class DrevoSearchInterface(SearchInterface):
         filter_queries.append('n.name_embedding IS NOT NULL')
         filter_query = ' WHERE ' + ' AND '.join(filter_queries)
 
-        query = (
+        return_query = get_entity_node_return_query(driver.provider)
+        native_cypher = (
+            f'MATCH (n:Entity){filter_query} '
+            'WITH n, cosine_similarity(n.name_embedding, $search_vector) AS score '
+            'WHERE score > $min_score '
+            'RETURN ' + return_query + ' '
+            'ORDER BY score DESC LIMIT $limit'
+        )
+        fallback_cypher = (
             f'MATCH (n:Entity){filter_query} RETURN '
-            + get_entity_node_return_query(driver.provider)
+            + return_query
             + ', n.name_embedding AS _search_embedding'
         )
-        records, _, _ = await driver.execute_query(query, **filter_params)
-
-        ranked = _rank_records_by_cosine(
-            records, search_vector, min_score, limit, '_search_embedding'
+        return await self._ranked_similarity(
+            driver,
+            native_cypher=native_cypher,
+            native_params={
+                'search_vector': search_vector,
+                'min_score': min_score,
+                'limit': limit,
+                **filter_params,
+            },
+            fallback_cypher=fallback_cypher,
+            fallback_params=dict(filter_params),
+            search_vector=search_vector,
+            min_score=min_score,
+            limit=limit,
+            embedding_key='_search_embedding',
+            parse=lambda record: get_entity_node_from_record(record, driver.provider),
         )
-        return [get_entity_node_from_record(record, driver.provider) for record in ranked]
 
     async def edge_similarity_search(
         self,
@@ -181,17 +261,35 @@ class DrevoSearchInterface(SearchInterface):
         filter_queries.append('e.fact_embedding IS NOT NULL')
         filter_query = ' WHERE ' + ' AND '.join(filter_queries)
 
-        query = (
-            f'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity){filter_query} RETURN '
-            + get_entity_edge_return_query(driver.provider)
-            + ', e.fact_embedding AS _search_embedding'
+        return_query = get_entity_edge_return_query(driver.provider)
+        match = f'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity){filter_query}'
+        native_cypher = (
+            f'{match} '
+            'WITH e, n, m, cosine_similarity(e.fact_embedding, $search_vector) AS score '
+            'WHERE score > $min_score '
+            'RETURN ' + return_query + ' '
+            'ORDER BY score DESC LIMIT $limit'
         )
-        records, _, _ = await driver.execute_query(query, **filter_params)
-
-        ranked = _rank_records_by_cosine(
-            records, search_vector, min_score, limit, '_search_embedding'
+        fallback_cypher = (
+            f'{match} RETURN ' + return_query + ', e.fact_embedding AS _search_embedding'
         )
-        return [get_entity_edge_from_record(record, driver.provider) for record in ranked]
+        return await self._ranked_similarity(
+            driver,
+            native_cypher=native_cypher,
+            native_params={
+                'search_vector': search_vector,
+                'min_score': min_score,
+                'limit': limit,
+                **filter_params,
+            },
+            fallback_cypher=fallback_cypher,
+            fallback_params=dict(filter_params),
+            search_vector=search_vector,
+            min_score=min_score,
+            limit=limit,
+            embedding_key='_search_embedding',
+            parse=lambda record: get_entity_edge_from_record(record, driver.provider),
+        )
 
     async def node_fulltext_search(
         self,
@@ -344,9 +442,30 @@ class DrevoSearchInterface(SearchInterface):
         filter_queries.append('c.name_embedding IS NOT NULL')
         filter_query = ' WHERE ' + ' AND '.join(filter_queries)
 
-        # COMMUNITY_NODE_RETURN already projects `c.name_embedding AS name_embedding`.
-        cypher = f'MATCH (c:Community){filter_query} RETURN ' + COMMUNITY_NODE_RETURN
-        records, _, _ = await driver.execute_query(cypher, **filter_params)
-
-        ranked = _rank_records_by_cosine(records, search_vector, min_score, limit, 'name_embedding')
-        return [get_community_node_from_record(record) for record in ranked]
+        # COMMUNITY_NODE_RETURN already projects `c.name_embedding AS name_embedding`,
+        # which doubles as the fallback ranking key.
+        native_cypher = (
+            f'MATCH (c:Community){filter_query} '
+            'WITH c, cosine_similarity(c.name_embedding, $search_vector) AS score '
+            'WHERE score > $min_score '
+            'RETURN ' + COMMUNITY_NODE_RETURN + ' '
+            'ORDER BY score DESC LIMIT $limit'
+        )
+        fallback_cypher = f'MATCH (c:Community){filter_query} RETURN ' + COMMUNITY_NODE_RETURN
+        return await self._ranked_similarity(
+            driver,
+            native_cypher=native_cypher,
+            native_params={
+                'search_vector': search_vector,
+                'min_score': min_score,
+                'limit': limit,
+                **filter_params,
+            },
+            fallback_cypher=fallback_cypher,
+            fallback_params=dict(filter_params),
+            search_vector=search_vector,
+            min_score=min_score,
+            limit=limit,
+            embedding_key='name_embedding',
+            parse=get_community_node_from_record,
+        )
