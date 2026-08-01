@@ -76,6 +76,21 @@ def _fts_k(limit: int) -> int:
     return max(limit * 10, 100)
 
 
+def _drevo_edge_return_query(provider: Any) -> str:
+    """Edge RETURN using the bound endpoints ``n``/``m`` instead of startNode/endNode.
+
+    graphiti's shared edge return projects ``startNode(e).uuid`` / ``endNode(e).uuid``,
+    but drevo has no ``startNode``/``endNode`` yet ("future Phase 10"). Every drevo edge
+    query already binds the endpoints as ``(n)-[e]->(m)``, so swap those calls for
+    ``n.uuid`` / ``m.uuid``.
+    """
+    return (
+        get_entity_edge_return_query(provider)
+        .replace('startNode(e).uuid', 'n.uuid')
+        .replace('endNode(e).uuid', 'm.uuid')
+    )
+
+
 def _rank_records_by_cosine(
     records: list[dict[str, Any]],
     search_vector: list[float],
@@ -155,9 +170,10 @@ class DrevoSearchInterface(SearchInterface):
     drevo's native ``CALL fts.search`` BM25 procedure (drevo#208/#227), post-filtered
     by label and group. Both fall back — to library-side cosine and lexical
     ``CONTAINS`` respectively — with one warning if the connected drevo is an older
-    build that rejects the native feature. Edge full-text stays lexical because
-    ``fts.search`` returns nodes only. BFS, rerankers and community embeddings are
-    not overridden — they use the inline Neo4j-compatible Cypher drevo supports.
+    build that rejects the native feature. Edge full-text uses the native
+    ``CALL fts.searchRelationships`` procedure (drevo#229), re-matching endpoints for
+    the return. BFS, rerankers and community embeddings are not overridden — they use
+    the inline Neo4j-compatible Cypher drevo supports.
     """
 
     # None = not yet probed, True = native cosine_similarity works, False = fall back.
@@ -320,7 +336,7 @@ class DrevoSearchInterface(SearchInterface):
         filter_queries.append('e.fact_embedding IS NOT NULL')
         filter_query = ' WHERE ' + ' AND '.join(filter_queries)
 
-        return_query = get_entity_edge_return_query(driver.provider)
+        return_query = _drevo_edge_return_query(driver.provider)
         match = f'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity){filter_query}'
         native_cypher = (
             f'{match} '
@@ -433,6 +449,51 @@ class DrevoSearchInterface(SearchInterface):
         group_ids: list[str] | None = None,
         limit: int = 100,
     ) -> list[Any]:
+        if not query.strip():
+            return []
+
+        filter_queries, filter_params = edge_search_filter_query_constructor(
+            search_filter, driver.provider
+        )
+        if group_ids is not None:
+            filter_queries.append('e.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+        # Only `e` is bound before the endpoint re-match, so filters must be on `e`.
+        where = (' WHERE ' + ' AND '.join(filter_queries)) if filter_queries else ''
+
+        # fts.searchRelationships yields only the relationship; re-match its endpoints
+        # (drevo has no startNode/endNode yet) so the edge return query resolves n/m.
+        native_cypher = (
+            'CALL fts.searchRelationships($fts_query, $fts_k) YIELD rel, score '
+            'WITH rel AS e, score' + where + ' '
+            'MATCH (n:Entity)-[e]->(m:Entity) '
+            'RETURN ' + _drevo_edge_return_query(driver.provider) + ' '
+            'ORDER BY score DESC LIMIT $limit'
+        )
+        native_params = {
+            'fts_query': query,
+            'fts_k': _fts_k(limit),
+            'limit': limit,
+            **filter_params,
+        }
+        return await self._fulltext(
+            driver,
+            native_cypher=native_cypher,
+            native_params=native_params,
+            parse=lambda record: get_entity_edge_from_record(record, driver.provider),
+            fallback=lambda: self._lexical_edge_fulltext(
+                driver, query, search_filter, group_ids, limit
+            ),
+        )
+
+    async def _lexical_edge_fulltext(
+        self,
+        driver: Any,
+        query: str,
+        search_filter: Any,
+        group_ids: list[str] | None,
+        limit: int,
+    ) -> list[Any]:
         terms = _tokenize(query)
         if not terms:
             return []
@@ -449,7 +510,7 @@ class DrevoSearchInterface(SearchInterface):
         term_params = {f'term_{i}': term for i, term in enumerate(terms)}
         cypher = (
             f'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity){filter_query} RETURN '
-            + get_entity_edge_return_query(driver.provider)
+            + _drevo_edge_return_query(driver.provider)
             + ', e.name AS fulltext_name, e.fact AS fulltext_fact'
         )
         records, _, _ = await driver.execute_query(cypher, **filter_params, **term_params)

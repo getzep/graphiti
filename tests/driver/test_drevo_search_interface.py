@@ -294,9 +294,33 @@ class TestNodeFulltextSearch:
 
 @pytest.mark.asyncio
 class TestEdgeFulltextSearch:
-    async def test_matches_name_and_fact(self):
-        records = [{'uuid': 'e1', 'fulltext_name': 'rel', 'fulltext_fact': 'alpha beta fact'}]
+    async def test_uses_native_search_relationships(self):
+        records = [{'uuid': 'e1'}]
         execute_query = AsyncMock(return_value=(records, None, None))
+        driver = _drevo_driver_stub(execute_query)
+
+        with patch(
+            'graphiti_core.driver.drevo_search_interface.get_entity_edge_from_record',
+            side_effect=lambda record, provider: SimpleNamespace(uuid=record['uuid']),
+        ):
+            result = await DrevoSearchInterface().edge_fulltext_search(
+                driver,
+                query='alpha beta',
+                search_filter=SearchFilters(),
+                group_ids=['g1'],
+                limit=10,
+            )
+
+        assert [e.uuid for e in result] == ['e1']
+        cypher = execute_query.await_args.args[0]
+        assert 'CALL fts.searchRelationships($fts_query, $fts_k)' in cypher
+        assert 'MATCH (n:Entity)-[e]->(m:Entity)' in cypher
+        assert 'e.group_id IN $group_ids' in cypher
+        assert 'CONTAINS' not in cypher
+
+    async def test_falls_back_to_lexical(self):
+        lexical_records = [{'uuid': 'e1', 'fulltext_name': 'rel', 'fulltext_fact': 'alpha beta'}]
+        execute_query = AsyncMock(side_effect=[_UNSUPPORTED_FTS, (lexical_records, None, None)])
         driver = _drevo_driver_stub(execute_query)
 
         with patch(
@@ -308,9 +332,8 @@ class TestEdgeFulltextSearch:
             )
 
         assert [e.uuid for e in result] == ['e1']
-        cypher = execute_query.await_args.args[0]
-        assert 'toLower(e.name) CONTAINS $term_0' in cypher
-        assert 'toLower(e.fact) CONTAINS $term_0' in cypher
+        fallback_cypher = execute_query.await_args_list[1].args[0]
+        assert 'toLower(e.fact) CONTAINS $term_0' in fallback_cypher
 
 
 @pytest.mark.asyncio
