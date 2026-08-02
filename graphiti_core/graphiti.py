@@ -72,6 +72,7 @@ from graphiti_core.search.search_utils import (
     get_mentioned_nodes,
 )
 from graphiti_core.telemetry import capture_event
+from graphiti_core.meter import GraphitiMeter, create_meter
 from graphiti_core.tracer import Tracer, create_tracer
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
@@ -148,6 +149,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        meter: GraphitiMeter | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -226,8 +228,9 @@ class Graphiti:
         else:
             self.cross_encoder = OpenAIRerankerClient()
 
-        # Initialize tracer
+        # Initialize tracer and meter
         self.tracer = create_tracer(tracer, trace_span_prefix)
+        self.meter = meter if meter is not None else create_meter()
 
         # Set tracer on clients
         self.llm_client.set_tracer(self.tracer)
@@ -1211,7 +1214,15 @@ class Graphiti:
                     }
                 )
 
-                logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
+                duration_ms = (end - start) * 1000
+                logger.info(f'Completed add_episode in {duration_ms} ms')
+
+                self.meter.record_operation_duration('add_episode', duration_ms)
+                self.meter.increment_operation_count('add_episode', success=True)
+                self.meter.record_items_stored('node', len(hydrated_nodes))
+                self.meter.record_items_stored('edge', len(entity_edges))
+                self.meter.record_items_stored('episode', 1)
+                self.meter.record_items_invalidated('edge', len(invalidated_edges))
 
                 return AddEpisodeResults(
                     episode=episode,
@@ -1225,6 +1236,7 @@ class Graphiti:
             except Exception as e:
                 span.set_status('error', str(e))
                 span.record_exception(e)
+                self.meter.increment_operation_count('add_episode', success=False)
                 raise e
 
     async def add_episode_bulk(
@@ -1470,7 +1482,15 @@ class Graphiti:
                     }
                 )
 
-                logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
+                duration_ms = (end - start) * 1000
+                logger.info(f'Completed add_episode_bulk in {duration_ms} ms')
+
+                self.meter.record_operation_duration('add_episode_bulk', duration_ms)
+                self.meter.increment_operation_count('add_episode_bulk', success=True)
+                self.meter.record_items_stored('node', len(final_hydrated_nodes))
+                self.meter.record_items_stored('edge', len(resolved_edges))
+                self.meter.record_items_stored('episode', len(episodes))
+                self.meter.record_items_invalidated('edge', len(invalidated_edges))
 
                 return AddBulkEpisodeResults(
                     episodes=episodes,
@@ -1484,6 +1504,7 @@ class Graphiti:
             except Exception as e:
                 bulk_span.set_status('error', str(e))
                 bulk_span.record_exception(e)
+                self.meter.increment_operation_count('add_episode_bulk', success=False)
                 raise e
 
     @handle_multiple_group_ids
@@ -1571,19 +1592,40 @@ class Graphiti:
         )
         search_config.limit = num_results
 
-        edges = (
-            await search(
-                self.clients,
-                query,
-                group_ids,
-                search_config,
-                search_filter if search_filter is not None else SearchFilters(),
-                driver=driver,
-                center_node_uuid=center_node_uuid,
-            )
-        ).edges
+        with self.tracer.start_span('search') as span:
+            span.add_attributes({
+                'memory.operation.name': 'search',
+                'memory.query.result_limit': num_results,
+                'group_ids': str(group_ids),
+            })
+            try:
+                start = time()
+                edges = (
+                    await search(
+                        self.clients,
+                        query,
+                        group_ids,
+                        search_config,
+                        search_filter if search_filter is not None else SearchFilters(),
+                        driver=driver,
+                        center_node_uuid=center_node_uuid,
+                    )
+                ).edges
+                duration_ms = (time() - start) * 1000
 
-        return edges
+                span.add_attributes({'memory.query.result_count': len(edges)})
+                span.set_status('ok')
+
+                self.meter.record_operation_duration('search', duration_ms)
+                self.meter.increment_operation_count('search', success=True)
+                self.meter.record_query_results(len(edges), {'memory.operation.name': 'search'})
+
+                return edges
+            except Exception as e:
+                span.set_status('error', str(e))
+                span.record_exception(e)
+                self.meter.increment_operation_count('search', success=False)
+                raise
 
     async def _search(
         self,
@@ -1617,16 +1659,36 @@ class Graphiti:
         For different config recipes refer to search/search_config_recipes.
         """
 
-        return await search(
-            self.clients,
-            query,
-            group_ids,
-            config,
-            search_filter if search_filter is not None else SearchFilters(),
-            center_node_uuid,
-            bfs_origin_node_uuids,
-            driver=driver,
-        )
+        with self.tracer.start_span('search_') as span:
+            span.add_attributes({'memory.operation.name': 'search_'})
+            try:
+                start = time()
+                results = await search(
+                    self.clients,
+                    query,
+                    group_ids,
+                    config,
+                    search_filter if search_filter is not None else SearchFilters(),
+                    center_node_uuid,
+                    bfs_origin_node_uuids,
+                    driver=driver,
+                )
+                duration_ms = (time() - start) * 1000
+
+                result_count = len(results.edges) + len(results.nodes)
+                span.add_attributes({'memory.query.result_count': result_count})
+                span.set_status('ok')
+
+                self.meter.record_operation_duration('search_', duration_ms)
+                self.meter.increment_operation_count('search_', success=True)
+                self.meter.record_query_results(result_count, {'memory.operation.name': 'search_'})
+
+                return results
+            except Exception as e:
+                span.set_status('error', str(e))
+                span.record_exception(e)
+                self.meter.increment_operation_count('search_', success=False)
+                raise
 
     async def get_nodes_and_edges_by_episode(self, episode_uuids: list[str]) -> SearchResults:
         episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
@@ -1763,31 +1825,60 @@ class Graphiti:
         return AddTripletResults(edges=edges, nodes=nodes)
 
     async def remove_episode(self, episode_uuid: str):
-        # Find the episode to be deleted
-        episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
+        with self.tracer.start_span('remove_episode') as span:
+            span.add_attributes({
+                'memory.operation.name': 'remove_episode',
+                'episode.uuid': episode_uuid,
+            })
+            try:
+                start = time()
 
-        # Find edges mentioned by the episode
-        edges = await EntityEdge.get_by_uuids(self.driver, episode.entity_edges)
+                # Find the episode to be deleted
+                episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
 
-        # We should only delete edges created by the episode
-        edges_to_delete: list[EntityEdge] = []
-        for edge in edges:
-            if edge.episodes and edge.episodes[0] == episode.uuid:
-                edges_to_delete.append(edge)
+                # Find edges mentioned by the episode
+                edges = await EntityEdge.get_by_uuids(self.driver, episode.entity_edges)
 
-        # Find nodes mentioned by the episode
-        nodes = await get_mentioned_nodes(self.driver, [episode])
-        # We should delete all nodes that are only mentioned in the deleted episode
-        nodes_to_delete: list[EntityNode] = []
-        for node in nodes:
-            query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
-            records, _, _ = await self.driver.execute_query(query, uuid=node.uuid, routing_='r')
+                # We should only delete edges created by the episode
+                edges_to_delete: list[EntityEdge] = []
+                for edge in edges:
+                    if edge.episodes and edge.episodes[0] == episode.uuid:
+                        edges_to_delete.append(edge)
 
-            for record in records:
-                if record['episode_count'] == 1:
-                    nodes_to_delete.append(node)
+                # Find nodes mentioned by the episode
+                nodes = await get_mentioned_nodes(self.driver, [episode])
+                # We should delete all nodes that are only mentioned in the deleted episode
+                nodes_to_delete: list[EntityNode] = []
+                for node in nodes:
+                    query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
+                    records, _, _ = await self.driver.execute_query(
+                        query, uuid=node.uuid, routing_='r'
+                    )
 
-        await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
-        await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
+                    for record in records:
+                        if record['episode_count'] == 1:
+                            nodes_to_delete.append(node)
 
-        await episode.delete(self.driver)
+                await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
+                await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
+
+                await episode.delete(self.driver)
+
+                duration_ms = (time() - start) * 1000
+                span.add_attributes({
+                    'edge.deleted_count': len(edges_to_delete),
+                    'node.deleted_count': len(nodes_to_delete),
+                })
+                span.set_status('ok')
+
+                self.meter.record_operation_duration('remove_episode', duration_ms)
+                self.meter.increment_operation_count('remove_episode', success=True)
+                self.meter.record_items_invalidated('edge', len(edges_to_delete))
+                self.meter.record_items_invalidated('node', len(nodes_to_delete))
+                self.meter.record_items_invalidated('episode', 1)
+
+            except Exception as e:
+                span.set_status('error', str(e))
+                span.record_exception(e)
+                self.meter.increment_operation_count('remove_episode', success=False)
+                raise
