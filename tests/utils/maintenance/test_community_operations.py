@@ -16,6 +16,7 @@ from graphiti_core.utils.maintenance.community_operations import Neighbor, label
 
 T = TypeVar('T')
 
+
 # label_propagation() with the pre-fix implementation never returns for the
 # repro case below, so the whole test process would hang without a hard
 # timeout. A daemon thread lets the test fail fast (raising TimeoutError)
