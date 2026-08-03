@@ -2,9 +2,8 @@ import asyncio
 import logging
 from collections import defaultdict
 
-from pydantic import BaseModel
-
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.operations.graph_utils import Neighbor, label_propagation
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import semaphore_gather
@@ -18,14 +17,15 @@ from graphiti_core.utils.maintenance.edge_operations import build_community_edge
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
-MAX_LABEL_PROPAGATION_ITERATIONS = 100
 
 logger = logging.getLogger(__name__)
 
-
-class Neighbor(BaseModel):
-    node_uuid: str
-    edge_count: int
+# label_propagation() lives in graphiti_core.driver.operations.graph_utils and
+# is imported here rather than duplicated - every driver-specific
+# get_community_clusters() (Neo4j/FalkorDB/Kuzu/Neptune) already imports the
+# same function from there. A second, independently-maintained copy in this
+# module is exactly what let the #1355 infinite-loop fix miss the code path
+# actually used by every real backend the first time around.
 
 
 async def get_community_clusters(
@@ -89,63 +89,6 @@ async def get_community_clusters(
         )
 
     return community_clusters
-
-
-def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
-    # Implement the label propagation community detection algorithm.
-    # 1. Start with each node being assigned its own community
-    # 2. Each node will take on the community of the plurality of its neighbors
-    # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
-    #
-    # Updates are applied asynchronously (in place), not from a single prior
-    # snapshot. A synchronous update lets two nodes joined by edge_count >= 2
-    # swap communities with each other every round forever, since both compute
-    # their new label from the other's *old* label at the same time (#1355).
-    # Updating in place means the second node in a pair already observes the
-    # first node's new label within the same pass, which converges instead of
-    # oscillating.
-    community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
-
-    for _ in range(MAX_LABEL_PROPAGATION_ITERATIONS):
-        no_change = True
-
-        for uuid, neighbors in projection.items():
-            curr_community = community_map[uuid]
-
-            community_candidates: dict[int, int] = defaultdict(int)
-            for neighbor in neighbors:
-                community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
-            community_lst = [
-                (count, community) for community, count in community_candidates.items()
-            ]
-
-            community_lst.sort(reverse=True)
-            candidate_rank, community_candidate = community_lst[0] if community_lst else (0, -1)
-            if community_candidate != -1 and candidate_rank > 1:
-                new_community = community_candidate
-            else:
-                new_community = max(community_candidate, curr_community)
-
-            if new_community != curr_community:
-                community_map[uuid] = new_community
-                no_change = False
-
-        if no_change:
-            break
-    else:
-        logger.warning(
-            'label_propagation did not converge after %d iterations; '
-            'returning best-effort communities',
-            MAX_LABEL_PROPAGATION_ITERATIONS,
-        )
-
-    community_cluster_map = defaultdict(list)
-    for uuid, community in community_map.items():
-        community_cluster_map[community].append(uuid)
-
-    clusters = [cluster for cluster in community_cluster_map.values()]
-    return clusters
 
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
