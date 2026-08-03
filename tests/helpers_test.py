@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder.client import EmbedderClient
-from graphiti_core.helpers import lucene_sanitize
+from graphiti_core.helpers import lucene_sanitize, normalize_l2
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
@@ -194,6 +194,19 @@ def test_lucene_sanitize():
     for query, assert_result in queries:
         result = lucene_sanitize(query)
         assert assert_result == result
+
+
+def test_normalize_l2():
+    # A non-zero vector is scaled to unit length.
+    assert np.allclose(normalize_l2([3.0, 4.0]), [0.6, 0.8])
+
+    # A zero-magnitude embedding must not evaluate 0 / 0. Promote numpy's floating
+    # point warnings to errors so this test fails if the divide is computed for the
+    # zero vector (regression for the RuntimeWarnings reported in #777). The zero
+    # vector is returned unchanged.
+    with np.errstate(divide='raise', invalid='raise'):
+        zero = normalize_l2([0.0, 0.0, 0.0])
+    assert np.allclose(zero, [0.0, 0.0, 0.0])
 
 
 async def get_node_count(driver: GraphDriver, uuids: list[str]) -> int:
