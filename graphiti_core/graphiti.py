@@ -47,6 +47,7 @@ from graphiti_core.helpers import (
     validate_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.meter import GraphitiMeter, create_meter
 from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
@@ -72,7 +73,6 @@ from graphiti_core.search.search_utils import (
     get_mentioned_nodes,
 )
 from graphiti_core.telemetry import capture_event
-from graphiti_core.meter import GraphitiMeter, create_meter
 from graphiti_core.tracer import Tracer, create_tracer
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
@@ -1593,11 +1593,13 @@ class Graphiti:
         search_config.limit = num_results
 
         with self.tracer.start_span('search') as span:
-            span.add_attributes({
-                'memory.operation.name': 'search',
-                'memory.query.result_limit': num_results,
-                'group_ids': str(group_ids),
-            })
+            span.add_attributes(
+                {
+                    'memory.operation.name': 'search',
+                    'memory.query.result_limit': num_results,
+                    'group_ids': str(group_ids),
+                }
+            )
             try:
                 start = time()
                 edges = (
@@ -1826,10 +1828,12 @@ class Graphiti:
 
     async def remove_episode(self, episode_uuid: str):
         with self.tracer.start_span('remove_episode') as span:
-            span.add_attributes({
-                'memory.operation.name': 'remove_episode',
-                'episode.uuid': episode_uuid,
-            })
+            span.add_attributes(
+                {
+                    'memory.operation.name': 'remove_episode',
+                    'episode.uuid': episode_uuid,
+                }
+            )
             try:
                 start = time()
 
@@ -1865,10 +1869,12 @@ class Graphiti:
                 await episode.delete(self.driver)
 
                 duration_ms = (time() - start) * 1000
-                span.add_attributes({
-                    'edge.deleted_count': len(edges_to_delete),
-                    'node.deleted_count': len(nodes_to_delete),
-                })
+                span.add_attributes(
+                    {
+                        'edge.deleted_count': len(edges_to_delete),
+                        'node.deleted_count': len(nodes_to_delete),
+                    }
+                )
                 span.set_status('ok')
 
                 self.meter.record_operation_duration('remove_episode', duration_ms)

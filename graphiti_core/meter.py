@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import contextlib
 from abc import ABC, abstractmethod
 from typing import Any
 
 try:
-    from opentelemetry.metrics import Counter, Histogram, Meter, UpDownCounter
+    from opentelemetry.metrics import Counter, Histogram, Meter
 
     OTEL_METRICS_AVAILABLE = True
 except ImportError:
@@ -130,35 +131,34 @@ class OpenTelemetryMeter(GraphitiMeter):
     def __init__(self, meter: 'Meter') -> None:
         if not OTEL_METRICS_AVAILABLE:
             raise ImportError(
-                'opentelemetry-api is not installed. '
-                'Install it with: pip install opentelemetry-api'
+                'opentelemetry-api is not installed. Install it with: pip install opentelemetry-api'
             )
         self._meter = meter
 
         # Histograms (latency / result sizes)
-        self._operation_duration: 'Histogram' = meter.create_histogram(
+        self._operation_duration: Histogram = meter.create_histogram(
             name='memory.operation.duration',
             unit='ms',
             description='Wall-clock duration of a Graphiti memory operation.',
         )
-        self._query_results: 'Histogram' = meter.create_histogram(
+        self._query_results: Histogram = meter.create_histogram(
             name='memory.query.result_count',
             unit='1',
             description='Number of items returned by a memory query/search.',
         )
 
         # Counters (monotonically increasing)
-        self._operation_count: 'Counter' = meter.create_counter(
+        self._operation_count: Counter = meter.create_counter(
             name='memory.operation.count',
             unit='1',
             description='Total number of Graphiti memory operations.',
         )
-        self._items_stored: 'Counter' = meter.create_counter(
+        self._items_stored: Counter = meter.create_counter(
             name='memory.items.stored',
             unit='1',
             description='Total number of graph items (nodes/edges/episodes) written.',
         )
-        self._items_invalidated: 'Counter' = meter.create_counter(
+        self._items_invalidated: Counter = meter.create_counter(
             name='memory.items.invalidated',
             unit='1',
             description='Total number of graph items invalidated or deleted.',
@@ -223,10 +223,8 @@ class OpenTelemetryMeter(GraphitiMeter):
         result_count: int,
         attributes: dict[str, Any] | None = None,
     ) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._query_results.record(result_count, attributes or {})
-        except Exception:
-            pass
 
 
 def create_meter(otel_meter: Any | None = None) -> GraphitiMeter:
