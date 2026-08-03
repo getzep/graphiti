@@ -16,7 +16,6 @@ Graphiti
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/getzep/graphiti)](https://github.com/getzep/graphiti/stargazers)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.com/invite/W8Kw6bsgXQ)
 [![arXiv](https://img.shields.io/badge/arXiv-2501.13956-b31b1b.svg?style=flat)](https://arxiv.org/abs/2501.13956)
 [![Release](https://img.shields.io/github/v/release/getzep/graphiti?style=flat&label=Release&color=limegreen)](https://github.com/getzep/graphiti/releases)
 
@@ -87,6 +86,10 @@ Graphiti is the open-source temporal context graph engine at the core of
 [Zep's](https://www.getzep.com) context infrastructure for AI agents. Zep manages context graphs at scale, providing
 governed, low-latency context retrieval and assembly for production agent deployments.
 
+Under the hood, Zep is powered by a proprietary graph database — the
+[Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs
+with low-latency retrieval, so production deployments don't require a separate third-party graph database.
+
 Using Graphiti, we've demonstrated Zep is
 the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
 
@@ -105,6 +108,7 @@ applications.
 |--------|-----|---------|
 | **What they are** | Managed context graph infrastructure for AI agents | Open-source temporal context graph engine |
 | **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
+| **Graph database** | Proprietary [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs with low-latency retrieval; no third-party graph database vendor required | Bring your own third-party graph database |
 | **User & conversation management** | Built-in users, threads, and message storage | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
 | **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
@@ -709,9 +713,9 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 ## Contributing
 
 We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
-answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
+helping others on GitHub. For detailed guidelines on code contributions, please refer
 to [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
+Open a [GitHub issue](https://github.com/getzep/graphiti/issues) to ask questions, report bugs, or discuss Graphiti.
