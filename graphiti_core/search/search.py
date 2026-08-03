@@ -393,9 +393,7 @@ async def edge_search(
                         reranker_min_score,
                     )
             elif config.reranker == EdgeReranker.cross_encoder:
-                fact_to_uuid_map = {
-                    edge.fact: edge.uuid for edge in list(edge_uuid_map.values())[:limit]
-                }
+                fact_to_uuid_map = {edge.fact: edge.uuid for edge in list(edge_uuid_map.values())}
                 with _trace_phase(
                     search_tracer,
                     'search.edge_search.cross_encoder_rank',
