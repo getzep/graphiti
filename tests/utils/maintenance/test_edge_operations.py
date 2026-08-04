@@ -863,6 +863,29 @@ async def test_invalidation_shared_endpoint_same_name_invalidates(mock_current_e
 
 
 @pytest.mark.asyncio
+async def test_invalidation_shared_endpoint_opposite_position_is_ignored(mock_current_episode):
+    """A shared endpoint in the opposite position is two facts chained through one node."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'service_uuid',
+        'datastore_uuid',
+        'USES',
+        'Service uses datastore',
+        now - timedelta(days=10),
+    )
+    extracted = _invalidation_edge(
+        'datastore_uuid', 'cache_uuid', 'USES', 'Datastore uses cache', now
+    )
+
+    _, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == []
+    assert candidate.invalid_at is None
+
+
+@pytest.mark.asyncio
 async def test_invalidation_shared_endpoint_different_name_is_ignored(mock_current_episode):
     """A different fact about the same entity must not retire an unrelated edge."""
     now = datetime.now(timezone.utc)

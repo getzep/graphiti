@@ -545,9 +545,14 @@ def _could_replace(candidate: EntityEdge, resolved_edge: EntityEdge) -> bool:
     """True when `resolved_edge` is plausibly a replacement for `candidate`.
 
     Either it connects the same two entities, and so can restate that relationship; or it shares
-    one endpoint and carries the same relation name, which is what a rename or a port looks like.
-    Without this, any semantically similar edge in the group is eligible, and a new fact about a
-    person's side project can retire the fact recording their job.
+    one endpoint *in the same position* and carries the same relation name, which is what a rename
+    or a re-point looks like. Without this, any semantically similar edge in the group is eligible,
+    and a new fact about a person's side project can retire the fact recording their job.
+
+    The same-pair test ignores direction because extraction direction is not stable, but the
+    shared-endpoint test cannot: with the endpoint in opposite positions the two facts are merely
+    chained through one node, and `A -uses-> B` is not superseded by `B -uses-> C`. Anything where
+    the pair really is the same has already matched above.
     """
     candidate_pair = {candidate.source_node_uuid, candidate.target_node_uuid}
     resolved_pair = {resolved_edge.source_node_uuid, resolved_edge.target_node_uuid}
@@ -555,7 +560,12 @@ def _could_replace(candidate: EntityEdge, resolved_edge: EntityEdge) -> bool:
     if candidate_pair == resolved_pair:
         return True
 
-    return bool(candidate_pair & resolved_pair) and _relation_key(candidate.name) == _relation_key(
+    shares_endpoint_role = (
+        candidate.source_node_uuid == resolved_edge.source_node_uuid
+        or candidate.target_node_uuid == resolved_edge.target_node_uuid
+    )
+
+    return shares_endpoint_role and _relation_key(candidate.name) == _relation_key(
         resolved_edge.name
     )
 
