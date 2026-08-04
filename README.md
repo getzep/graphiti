@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fgetzep%2Fgraphiti.svg)](https://mcptoplist.com/server/glama%2Fgetzep%2Fgraphiti)
+
 <p align="center">
   <a href="https://www.getzep.com/">
     <img src="https://github.com/user-attachments/assets/119c5682-9654-4257-8922-56b7cb8ffd73" width="150" alt="Zep Logo">
