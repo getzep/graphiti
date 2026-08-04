@@ -28,7 +28,10 @@ jobs:
           private-key: ${{ secrets.CLA_APP_PRIVATE_KEY }}
 
       - name: "CLA Assistant"
-        if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
+        if: >
+          github.event_name == 'pull_request_target' ||
+          github.event.comment.body == 'recheck' ||
+          startsWith(github.event.comment.body, 'I have read the CLA Document and I hereby sign the CLA')
         # Maintained node24 fork of the (archived) contributor-assistant/github-action.
         # Pinned to a commit SHA because the fork publishes no semver tags.
         uses: SiliconLabsSoftware/action-cla-assistant@89980ac6cfe974ea7703b4ccfbaeb1b2cc6065d2 # silabs_flavour_v2 (node24)
