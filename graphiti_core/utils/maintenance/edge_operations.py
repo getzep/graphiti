@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import re
 from datetime import datetime
 from time import time
 
@@ -535,6 +536,30 @@ async def resolve_extracted_edges(
     return resolved_edges, invalidated_edges, new_edges
 
 
+def _relation_key(name: str) -> str:
+    """Fold case and separators: `MIGRATED_OFF`, `migrated-off` and `Migrated Off` all match."""
+    return re.sub(r'[\s_-]+', '', name or '').casefold()
+
+
+def _could_replace(candidate: EntityEdge, resolved_edge: EntityEdge) -> bool:
+    """True when `resolved_edge` is plausibly a replacement for `candidate`.
+
+    Either it connects the same two entities, and so can restate that relationship; or it shares
+    one endpoint and carries the same relation name, which is what a rename or a port looks like.
+    Without this, any semantically similar edge in the group is eligible, and a new fact about a
+    person's side project can retire the fact recording their job.
+    """
+    candidate_pair = {candidate.source_node_uuid, candidate.target_node_uuid}
+    resolved_pair = {resolved_edge.source_node_uuid, resolved_edge.target_node_uuid}
+
+    if candidate_pair == resolved_pair:
+        return True
+
+    return bool(candidate_pair & resolved_pair) and _relation_key(candidate.name) == _relation_key(
+        resolved_edge.name
+    )
+
+
 def resolve_edge_contradictions(
     resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
 ) -> list[EntityEdge]:
@@ -774,6 +799,15 @@ async def resolve_extracted_edge(
             elif invalidation_idx_offset <= idx <= max_valid_idx:
                 # From FACT INVALIDATION CANDIDATES (adjust index by offset)
                 invalidation_candidates.append(existing_edges[idx - invalidation_idx_offset])
+
+    # The LLM judges bare fact strings, so it can flag facts that merely mention a shared
+    # entity. Filtering here covers both downstream paths: retiring the candidate edge and
+    # back-dating (`invalid_at`) the new edge.
+    invalidation_candidates = [
+        candidate
+        for candidate in invalidation_candidates
+        if _could_replace(candidate, resolved_edge)
+    ]
 
     # Only extract structured attributes if the edge's relation_type matches an allowed custom type
     # AND the edge model exists for this node pair signature
