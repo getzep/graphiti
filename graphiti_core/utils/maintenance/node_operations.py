@@ -429,7 +429,8 @@ async def _semantic_candidate_search(
     except NotImplementedError:
         query_vectors = list(
             await semaphore_gather(
-                *[clients.embedder.create(input_data=[query]) for query in queries]
+                *[clients.embedder.create(input_data=[query]) for query in queries],
+                max_coroutines=getattr(clients, 'max_coroutines', None),
             )
         )
 
@@ -445,7 +446,8 @@ async def _semantic_candidate_search(
                     NODE_DEDUP_COSINE_MIN_SCORE,
                 )
                 for node, query_vector in zip(extracted_nodes, query_vectors, strict=True)
-            ]
+            ],
+            max_coroutines=getattr(clients, 'max_coroutines', None),
         )
     )
 
@@ -755,7 +757,8 @@ async def extract_attributes_from_nodes(
                 ),
             )
             for node in nodes
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # _extract_entity_attributes returns the already-merged attribute dict
@@ -773,6 +776,7 @@ async def extract_attributes_from_nodes(
         edges_by_node,
         skip_fact_appending=skip_fact_appending,
         entity_types=entity_types if include_type_descriptions else None,
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     await create_entity_node_embeddings(embedder, nodes)
@@ -840,6 +844,7 @@ async def _extract_entity_summaries_batch(
     *,
     skip_fact_appending: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
+    max_coroutines: int | None = None,
 ) -> None:
     """Extract summaries for multiple entities in batched LLM calls.
 
@@ -906,7 +911,8 @@ async def _extract_entity_summaries_batch(
                 entity_types=entity_types,
             )
             for flight in node_flights
-        ]
+        ],
+        max_coroutines=max_coroutines,
     )
 
 
