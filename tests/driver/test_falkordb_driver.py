@@ -429,3 +429,71 @@ class TestFalkorDriverIntegration:
 
         except Exception as e:
             pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_episode_mentions_reranker_ordering_and_min_score(self):
+        """Most-mentioned nodes must rank first and min_score must filter unmentioned nodes.
+
+        Regression test: scores were sorted ascending (least-mentioned first) and
+        unmentioned nodes were scored float('inf'), so they bypassed any min_score.
+        """
+        pytest.importorskip('falkordb')
+
+        from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+        from graphiti_core.utils.datetime_utils import utc_now
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_reranker')
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            embedding = [0.1] * 4
+            popular = EntityNode(
+                name='Popular', group_id='g1', labels=['Entity'], name_embedding=embedding
+            )
+            rare = EntityNode(
+                name='Rare', group_id='g1', labels=['Entity'], name_embedding=embedding
+            )
+            unmentioned = EntityNode(
+                name='Unmentioned', group_id='g1', labels=['Entity'], name_embedding=embedding
+            )
+            for node in (popular, rare, unmentioned):
+                await driver.entity_node_ops.save(driver, node)
+
+            # 3 episodes mention 'Popular', 1 mentions 'Rare'
+            for i in range(4):
+                episode = EpisodicNode(
+                    name=f'ep{i}',
+                    group_id='g1',
+                    source=EpisodeType.text,
+                    source_description='test',
+                    content=f'content {i}',
+                    valid_at=utc_now(),
+                    created_at=utc_now(),
+                )
+                await driver.episode_node_ops.save(driver, episode)
+                target = popular.uuid if i < 3 else rare.uuid
+                await driver.execute_query(
+                    'MATCH (e:Episodic {uuid: $e}), (n:Entity {uuid: $n}) '
+                    'CREATE (e)-[:MENTIONS {uuid: $u}]->(n)',
+                    e=episode.uuid,
+                    n=target,
+                    u=f'mention-{i}',
+                )
+
+            uuids = [popular.uuid, rare.uuid, unmentioned.uuid]
+
+            nodes = await driver.search_ops.episode_mentions_reranker(driver, uuids)
+            assert [n.name for n in nodes] == ['Popular', 'Rare', 'Unmentioned']
+
+            nodes = await driver.search_ops.episode_mentions_reranker(driver, uuids, min_score=2)
+            assert [n.name for n in nodes] == ['Popular']
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()
