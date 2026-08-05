@@ -103,7 +103,8 @@ def _create_graphiti_client(settings: ZepEnvDep) -> ZepGraphiti:
         )
 
 
-async def get_graphiti(settings: ZepEnvDep):
+def build_graphiti(settings: ZepEnvDep) -> ZepGraphiti:
+    """Construct and configure a ZepGraphiti client (no lifecycle management)."""
     client = _create_graphiti_client(settings)
     if settings.openai_base_url is not None:
         client.llm_client.config.base_url = settings.openai_base_url
@@ -111,7 +112,11 @@ async def get_graphiti(settings: ZepEnvDep):
         client.llm_client.config.api_key = settings.openai_api_key
     if settings.model_name is not None:
         client.llm_client.model = settings.model_name
+    return client
 
+
+async def get_graphiti(settings: ZepEnvDep):
+    client = build_graphiti(settings)
     try:
         yield client
     finally:
