@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+from copy import copy
 from datetime import datetime
 from time import time
 from uuid import uuid4
@@ -601,6 +602,18 @@ class Graphiti:
         """
         await self.driver.build_indices_and_constraints(delete_existing)
 
+    def _with_database(self, database: str) -> 'Graphiti':
+        """Return a shallow copy that uses a database-specific driver.
+
+        FalkorDB maps each group ID to a distinct graph. Keeping both the driver
+        and its clients container on the copy prevents concurrent requests from
+        rebinding state on the shared Graphiti instance.
+        """
+        graphiti = copy(self)
+        graphiti.driver = self.driver.clone(database=database)
+        graphiti.clients = self.clients.model_copy(update={'driver': graphiti.driver})
+        return graphiti
+
     async def _extract_and_resolve_nodes(
         self,
         episode: EpisodicNode | list[EpisodicNode],
@@ -1077,9 +1090,24 @@ class Graphiti:
         else:
             validate_group_id(group_id)
             if group_id != self.driver._database:
-                # if group_id is provided, use it as the database name
-                self.driver = self.driver.clone(database=group_id)
-                self.clients.driver = self.driver
+                return await self._with_database(group_id).add_episode(
+                    name=name,
+                    episode_body=episode_body,
+                    source_description=source_description,
+                    reference_time=reference_time,
+                    source=source,
+                    group_id=group_id,
+                    uuid=uuid,
+                    update_communities=update_communities,
+                    entity_types=entity_types,
+                    excluded_entity_types=excluded_entity_types,
+                    previous_episode_uuids=previous_episode_uuids,
+                    edge_types=edge_types,
+                    edge_type_map=edge_type_map,
+                    custom_extraction_instructions=custom_extraction_instructions,
+                    saga=saga,
+                    saga_previous_episode_uuid=saga_previous_episode_uuid,
+                )
 
         with self.tracer.start_span('add_episode') as span:
             try:
@@ -1305,9 +1333,16 @@ class Graphiti:
                 else:
                     validate_group_id(group_id)
                     if group_id != self.driver._database:
-                        # if group_id is provided, use it as the database name
-                        self.driver = self.driver.clone(database=group_id)
-                        self.clients.driver = self.driver
+                        return await self._with_database(group_id).add_episode_bulk(
+                            bulk_episodes=bulk_episodes,
+                            group_id=group_id,
+                            entity_types=entity_types,
+                            excluded_entity_types=excluded_entity_types,
+                            edge_types=edge_types,
+                            edge_type_map=edge_type_map,
+                            custom_extraction_instructions=custom_extraction_instructions,
+                            saga=saga,
+                        )
 
                 # Create default edge type map
                 edge_type_map_default = (
