@@ -3,8 +3,8 @@
 ### Before Starting Any Task
 
 - **Always search first:** Use the `search_nodes` tool to look for relevant preferences and procedures before beginning work.
-- **Search for facts too:** Use the `search_facts` tool to discover relationships and factual information that may be relevant to your task.
-- **Filter by entity type:** Specify `Preference`, `Procedure`, or `Requirement` in your node search to get targeted results.
+- **Search for facts too:** Use the `search_memory_facts` tool to discover relationships and factual information that may be relevant to your task.
+- **Filter by entity type:** Pass the entity types you care about (for example `Preference`, `Procedure`, or `Requirement`) in `entity_types` to get targeted results. The server only knows the entity types registered in its configuration, so leave the filter off if none are configured.
 - **Review all matches:** Carefully examine any preferences, procedures, or facts that match your current task.
 
 ### Always Save New or Updated Information
@@ -27,7 +27,7 @@
 
 - **Search before suggesting:** Always check if there's established knowledge before making recommendations.
 - **Combine node and fact searches:** For complex tasks, search both nodes and facts to build a complete picture.
-- **Use `center_node_uuid`:** When exploring related information, center your search around a specific node.
+- **Use `center_node_uuid`:** When exploring related information, center your search around a specific node. Both `search_nodes` and `search_memory_facts` accept it.
 - **Prioritize specific matches:** More specific information takes precedence over general information.
 - **Be proactive:** If you notice patterns in user behavior, consider storing them as preferences or procedures.
 
