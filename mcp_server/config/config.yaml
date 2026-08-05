@@ -73,6 +73,12 @@ embedder:
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
+# By default, infer a reranker from the LLM and embedder providers, then fall back to local BGE.
+# Set this explicitly to openai, azure_openai, gemini, or bge to override that selection.
+# API-backed rerankers reuse credentials from the matching llm.providers or embedder.providers block.
+reranker:
+  provider: ${RERANKER_PROVIDER:auto}
+
 database:
   provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
 
