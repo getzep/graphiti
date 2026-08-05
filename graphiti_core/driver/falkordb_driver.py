@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -34,7 +35,10 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
-from graphiti_core.driver.falkordb import STOPWORDS as STOPWORDS
+from graphiti_core.driver.falkordb.fulltext import (
+    build_falkor_fulltext_query,
+    sanitize_falkor_fulltext_query,
+)
 from graphiti_core.driver.falkordb.operations.community_edge_ops import (
     FalkorCommunityEdgeOperations,
 )
@@ -66,7 +70,6 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import validate_group_ids
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
@@ -123,7 +126,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
-    default_group_id: str = '\\_'
+    default_group_id: str = '_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
     aoss_client: None = None
 
@@ -172,14 +175,12 @@ class FalkorDriver(GraphDriver):
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
 
+        self._init_task: asyncio.Task | None = None
         # Schedule the indices and constraints to be built
         try:
-            # Try to get the current event loop
             loop = asyncio.get_running_loop()
-            # Schedule the build_indices_and_constraints to run
-            loop.create_task(self.build_indices_and_constraints())
+            self._init_task = loop.create_task(self.build_indices_and_constraints())
         except RuntimeError:
-            # No event loop running, this will be handled later
             pass
 
     # --- Operations properties ---
@@ -273,6 +274,14 @@ class FalkorDriver(GraphDriver):
 
     async def close(self) -> None:
         """Close the driver connection."""
+        if self._init_task is not None:
+            if not self._init_task.done():
+                self._init_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._init_task
+            elif not self._init_task.cancelled():
+                # Retrieve any exception so it doesn't go unobserved
+                self._init_task.exception()
         if hasattr(self.client, 'aclose'):
             await self.client.aclose()  # type: ignore[reportUnknownMemberType]
         elif hasattr(self.client.connection, 'aclose'):
@@ -357,84 +366,10 @@ class FalkorDriver(GraphDriver):
             return obj
 
     def sanitize(self, query: str) -> str:
-        """
-        Replace FalkorDB special characters with whitespace.
-        Based on FalkorDB tokenization rules: ,.<>{}[]"':;!@#$%^&*()-+=~
-        """
-        # FalkorDB separator characters that break text into tokens
-        separator_map = str.maketrans(
-            {
-                ',': ' ',
-                '.': ' ',
-                '<': ' ',
-                '>': ' ',
-                '{': ' ',
-                '}': ' ',
-                '[': ' ',
-                ']': ' ',
-                '"': ' ',
-                "'": ' ',
-                ':': ' ',
-                ';': ' ',
-                '!': ' ',
-                '@': ' ',
-                '#': ' ',
-                '$': ' ',
-                '%': ' ',
-                '^': ' ',
-                '&': ' ',
-                '*': ' ',
-                '(': ' ',
-                ')': ' ',
-                '-': ' ',
-                '+': ' ',
-                '=': ' ',
-                '~': ' ',
-                '?': ' ',
-                '|': ' ',
-                '/': ' ',
-                '\\': ' ',
-            }
-        )
-        sanitized = query.translate(separator_map)
-        # Clean up multiple spaces
-        sanitized = ' '.join(sanitized.split())
-        return sanitized
+        """Replace FalkorDB special characters with whitespace."""
+        return sanitize_falkor_fulltext_query(query)
 
     def build_fulltext_query(
         self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
     ) -> str:
-        """
-        Build a fulltext query string for FalkorDB using RedisSearch syntax.
-        FalkorDB uses RedisSearch-like syntax where:
-        - Field queries use @ prefix: @field:value
-        - Multiple values for same field: (@field:value1|value2)
-        - Text search doesn't need @ prefix for content fields
-        - AND is implicit with space: (@group_id:value) (text)
-        - OR uses pipe within parentheses: (@group_id:value1|value2)
-        """
-        validate_group_ids(group_ids)
-
-        if group_ids is None or len(group_ids) == 0:
-            group_filter = ''
-        else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
-            group_values = '|'.join(escaped_group_ids)
-            group_filter = f'(@group_id:{group_values})'
-
-        sanitized_query = self.sanitize(query)
-
-        # Remove stopwords and empty tokens from the sanitized query
-        query_words = sanitized_query.split()
-        filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
-        sanitized_query = ' | '.join(filtered_words)
-
-        # If the query is too long return no query
-        if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
-            return ''
-
-        full_query = group_filter + ' (' + sanitized_query + ')'
-
-        return full_query
+        return build_falkor_fulltext_query(query, group_ids, max_query_length)

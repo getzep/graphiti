@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import warnings
 from typing import Any
 
 import kuzu
@@ -142,6 +143,12 @@ class KuzuDriver(GraphDriver):
         db: str = ':memory:',
         max_concurrent_queries: int = 1,
     ):
+        warnings.warn(
+            'The Kuzu backend is deprecated and will be removed in a future release — the '
+            'upstream Kuzu project is no longer maintained. Migrate to Neo4j or FalkorDB.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__()
         self.db = kuzu.Database(db)
 
