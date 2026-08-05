@@ -391,7 +391,7 @@ async def edge_similarity_search(
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityEdge]:
     if driver.search_interface:
-        return await driver.search_interface.edge_similarity_search(
+        edges = await driver.search_interface.edge_similarity_search(
             driver,
             search_vector,
             source_node_uuid,
@@ -400,6 +400,15 @@ async def edge_similarity_search(
             group_ids,
             limit,
             min_score,
+        )
+        return await _apply_edge_similarity_search_hook(
+            edges,
+            driver=driver,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            source_node_uuid=source_node_uuid,
+            target_node_uuid=target_node_uuid,
+            search_filter=search_filter,
         )
 
     if bool(_write_path_config('vector_edge_search_enabled', True)) and _provider_is_neo4j(driver):
@@ -560,7 +569,7 @@ async def edge_similarity_search(
                 **filter_params,
             )
         else:
-            return []
+            records = []
     else:
         query = (
             match_query
