@@ -63,4 +63,8 @@ class OpenAIEmbedder(EmbedderClient):
         result = await self.client.embeddings.create(
             input=input_data_list, model=self.config.embedding_model
         )
-        return [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
+        # The API documents `data` as index-addressed and does not guarantee it
+        # arrives in input order, so pair by `index` rather than by position:
+        # reading positionally attaches embeddings to the wrong inputs silently.
+        ordered = sorted(result.data, key=lambda embedding: embedding.index)
+        return [embedding.embedding[: self.config.embedding_dim] for embedding in ordered]

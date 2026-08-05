@@ -65,7 +65,10 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
                 model=self.model, input=input_data_list
             )
 
-            return [embedding.embedding for embedding in response.data]
+            # Pair by `index`, not position: the API does not guarantee that
+            # `data` arrives in input order (see OpenAIEmbedder.create_batch).
+            ordered = sorted(response.data, key=lambda embedding: embedding.index)
+            return [embedding.embedding for embedding in ordered]
         except Exception as e:
             logger.error(f'Error in Azure OpenAI batch embedding: {e}')
             raise
