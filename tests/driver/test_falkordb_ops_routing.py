@@ -24,6 +24,9 @@ from graphiti_core.driver.falkordb.operations.entity_node_ops import (
 from graphiti_core.driver.falkordb.operations.episode_node_ops import (
     FalkorEpisodeNodeOperations,
 )
+from graphiti_core.driver.falkordb.operations.graph_ops import (
+    FalkorGraphMaintenanceOperations,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -117,3 +120,48 @@ async def test_get_by_group_ids_empty_group_ids_does_not_route():
 
     base.clone.assert_not_called()
     base.execute_query.assert_awaited_once()
+
+
+async def test_clear_data_single_group_routes_to_its_graph():
+    ops = FalkorGraphMaintenanceOperations()
+    base, child = _make_falkor_driver()
+
+    await ops.clear_data(base, ['tenant-1'])
+
+    base.clone.assert_called_once_with(database='tenant-1')
+    child.execute_query.assert_awaited_once_with('MATCH (n) DETACH DELETE n')
+    base.execute_query.assert_not_called()
+
+
+async def test_clear_data_multi_group_routes_to_each_graph_once():
+    ops = FalkorGraphMaintenanceOperations()
+    base = MagicMock(spec=GraphDriver)
+    base.provider = GraphProvider.FALKORDB
+    base.execute_query = AsyncMock(return_value=([], None, None))
+    clones = {}
+
+    def _clone(database):
+        child = MagicMock(spec=GraphDriver)
+        child.provider = GraphProvider.FALKORDB
+        child.execute_query = AsyncMock(return_value=([], None, None))
+        clones[database] = child
+        return child
+
+    base.clone = MagicMock(side_effect=_clone)
+
+    await ops.clear_data(base, ['group-a', 'group-b', 'group-a'])
+
+    assert list(clones) == ['group-a', 'group-b']
+    base.execute_query.assert_not_called()
+    for child in clones.values():
+        child.execute_query.assert_awaited_once_with('MATCH (n) DETACH DELETE n')
+
+
+async def test_clear_data_without_group_ids_clears_current_graph():
+    ops = FalkorGraphMaintenanceOperations()
+    base, _ = _make_falkor_driver()
+
+    await ops.clear_data(base)
+
+    base.clone.assert_not_called()
+    base.execute_query.assert_awaited_once_with('MATCH (n) DETACH DELETE n')

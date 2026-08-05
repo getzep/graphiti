@@ -18,7 +18,7 @@ import asyncio
 import logging
 from typing import Any
 
-from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
 from graphiti_core.driver.operations.graph_utils import Neighbor, label_propagation
 from graphiti_core.driver.query_executor import QueryExecutor
@@ -41,17 +41,27 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
     ) -> None:
         if group_ids is None:
             await executor.execute_query('MATCH (n) DETACH DELETE n')
-        else:
-            # FalkorDB: iterate labels individually
-            for label in ['Entity', 'Episodic', 'Community']:
-                await executor.execute_query(
-                    f"""
-                    MATCH (n:{label})
-                    WHERE n.group_id IN $group_ids
-                    DETACH DELETE n
-                    """,
-                    group_ids=group_ids,
-                )
+            return
+
+        if isinstance(executor, GraphDriver):
+            # FalkorDB stores every group_id in its own physical graph. Route each
+            # clear to that graph instead of filtering the base/default graph.
+            for group_id in dict.fromkeys(group_ids):
+                group_driver = executor.clone(database=group_id)
+                await group_driver.execute_query('MATCH (n) DETACH DELETE n')
+            return
+
+        # Transaction-like executors cannot be cloned. Preserve the scoped
+        # fallback for callers that already opened a session on the target graph.
+        for label in ['Entity', 'Episodic', 'Community']:
+            await executor.execute_query(
+                f"""
+                MATCH (n:{label})
+                WHERE n.group_id IN $group_ids
+                DETACH DELETE n
+                """,
+                group_ids=group_ids,
+            )
 
     async def build_indices_and_constraints(
         self,
