@@ -47,7 +47,9 @@ if os.getenv('DISABLE_FALKORDB') is None:
     except ImportError:
         raise
 
-if os.getenv('DISABLE_KUZU') is None:
+# Kuzu is deprecated (upstream project no longer maintained) and is excluded from the
+# default test matrix. Set ENABLE_KUZU=1 to include it while the driver still ships.
+if os.getenv('ENABLE_KUZU') is not None and os.getenv('DISABLE_KUZU') is None:
     try:
         from graphiti_core.driver.kuzu_driver import KuzuDriver
 

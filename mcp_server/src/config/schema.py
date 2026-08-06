@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -147,11 +147,19 @@ class LLMConfig(BaseModel):
     """LLM configuration."""
 
     provider: str = Field(default='openai', description='LLM provider')
-    model: str = Field(default='gpt-4o-mini', description='Model name')
+    model: str = Field(default='gpt-5.5', description='Model name')
     temperature: float | None = Field(
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )
     max_tokens: int = Field(default=4096, description='Max tokens')
+    structured_output_mode: Literal['json_schema', 'json_object'] = Field(
+        default='json_schema',
+        description=(
+            'Structured output mode for OpenAIGenericClient: json_schema requests native '
+            'schema enforcement; json_object injects the schema into the prompt for '
+            'OpenAI-compatible providers that do not reliably honor json_schema.'
+        ),
+    )
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)
 
 
@@ -187,6 +195,7 @@ class FalkorDBProviderConfig(BaseModel):
     """FalkorDB provider configuration."""
 
     uri: str = 'redis://localhost:6379'
+    username: str | None = None
     password: str | None = None
     database: str = 'default_db'
 
@@ -206,10 +215,44 @@ class DatabaseConfig(BaseModel):
 
 
 class EntityTypeConfig(BaseModel):
-    """Entity type configuration."""
+    """Entity type configuration.
+
+    If ``name`` matches a model registered in ``models.entity_types.ENTITY_TYPES``,
+    the rich Pydantic model (with its attributes and extraction instructions) is
+    registered with graphiti-core. Otherwise a documentation-only model is built
+    from ``name`` + ``description`` for backward compatibility.
+    """
 
     name: str
     description: str
+
+
+class EdgeTypeConfig(BaseModel):
+    """Edge (fact) type configuration.
+
+    Mirrors :class:`EntityTypeConfig`. If ``name`` matches a model registered in
+    ``models.edge_types.EDGE_TYPES``, the rich Pydantic model is registered with
+    graphiti-core. Otherwise a documentation-only model is built from
+    ``name`` + ``description``.
+    """
+
+    name: str
+    description: str
+
+
+class EdgeTypeMapEntry(BaseModel):
+    """Maps an ordered (source entity type, target entity type) pair to the edge
+    type names permitted between them.
+
+    Use ``'Entity'`` as a wildcard for either endpoint, matching graphiti-core's
+    ``edge_type_map`` convention.
+    """
+
+    source: str = Field(default='Entity', description='Source entity type name')
+    target: str = Field(default='Entity', description='Target entity type name')
+    edge_types: list[str] = Field(
+        default_factory=list, description='Edge type names allowed for this pair'
+    )
 
 
 class GraphitiAppConfig(BaseModel):
@@ -219,6 +262,8 @@ class GraphitiAppConfig(BaseModel):
     episode_id_prefix: str | None = Field(default='', description='Episode ID prefix')
     user_id: str = Field(default='mcp_user', description='User ID')
     entity_types: list[EntityTypeConfig] = Field(default_factory=list)
+    edge_types: list[EdgeTypeConfig] = Field(default_factory=list)
+    edge_type_map: list[EdgeTypeMapEntry] = Field(default_factory=list)
 
     def model_post_init(self, __context) -> None:
         """Convert None to empty string for episode_id_prefix."""
@@ -265,6 +310,10 @@ class GraphitiConfig(BaseSettings):
         # Override server settings
         if hasattr(args, 'transport') and args.transport:
             self.server.transport = args.transport
+        if hasattr(args, 'host') and args.host:
+            self.server.host = args.host
+        if hasattr(args, 'port') and args.port is not None:
+            self.server.port = args.port
 
         # Override LLM settings
         if hasattr(args, 'llm_provider') and args.llm_provider:

@@ -16,7 +16,6 @@ Graphiti
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/getzep/graphiti)](https://github.com/getzep/graphiti/stargazers)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.com/invite/W8Kw6bsgXQ)
 [![arXiv](https://img.shields.io/badge/arXiv-2501.13956-b31b1b.svg?style=flat)](https://arxiv.org/abs/2501.13956)
 [![Release](https://img.shields.io/github/v/release/getzep/graphiti?style=flat&label=Release&color=limegreen)](https://github.com/getzep/graphiti/releases)
 
@@ -87,6 +86,10 @@ Graphiti is the open-source temporal context graph engine at the core of
 [Zep's](https://www.getzep.com) context infrastructure for AI agents. Zep manages context graphs at scale, providing
 governed, low-latency context retrieval and assembly for production agent deployments.
 
+Under the hood, Zep is powered by a proprietary graph database — the
+[Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs
+with low-latency retrieval, so production deployments don't require a separate third-party graph database.
+
 Using Graphiti, we've demonstrated Zep is
 the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
 
@@ -105,6 +108,7 @@ applications.
 |--------|-----|---------|
 | **What they are** | Managed context graph infrastructure for AI agents | Open-source temporal context graph engine |
 | **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
+| **Graph database** | Proprietary [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs with low-latency retrieval; no third-party graph database vendor required | Bring your own third-party graph database |
 | **User & conversation management** | Built-in users, threads, and message storage | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
 | **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
@@ -162,12 +166,12 @@ particularly suitable for applications requiring real-time interaction and preci
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
-  OpenSearch Serverless collection (serves as the full text search backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
+  Serverless collection (serves as the full text search backend) / Kuzu 0.11.2 (**deprecated**, see below)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
-> Graphiti works best with LLM services that support Structured Output (such as OpenAI and Gemini).
+> Graphiti works best with LLM services that support Structured Output (such as OpenAI, Anthropic, and Gemini).
 > Using other services may result in incorrect output schemas and ingestion failures. This is particularly
 > problematic when using smaller models.
 
@@ -210,6 +214,11 @@ uv add graphiti-core[falkordblite]
 ```
 
 ### Installing with Kuzu Support
+
+> [!WARNING]
+> **Kuzu is deprecated** and will be removed in a future release — the upstream Kuzu project is no longer
+> maintained. New projects should use Neo4j or FalkorDB. The driver still ships for now but emits a
+> `DeprecationWarning`.
 
 If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
 
@@ -270,8 +279,10 @@ performance.
 > [!IMPORTANT]
 > Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your
 > environment.
-> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI
-> compatible APIs.
+> Support for Anthropic, Gemini, and Groq is available, too. Other LLM providers — both hosted OpenAI-compatible APIs
+> (DeepSeek, Together, OpenRouter, …) and local servers (Ollama, vLLM, llama.cpp, LM Studio) — may be used via their
+> OpenAI-compatible endpoints; see
+> [Using Graphiti with OpenAI-compatible providers and local LLMs](#using-graphiti-with-openai-compatible-providers-and-local-llms).
 
 For a complete working example, see the [Quickstart Example](examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
@@ -389,6 +400,10 @@ graphiti = Graphiti(graph_driver=driver)
 ```
 
 #### Kuzu
+
+> [!WARNING]
+> Kuzu is **deprecated** (upstream project unmaintained) and will be removed in a future release. Prefer Neo4j or
+> FalkorDB.
 
 ```python
 from graphiti_core import Graphiti
@@ -528,14 +543,15 @@ The Gemini reranker uses the `gemini-2.5-flash-lite` model by default, which is 
 cost-effective and low-latency classification tasks. It uses the same boolean classification approach as the OpenAI
 reranker, leveraging Gemini's log probabilities feature to rank passage relevance.
 
-## Using Graphiti with Ollama (Local LLM)
+## Using Graphiti with OpenAI-compatible providers and local LLMs
 
-Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal
-for privacy-focused applications or when you want to avoid API costs.
+Graphiti can use any OpenAI-compatible `/v1` endpoint for LLM inference via `OpenAIGenericClient` — both **hosted
+providers** (DeepSeek, Together, OpenRouter, Fireworks, etc.) and **local servers** (Ollama, vLLM, llama.cpp, LM
+Studio). Local servers are ideal for privacy-focused applications or avoiding API costs. The example below uses Ollama;
+for any other provider, point `base_url` at its endpoint and set the appropriate `api_key` and `model`.
 
-**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for Ollama and other OpenAI-compatible providers like LM
-Studio. The `OpenAIGenericClient` is optimized for local models with a higher default max token limit (16K vs 8K) and
-full support for structured outputs.
+**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for these endpoints. It is optimized for local models with a
+higher default max token limit (16K vs 8K) and handles structured outputs across compatible providers.
 
 Install the models:
 
@@ -582,6 +598,26 @@ graphiti = Graphiti(
 ```
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
+
+### Structured output and small models
+
+Graphiti depends on structured (JSON) output for entity/edge extraction and deduplication, and works best with models
+and providers that reliably honor it (OpenAI, Anthropic, Gemini). Reliability varies across OpenAI-compatible providers and
+especially on smaller or local models, so `OpenAIGenericClient` exposes a `structured_output_mode`:
+
+- `"json_schema"` (default): requests native structured output via `response_format`. Best on capable models and
+  providers that enforce the schema via constrained decoding.
+- `"json_object"`: requests plain-JSON mode and injects the schema into the prompt instead. Use this for
+  providers/models that don't reliably honor `json_schema` — including some local servers that accept the `json_schema`
+  request but don't actually constrain output to it, where `json_object` can be *more* reliable.
+
+When using smaller or local models:
+
+- Prefer the most capable model you can run. Very small models frequently emit JSON that doesn't match the requested
+  schema, which surfaces as extraction failures.
+- Responses wrapped in Markdown ` ```json ` code fences are stripped automatically.
+- Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
+  servers and some providers have limited concurrency.
 
 ## Documentation
 
@@ -677,9 +713,9 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 ## Contributing
 
 We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
-answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
+helping others on GitHub. For detailed guidelines on code contributions, please refer
 to [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
+Open a [GitHub issue](https://github.com/getzep/graphiti/issues) to ask questions, report bugs, or discuss Graphiti.

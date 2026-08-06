@@ -3,9 +3,11 @@ from typing import Any, cast
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
 from graphiti_core.search import search_utils
+from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import edge_operations, node_operations
 from graphiti_core.write_path_hooks import (
@@ -110,6 +112,30 @@ class EdgeSimilaritySearchHook:
         return edges[:1]
 
 
+class EdgeSimilaritySearchCallHook:
+    async def filter_edges(self, edges, *, context, **kwargs):
+        context.stats['edge_similarity_search_hook_calls'] = (
+            context.stats.get('edge_similarity_search_hook_calls', 0) + 1
+        )
+        return edges
+
+
+class StubEdgeSearchInterface:
+    def __init__(self, edges):
+        self.edges = edges
+
+    async def edge_similarity_search(self, *args, **kwargs):
+        return self.edges
+
+
+class EmptyNeptuneDriver:
+    provider = GraphProvider.NEPTUNE
+    search_interface = None
+
+    async def execute_query(self, *args, **kwargs):
+        return [], None, None
+
+
 @pytest.mark.asyncio
 async def test_edge_similarity_search_hook_filters_results() -> None:
     stats = {}
@@ -149,5 +175,57 @@ async def test_edge_similarity_search_hook_filters_results() -> None:
         assert result == [edge_a]
         assert stats['edge_similarity_search_hook_called'] is True
         assert stats['edge_similarity_record_score'] == 0.91
+    finally:
+        reset_write_path_context(token)
+
+
+@pytest.mark.asyncio
+async def test_edge_similarity_search_hook_wraps_driver_interface_return() -> None:
+    stats = {}
+    token = set_write_path_context(stats=stats)
+    try:
+        register_hook('edge_similarity_search', EdgeSimilaritySearchCallHook())
+        edge = EntityEdge(
+            source_node_uuid='source',
+            target_node_uuid='target',
+            name='RELATES_TO',
+            group_id='g',
+            fact='Alice knows Bob',
+            created_at=utc_now(),
+            episodes=[],
+        )
+        driver = SimpleNamespace(search_interface=StubEdgeSearchInterface([edge]))
+
+        result = await search_utils.edge_similarity_search(
+            cast(Any, driver),
+            [1.0],
+            None,
+            None,
+            SearchFilters(),
+        )
+
+        assert result == [edge]
+        assert stats['edge_similarity_search_hook_calls'] == 1
+    finally:
+        reset_write_path_context(token)
+
+
+@pytest.mark.asyncio
+async def test_edge_similarity_search_hook_wraps_empty_neptune_return() -> None:
+    stats = {}
+    token = set_write_path_context(stats=stats)
+    try:
+        register_hook('edge_similarity_search', EdgeSimilaritySearchCallHook())
+
+        result = await search_utils.edge_similarity_search(
+            cast(Any, EmptyNeptuneDriver()),
+            [1.0],
+            None,
+            None,
+            SearchFilters(),
+        )
+
+        assert result == []
+        assert stats['edge_similarity_search_hook_calls'] == 1
     finally:
         reset_write_path_context(token)
