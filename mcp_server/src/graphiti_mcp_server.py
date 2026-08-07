@@ -1109,7 +1109,7 @@ async def initialize_server() -> ServerConfig:
     parser.add_argument(
         '--config',
         type=Path,
-        default=default_config,
+        default=None,
         help='Path to YAML configuration file (default: config/config.yaml)',
     )
 
@@ -1173,9 +1173,16 @@ async def initialize_server() -> ServerConfig:
 
     args = parser.parse_args()
 
-    # Set config path in environment for the settings to pick up
-    if args.config:
+    # Set config path in environment for the settings to pick up.
+    # Precedence: explicit --config flag > CONFIG_PATH env var > bundled default.
+    # Only fall back to the bundled default when neither is provided, so a
+    # deployment's CONFIG_PATH env var is honored. Previously --config carried an
+    # always-truthy Path default that unconditionally overwrote CONFIG_PATH on
+    # every boot, silently ignoring the documented env-var pattern.
+    if args.config is not None:
         os.environ['CONFIG_PATH'] = str(args.config)
+    elif 'CONFIG_PATH' not in os.environ:
+        os.environ['CONFIG_PATH'] = str(default_config)
 
     # Load configuration with environment variables and YAML
     config = GraphitiConfig()
