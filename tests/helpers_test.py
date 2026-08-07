@@ -67,6 +67,14 @@ if os.getenv('DISABLE_NEPTUNE') is None:
     except ImportError:
         raise
 
+if os.getenv('DISABLE_ARCADEDB') is None:
+    try:
+        from graphiti_core.driver.arcadedb_driver import ArcadeDBDriver
+
+        drivers.append(GraphProvider.ARCADEDB)
+    except ImportError:
+        raise
+
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'test')
@@ -81,6 +89,11 @@ NEPTUNE_PORT = os.getenv('NEPTUNE_PORT', 8182)
 AOSS_HOST = os.getenv('AOSS_HOST', None)
 
 KUZU_DB = os.getenv('KUZU_DB', ':memory:')
+
+ARCADEDB_URI = os.getenv('ARCADEDB_URI', 'bolt://localhost:2480')
+ARCADEDB_USER = os.getenv('ARCADEDB_USER', 'root')
+ARCADEDB_PASSWORD = os.getenv('ARCADEDB_PASSWORD', 'playwithdata')
+ARCADEDB_DATABASE = os.getenv('ARCADEDB_DATABASE', 'graphiti')
 
 group_id = 'graphiti_test_group'
 group_id_2 = 'graphiti_test_group_2'
@@ -110,6 +123,13 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             host=NEPTUNE_HOST,
             port=int(NEPTUNE_PORT),
             aoss_host=AOSS_HOST,
+        )
+    elif provider == GraphProvider.ARCADEDB:
+        return ArcadeDBDriver(
+            uri=ARCADEDB_URI,
+            user=ARCADEDB_USER,
+            password=ARCADEDB_PASSWORD,
+            database=ARCADEDB_DATABASE,
         )
     else:
         raise ValueError(f'Driver {provider} not available')
