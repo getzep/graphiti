@@ -57,7 +57,14 @@ from graphiti_core.nodes import (
     SagaNode,
     create_entity_node_embeddings,
 )
-from graphiti_core.prompts.lib import prompt_library
+from graphiti_core.prompts.lib import (
+    PromptLibrary,
+    ensure_prompt_library_wrapped,
+    validate_prompt_library,
+)
+from graphiti_core.prompts.lib import (
+    prompt_library as default_prompt_library,
+)
 from graphiti_core.prompts.summarize_sagas import SagaSummary
 from graphiti_core.search.search import SearchConfig, search
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResults
@@ -148,6 +155,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        prompt_library: PromptLibrary | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -184,6 +192,13 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        prompt_library : PromptLibrary | None, optional
+            An instance-scoped prompt library used for all LLM prompt construction.
+            If not provided, Graphiti uses the built-in default prompt library.
+            For partial customization, compose overrides with
+            ``create_prompt_library(overrides)`` and pass the result here.
+            Custom prompts must still produce responses compatible with the
+            response models used at each call site.
 
         Returns
         -------
@@ -232,12 +247,21 @@ class Graphiti:
         # Set tracer on clients
         self.llm_client.set_tracer(self.tracer)
 
+        if prompt_library is not None:
+            validate_prompt_library(prompt_library)
+            # Re-wrap non-wrapper libraries so system messages always get
+            # DO_NOT_ESCAPE_UNICODE post-processing (§3.5) without merging defaults.
+            self.prompt_library = ensure_prompt_library_wrapped(prompt_library)
+        else:
+            self.prompt_library = default_prompt_library
+
         self.clients = GraphitiClients(
             driver=self.driver,
             llm_client=self.llm_client,
             embedder=self.embedder,
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
+            prompt_library=self.prompt_library,
         )
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
@@ -536,7 +560,7 @@ class Graphiti:
         }
 
         llm_response = await self.llm_client.generate_response(
-            prompt_library.summarize_sagas.summarize_saga(context),
+            self.prompt_library.summarize_sagas.summarize_saga(context),
             response_model=SagaSummary,
             prompt_name='summarize_sagas.summarize_saga',
         )
@@ -1184,7 +1208,13 @@ class Graphiti:
                 if update_communities:
                     communities, community_edges = await semaphore_gather(
                         *[
-                            update_community(self.driver, self.llm_client, self.embedder, node)
+                            update_community(
+                                self.driver,
+                                self.llm_client,
+                                self.embedder,
+                                node,
+                                self.prompt_library,
+                            )
                             for node in nodes
                         ],
                         max_coroutines=self.max_coroutines,
@@ -1504,7 +1534,7 @@ class Graphiti:
         await remove_communities(driver, group_ids=group_ids)
 
         community_nodes, community_edges = await build_communities(
-            driver, self.llm_client, group_ids
+            driver, self.llm_client, group_ids, self.prompt_library
         )
 
         await semaphore_gather(
@@ -1752,6 +1782,7 @@ class Graphiti:
                 group_id=edge.group_id,
             ),
             None,
+            prompt_library=self.prompt_library,
         )
 
         edges: list[EntityEdge] = [resolved_edge] + invalidated_edges

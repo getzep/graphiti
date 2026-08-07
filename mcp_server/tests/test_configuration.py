@@ -234,3 +234,15 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
+
+def test_graphiti_initialization_without_prompt_configuration_uses_defaults():
+    """MCP may keep constructing Graphiti without prompt configuration."""
+    import inspect
+
+    from graphiti_core import Graphiti
+
+    params = inspect.signature(Graphiti.__init__).parameters
+    # Older graphiti-core has no prompt_library param; newer makes it optional.
+    if 'prompt_library' in params:
+        assert params['prompt_library'].default is None

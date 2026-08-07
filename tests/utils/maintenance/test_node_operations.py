@@ -1,11 +1,13 @@
 import logging
 from collections import defaultdict
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.prompts import prompt_library as default_prompt_library
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
@@ -45,6 +47,7 @@ def _make_clients():
         embedder=embedder,
         cross_encoder=cross_encoder,
         llm_client=llm_client,
+        prompt_library=default_prompt_library,
     )
 
     return clients, llm_generate
@@ -493,11 +496,6 @@ async def test_resolve_with_llm_candidate_attributes_cannot_overwrite_candidate_
         captured_context.update(context)
         return ['prompt']
 
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
-        fake_prompt_nodes,
-    )
-
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
         return_value={
@@ -515,6 +513,7 @@ async def test_resolve_with_llm_candidate_attributes_cannot_overwrite_candidate_
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
+        prompt_library=SimpleNamespace(dedupe_nodes=SimpleNamespace(nodes=fake_prompt_nodes)),
     )
 
     # candidate_id must be the positional index (0), not the adversarial attribute (999)
@@ -538,11 +537,6 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
         captured_context.update(context)
         return ['prompt']
 
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
-        fake_prompt_nodes,
-    )
-
     async def fake_generate_response(*_, **__):
         return {
             'entity_resolutions': [
@@ -565,6 +559,7 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
+        prompt_library=SimpleNamespace(dedupe_nodes=SimpleNamespace(nodes=fake_prompt_nodes)),
     )
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
@@ -584,11 +579,6 @@ async def test_resolve_with_llm_promotes_generic_candidate_type(monkeypatch):
 
     indexes = _build_candidate_indexes([candidate])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[0])
-
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
-        lambda context: ['prompt'],
-    )
 
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
@@ -611,6 +601,9 @@ async def test_resolve_with_llm_promotes_generic_candidate_type(monkeypatch):
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
+        prompt_library=SimpleNamespace(
+            dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
+        ),
     )
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
@@ -626,11 +619,6 @@ async def test_resolve_with_llm_ignores_out_of_range_relative_ids(monkeypatch, c
 
     indexes = _build_candidate_indexes([])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[0])
-
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
-        lambda context: ['prompt'],
-    )
 
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
@@ -654,6 +642,9 @@ async def test_resolve_with_llm_ignores_out_of_range_relative_ids(monkeypatch, c
             episode=_make_episode(),
             previous_episodes=[],
             entity_types=None,
+            prompt_library=SimpleNamespace(
+                dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
+            ),
         )
 
     assert state.resolved_nodes[0] is None
@@ -667,11 +658,6 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
 
     indexes = _build_candidate_indexes([candidate])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[0])
-
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
-        lambda context: ['prompt'],
-    )
 
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
@@ -699,6 +685,9 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
+        prompt_library=SimpleNamespace(
+            dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
+        ),
     )
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
@@ -712,11 +701,6 @@ async def test_resolve_with_llm_invalid_candidate_id_defaults_to_extracted(monke
 
     indexes = _build_candidate_indexes([])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[0])
-
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
-        lambda context: ['prompt'],
-    )
 
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
@@ -739,6 +723,9 @@ async def test_resolve_with_llm_invalid_candidate_id_defaults_to_extracted(monke
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
+        prompt_library=SimpleNamespace(
+            dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
+        ),
     )
 
     assert state.resolved_nodes[0] == extracted
@@ -764,6 +751,7 @@ async def test_batch_summaries_short_summary_no_llm():
         previous_episodes=[],
         should_summarize_node=None,
         edges_by_node={},
+        prompt_library=default_prompt_library,
     )
 
     # Short summary should be kept as-is without LLM call
@@ -794,6 +782,7 @@ async def test_batch_summaries_callback_skip_summary():
         previous_episodes=[],
         should_summarize_node=skip_summary_filter,
         edges_by_node={},
+        prompt_library=default_prompt_library,
     )
 
     # Summary should remain unchanged
@@ -826,6 +815,7 @@ async def test_batch_summaries_selective_callback():
         previous_episodes=[],
         should_summarize_node=selective_filter,
         edges_by_node={},
+        prompt_library=default_prompt_library,
     )
 
     # User summary should remain unchanged (callback returned False)
@@ -913,6 +903,7 @@ async def test_batch_summaries_calls_llm_for_long_summary():
         previous_episodes=[],
         should_summarize_node=None,
         edges_by_node=edges_by_node,
+        prompt_library=default_prompt_library,
     )
 
     # LLM should have been called to condense the long summary

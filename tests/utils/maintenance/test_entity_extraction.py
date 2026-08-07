@@ -21,6 +21,7 @@ import pytest
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.prompts import prompt_library as default_prompt_library
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
@@ -44,6 +45,7 @@ def _make_clients():
         embedder=embedder,
         cross_encoder=cross_encoder,
         llm_client=llm_client,
+        prompt_library=default_prompt_library,
     )
 
     return clients, llm_generate
@@ -362,6 +364,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=None,
             should_summarize_node=None,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # LLM should not be called
@@ -390,6 +393,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=None,
             should_summarize_node=None,
             edges_by_node=edges_by_node,
+            prompt_library=default_prompt_library,
         )
 
         # LLM should not be called
@@ -421,6 +425,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=[],
             should_summarize_node=None,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # LLM should be called
@@ -448,6 +453,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=[],
             should_summarize_node=reject_all,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # LLM should not be called
@@ -478,6 +484,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=[],
             should_summarize_node=None,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # LLM should be called exactly once (batch call)
@@ -509,6 +516,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=[],
             should_summarize_node=None,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # Alice should have updated summary
@@ -530,6 +538,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=None,
             should_summarize_node=None,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # LLM should not be called - no content to summarize
@@ -567,6 +576,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=[],
             should_summarize_node=None,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # With MAX_NODES=2 and 5 nodes, we should have 3 flights (2+2+1)
@@ -596,6 +606,7 @@ class TestExtractEntitySummariesBatch:
             previous_episodes=[],
             should_summarize_node=None,
             edges_by_node={},
+            prompt_library=default_prompt_library,
         )
 
         # Should match despite case difference

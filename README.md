@@ -619,6 +619,34 @@ When using smaller or local models:
 - Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
   servers and some providers have limited concurrency.
 
+## Configurable Prompts
+
+Graphiti lets you override LLM prompt builders per client instance without changing response schemas:
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.prompts import Message, create_prompt_library
+
+def custom_extract_message(context: dict) -> list[Message]:
+    return [
+        Message(role='system', content='Extract entities for my domain.'),
+        Message(role='user', content=str(context.get('episode_content', ''))),
+    ]
+
+prompt_library = create_prompt_library({
+    'extract_nodes': {
+        'extract_message': custom_extract_message,
+    },
+})
+
+graphiti = Graphiti(..., prompt_library=prompt_library)
+```
+
+Unspecified prompts keep the built-in defaults. Custom prompts must still produce LLM responses
+compatible with the response models used at each call site. Prefer ``create_prompt_library`` for
+overrides; if you pass a hand-built complete library, Graphiti wraps it so system messages still
+receive the standard do-not-escape-unicode post-processing.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.prompts import prompt_library as default_prompt_library
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
@@ -143,6 +144,7 @@ async def test_resolve_extracted_edge_exact_fact_short_circuit(
         mock_existing_edges,
         mock_current_episode,
         edge_type_candidates=None,
+        prompt_library=default_prompt_library,
     )
 
     assert resolved_edge is related_edges[0]
@@ -182,6 +184,7 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
         llm_client=llm_client,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
+        prompt_library=default_prompt_library,
     )
 
     source_node = EntityNode(
@@ -313,6 +316,7 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
         [],
         episode,
         edge_type_candidates=None,
+        prompt_library=default_prompt_library,
     )
 
     # Verify LLM was called
@@ -349,6 +353,8 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
         existing_edges,
         episode,
         edge_type_candidates=None,
+        *,
+        prompt_library=None,
     ):
         nonlocal resolve_call_count
         resolve_call_count += 1
@@ -371,6 +377,7 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
         llm_client=llm_client,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
+        prompt_library=default_prompt_library,
     )
 
     source_node = EntityNode(
@@ -609,6 +616,7 @@ async def test_extract_edges_drops_self_edges(monkeypatch):
         llm_client=mock_llm,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
+        prompt_library=default_prompt_library,
     )
 
     episode = EpisodicNode(
@@ -677,6 +685,7 @@ async def test_extract_edges_keeps_valid_edges_with_same_name_different_nodes(mo
         llm_client=mock_llm,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
+        prompt_library=default_prompt_library,
     )
 
     episode = EpisodicNode(
@@ -762,6 +771,7 @@ async def test_resolve_extracted_edge_overcap_attribute_preserves_prior(monkeypa
         existing_edges=[],
         episode=episode,
         edge_type_candidates={'EMPLOYMENT': _EmploymentEdge},
+        prompt_library=default_prompt_library,
     )
 
     # Title should reflect the legitimate LLM update.

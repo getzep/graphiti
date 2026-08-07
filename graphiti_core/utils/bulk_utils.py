@@ -551,6 +551,7 @@ async def dedupe_edges_bulk(
                 candidates,
                 episode,
                 edge_types,
+                prompt_library=clients.prompt_library,
             )
             for episode, edge, candidates in dedupe_tuples
         ]

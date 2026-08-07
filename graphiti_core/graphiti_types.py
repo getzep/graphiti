@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 from graphiti_core.cross_encoder import CrossEncoderClient
@@ -29,5 +31,7 @@ class GraphitiClients(BaseModel):
     embedder: EmbedderClient
     cross_encoder: CrossEncoderClient
     tracer: Tracer
+    # PromptLibrary is a typing.Protocol; store as Any for Pydantic compatibility.
+    prompt_library: Any
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

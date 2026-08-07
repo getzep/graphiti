@@ -32,7 +32,6 @@ from graphiti_core.nodes import (
     EpisodicNode,
     create_entity_node_embeddings,
 )
-from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
     ExtractedEntities,
@@ -129,7 +128,9 @@ async def extract_nodes(
     }
 
     # Extract entities
-    extracted_entities = await _extract_nodes_single(llm_client, primary_episode, context)
+    extracted_entities = await _extract_nodes_single(
+        llm_client, primary_episode, context, clients.prompt_library
+    )
 
     # Filter empty names
     filtered_entities = [e for e in extracted_entities if e.name.strip()]
@@ -245,9 +246,10 @@ async def _extract_nodes_single(
     llm_client: LLMClient,
     episode: EpisodicNode,
     context: dict,
+    prompt_library,
 ) -> list[ExtractedEntity]:
     """Extract entities using a single LLM call."""
-    llm_response = await _call_extraction_llm(llm_client, episode, context)
+    llm_response = await _call_extraction_llm(llm_client, episode, context, prompt_library)
     response_object = ExtractedEntities(**llm_response)
     return response_object.extracted_entities
 
@@ -256,6 +258,7 @@ async def _call_extraction_llm(
     llm_client: LLMClient,
     episode: EpisodicNode,
     context: dict,
+    prompt_library,
 ) -> dict:
     """Call the appropriate extraction prompt based on episode type."""
     if episode.source == EpisodeType.message:
@@ -472,6 +475,7 @@ async def _resolve_with_llm(
     episode: EpisodicNode | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_types: dict[str, type[BaseModel]] | None,
+    prompt_library,
 ) -> None:
     """Escalate unresolved nodes to the dedupe prompt so the LLM can select or reject duplicates.
 
@@ -686,6 +690,7 @@ async def resolve_extracted_nodes(
             episode,
             previous_episodes,
             entity_types,
+            clients.prompt_library,
         )
 
     if not state.unresolved_indices and not any(candidate_nodes_by_extracted):
@@ -753,6 +758,7 @@ async def extract_attributes_from_nodes(
                     if entity_types is not None
                     else None
                 ),
+                clients.prompt_library,
             )
             for node in nodes
         ]
@@ -771,6 +777,7 @@ async def extract_attributes_from_nodes(
         previous_episodes,
         should_summarize_node,
         edges_by_node,
+        clients.prompt_library,
         skip_fact_appending=skip_fact_appending,
         entity_types=entity_types if include_type_descriptions else None,
     )
@@ -786,6 +793,7 @@ async def _extract_entity_attributes(
     episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_type: type[BaseModel] | None,
+    prompt_library,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
         return {}
@@ -837,6 +845,7 @@ async def _extract_entity_summaries_batch(
     previous_episodes: list[EpisodicNode] | None,
     should_summarize_node: NodeSummaryFilter | None,
     edges_by_node: dict[str, list[EntityEdge]],
+    prompt_library,
     *,
     skip_fact_appending: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
@@ -902,6 +911,7 @@ async def _extract_entity_summaries_batch(
                 flight,
                 episode,
                 previous_episodes,
+                prompt_library,
                 use_episode_prompt=skip_fact_appending,
                 entity_types=entity_types,
             )
@@ -915,6 +925,7 @@ async def _process_summary_flight(
     nodes: list[EntityNode],
     episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
+    prompt_library,
     *,
     use_episode_prompt: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
