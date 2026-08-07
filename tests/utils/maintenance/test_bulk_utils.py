@@ -255,14 +255,13 @@ async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
 
     # Mock resolve_extracted_edge to track comparisons and mark duplicates
     async def mock_resolve_extracted_edge(
-        llm_client,
+        clients,
         extracted_edge,
         related_edges,
         existing_edges,
         episode,
         edge_type_candidates=None,
         *,
-        prompt_library=None,
         custom_edge_type_names=None,
     ):
         # Track that this edge was compared against the related_edges

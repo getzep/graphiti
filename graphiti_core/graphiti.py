@@ -47,6 +47,7 @@ from graphiti_core.helpers import (
     validate_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.prompt_bound import PromptBoundLLM
 from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
@@ -65,7 +66,6 @@ from graphiti_core.prompts.lib import (
 from graphiti_core.prompts.lib import (
     prompt_library as default_prompt_library,
 )
-from graphiti_core.prompts.summarize_sagas import SagaSummary
 from graphiti_core.search.search import SearchConfig, search
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResults
 from graphiti_core.search.search_config_recipes import (
@@ -156,6 +156,7 @@ class Graphiti:
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
         prompt_library: PromptLibrary | None = None,
+        prompt_bound_llm: PromptBoundLLM | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -174,6 +175,7 @@ class Graphiti:
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
+            When ``prompt_bound_llm`` is set, the bundle's transport is used instead.
         embedder : EmbedderClient | None, optional
             An instance of EmbedderClient for embedding tasks.
             If not provided, a default OpenAIEmbedder will be initialized.
@@ -197,8 +199,12 @@ class Graphiti:
             If not provided, Graphiti uses the built-in default prompt library.
             For partial customization, compose overrides with
             ``create_prompt_library(overrides)`` and pass the result here.
-            Custom prompts must still produce responses compatible with the
-            response models used at each call site.
+            Override callables must return ``ChatPrompt``.
+            Cannot be combined with ``prompt_bound_llm``.
+        prompt_bound_llm : PromptBoundLLM | None, optional
+            Opt-in multi-model prompt bundle wrapping a single LLMClient transport.
+            When set, owns prompt selection and per-prompt model routing.
+            Cannot be combined with ``prompt_library``.
 
         Returns
         -------
@@ -219,6 +225,12 @@ class Graphiti:
         Graphiti if you're using the default OpenAIClient.
         """
 
+        if prompt_library is not None and prompt_bound_llm is not None:
+            raise ValueError(
+                'Pass either prompt_library or prompt_bound_llm, not both. '
+                'The PromptBoundLLM bundle owns the active prompt library.'
+            )
+
         if graph_driver:
             self.driver = graph_driver
         else:
@@ -228,10 +240,22 @@ class Graphiti:
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
-        if llm_client:
-            self.llm_client = llm_client
+
+        self.prompt_bound_llm = prompt_bound_llm
+        if prompt_bound_llm is not None:
+            self.llm_client = prompt_bound_llm.transport
+            self.prompt_library = ensure_prompt_library_wrapped(prompt_bound_llm.prompt_library)
         else:
-            self.llm_client = OpenAIClient()
+            if llm_client:
+                self.llm_client = llm_client
+            else:
+                self.llm_client = OpenAIClient()
+            if prompt_library is not None:
+                validate_prompt_library(prompt_library)
+                self.prompt_library = ensure_prompt_library_wrapped(prompt_library)
+            else:
+                self.prompt_library = default_prompt_library
+
         if embedder:
             self.embedder = embedder
         else:
@@ -247,14 +271,6 @@ class Graphiti:
         # Set tracer on clients
         self.llm_client.set_tracer(self.tracer)
 
-        if prompt_library is not None:
-            validate_prompt_library(prompt_library)
-            # Re-wrap non-wrapper libraries so system messages always get
-            # DO_NOT_ESCAPE_UNICODE post-processing (§3.5) without merging defaults.
-            self.prompt_library = ensure_prompt_library_wrapped(prompt_library)
-        else:
-            self.prompt_library = default_prompt_library
-
         self.clients = GraphitiClients(
             driver=self.driver,
             llm_client=self.llm_client,
@@ -262,6 +278,7 @@ class Graphiti:
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
             prompt_library=self.prompt_library,
+            prompt_bound_llm=self.prompt_bound_llm,
         )
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
@@ -559,10 +576,9 @@ class Graphiti:
             'episodes': episode_contents,
         }
 
-        llm_response = await self.llm_client.generate_response(
-            self.prompt_library.summarize_sagas.summarize_saga(context),
-            response_model=SagaSummary,
-            prompt_name='summarize_sagas.summarize_saga',
+        llm_response = await self.clients.complete_prompt(
+            'summarize_sagas.summarize_saga',
+            context,
         )
 
         summary = llm_response.get('summary', '')
@@ -1209,11 +1225,8 @@ class Graphiti:
                     communities, community_edges = await semaphore_gather(
                         *[
                             update_community(
-                                self.driver,
-                                self.llm_client,
-                                self.embedder,
+                                self.clients,
                                 node,
-                                self.prompt_library,
                             )
                             for node in nodes
                         ],
@@ -1533,9 +1546,12 @@ class Graphiti:
         # Clear existing communities (scoped: only the groups being rebuilt)
         await remove_communities(driver, group_ids=group_ids)
 
-        community_nodes, community_edges = await build_communities(
-            driver, self.llm_client, group_ids, self.prompt_library
-        )
+        # Prefer the resolved clients bundle (prompt_bound_llm / prompt_library),
+        # but honor an explicit driver override when provided.
+        clients = self.clients
+        if driver is not None and driver is not self.driver:
+            clients = self.clients.model_copy(update={'driver': driver})
+        community_nodes, community_edges = await build_communities(clients, group_ids)
 
         await semaphore_gather(
             *[node.generate_name_embedding(self.embedder) for node in community_nodes],
@@ -1768,7 +1784,7 @@ class Graphiti:
         ).edges
 
         resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
-            self.llm_client,
+            self.clients,
             edge,
             related_edges,
             existing_edges,
@@ -1782,7 +1798,6 @@ class Graphiti:
                 group_id=edge.group_id,
             ),
             None,
-            prompt_library=self.prompt_library,
         )
 
         edges: list[EntityEdge] = [resolved_edge] + invalidated_edges

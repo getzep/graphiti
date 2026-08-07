@@ -24,7 +24,6 @@ from pydantic import BaseModel
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
-from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import (
     EntityNode,
@@ -94,7 +93,6 @@ async def extract_nodes(
     primary_episode = episodes[0]
 
     start = time()
-    llm_client = clients.llm_client
 
     # Build entity types context
     entity_types_context = _build_entity_types_context(entity_types)
@@ -128,9 +126,7 @@ async def extract_nodes(
     }
 
     # Extract entities
-    extracted_entities = await _extract_nodes_single(
-        llm_client, primary_episode, context, clients.prompt_library
-    )
+    extracted_entities = await _extract_nodes_single(clients, primary_episode, context)
 
     # Filter empty names
     filtered_entities = [e for e in extracted_entities if e.name.strip()]
@@ -243,43 +239,36 @@ def _find_sentence_end(text: str) -> int:
 
 
 async def _extract_nodes_single(
-    llm_client: LLMClient,
+    clients,
     episode: EpisodicNode,
     context: dict,
-    prompt_library,
 ) -> list[ExtractedEntity]:
     """Extract entities using a single LLM call."""
-    llm_response = await _call_extraction_llm(llm_client, episode, context, prompt_library)
+    llm_response = await _call_extraction_llm(clients, episode, context)
     response_object = ExtractedEntities(**llm_response)
     return response_object.extracted_entities
 
 
 async def _call_extraction_llm(
-    llm_client: LLMClient,
+    clients,
     episode: EpisodicNode,
     context: dict,
-    prompt_library,
 ) -> dict:
     """Call the appropriate extraction prompt based on episode type."""
     if episode.source == EpisodeType.message:
-        prompt = prompt_library.extract_nodes.extract_message(context)
         prompt_name = 'extract_nodes.extract_message'
     elif episode.source == EpisodeType.text:
-        prompt = prompt_library.extract_nodes.extract_text(context)
         prompt_name = 'extract_nodes.extract_text'
     elif episode.source == EpisodeType.json:
-        prompt = prompt_library.extract_nodes.extract_json(context)
         prompt_name = 'extract_nodes.extract_json'
     else:
         # Fallback to text extraction
-        prompt = prompt_library.extract_nodes.extract_text(context)
         prompt_name = 'extract_nodes.extract_text'
 
-    return await llm_client.generate_response(
-        prompt,
-        response_model=ExtractedEntities,
+    return await clients.complete_prompt(
+        prompt_name,
+        context,
         group_id=episode.group_id,
-        prompt_name=prompt_name,
     )
 
 
@@ -468,14 +457,13 @@ def _commit_resolution(
 
 
 async def _resolve_with_llm(
-    llm_client: LLMClient,
+    clients,
     extracted_nodes: list[EntityNode],
     indexes: DedupCandidateIndexes,
     state: DedupResolutionState,
     episode: EpisodicNode | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_types: dict[str, type[BaseModel]] | None,
-    prompt_library,
 ) -> None:
     """Escalate unresolved nodes to the dedupe prompt so the LLM can select or reject duplicates.
 
@@ -553,10 +541,9 @@ async def _resolve_with_llm(
         ),
     }
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_nodes.nodes(context),
-        response_model=NodeResolutions,
-        prompt_name='dedupe_nodes.nodes',
+    llm_response = await clients.complete_prompt(
+        'dedupe_nodes.nodes',
+        context,
     )
 
     node_resolutions: list[NodeDuplicate] = NodeResolutions(**llm_response).entity_resolutions
@@ -637,7 +624,6 @@ async def resolve_extracted_nodes(
     existing_nodes_override: list[EntityNode] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup."""
-    llm_client = clients.llm_client
     candidate_nodes_by_extracted = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
@@ -683,14 +669,13 @@ async def resolve_extracted_nodes(
             None,
         )
         await _resolve_with_llm(
-            llm_client,
+            clients,
             extracted_nodes,
             _build_candidate_indexes(llm_candidate_nodes),
             state,
             episode,
             previous_episodes,
             entity_types,
-            clients.prompt_library,
         )
 
     if not state.unresolved_indices and not any(candidate_nodes_by_extracted):
@@ -739,7 +724,6 @@ async def extract_attributes_from_nodes(
     skip_fact_appending: bool = False,
     include_type_descriptions: bool = False,
 ) -> list[EntityNode]:
-    llm_client = clients.llm_client
     embedder = clients.embedder
 
     # Pre-build edges lookup for O(E + N) instead of O(N * E)
@@ -749,7 +733,7 @@ async def extract_attributes_from_nodes(
     attribute_results: list[dict[str, Any]] = await semaphore_gather(
         *[
             _extract_entity_attributes(
-                llm_client,
+                clients,
                 node,
                 episode,
                 previous_episodes,
@@ -758,7 +742,6 @@ async def extract_attributes_from_nodes(
                     if entity_types is not None
                     else None
                 ),
-                clients.prompt_library,
             )
             for node in nodes
         ]
@@ -771,13 +754,12 @@ async def extract_attributes_from_nodes(
 
     # Extract summaries in batch
     await _extract_entity_summaries_batch(
-        llm_client,
+        clients,
         nodes,
         episode,
         previous_episodes,
         should_summarize_node,
         edges_by_node,
-        clients.prompt_library,
         skip_fact_appending=skip_fact_appending,
         entity_types=entity_types if include_type_descriptions else None,
     )
@@ -788,12 +770,11 @@ async def extract_attributes_from_nodes(
 
 
 async def _extract_entity_attributes(
-    llm_client: LLMClient,
+    clients,
     node: EntityNode,
     episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_type: type[BaseModel] | None,
-    prompt_library,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
         return {}
@@ -809,12 +790,12 @@ async def _extract_entity_attributes(
         previous_episodes=previous_episodes,
     )
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_attributes(attributes_context),
+    llm_response = await clients.complete_prompt(
+        'extract_nodes.extract_attributes',
+        attributes_context,
         response_model=entity_type,
         model_size=ModelSize.small,
         group_id=node.group_id,
-        prompt_name='extract_nodes.extract_attributes',
         attribute_extraction=True,
     )
 
@@ -839,13 +820,12 @@ async def _extract_entity_attributes(
 
 
 async def _extract_entity_summaries_batch(
-    llm_client: LLMClient,
+    clients,
     nodes: list[EntityNode],
     episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     should_summarize_node: NodeSummaryFilter | None,
     edges_by_node: dict[str, list[EntityEdge]],
-    prompt_library,
     *,
     skip_fact_appending: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
@@ -907,11 +887,10 @@ async def _extract_entity_summaries_batch(
     await semaphore_gather(
         *[
             _process_summary_flight(
-                llm_client,
+                clients,
                 flight,
                 episode,
                 previous_episodes,
-                prompt_library,
                 use_episode_prompt=skip_fact_appending,
                 entity_types=entity_types,
             )
@@ -921,11 +900,10 @@ async def _extract_entity_summaries_batch(
 
 
 async def _process_summary_flight(
-    llm_client: LLMClient,
+    clients,
     nodes: list[EntityNode],
     episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
-    prompt_library,
     *,
     use_episode_prompt: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
@@ -978,18 +956,15 @@ async def _process_summary_flight(
     group_id = nodes[0].group_id if nodes else None
 
     if use_episode_prompt:
-        prompt = prompt_library.extract_nodes.extract_entity_summaries_from_episodes(batch_context)
         prompt_name = 'extract_nodes.extract_entity_summaries_from_episodes'
     else:
-        prompt = prompt_library.extract_nodes.extract_summaries_batch(batch_context)
         prompt_name = 'extract_nodes.extract_summaries_batch'
 
-    llm_response = await llm_client.generate_response(
-        prompt,
-        response_model=SummarizedEntities,
+    llm_response = await clients.complete_prompt(
+        prompt_name,
+        batch_context,
         model_size=ModelSize.small,
         group_id=group_id,
-        prompt_name=prompt_name,
     )
 
     # Build case-insensitive name -> nodes mapping (handles duplicates)
