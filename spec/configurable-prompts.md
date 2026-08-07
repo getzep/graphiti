@@ -26,14 +26,18 @@ prompt message builders are selected.
 
 ### 2.1. Prompt Function
 
-A prompt function is a callable that accepts a context map and returns an ordered list of
-LLM messages. Each message has a role and content.
+A prompt function is a callable that accepts a context map and returns a ``ChatPrompt``
+(typed system + user messages). Call ``ChatPrompt.as_messages()`` to render transport
+``Message`` objects (including the do-not-escape-unicode note on the system message).
 
 Pseudocode:
 
 ```text
-PromptFunction(context: Map<String, Any>) -> List<Message>
+PromptFunction(context: Map<String, Any>) -> ChatPrompt
 ```
+
+**Migration:** overrides that return ``list[Message]`` are rejected with ``TypeError``.
+Return ``ChatPrompt(system=SystemMessage(...), user=UserMessage(...))`` instead.
 
 ### 2.2. Prompt Group
 

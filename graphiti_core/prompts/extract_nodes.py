@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, Protocol, TypedDict
+from abc import ABC, abstractmethod
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, SystemMessage, UserMessage
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
 
@@ -58,439 +59,6 @@ class SummarizedEntities(BaseModel):
     )
 
 
-class Prompt(Protocol):
-    extract_message: PromptVersion
-    extract_json: PromptVersion
-    extract_text: PromptVersion
-    classify_nodes: PromptVersion
-    extract_attributes: PromptVersion
-    extract_summary: PromptVersion
-    extract_summaries_batch: PromptVersion
-    extract_entity_summaries_from_episodes: PromptVersion
-
-
-class Versions(TypedDict):
-    extract_message: PromptFunction
-    extract_json: PromptFunction
-    extract_text: PromptFunction
-    classify_nodes: PromptFunction
-    extract_attributes: PromptFunction
-    extract_summary: PromptFunction
-    extract_summaries_batch: PromptFunction
-    extract_entity_summaries_from_episodes: PromptFunction
-
-
-def extract_message(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity extraction specialist for conversational messages. '
-        'NEVER extract abstract concepts, feelings, or generic words.'
-    )
-
-    user_prompt = f"""
-NEVER extract any of the following:
-- Pronouns (you, me, I, he, she, they, we, us, it, them, him, her, this, that, those)
-- Abstract concepts or feelings (joy, balance, growth, resilience, happiness, passion, motivation)
-- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,
-  way, tickets, supplies, clothes, keys, gear)
-- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,
-  image, video, post, story)
-- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,
-  class, workshop, competition)
-- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,
-  team, office)
-- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself
-- Sentence fragments or clauses ("what you really care about", "results of that effort")
-- Adjectives or descriptive phrases ("amazing", "something different", "new hair color")
-- Duplicate references to the same real-world entity. Extract each entity at most once per message,
-  even if it appears multiple times or both as a speaker label and in the body text.
-- Bare relational or kinship terms (dad, mom, mother, father, sister, brother, husband, wife,
-  spouse, son, daughter, uncle, aunt, cousin, grandma, grandpa, friend, boss, teacher, neighbor,
-  roommate) and bare animal/pet words (dog, cat, pet, puppy, kitten). These are too generic on
-  their own. Instead, qualify them with the possessor: extract "Nisha's dad" not "dad",
-  "Jordan's dog" not "dog".
-- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or
-  distinguishing detail (e.g., NEVER extract "supplies" from "I picked up some supplies")
-
-Your task is to extract **entity nodes** that are **explicitly** mentioned in the CURRENT MESSAGE.
-Pronoun references such as he/she/they or this/that/those should be disambiguated to the names of the
-reference entities. Only extract distinct entities from the CURRENT MESSAGE.
-
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
-
-<PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
-</PREVIOUS MESSAGES>
-
-<CURRENT MESSAGE>
-{context['episode_content']}
-</CURRENT MESSAGE>
-
-1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.
-   - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.
-
-2. **Entity Identification**:
-   - Extract named entities and specific, concrete things that are **explicitly** mentioned in the CURRENT MESSAGE.
-   - Only extract entities that are specific enough to be uniquely identifiable. Ask: "Could this have its own Wikipedia article or database entry, OR is it specific enough to distinguish from other items of the same category within this conversation?"
-   - For objects, possessions, and physical items, extract when they are specific enough
-     to distinguish from other items of the same category. SHOULD be extracted:
-     - Brand-named items ("Gamecube", "Ford Mustang", "Moen faucet")
-     - Qualified items ("wool coat", "red and purple lighting", "cracked windshield",
-       "dog leash")
-     - Items with a concrete distinguishing descriptor (color, material, size, model,
-       owner, specific use)
-     Should NOT be extracted:
-     - Bare head nouns alone ("car", "coat", "game", "lighting", "windshield")
-   - When a speaker or named person refers to a relative, pet, or associate using a bare term
-     (e.g., "my dad", "his cat"), extract the entity qualified with the possessor's name
-     (e.g., "Nisha's dad", "Jordan's cat"). Do NOT extract the bare term alone.
-   - **Exclude** entities mentioned only in the PREVIOUS MESSAGES (they are for context only).
-
-3. **Entity Classification**:
-   - Use the descriptions in ENTITY TYPES to classify each extracted entity.
-   - Assign the appropriate `entity_type_id` for each one.
-
-4. **Exclusions**:
-   - Do NOT extract entities representing relationships or actions.
-   - Do NOT extract dates, times, or other temporal information — these will be handled separately.
-   - When in doubt, do NOT extract.
-
-5. **Specificity**:
-   - Always use the **most specific form** mentioned in the message. If the message says "road cycling",
-     extract "road cycling" not "cycling". If it says "wool coat", extract "wool coat" not "coat".
-   - When context makes an object's type clear, include that context in the name. For example, if the
-     message mentions forgetting a leash while discussing a dog walk, extract "dog leash" not "leash".
-   - If a phrase would not be distinguishable when read alone later, do NOT extract it.
-
-6. **Formatting**:
-   - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).
-
-<EXAMPLE>
-Message: "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center."
-Good extractions: "Jordan" (speaker), "Denver" (Location), "Lockheed Martin" (Organization), "Belmont Arts Center" (Location), "ceramics" (Topic)
-Do NOT extract: "spouse" (generic reference — extract only if named), "new role" (not an entity), "last month" (temporal), "we" (pronoun)
-</EXAMPLE>
-
-<EXAMPLE>
-Message: "Nisha: My dad is visiting next week. He loves walking his dogs in Riverside Park."
-Good extractions: "Nisha" (speaker), "Nisha's dad" (Person), "Riverside Park" (Location)
-Do NOT extract: "dad" (bare relational term — qualify as "Nisha's dad"), "dogs" (bare animal word — no specific identity), "next week" (temporal)
-</EXAMPLE>
-
-<EXAMPLE>
-Message: "Mary: I forgot Trigger's leash so I couldn't take him on a dog walk. After that I went road cycling in my new wool coat."
-Good extractions: "Mary" (speaker), "Trigger" (animal name), "dog leash" (Object), "road cycling" (Topic), "wool coat" (Object)
-Do NOT extract: "leash" (too generic — use "dog leash"), "cycling" (too generic — use "road cycling"), "coat" (too generic — use "wool coat"), "dog walk" (activity, not an entity)
-</EXAMPLE>
-
-<EXAMPLE>
-Message: "Nate: My gaming room has red and purple lighting and I mostly play on a Gamecube. Last week the windshield on my Mustang got cracked."
-Good extractions: "Nate" (speaker), "gaming room" (Object), "red and purple lighting" (Object), "Gamecube" (Object), "Mustang" (Object), "cracked windshield" (Object)
-Do NOT extract: "lighting" (bare head noun — use "red and purple lighting"), "windshield" (bare head noun — use "cracked windshield"), "week" (temporal)
-</EXAMPLE>
-
-<EXAMPLE>
-Message: "Alex: I shared a pic from the game after the event."
-Good extractions: "Alex" (speaker)
-Do NOT extract: "pic" (generic media noun), "game" (generic event noun), "event" (generic event noun)
-</EXAMPLE>
-
-<EXAMPLE>
-Message: "Jordan: We won by a tight score. Scoring that last basket felt incredible."
-Good extractions: "Jordan" (speaker)
-Do NOT extract: "basket" (ambiguous bare noun that depends on sentence context)
-</EXAMPLE>
-
-{context['custom_extraction_instructions']}
-"""
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def extract_json(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity extraction specialist for JSON data. '
-        'NEVER extract abstract concepts, dates, or generic field values.'
-    )
-
-    user_prompt = f"""
-NEVER extract:
-- Date, time, or timestamp values
-- Abstract concepts or generic field values (e.g., "true", "active", "pending")
-- Numeric IDs or codes that are not meaningful entity names
-- Bare relational or kinship terms (e.g., "spouse", "parent", "pet") — only extract if qualified
-  with a possessor name
-- Bare generic objects or common nouns (e.g., "supplies", "tickets", "gear") — only extract if
-  qualified with a distinguishing detail
-- Generic media/content nouns unless uniquely identified in the value itself (photo, pic, picture,
-  image, video, post, story)
-- Generic event/activity nouns unless uniquely identified in the value itself (event, game, meeting,
-  class, workshop, competition)
-- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,
-  team, office)
-- Ambiguous bare nouns whose meaning depends on surrounding text rather than the extracted value itself
-
-Extract entities from the JSON and classify each using the ENTITY TYPES above.
-
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
-
-<SOURCE DESCRIPTION>
-{context['source_description']}
-</SOURCE DESCRIPTION>
-
-<JSON>
-{context['episode_content']}
-</JSON>
-
-Guidelines:
-1. Extract the primary entity the JSON represents (e.g., a "name" or "user" field).
-2. Extract named entities referenced in other properties throughout the JSON structure.
-3. Only extract entities specific enough to be uniquely identifiable.
-4. Be explicit in naming entities — use full names when available.
-5. Use the most specific form present in the data (e.g., "road cycling" not "cycling").
-6. If a value would not be meaningful and distinguishable when read alone later, do NOT extract it.
-
-{context['custom_extraction_instructions']}
-
-<EXAMPLE>
-JSON: {{"user": "Jordan Lee", "company": "Acme Corp", "role": "engineer", "start_date": "2024-01-15", "location": "Denver", "active": true}}
-Good extractions: "Jordan Lee" (Person), "Acme Corp" (Organization), "Denver" (Location)
-Do NOT extract: "engineer" (role, not an entity), "2024-01-15" (date), "true" (field value)
-</EXAMPLE>
-
-<EXAMPLE>
-JSON: {{"author": "Alex", "attachment_type": "photo", "event_name": "event", "agency": "government"}}
-Good extractions: "Alex" (Person)
-Do NOT extract: "photo" (generic media noun), "event" (generic event noun), "government" (broad institutional noun)
-</EXAMPLE>
-"""
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def extract_text(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity extraction specialist for unstructured text. '
-        'NEVER extract abstract concepts, feelings, or generic words.'
-    )
-
-    user_prompt = f"""
-NEVER extract:
-- Pronouns (you, me, he, she, they, it, them, him, her, we, us, this, that, those)
-- Abstract concepts (joy, balance, growth, resilience, passion, motivation)
-- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,
-  tickets, supplies, clothes, keys, gear)
-- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,
-  image, video, post, story)
-- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,
-  class, workshop, competition)
-- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,
-  team, office)
-- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself
-- Sentence fragments or clauses as entity names
-- Bare relational or kinship terms (dad, mom, sister, brother, spouse, friend, boss, pet, dog,
-  cat) unless qualified with a possessor (e.g., "Nisha's dad" is acceptable, "dad" alone is not)
-- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or
-  distinguishing detail (e.g., NEVER extract "supplies" from "I picked up some supplies")
-
-Extract entities from the TEXT that are **explicitly mentioned**.
-For each entity, classify it using the ENTITY TYPES above.
-Only extract entities specific enough to be uniquely identifiable — ask: "Could this have its own Wikipedia article or database entry?"
-
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
-
-<TEXT>
-{context['episode_content']}
-</TEXT>
-
-Guidelines:
-1. Extract named entities and specific, concrete things.
-2. Do not create nodes for relationships or actions.
-3. Do not create nodes for temporal information like dates, times or years.
-4. Be explicit in node names, using full names and avoiding abbreviations.
-5. Always use the most specific form from the text (e.g., "road cycling" not "cycling",
-   "wool coat" not "coat"). Include qualifying context when it's clear from the text.
-6. When the text refers to a person's relative, pet, or associate by a bare term, qualify the
-   entity with the possessor's name (e.g., "Dr. Osei's colleague" not "colleague").
-7. If a phrase would not be meaningful and distinguishable when read alone later, do NOT extract it.
-8. When in doubt, do NOT extract.
-
-{context['custom_extraction_instructions']}
-
-<EXAMPLE>
-Text: "Dr. Amara Osei presented her migraine study results at the AAN conference. The study tracked 340 patients using a new CGRP combination protocol."
-Good extractions: "Dr. Amara Osei" (Person), "AAN" (Organization), "migraine study" (Topic), "CGRP combination protocol" (Object)
-Do NOT extract: "results" (generic noun), "340" (number), "patients" (generic noun), "conference" (generic without a specific name)
-</EXAMPLE>
-
-<EXAMPLE>
-Text: "Alex shared a pic after the event and said scoring the last basket felt incredible."
-Good extractions: "Alex" (Person)
-Do NOT extract: "pic" (generic media noun), "event" (generic event noun), "basket" (ambiguous bare noun)
-</EXAMPLE>
-"""
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def classify_nodes(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity classification specialist. '
-        'NEVER assign types not listed in ENTITY TYPES.'
-    )
-
-    user_prompt = f"""
-<PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
-</PREVIOUS MESSAGES>
-
-<CURRENT MESSAGE>
-{context['episode_content']}
-</CURRENT MESSAGE>
-
-<EXTRACTED ENTITIES>
-{context['extracted_entities']}
-</EXTRACTED ENTITIES>
-
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
-
-Given the above conversation, extracted entities, and provided entity types and their descriptions, classify the extracted entities.
-
-Guidelines:
-1. Each entity must have exactly one type.
-2. NEVER use types not listed in ENTITY TYPES.
-3. If none of the provided entity types accurately classify an extracted entity, the type should be set to None.
-"""
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def extract_attributes(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content=(
-                'You are an entity attribute extraction specialist. '
-                'You ONLY emit attribute values that are explicitly stated in MESSAGES or '
-                'already present on the ENTITY. You output strictly the JSON specified by the '
-                'response schema — no reasoning, no explanation, no commentary in any field.'
-            ),
-        ),
-        Message(
-            role='user',
-            content=f"""\
-Given the MESSAGES and the following ENTITY, update its attributes.
-
-HARD RULES — violating any of these is a failure:
-
-1. Each attribute value MUST be one of:
-   (a) a clean value copied or directly normalized from text in MESSAGES,
-   (b) the existing value already on the ENTITY (preserved unchanged), or
-   (c) null / omitted, when neither (a) nor (b) applies.
-
-2. NEVER write reasoning, justification, or commentary into any field. Specifically:
-   - NEVER include parenthetical explanations like "(implied by ...)", "(Context: ...)",
-     "(not explicitly stated ...)", "(based on ...)".
-   - NEVER include first-person or deliberative phrases like "I should...", "However...",
-     "Sticking to...", "Since no...", "the instruction is to...", "must be kept...",
-     "if no value is present...".
-   - NEVER list alternatives or candidates inside one field ("X, or Y, or maybe Z").
-   - NEVER explain why a value is null. If unknown, set the field to null and stop.
-
-3. Each attribute schema description (e.g. an "Industry sector" field whose description
-   reads "Industry classification, single word where possible") tells you the FORMAT a
-   real value should take. The description text is NEVER itself a value. NEVER copy
-   schema description text into the field.
-
-4. The literal strings "null", "N/A", "Not specified", "unknown", "none", "not provided",
-   or any sentence describing absence are NOT valid values. If no value is supported by
-   MESSAGES, set the field to null (or omit it) — do not write a sentence.
-
-5. Each attribute value must be a short, well-formed instance of the type the field
-   describes (a phone number, an industry name, a URL, a postal address). If you cannot
-   produce a clean value of that type from MESSAGES, the field is null.
-
-6. NEVER infer attribute values from the entity's name, from related entities, from
-   generic world knowledge, or from prior summaries. Only verbatim or directly normalized
-   text from MESSAGES qualifies as a new value.
-
-7. If MESSAGES contain no information about an attribute, leave the existing entity
-   value unchanged. If the entity has no existing value, the field is null.
-
-EXAMPLES
-
-ENTITY: {{"name": "Sam Rivera", "phones": "415-555-0142"}}
-MESSAGES contain no phone information for Sam.
-GOOD → "phones": "415-555-0142"   (preserved existing value)
-BAD  → "phones": "415-555-0142 (implied by original entity, but no new information in
-        messages, retaining original value as per instruction...)"
-
-ENTITY: {{"name": "Northwind", "industry": null}}
-MESSAGES mention Northwind only as the platform some content was posted to.
-GOOD → "industry": null   (no explicit industry classification was stated)
-BAD  → "industry": "Content platform, SaaS (implied by usage context, though not stated
-        explicitly as industry classification...)"
-
-ENTITY: {{"name": "Priya"}}
-MESSAGES contain no phone for Priya, but discuss a project she contributed to.
-GOOD → "phones": null
-BAD  → "phones": "Worked with Lin and Marco on the Q3 launch..."   (off-topic content dump)
-
-<MESSAGES>
-{to_prompt_json(context['previous_episodes'])}
-{to_prompt_json(context['episode_content'])}
-</MESSAGES>
-
-<ENTITY>
-{context['node']}
-</ENTITY>
-""",
-        ),
-    ]
-
-
-def extract_summary(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that extracts entity summaries from the provided text.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-        Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
-        from the messages and relevant information from the existing summary. Summary must be under {MAX_SUMMARY_CHARS} characters.
-
-        {summary_instructions}
-
-        <MESSAGES>
-        {to_prompt_json(context['previous_episodes'])}
-        {to_prompt_json(context['episode_content'])}
-        </MESSAGES>
-
-        <ENTITY>
-        {context['node']}
-        </ENTITY>
-        """,
-        ),
-    ]
-
-
 def _entity_type_descriptions_section(context: dict[str, Any]) -> str:
     """Build an optional prompt section with entity type descriptions."""
     descriptions = context.get('entity_type_descriptions')
@@ -506,39 +74,6 @@ in the summary text itself.
 """
 
 
-def extract_summaries_batch(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that generates concise entity summaries from provided context.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-Given the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.
-Each summary must be under {MAX_SUMMARY_CHARS} characters.
-
-{summary_instructions}
-
-<MESSAGES>
-{to_prompt_json(context['previous_episodes'])}
-{to_prompt_json(context['episode_content'])}
-</MESSAGES>
-{_entity_type_descriptions_section(context)}
-<ENTITIES>
-{to_prompt_json(context['entities'])}
-</ENTITIES>
-
-For each entity, combine relevant information from the MESSAGES with any existing summary content.
-Only return summaries for entities that have meaningful information to summarize.
-If an entity has no relevant information in the messages and no existing summary, you may skip it.
-""",
-        ),
-    ]
-
-
-# NOTE: This prompt is semantically mirrored in the Go async summary worker at
-# src/lib/graphsummary/processor.go (entitySummarySystemPrompt). Keep both in sync.
 _entity_episode_summary_system_prompt = """You maintain detailed, information-dense entity memories from episode text.
 
 Use ONLY facts explicitly stated in EPISODES and durable facts already present in EXISTING_SUMMARY.
@@ -610,45 +145,644 @@ the arts center."
 </EXAMPLES>"""
 
 
-def extract_entity_summaries_from_episodes(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content=_entity_episode_summary_system_prompt,
-        ),
-        Message(
-            role='user',
-            content=f"""NEVER include meta-language about the summarization process. \
-Use ONLY facts from the provided EPISODES.
-Each summary must be under {MAX_SUMMARY_CHARS} characters. Write 2-6 dense sentences in third person. \
-Preserve all material names, roles, dates, counts, and changes over time that are explicitly supported.
+class ExtractNodesPrompts(ABC):
+    @abstractmethod
+    def extract_message(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Extract entity nodes from conversational messages.
 
-For each entity below, generate an updated summary using ONLY the provided EPISODES and any \
-existing summary already on the entity.
+                Called from
+                ``node_operations._call_extraction_llm`` when ``EpisodeType.message``.
 
-<EPISODES>
-{to_prompt_json(context['previous_episodes'])}
-{to_prompt_json(context['episode_content'])}
-</EPISODES>
-{_entity_type_descriptions_section(context)}
-<ENTITIES>
-{to_prompt_json(context['entities'])}
-</ENTITIES>
+                Context inputs
+                ``entity_types``, ``previous_episodes``, ``episode_content``,
+                ``custom_extraction_instructions``, ``source_description``.
 
-Only return summaries for entities that have meaningful information to summarize.
-If an entity has no relevant information in the episodes and no existing summary, you may skip it.
-""",
-        ),
-    ]
+                Output contract
+                ``ChatPrompt`` for prompt_name ``extract_nodes.extract_message``;
+                fixed response_model ``ExtractedEntities``.
+
+                Gotchas
+                Must not extract pronouns, abstract concepts, or bare generic nouns.
+                Entity type ids must match provided ``entity_types``.
+
+                Modification guidance
+                Preserve entity-type id contract and exclusion rules; keep response schema stable.
+        """
+
+    @abstractmethod
+    def extract_json(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Extract entity nodes from JSON-structured episode content.
+
+                Called from
+                ``node_operations._call_extraction_llm`` when ``EpisodeType.json``.
+
+                Context inputs
+                Same as ``extract_message``.
+
+                Output contract
+                ``ChatPrompt`` for ``extract_nodes.extract_json``; ``ExtractedEntities``.
+
+                Gotchas
+                JSON fields may contain nested entities; still apply exclusion rules.
+
+                Modification guidance
+                Keep schema and entity-type id contract unchanged.
+        """
+
+    @abstractmethod
+    def extract_text(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Extract entity nodes from free-form text episodes.
+
+                Called from
+                ``node_operations._call_extraction_llm`` when ``EpisodeType.text`` (or fallback).
+
+                Context inputs
+                Same as ``extract_message``.
+
+                Output contract
+                ``ChatPrompt`` for ``extract_nodes.extract_text``; ``ExtractedEntities``.
+
+                Gotchas
+                Same exclusion rules as message extraction.
+
+                Modification guidance
+                Keep schema and entity-type id contract unchanged.
+        """
+
+    @abstractmethod
+    def classify_nodes(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Classify extracted nodes into entity types.
+
+                Called from
+                Unused in core runtime (registered for completeness / eval tooling).
+
+                Context inputs
+                Classification context for nodes and available entity types.
+
+                Output contract
+                ``ChatPrompt`` for ``extract_nodes.classify_nodes``.
+
+                Gotchas
+                Not wired into production ingestion paths.
+
+                Modification guidance
+                Safe to customize for experiments; keep callable for library completeness.
+        """
+
+    @abstractmethod
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Extract typed attributes for an entity node from episode context.
+
+                Called from
+                ``node_operations._extract_entity_attributes``.
+
+                Context inputs
+                Node name/labels/attributes plus episode and previous episode content.
+
+                Output contract
+                ``ChatPrompt`` for ``extract_nodes.extract_attributes``;
+                ``dynamic_schema=True`` — call-site supplies entity-type response model.
+
+                Gotchas
+                Only emit attributes explicitly stated; attribute_extraction framing is applied by the LLM client.
+
+                Modification guidance
+                Do not change schema ownership; callers pass the entity type model.
+        """
+
+    @abstractmethod
+    def extract_summary(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Summarize a single entity from context.
+
+                Called from
+                Unused in core runtime (batch summary prompts are used instead).
+
+                Context inputs
+                Entity and episode context for summarization.
+
+                Output contract
+                ``ChatPrompt`` for ``extract_nodes.extract_summary``; typically ``EntitySummary``.
+
+                Gotchas
+                Prefer batch prompts in production.
+
+                Modification guidance
+                Keep library completeness; honor summary length guidance.
+        """
+
+    @abstractmethod
+    def extract_summaries_batch(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Batch-update entity summaries from shared episode context.
+
+                Called from
+                ``node_operations._process_summary_flight`` when not using episode-centric prompt.
+
+                Context inputs
+                ``entities``, ``episode_content``, ``previous_episodes``, ``entity_type_descriptions``.
+
+                Output contract
+                ``ChatPrompt`` for ``extract_nodes.extract_summaries_batch``; ``SummarizedEntities``.
+
+                Gotchas
+                Summaries must stay under ``MAX_SUMMARY_CHARS``; skip entities with no info.
+
+                Modification guidance
+                Preserve name matching and summary length constraints.
+        """
+
+    @abstractmethod
+    def extract_entity_summaries_from_episodes(self, context: dict[str, Any]) -> ChatPrompt:
+        """
+        Purpose
+                Batch-update entity summaries emphasizing episode chronology.
+
+                Called from
+                ``node_operations._process_summary_flight`` when ``use_episode_prompt``.
+
+                Context inputs
+                Same as ``extract_summaries_batch``.
+
+                Output contract
+                ``ChatPrompt`` for ``extract_nodes.extract_entity_summaries_from_episodes``;
+                ``SummarizedEntities``.
+
+                Gotchas
+                Use only facts from provided episodes; no meta-language about summarization.
+
+                Modification guidance
+                Preserve name matching and summary length constraints.
+        """
 
 
-versions: Versions = {
-    'extract_message': extract_message,
-    'extract_json': extract_json,
-    'extract_text': extract_text,
-    'extract_summary': extract_summary,
-    'extract_summaries_batch': extract_summaries_batch,
-    'extract_entity_summaries_from_episodes': extract_entity_summaries_from_episodes,
-    'classify_nodes': classify_nodes,
-    'extract_attributes': extract_attributes,
-}
+class DefaultExtractNodesPrompts(ExtractNodesPrompts):
+    def extract_message(self, context: dict[str, Any]) -> ChatPrompt:
+        sys_prompt = (
+            'You are an entity extraction specialist for conversational messages. '
+            'NEVER extract abstract concepts, feelings, or generic words.'
+        )
+
+        user_prompt = f"""
+    NEVER extract any of the following:
+    - Pronouns (you, me, I, he, she, they, we, us, it, them, him, her, this, that, those)
+    - Abstract concepts or feelings (joy, balance, growth, resilience, happiness, passion, motivation)
+    - Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,
+      way, tickets, supplies, clothes, keys, gear)
+    - Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,
+      image, video, post, story)
+    - Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,
+      class, workshop, competition)
+    - Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,
+      team, office)
+    - Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself
+    - Sentence fragments or clauses ("what you really care about", "results of that effort")
+    - Adjectives or descriptive phrases ("amazing", "something different", "new hair color")
+    - Duplicate references to the same real-world entity. Extract each entity at most once per message,
+      even if it appears multiple times or both as a speaker label and in the body text.
+    - Bare relational or kinship terms (dad, mom, mother, father, sister, brother, husband, wife,
+      spouse, son, daughter, uncle, aunt, cousin, grandma, grandpa, friend, boss, teacher, neighbor,
+      roommate) and bare animal/pet words (dog, cat, pet, puppy, kitten). These are too generic on
+      their own. Instead, qualify them with the possessor: extract "Nisha's dad" not "dad",
+      "Jordan's dog" not "dog".
+    - Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or
+      distinguishing detail (e.g., NEVER extract "supplies" from "I picked up some supplies")
+    
+    Your task is to extract **entity nodes** that are **explicitly** mentioned in the CURRENT MESSAGE.
+    Pronoun references such as he/she/they or this/that/those should be disambiguated to the names of the
+    reference entities. Only extract distinct entities from the CURRENT MESSAGE.
+    
+    <ENTITY TYPES>
+    {context['entity_types']}
+    </ENTITY TYPES>
+    
+    <PREVIOUS MESSAGES>
+    {to_prompt_json([ep for ep in context['previous_episodes']])}
+    </PREVIOUS MESSAGES>
+    
+    <CURRENT MESSAGE>
+    {context['episode_content']}
+    </CURRENT MESSAGE>
+    
+    1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.
+       - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.
+    
+    2. **Entity Identification**:
+       - Extract named entities and specific, concrete things that are **explicitly** mentioned in the CURRENT MESSAGE.
+       - Only extract entities that are specific enough to be uniquely identifiable. Ask: "Could this have its own Wikipedia article or database entry, OR is it specific enough to distinguish from other items of the same category within this conversation?"
+       - For objects, possessions, and physical items, extract when they are specific enough
+         to distinguish from other items of the same category. SHOULD be extracted:
+         - Brand-named items ("Gamecube", "Ford Mustang", "Moen faucet")
+         - Qualified items ("wool coat", "red and purple lighting", "cracked windshield",
+           "dog leash")
+         - Items with a concrete distinguishing descriptor (color, material, size, model,
+           owner, specific use)
+         Should NOT be extracted:
+         - Bare head nouns alone ("car", "coat", "game", "lighting", "windshield")
+       - When a speaker or named person refers to a relative, pet, or associate using a bare term
+         (e.g., "my dad", "his cat"), extract the entity qualified with the possessor's name
+         (e.g., "Nisha's dad", "Jordan's cat"). Do NOT extract the bare term alone.
+       - **Exclude** entities mentioned only in the PREVIOUS MESSAGES (they are for context only).
+    
+    3. **Entity Classification**:
+       - Use the descriptions in ENTITY TYPES to classify each extracted entity.
+       - Assign the appropriate `entity_type_id` for each one.
+    
+    4. **Exclusions**:
+       - Do NOT extract entities representing relationships or actions.
+       - Do NOT extract dates, times, or other temporal information — these will be handled separately.
+       - When in doubt, do NOT extract.
+    
+    5. **Specificity**:
+       - Always use the **most specific form** mentioned in the message. If the message says "road cycling",
+         extract "road cycling" not "cycling". If it says "wool coat", extract "wool coat" not "coat".
+       - When context makes an object's type clear, include that context in the name. For example, if the
+         message mentions forgetting a leash while discussing a dog walk, extract "dog leash" not "leash".
+       - If a phrase would not be distinguishable when read alone later, do NOT extract it.
+    
+    6. **Formatting**:
+       - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).
+    
+    <EXAMPLE>
+    Message: "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center."
+    Good extractions: "Jordan" (speaker), "Denver" (Location), "Lockheed Martin" (Organization), "Belmont Arts Center" (Location), "ceramics" (Topic)
+    Do NOT extract: "spouse" (generic reference — extract only if named), "new role" (not an entity), "last month" (temporal), "we" (pronoun)
+    </EXAMPLE>
+    
+    <EXAMPLE>
+    Message: "Nisha: My dad is visiting next week. He loves walking his dogs in Riverside Park."
+    Good extractions: "Nisha" (speaker), "Nisha's dad" (Person), "Riverside Park" (Location)
+    Do NOT extract: "dad" (bare relational term — qualify as "Nisha's dad"), "dogs" (bare animal word — no specific identity), "next week" (temporal)
+    </EXAMPLE>
+    
+    <EXAMPLE>
+    Message: "Mary: I forgot Trigger's leash so I couldn't take him on a dog walk. After that I went road cycling in my new wool coat."
+    Good extractions: "Mary" (speaker), "Trigger" (animal name), "dog leash" (Object), "road cycling" (Topic), "wool coat" (Object)
+    Do NOT extract: "leash" (too generic — use "dog leash"), "cycling" (too generic — use "road cycling"), "coat" (too generic — use "wool coat"), "dog walk" (activity, not an entity)
+    </EXAMPLE>
+    
+    <EXAMPLE>
+    Message: "Nate: My gaming room has red and purple lighting and I mostly play on a Gamecube. Last week the windshield on my Mustang got cracked."
+    Good extractions: "Nate" (speaker), "gaming room" (Object), "red and purple lighting" (Object), "Gamecube" (Object), "Mustang" (Object), "cracked windshield" (Object)
+    Do NOT extract: "lighting" (bare head noun — use "red and purple lighting"), "windshield" (bare head noun — use "cracked windshield"), "week" (temporal)
+    </EXAMPLE>
+    
+    <EXAMPLE>
+    Message: "Alex: I shared a pic from the game after the event."
+    Good extractions: "Alex" (speaker)
+    Do NOT extract: "pic" (generic media noun), "game" (generic event noun), "event" (generic event noun)
+    </EXAMPLE>
+    
+    <EXAMPLE>
+    Message: "Jordan: We won by a tight score. Scoring that last basket felt incredible."
+    Good extractions: "Jordan" (speaker)
+    Do NOT extract: "basket" (ambiguous bare noun that depends on sentence context)
+    </EXAMPLE>
+    
+    {context['custom_extraction_instructions']}
+    """
+        return ChatPrompt(
+            system=SystemMessage(content=sys_prompt),
+            user=UserMessage(content=user_prompt),
+        )
+
+    def extract_json(self, context: dict[str, Any]) -> ChatPrompt:
+        sys_prompt = (
+            'You are an entity extraction specialist for JSON data. '
+            'NEVER extract abstract concepts, dates, or generic field values.'
+        )
+
+        user_prompt = f"""
+    NEVER extract:
+    - Date, time, or timestamp values
+    - Abstract concepts or generic field values (e.g., "true", "active", "pending")
+    - Numeric IDs or codes that are not meaningful entity names
+    - Bare relational or kinship terms (e.g., "spouse", "parent", "pet") — only extract if qualified
+      with a possessor name
+    - Bare generic objects or common nouns (e.g., "supplies", "tickets", "gear") — only extract if
+      qualified with a distinguishing detail
+    - Generic media/content nouns unless uniquely identified in the value itself (photo, pic, picture,
+      image, video, post, story)
+    - Generic event/activity nouns unless uniquely identified in the value itself (event, game, meeting,
+      class, workshop, competition)
+    - Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,
+      team, office)
+    - Ambiguous bare nouns whose meaning depends on surrounding text rather than the extracted value itself
+    
+    Extract entities from the JSON and classify each using the ENTITY TYPES above.
+    
+    <ENTITY TYPES>
+    {context['entity_types']}
+    </ENTITY TYPES>
+    
+    <SOURCE DESCRIPTION>
+    {context['source_description']}
+    </SOURCE DESCRIPTION>
+    
+    <JSON>
+    {context['episode_content']}
+    </JSON>
+    
+    Guidelines:
+    1. Extract the primary entity the JSON represents (e.g., a "name" or "user" field).
+    2. Extract named entities referenced in other properties throughout the JSON structure.
+    3. Only extract entities specific enough to be uniquely identifiable.
+    4. Be explicit in naming entities — use full names when available.
+    5. Use the most specific form present in the data (e.g., "road cycling" not "cycling").
+    6. If a value would not be meaningful and distinguishable when read alone later, do NOT extract it.
+    
+    {context['custom_extraction_instructions']}
+    
+    <EXAMPLE>
+    JSON: {{"user": "Jordan Lee", "company": "Acme Corp", "role": "engineer", "start_date": "2024-01-15", "location": "Denver", "active": true}}
+    Good extractions: "Jordan Lee" (Person), "Acme Corp" (Organization), "Denver" (Location)
+    Do NOT extract: "engineer" (role, not an entity), "2024-01-15" (date), "true" (field value)
+    </EXAMPLE>
+    
+    <EXAMPLE>
+    JSON: {{"author": "Alex", "attachment_type": "photo", "event_name": "event", "agency": "government"}}
+    Good extractions: "Alex" (Person)
+    Do NOT extract: "photo" (generic media noun), "event" (generic event noun), "government" (broad institutional noun)
+    </EXAMPLE>
+    """
+        return ChatPrompt(
+            system=SystemMessage(content=sys_prompt),
+            user=UserMessage(content=user_prompt),
+        )
+
+    def extract_text(self, context: dict[str, Any]) -> ChatPrompt:
+        sys_prompt = (
+            'You are an entity extraction specialist for unstructured text. '
+            'NEVER extract abstract concepts, feelings, or generic words.'
+        )
+
+        user_prompt = f"""
+    NEVER extract:
+    - Pronouns (you, me, he, she, they, it, them, him, her, we, us, this, that, those)
+    - Abstract concepts (joy, balance, growth, resilience, passion, motivation)
+    - Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,
+      tickets, supplies, clothes, keys, gear)
+    - Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,
+      image, video, post, story)
+    - Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,
+      class, workshop, competition)
+    - Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,
+      team, office)
+    - Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself
+    - Sentence fragments or clauses as entity names
+    - Bare relational or kinship terms (dad, mom, sister, brother, spouse, friend, boss, pet, dog,
+      cat) unless qualified with a possessor (e.g., "Nisha's dad" is acceptable, "dad" alone is not)
+    - Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or
+      distinguishing detail (e.g., NEVER extract "supplies" from "I picked up some supplies")
+    
+    Extract entities from the TEXT that are **explicitly mentioned**.
+    For each entity, classify it using the ENTITY TYPES above.
+    Only extract entities specific enough to be uniquely identifiable — ask: "Could this have its own Wikipedia article or database entry?"
+    
+    <ENTITY TYPES>
+    {context['entity_types']}
+    </ENTITY TYPES>
+    
+    <TEXT>
+    {context['episode_content']}
+    </TEXT>
+    
+    Guidelines:
+    1. Extract named entities and specific, concrete things.
+    2. Do not create nodes for relationships or actions.
+    3. Do not create nodes for temporal information like dates, times or years.
+    4. Be explicit in node names, using full names and avoiding abbreviations.
+    5. Always use the most specific form from the text (e.g., "road cycling" not "cycling",
+       "wool coat" not "coat"). Include qualifying context when it's clear from the text.
+    6. When the text refers to a person's relative, pet, or associate by a bare term, qualify the
+       entity with the possessor's name (e.g., "Dr. Osei's colleague" not "colleague").
+    7. If a phrase would not be meaningful and distinguishable when read alone later, do NOT extract it.
+    8. When in doubt, do NOT extract.
+    
+    {context['custom_extraction_instructions']}
+    
+    <EXAMPLE>
+    Text: "Dr. Amara Osei presented her migraine study results at the AAN conference. The study tracked 340 patients using a new CGRP combination protocol."
+    Good extractions: "Dr. Amara Osei" (Person), "AAN" (Organization), "migraine study" (Topic), "CGRP combination protocol" (Object)
+    Do NOT extract: "results" (generic noun), "340" (number), "patients" (generic noun), "conference" (generic without a specific name)
+    </EXAMPLE>
+    
+    <EXAMPLE>
+    Text: "Alex shared a pic after the event and said scoring the last basket felt incredible."
+    Good extractions: "Alex" (Person)
+    Do NOT extract: "pic" (generic media noun), "event" (generic event noun), "basket" (ambiguous bare noun)
+    </EXAMPLE>
+    """
+        return ChatPrompt(
+            system=SystemMessage(content=sys_prompt),
+            user=UserMessage(content=user_prompt),
+        )
+
+    def classify_nodes(self, context: dict[str, Any]) -> ChatPrompt:
+        sys_prompt = (
+            'You are an entity classification specialist. '
+            'NEVER assign types not listed in ENTITY TYPES.'
+        )
+
+        user_prompt = f"""
+    <PREVIOUS MESSAGES>
+    {to_prompt_json([ep for ep in context['previous_episodes']])}
+    </PREVIOUS MESSAGES>
+    
+    <CURRENT MESSAGE>
+    {context['episode_content']}
+    </CURRENT MESSAGE>
+    
+    <EXTRACTED ENTITIES>
+    {context['extracted_entities']}
+    </EXTRACTED ENTITIES>
+    
+    <ENTITY TYPES>
+    {context['entity_types']}
+    </ENTITY TYPES>
+    
+    Given the above conversation, extracted entities, and provided entity types and their descriptions, classify the extracted entities.
+    
+    Guidelines:
+    1. Each entity must have exactly one type.
+    2. NEVER use types not listed in ENTITY TYPES.
+    3. If none of the provided entity types accurately classify an extracted entity, the type should be set to None.
+    """
+        return ChatPrompt(
+            system=SystemMessage(content=sys_prompt),
+            user=UserMessage(content=user_prompt),
+        )
+
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt(
+            system=SystemMessage(
+                content=(
+                    'You are an entity attribute extraction specialist. '
+                    'You ONLY emit attribute values that are explicitly stated in MESSAGES or '
+                    'already present on the ENTITY. You output strictly the JSON specified by the '
+                    'response schema — no reasoning, no explanation, no commentary in any field.'
+                ),
+            ),
+            user=UserMessage(
+                content=f"""\
+    Given the MESSAGES and the following ENTITY, update its attributes.
+    
+    HARD RULES — violating any of these is a failure:
+    
+    1. Each attribute value MUST be one of:
+       (a) a clean value copied or directly normalized from text in MESSAGES,
+       (b) the existing value already on the ENTITY (preserved unchanged), or
+       (c) null / omitted, when neither (a) nor (b) applies.
+    
+    2. NEVER write reasoning, justification, or commentary into any field. Specifically:
+       - NEVER include parenthetical explanations like "(implied by ...)", "(Context: ...)",
+         "(not explicitly stated ...)", "(based on ...)".
+       - NEVER include first-person or deliberative phrases like "I should...", "However...",
+         "Sticking to...", "Since no...", "the instruction is to...", "must be kept...",
+         "if no value is present...".
+       - NEVER list alternatives or candidates inside one field ("X, or Y, or maybe Z").
+       - NEVER explain why a value is null. If unknown, set the field to null and stop.
+    
+    3. Each attribute schema description (e.g. an "Industry sector" field whose description
+       reads "Industry classification, single word where possible") tells you the FORMAT a
+       real value should take. The description text is NEVER itself a value. NEVER copy
+       schema description text into the field.
+    
+    4. The literal strings "null", "N/A", "Not specified", "unknown", "none", "not provided",
+       or any sentence describing absence are NOT valid values. If no value is supported by
+       MESSAGES, set the field to null (or omit it) — do not write a sentence.
+    
+    5. Each attribute value must be a short, well-formed instance of the type the field
+       describes (a phone number, an industry name, a URL, a postal address). If you cannot
+       produce a clean value of that type from MESSAGES, the field is null.
+    
+    6. NEVER infer attribute values from the entity's name, from related entities, from
+       generic world knowledge, or from prior summaries. Only verbatim or directly normalized
+       text from MESSAGES qualifies as a new value.
+    
+    7. If MESSAGES contain no information about an attribute, leave the existing entity
+       value unchanged. If the entity has no existing value, the field is null.
+    
+    EXAMPLES
+    
+    ENTITY: {{"name": "Sam Rivera", "phones": "415-555-0142"}}
+    MESSAGES contain no phone information for Sam.
+    GOOD → "phones": "415-555-0142"   (preserved existing value)
+    BAD  → "phones": "415-555-0142 (implied by original entity, but no new information in
+            messages, retaining original value as per instruction...)"
+    
+    ENTITY: {{"name": "Northwind", "industry": null}}
+    MESSAGES mention Northwind only as the platform some content was posted to.
+    GOOD → "industry": null   (no explicit industry classification was stated)
+    BAD  → "industry": "Content platform, SaaS (implied by usage context, though not stated
+            explicitly as industry classification...)"
+    
+    ENTITY: {{"name": "Priya"}}
+    MESSAGES contain no phone for Priya, but discuss a project she contributed to.
+    GOOD → "phones": null
+    BAD  → "phones": "Worked with Lin and Marco on the Q3 launch..."   (off-topic content dump)
+    
+    <MESSAGES>
+    {to_prompt_json(context['previous_episodes'])}
+    {to_prompt_json(context['episode_content'])}
+    </MESSAGES>
+    
+    <ENTITY>
+    {context['node']}
+    </ENTITY>
+    """,
+            ),
+        )
+
+    def extract_summary(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt(
+            system=SystemMessage(
+                content='You are a helpful assistant that extracts entity summaries from the provided text.',
+            ),
+            user=UserMessage(
+                content=f"""
+            Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
+            from the messages and relevant information from the existing summary. Summary must be under {MAX_SUMMARY_CHARS} characters.
+    
+            {summary_instructions}
+    
+            <MESSAGES>
+            {to_prompt_json(context['previous_episodes'])}
+            {to_prompt_json(context['episode_content'])}
+            </MESSAGES>
+    
+            <ENTITY>
+            {context['node']}
+            </ENTITY>
+            """,
+            ),
+        )
+
+    def extract_summaries_batch(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt(
+            system=SystemMessage(
+                content='You are a helpful assistant that generates concise entity summaries from provided context.',
+            ),
+            user=UserMessage(
+                content=f"""
+    Given the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.
+    Each summary must be under {MAX_SUMMARY_CHARS} characters.
+    
+    {summary_instructions}
+    
+    <MESSAGES>
+    {to_prompt_json(context['previous_episodes'])}
+    {to_prompt_json(context['episode_content'])}
+    </MESSAGES>
+    {_entity_type_descriptions_section(context)}
+    <ENTITIES>
+    {to_prompt_json(context['entities'])}
+    </ENTITIES>
+    
+    For each entity, combine relevant information from the MESSAGES with any existing summary content.
+    Only return summaries for entities that have meaningful information to summarize.
+    If an entity has no relevant information in the messages and no existing summary, you may skip it.
+    """,
+            ),
+        )
+
+    def extract_entity_summaries_from_episodes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt(
+            system=SystemMessage(
+                content=_entity_episode_summary_system_prompt,
+            ),
+            user=UserMessage(
+                content=f"""NEVER include meta-language about the summarization process. \
+    Use ONLY facts from the provided EPISODES.
+    Each summary must be under {MAX_SUMMARY_CHARS} characters. Write 2-6 dense sentences in third person. \
+    Preserve all material names, roles, dates, counts, and changes over time that are explicitly supported.
+    
+    For each entity below, generate an updated summary using ONLY the provided EPISODES and any \
+    existing summary already on the entity.
+    
+    <EPISODES>
+    {to_prompt_json(context['previous_episodes'])}
+    {to_prompt_json(context['episode_content'])}
+    </EPISODES>
+    {_entity_type_descriptions_section(context)}
+    <ENTITIES>
+    {to_prompt_json(context['entities'])}
+    </ENTITIES>
+    
+    Only return summaries for entities that have meaningful information to summarize.
+    If an entity has no relevant information in the episodes and no existing summary, you may skip it.
+    """,
+            ),
+        )

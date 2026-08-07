@@ -545,13 +545,12 @@ async def dedupe_edges_bulk(
     ] = await semaphore_gather(
         *[
             resolve_extracted_edge(
-                clients.llm_client,
+                clients,
                 edge,
                 candidates,
                 candidates,
                 episode,
                 edge_types,
-                prompt_library=clients.prompt_library,
             )
             for episode, edge, candidates in dedupe_tuples
         ]

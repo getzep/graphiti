@@ -18,13 +18,17 @@ from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
 from .openai_client import OpenAIClient
+from .prompt_bound import LLMModelConfig, PromptBoundLLM, create_prompt_bound_llm
 from .token_tracker import TokenUsage, TokenUsageTracker
 
 __all__ = [
     'LLMClient',
+    'LLMModelConfig',
     'OpenAIClient',
     'LLMConfig',
+    'PromptBoundLLM',
     'RateLimitError',
     'TokenUsage',
     'TokenUsageTracker',
+    'create_prompt_bound_llm',
 ]

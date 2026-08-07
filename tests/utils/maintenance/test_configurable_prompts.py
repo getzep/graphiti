@@ -13,7 +13,7 @@ from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import create_prompt_library, prompt_library
 from graphiti_core.prompts.extract_edges import ExtractedEdges
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
-from graphiti_core.prompts.models import Message
+from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import community_operations as community_ops
 from graphiti_core.utils.maintenance import edge_operations as edge_ops
@@ -34,11 +34,11 @@ class _EmploymentEdge(BaseModel):
 
 
 def _marker_prompt(marker: str):
-    def _fn(context: dict) -> list[Message]:
-        return [
-            Message(role='system', content=marker),
-            Message(role='user', content=marker),
-        ]
+    def _fn(context: dict) -> ChatPrompt:
+        return ChatPrompt(
+            system=SystemMessage(content=marker),
+            user=UserMessage(content=marker),
+        )
 
     return _fn
 
@@ -169,8 +169,8 @@ async def test_extract_edges_preserves_prompt_name_with_custom_prompt():
 async def test_resolve_edges_uses_injected_prompt_library():
     marker = 'CUSTOM_RESOLVE_EDGE'
     lib = create_prompt_library({'dedupe_edges': {'resolve_edge': _marker_prompt(marker)}})
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(
+    clients = _make_clients(lib)
+    clients.llm_client.generate_response = AsyncMock(
         return_value={'duplicate_facts': [], 'contradicted_facts': []}
     )
     extracted = EntityEdge(
@@ -197,17 +197,16 @@ async def test_resolve_edges_uses_injected_prompt_library():
     # Pre-set timestamps so resolve does not make a follow-up timestamp LLM call.
     extracted.valid_at = utc_now()
     await resolve_extracted_edge(
-        llm_client,
+        clients,
         extracted,
         related,
         [],
         _make_episode(),
-        prompt_library=lib,
     )
 
     resolve_calls = [
         c
-        for c in llm_client.generate_response.await_args_list
+        for c in clients.llm_client.generate_response.await_args_list
         if c.kwargs.get('prompt_name') == 'dedupe_edges.resolve_edge'
     ]
     assert resolve_calls
@@ -236,7 +235,9 @@ async def test_extract_edge_timestamps_use_injected_prompt_library():
         valid_at=None,
         invalid_at=None,
     )
-    await edge_ops._extract_edge_timestamps(llm_client, edge, _make_episode(), lib)
+    clients = _make_clients(lib)
+    clients.llm_client = llm_client
+    await edge_ops._extract_edge_timestamps(clients, edge, _make_episode())
     args, kwargs = llm_client.generate_response.await_args
     assert args[0][0].content.startswith(marker)
     assert kwargs['prompt_name'] == 'extract_edges.extract_timestamps'
@@ -246,8 +247,8 @@ async def test_extract_edge_timestamps_use_injected_prompt_library():
 async def test_extract_edge_attributes_use_injected_prompt_library():
     marker = 'CUSTOM_EDGE_ATTRS'
     lib = create_prompt_library({'extract_edges': {'extract_attributes': _marker_prompt(marker)}})
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(return_value={'role': 'engineer'})
+    clients = _make_clients(lib)
+    clients.llm_client.generate_response = AsyncMock(return_value={'role': 'engineer'})
     extracted = EntityEdge(
         source_node_uuid='a',
         target_node_uuid='b',
@@ -259,15 +260,14 @@ async def test_extract_edge_attributes_use_injected_prompt_library():
         valid_at=datetime.now(timezone.utc),
     )
     await resolve_extracted_edge(
-        llm_client,
+        clients,
         extracted,
         related_edges=[],
         existing_edges=[],
         episode=_make_episode(),
         edge_type_candidates={'EMPLOYMENT': _EmploymentEdge},
-        prompt_library=lib,
     )
-    args, kwargs = llm_client.generate_response.await_args
+    args, kwargs = clients.llm_client.generate_response.await_args
     assert args[0][0].content.startswith(marker)
     assert kwargs['prompt_name'] == 'extract_edges.extract_attributes'
 
@@ -293,12 +293,7 @@ async def test_combined_batch_timestamps_use_clients_prompt_library():
     marker = 'CUSTOM_BATCH_TS'
     lib = create_prompt_library(
         {
-            'extract_nodes_and_edges': {
-                'extract_message': lambda ctx: [
-                    Message(role='system', content='x'),
-                    Message(role='user', content='x'),
-                ]
-            },
+            'extract_nodes_and_edges': {'extract_message': _marker_prompt('x')},
             'extract_edges': {'extract_timestamps_batch': _marker_prompt(marker)},
         }
     )
@@ -335,10 +330,10 @@ async def test_combined_batch_timestamps_use_clients_prompt_library():
 async def test_community_summarize_pair_uses_configured_prompt_library():
     marker = 'CUSTOM_SUMMARIZE_PAIR'
     lib = create_prompt_library({'summarize_nodes': {'summarize_pair': _marker_prompt(marker)}})
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(return_value={'summary': 'combined'})
-    await summarize_pair(llm_client, ('a', 'b'), lib)
-    args, kwargs = llm_client.generate_response.await_args
+    clients = _make_clients(lib)
+    clients.llm_client.generate_response = AsyncMock(return_value={'summary': 'combined'})
+    await summarize_pair(clients, ('a', 'b'))
+    args, kwargs = clients.llm_client.generate_response.await_args
     assert args[0][0].content.startswith(marker)
     assert kwargs['prompt_name'] == 'summarize_nodes.summarize_pair'
 
@@ -349,10 +344,10 @@ async def test_community_summary_description_uses_configured_prompt_library():
     lib = create_prompt_library(
         {'summarize_nodes': {'summary_description': _marker_prompt(marker)}}
     )
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(return_value={'description': 'name'})
-    await generate_summary_description(llm_client, 'summary', lib)
-    args, kwargs = llm_client.generate_response.await_args
+    clients = _make_clients(lib)
+    clients.llm_client.generate_response = AsyncMock(return_value={'description': 'name'})
+    await generate_summary_description(clients, 'summary')
+    args, kwargs = clients.llm_client.generate_response.await_args
     assert args[0][0].content.startswith(marker)
     assert kwargs['prompt_name'] == 'summarize_nodes.summary_description'
 
@@ -378,11 +373,11 @@ async def test_update_community_uses_configured_prompt_library(monkeypatch):
         AsyncMock(return_value='new-name'),
     )
 
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(return_value={'summary': 'new'})
+    clients = _make_clients(lib)
+    clients.llm_client.generate_response = AsyncMock(return_value={'summary': 'new'})
     entity = EntityNode(name='Alice', group_id='group', labels=['Entity'], summary='entity')
-    await community_ops.update_community(MagicMock(), llm_client, MagicMock(), entity, lib)
-    args, kwargs = llm_client.generate_response.await_args
+    await community_ops.update_community(clients, entity)
+    args, kwargs = clients.llm_client.generate_response.await_args
     assert args[0][0].content.startswith(marker)
 
 
@@ -390,19 +385,19 @@ async def test_update_community_uses_configured_prompt_library(monkeypatch):
 async def test_build_communities_uses_configured_prompt_library(monkeypatch):
     marker = 'CUSTOM_BUILD_COMMUNITY'
     lib = create_prompt_library({'summarize_nodes': {'summarize_pair': _marker_prompt(marker)}})
+    clients = _make_clients(lib)
     monkeypatch.setattr(community_ops, 'get_community_clusters', AsyncMock(return_value=[[]]))
     monkeypatch.setattr(
         community_ops,
         'build_community',
         AsyncMock(return_value=(MagicMock(), [])),
     )
-    await community_ops.build_communities(MagicMock(), MagicMock(), None, lib)
-    # empty cluster list -> build_community not called; use non-empty
+    await community_ops.build_communities(clients, None)
     node = EntityNode(name='A', group_id='g', labels=['Entity'], summary='s')
     monkeypatch.setattr(community_ops, 'get_community_clusters', AsyncMock(return_value=[[node]]))
-    await community_ops.build_communities(MagicMock(), MagicMock(), None, lib)
+    await community_ops.build_communities(clients, None)
     community_ops.build_community.assert_awaited()
-    assert community_ops.build_community.await_args.args[2] is lib
+    assert community_ops.build_community.await_args.args[0] is clients
 
 
 @pytest.mark.asyncio
@@ -470,10 +465,10 @@ async def test_saga_summary_uses_self_prompt_library():
             cross_encoder=MagicMock(),
             prompt_library=lib,
         )
-    messages = graphiti.prompt_library.summarize_sagas.summarize_saga(
+    prompt = graphiti.prompt_library.summarize_sagas.summarize_saga(
         {'saga_name': 's', 'existing_summary': '', 'episodes': ['ep']}
     )
-    assert messages[0].content.startswith(marker)
+    assert prompt.system.content.startswith(marker)
 
 
 @pytest.mark.asyncio
@@ -496,12 +491,9 @@ async def test_saga_summary_preserves_prompt_name_with_custom_prompt():
             prompt_library=lib,
         )
 
-    # Invoke the same prompt_name path Graphiti uses
-    await graphiti.llm_client.generate_response(
-        graphiti.prompt_library.summarize_sagas.summarize_saga(
-            {'saga_name': 's', 'existing_summary': '', 'episodes': ['ep']}
-        ),
-        prompt_name='summarize_sagas.summarize_saga',
+    await graphiti.clients.complete_prompt(
+        'summarize_sagas.summarize_saga',
+        {'saga_name': 's', 'existing_summary': '', 'episodes': ['ep']},
     )
     assert (
         llm_client.generate_response.await_args.kwargs['prompt_name']

@@ -47,6 +47,7 @@ def _make_clients():
         embedder=embedder,
         cross_encoder=cross_encoder,
         llm_client=llm_client,
+        tracer=MagicMock(),
         prompt_library=default_prompt_library,
     )
 
@@ -492,28 +493,25 @@ async def test_resolve_with_llm_candidate_attributes_cannot_overwrite_candidate_
 
     captured_context = {}
 
-    def fake_prompt_nodes(context):
+    async def fake_complete(prompt_name, context, **kwargs):
         captured_context.update(context)
-        return ['prompt']
-
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(
-        return_value={
+        return {
             'entity_resolutions': [
                 {'id': 0, 'name': 'Dizzy Gillespie', 'duplicate_candidate_id': 0}
             ]
         }
-    )
+
+    clients = MagicMock()
+    clients.complete_prompt = AsyncMock(side_effect=fake_complete)
 
     await _resolve_with_llm(
-        llm_client,
+        clients,
         [extracted],
         indexes,
         state,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
-        prompt_library=SimpleNamespace(dedupe_nodes=SimpleNamespace(nodes=fake_prompt_nodes)),
     )
 
     # candidate_id must be the positional index (0), not the adversarial attribute (999)
@@ -533,11 +531,8 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
 
     captured_context = {}
 
-    def fake_prompt_nodes(context):
+    async def fake_complete(prompt_name, context, **kwargs):
         captured_context.update(context)
-        return ['prompt']
-
-    async def fake_generate_response(*_, **__):
         return {
             'entity_resolutions': [
                 {
@@ -548,18 +543,17 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
             ]
         }
 
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(side_effect=fake_generate_response)
+    clients = MagicMock()
+    clients.complete_prompt = AsyncMock(side_effect=fake_complete)
 
     await _resolve_with_llm(
-        llm_client,
+        clients,
         [extracted],
         indexes,
         state,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
-        prompt_library=SimpleNamespace(dedupe_nodes=SimpleNamespace(nodes=fake_prompt_nodes)),
     )
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
@@ -593,17 +587,16 @@ async def test_resolve_with_llm_promotes_generic_candidate_type(monkeypatch):
         }
     )
 
+    clients = MagicMock()
+    clients.complete_prompt = llm_client.generate_response
     await _resolve_with_llm(
-        llm_client,
+        clients,
         [extracted],
         indexes,
         state,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
-        prompt_library=SimpleNamespace(
-            dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
-        ),
     )
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
@@ -634,17 +627,16 @@ async def test_resolve_with_llm_ignores_out_of_range_relative_ids(monkeypatch, c
     )
 
     with caplog.at_level(logging.WARNING):
+        clients = MagicMock()
+        clients.complete_prompt = llm_client.generate_response
         await _resolve_with_llm(
-            llm_client,
+            clients,
             [extracted],
             indexes,
             state,
             episode=_make_episode(),
             previous_episodes=[],
             entity_types=None,
-            prompt_library=SimpleNamespace(
-                dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
-            ),
         )
 
     assert state.resolved_nodes[0] is None
@@ -677,17 +669,16 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
         }
     )
 
+    clients = MagicMock()
+    clients.complete_prompt = llm_client.generate_response
     await _resolve_with_llm(
-        llm_client,
+        clients,
         [extracted],
         indexes,
         state,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
-        prompt_library=SimpleNamespace(
-            dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
-        ),
     )
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
@@ -715,17 +706,16 @@ async def test_resolve_with_llm_invalid_candidate_id_defaults_to_extracted(monke
         }
     )
 
+    clients = MagicMock()
+    clients.complete_prompt = llm_client.generate_response
     await _resolve_with_llm(
-        llm_client,
+        clients,
         [extracted],
         indexes,
         state,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
-        prompt_library=SimpleNamespace(
-            dedupe_nodes=SimpleNamespace(nodes=lambda context: ['prompt'])
-        ),
     )
 
     assert state.resolved_nodes[0] == extracted
@@ -744,14 +734,16 @@ async def test_batch_summaries_short_summary_no_llm():
     node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Old summary')
     episode = _make_episode()
 
+    clients = MagicMock()
+    clients.llm_client = llm_client
+    clients.complete_prompt = llm_client.generate_response
     await _extract_entity_summaries_batch(
-        llm_client,
+        clients,
         [node],
         episode=episode,
         previous_episodes=[],
         should_summarize_node=None,
         edges_by_node={},
-        prompt_library=default_prompt_library,
     )
 
     # Short summary should be kept as-is without LLM call
@@ -775,14 +767,16 @@ async def test_batch_summaries_callback_skip_summary():
     async def skip_summary_filter(n: EntityNode) -> bool:
         return False
 
+    clients = MagicMock()
+    clients.llm_client = llm_client
+    clients.complete_prompt = llm_client.generate_response
     await _extract_entity_summaries_batch(
-        llm_client,
+        clients,
         [node],
         episode=episode,
         previous_episodes=[],
         should_summarize_node=skip_summary_filter,
-        edges_by_node={},
-        prompt_library=default_prompt_library,
+        edges_by_node={}
     )
 
     # Summary should remain unchanged
@@ -808,14 +802,16 @@ async def test_batch_summaries_selective_callback():
     async def selective_filter(n: EntityNode) -> bool:
         return 'User' not in n.labels
 
+    clients = MagicMock()
+    clients.llm_client = llm_client
+    clients.complete_prompt = llm_client.generate_response
     await _extract_entity_summaries_batch(
-        llm_client,
+        clients,
         [user_node, topic_node],
         episode=episode,
         previous_episodes=[],
         should_summarize_node=selective_filter,
-        edges_by_node={},
-        prompt_library=default_prompt_library,
+        edges_by_node={}
     )
 
     # User summary should remain unchanged (callback returned False)
@@ -896,14 +892,16 @@ async def test_batch_summaries_calls_llm_for_long_summary():
 
     edges_by_node = {node.uuid: [edge, edge]}  # Multiple long edges
 
+    clients = MagicMock()
+    clients.llm_client = llm_client
+    clients.complete_prompt = llm_client.generate_response
     await _extract_entity_summaries_batch(
-        llm_client,
+        clients,
         [node],
         episode=episode,
         previous_episodes=[],
         should_summarize_node=None,
-        edges_by_node=edges_by_node,
-        prompt_library=default_prompt_library,
+        edges_by_node=edges_by_node
     )
 
     # LLM should have been called to condense the long summary
