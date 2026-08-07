@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from copy import deepcopy
 from typing import Any, Protocol, TypedDict
 
 from .dedupe_edges import Prompt as DedupeEdgesPrompt
@@ -66,6 +67,9 @@ class PromptLibraryImpl(TypedDict):
     eval: EvalVersions
 
 
+PromptOverrides = dict[str, dict[str, PromptFunction]]
+
+
 class VersionWrapper:
     def __init__(self, func: PromptFunction):
         self.func = func
@@ -100,3 +104,76 @@ PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
     'eval': eval_versions,
 }
 prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)  # type: ignore[assignment]
+
+
+def create_prompt_library(overrides: PromptOverrides | None = None) -> PromptLibrary:
+    """Create a prompt library, optionally applying partial overrides to the defaults."""
+    merged: dict[str, dict[str, PromptFunction]] = {
+        group_name: dict(group_versions)  # type: ignore[arg-type]
+        for group_name, group_versions in deepcopy(PROMPT_LIBRARY_IMPL).items()
+    }
+
+    if overrides:
+        for group_name, group_overrides in overrides.items():
+            if group_name not in merged:
+                raise ValueError(f'Unknown prompt group: {group_name}')
+
+            for function_name, function in group_overrides.items():
+                if function_name not in merged[group_name]:
+                    raise ValueError(
+                        f'Unknown prompt function for group {group_name}: {function_name}'
+                    )
+                if not callable(function):
+                    raise ValueError(
+                        f'Prompt override must be callable: {group_name}.{function_name}'
+                    )
+
+                merged[group_name][function_name] = function
+
+    return PromptLibraryWrapper(merged)  # type: ignore[arg-type, return-value]
+
+
+def validate_prompt_library(library: PromptLibrary) -> None:
+    """Validate that a complete prompt library exposes every required group and function."""
+    for group_name in PROMPT_LIBRARY_IMPL:
+        if not hasattr(library, group_name):
+            raise ValueError(f'Prompt library missing group: {group_name}')
+
+        group = getattr(library, group_name)
+        for function_name in PROMPT_LIBRARY_IMPL[group_name]:
+            if not hasattr(group, function_name):
+                raise ValueError(f'Prompt library missing function: {group_name}.{function_name}')
+
+            function = getattr(group, function_name)
+            if not callable(function):
+                raise ValueError(
+                    f'Prompt library function must be callable: {group_name}.{function_name}'
+                )
+
+
+def _unwrap_prompt_function(function: Any) -> PromptFunction:
+    """Return the raw prompt function, unwrapping VersionWrapper if present."""
+    if isinstance(function, VersionWrapper):
+        return function.func
+    return function
+
+
+def ensure_prompt_library_wrapped(library: PromptLibrary) -> PromptLibrary:
+    """Ensure prompt functions receive standard VersionWrapper post-processing.
+
+    Libraries already produced by ``PromptLibraryWrapper`` / ``create_prompt_library``
+    are returned as-is. Other complete libraries are re-wrapped from their callables
+    without merging in default prompt implementations.
+    """
+    if isinstance(library, PromptLibraryWrapper):
+        return library
+
+    impl: dict[str, dict[str, PromptFunction]] = {}
+    for group_name in PROMPT_LIBRARY_IMPL:
+        group = getattr(library, group_name)
+        impl[group_name] = {
+            function_name: _unwrap_prompt_function(getattr(group, function_name))
+            for function_name in PROMPT_LIBRARY_IMPL[group_name]
+        }
+
+    return PromptLibraryWrapper(impl)  # type: ignore[arg-type, return-value]

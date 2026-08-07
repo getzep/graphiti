@@ -11,7 +11,7 @@ from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.nodes.node_db_queries import COMMUNITY_NODE_RETURN
 from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
-from graphiti_core.prompts import prompt_library
+from graphiti_core.prompts.lib import PromptLibrary
 from graphiti_core.prompts.summarize_nodes import Summary, SummaryDescription
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.edge_operations import build_community_edges
@@ -138,7 +138,9 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
     return clusters
 
 
-async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
+async def summarize_pair(
+    llm_client: LLMClient, summary_pair: tuple[str, str], prompt_library: PromptLibrary
+) -> str:
     # Prepare context for LLM
     context = {
         'node_summaries': [{'summary': summary} for summary in summary_pair],
@@ -155,7 +157,9 @@ async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -
     return truncate_at_sentence(pair_summary, MAX_SUMMARY_CHARS)
 
 
-async def generate_summary_description(llm_client: LLMClient, summary: str) -> str:
+async def generate_summary_description(
+    llm_client: LLMClient, summary: str, prompt_library: PromptLibrary
+) -> str:
     context = {
         'summary': summary,
     }
@@ -172,7 +176,9 @@ async def generate_summary_description(llm_client: LLMClient, summary: str) -> s
 
 
 async def build_community(
-    llm_client: LLMClient, community_cluster: list[EntityNode]
+    llm_client: LLMClient,
+    community_cluster: list[EntityNode],
+    prompt_library: PromptLibrary,
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     summaries = [entity.summary for entity in community_cluster]
     length = len(summaries)
@@ -184,7 +190,9 @@ async def build_community(
         new_summaries: list[str] = list(
             await semaphore_gather(
                 *[
-                    summarize_pair(llm_client, (str(left_summary), str(right_summary)))
+                    summarize_pair(
+                        llm_client, (str(left_summary), str(right_summary)), prompt_library
+                    )
                     for left_summary, right_summary in zip(
                         summaries[: int(length / 2)], summaries[int(length / 2) :], strict=False
                     )
@@ -197,7 +205,7 @@ async def build_community(
         length = len(summaries)
 
     summary = truncate_at_sentence(summaries[0], MAX_SUMMARY_CHARS)
-    name = await generate_summary_description(llm_client, summary)
+    name = await generate_summary_description(llm_client, summary, prompt_library)
     now = utc_now()
     community_node = CommunityNode(
         name=name,
@@ -217,6 +225,7 @@ async def build_communities(
     driver: GraphDriver,
     llm_client: LLMClient,
     group_ids: list[str] | None,
+    prompt_library: PromptLibrary,
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -224,7 +233,7 @@ async def build_communities(
 
     async def limited_build_community(cluster):
         async with semaphore:
-            return await build_community(llm_client, cluster)
+            return await build_community(llm_client, cluster, prompt_library)
 
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
         await semaphore_gather(
@@ -342,14 +351,17 @@ async def update_community(
     llm_client: LLMClient,
     embedder: EmbedderClient,
     entity: EntityNode,
+    prompt_library: PromptLibrary,
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community, is_new = await determine_entity_community(driver, entity)
 
     if community is None:
         return [], []
 
-    new_summary = await summarize_pair(llm_client, (entity.summary, community.summary))
-    new_name = await generate_summary_description(llm_client, new_summary)
+    new_summary = await summarize_pair(
+        llm_client, (entity.summary, community.summary), prompt_library
+    )
+    new_name = await generate_summary_description(llm_client, new_summary, prompt_library)
 
     community.summary = new_summary
     community.name = new_name

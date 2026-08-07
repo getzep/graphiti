@@ -24,7 +24,6 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodicNode
-from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.extract_edges import BatchEdgeTimestamps
 from graphiti_core.prompts.extract_nodes_and_edges import CombinedExtraction
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
@@ -126,7 +125,7 @@ async def extract_nodes_and_edges(
 
     # Single LLM call for combined extraction
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes_and_edges.extract_message(context),
+        clients.prompt_library.extract_nodes_and_edges.extract_message(context),
         response_model=CombinedExtraction,
         group_id=primary_episode.group_id,
         prompt_name='extract_nodes_and_edges.extract_message',
@@ -243,7 +242,9 @@ async def extract_nodes_and_edges(
         ]
         try:
             ts_response = await llm_client.generate_response(
-                prompt_library.extract_edges.extract_timestamps_batch({'facts': facts_with_ref}),
+                clients.prompt_library.extract_edges.extract_timestamps_batch(
+                    {'facts': facts_with_ref}
+                ),
                 response_model=BatchEdgeTimestamps,
                 model_size=ModelSize.small,
                 prompt_name='extract_edges.extract_timestamps_batch',

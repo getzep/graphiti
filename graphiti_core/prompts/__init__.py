@@ -1,4 +1,11 @@
-from .lib import prompt_library
-from .models import Message
+from .lib import PromptLibrary, PromptOverrides, create_prompt_library, prompt_library
+from .models import Message, PromptFunction
 
-__all__ = ['prompt_library', 'Message']
+__all__ = [
+    'Message',
+    'PromptFunction',
+    'PromptLibrary',
+    'PromptOverrides',
+    'create_prompt_library',
+    'prompt_library',
+]
