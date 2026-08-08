@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock
 import pytest
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EntityNode
+from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_filters import ComparisonOperator, SearchFilters
 
 # Add the src directory to the path (mirrors the other unit tests)
@@ -275,6 +275,46 @@ class TestCoreSignatureCompatibility:
         )
         assert edge.source_node_uuid == 's'
         assert edge.target_node_uuid == 't'
+
+
+class TestGetMostRecentByGroupIds:
+    """The MCP get_episodes tool must return the most recent episodes by valid_at."""
+
+    def test_get_episodes_uses_recency_helper(self):
+        # GraphitiService.get_episodes must resolve recency through the dedicated
+        # helper, not the uuid-keyed keyset pagination of get_by_group_ids.
+        import graphiti_mcp_server
+
+        source = inspect.getsource(graphiti_mcp_server.get_episodes)
+        assert 'get_most_recent_by_group_ids' in source
+        assert 'get_by_group_ids' not in source
+
+    @pytest.mark.asyncio
+    async def test_helper_orders_by_valid_at_desc_then_created_at(self):
+        driver = AsyncMock()
+        driver.graph_operations_interface = None
+        driver.execute_query.return_value = ([], {}, None)
+
+        await EpisodicNode.get_most_recent_by_group_ids(driver, ['g1'], limit=7)
+
+        driver.execute_query.assert_awaited_once()
+        query = driver.execute_query.await_args.args[0]
+        assert 'ORDER BY e.valid_at DESC, e.created_at DESC, e.uuid DESC' in query
+        assert 'LIMIT $limit' in query
+        kwargs = driver.execute_query.await_args.kwargs
+        assert kwargs['group_ids'] == ['g1']
+        assert kwargs['limit'] == 7
+
+    @pytest.mark.asyncio
+    async def test_helper_omits_limit_clause_when_unbounded(self):
+        driver = AsyncMock()
+        driver.graph_operations_interface = None
+        driver.execute_query.return_value = ([], {}, None)
+
+        await EpisodicNode.get_most_recent_by_group_ids(driver, ['g1'])
+
+        query = driver.execute_query.await_args.args[0]
+        assert 'LIMIT' not in query
 
 
 class TestEntityTypeRegistration:

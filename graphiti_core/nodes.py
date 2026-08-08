@@ -419,6 +419,54 @@ class EpisodicNode(Node):
         return episodes
 
     @classmethod
+    async def get_most_recent_by_group_ids(
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+    ):
+        """Return the most recent episodes for the given groups, ordered by episode time.
+
+        Episodes are ordered by ``valid_at`` (the time the described events occurred)
+        descending, then by ``created_at`` (ingestion time) descending, with ``uuid``
+        as a deterministic tiebreaker. Used by browsing tools that need recency rather
+        than keyset pagination (see :meth:`get_by_group_ids`).
+        """
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.episodic_node_get_by_group_ids(
+                    cls, driver, group_ids, limit, None
+                )
+            except NotImplementedError:
+                pass
+
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
+
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (e:Episodic)
+            WHERE e.group_id IN $group_ids
+            RETURN DISTINCT
+            """
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            )
+            + """
+            ORDER BY e.valid_at DESC, e.created_at DESC, e.uuid DESC
+            """
+            + limit_query,
+            group_ids=group_ids,
+            limit=limit,
+            routing_='r',
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
+
+        return episodes
+
+    @classmethod
     async def get_by_group_ids(
         cls,
         driver: GraphDriver,

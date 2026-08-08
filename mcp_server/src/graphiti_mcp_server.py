@@ -771,7 +771,10 @@ async def get_episodes(
         from graphiti_core.nodes import EpisodicNode
 
         if effective_group_ids:
-            episodes = await EpisodicNode.get_by_group_ids(
+            # get_episodes is a recency browsing tool: return the most recent episodes
+            # by valid_at rather than the arbitrary uuid-ordered subset that
+            # get_by_group_ids (a keyset-pagination helper) would produce.
+            episodes = await EpisodicNode.get_most_recent_by_group_ids(
                 client.driver, effective_group_ids, limit=max_episodes
             )
         else:
