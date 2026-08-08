@@ -821,6 +821,7 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None,
         edge_type_map: dict[tuple[str, str], list[str]],
         episodes: list[EpisodicNode],
+        custom_extraction_instructions: str | None = None,
     ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
         """Resolve nodes and edges against the existing graph."""
         nodes_by_uuid: dict[str, EntityNode] = {
@@ -880,6 +881,7 @@ class Graphiti:
                     episode,
                     previous_episodes,
                     entity_types,
+                    custom_extraction_instructions=custom_extraction_instructions,
                 )
                 for episode, previous_episodes in episode_context
             ]
@@ -1030,7 +1032,8 @@ class Graphiti:
             Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
             the most recent episodes by created_at date will be used.
         custom_extraction_instructions : str | None
-            Optional. Custom extraction instructions string to be included in the extract entities and extract edges prompts.
+            Optional. Custom extraction instructions string to be included in the extract entities,
+            extract edges and entity summary prompts.
             This allows for additional instructions or context to guide the extraction process.
         saga : str | SagaNode | None
             Optional. Either a saga name (str) or a SagaNode object to associate this episode with.
@@ -1164,6 +1167,7 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                     edges=new_edges,
+                    custom_extraction_instructions=custom_extraction_instructions,
                 )
 
                 # Process and save episode data (including saga association if provided)
@@ -1260,8 +1264,8 @@ class Graphiti:
             Optional. A mapping of (source_type, target_type) to allowed edge types.
         custom_extraction_instructions : str | None
             Optional. Custom extraction instructions string to be included in the
-            extract entities and extract edges prompts. This allows for additional
-            instructions or context to guide the extraction process.
+            extract entities, extract edges and entity summary prompts. This allows
+            for additional instructions or context to guide the extraction process.
         saga : str | SagaNode | None
             Optional. Either a saga name (str) or a SagaNode object to associate all episodes with.
             If a string is provided and a saga with this name already exists in the group, the episodes
@@ -1392,6 +1396,7 @@ class Graphiti:
                     edge_types,
                     edge_type_map or edge_type_map_default,
                     episodes,
+                    custom_extraction_instructions=custom_extraction_instructions,
                 )
 
                 # Resolved pointers for episodic edges

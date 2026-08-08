@@ -918,3 +918,124 @@ async def test_batch_summaries_calls_llm_for_long_summary():
     # LLM should have been called to condense the long summary
     llm_client.generate_response.assert_awaited_once()
     assert node.summary == 'Condensed summary'
+
+
+@pytest.mark.asyncio
+async def test_batch_summaries_pass_custom_instructions_to_prompt(monkeypatch):
+    """custom_extraction_instructions must reach the batch summary prompt context."""
+    from graphiti_core.edges import EntityEdge
+    from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
+
+    captured_context = {}
+
+    def fake_summaries_batch(context):
+        captured_context.update(context)
+        return ['prompt']
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.prompt_library.extract_nodes.extract_summaries_batch',
+        fake_summaries_batch,
+    )
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(return_value={'summaries': []})
+
+    node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Short')
+    long_fact = 'x' * (MAX_SUMMARY_CHARS * 2)
+    edge = EntityEdge(
+        uuid='edge1',
+        group_id='group',
+        source_node_uuid=node.uuid,
+        target_node_uuid='other-uuid',
+        name='test_edge',
+        fact=long_fact,
+        created_at=utc_now(),
+    )
+
+    await _extract_entity_summaries_batch(
+        llm_client,
+        [node],
+        episode=_make_episode(),
+        previous_episodes=[],
+        should_summarize_node=None,
+        edges_by_node={node.uuid: [edge, edge]},
+        custom_extraction_instructions='Write every summary in Italian.',
+    )
+
+    assert captured_context['custom_extraction_instructions'] == 'Write every summary in Italian.'
+
+
+@pytest.mark.asyncio
+async def test_episode_summaries_pass_custom_instructions_to_prompt(monkeypatch):
+    """The skip_fact_appending path must receive custom_extraction_instructions too."""
+    captured_context = {}
+
+    def fake_episode_summaries(context):
+        captured_context.update(context)
+        return ['prompt']
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.prompt_library.extract_nodes.extract_entity_summaries_from_episodes',
+        fake_episode_summaries,
+    )
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(return_value={'summaries': []})
+
+    node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Old')
+
+    await _extract_entity_summaries_batch(
+        llm_client,
+        [node],
+        episode=_make_episode(),
+        previous_episodes=[],
+        should_summarize_node=None,
+        edges_by_node={},
+        skip_fact_appending=True,
+        custom_extraction_instructions='Write every summary in Italian.',
+    )
+
+    assert captured_context['custom_extraction_instructions'] == 'Write every summary in Italian.'
+
+
+@pytest.mark.asyncio
+async def test_extract_attributes_from_nodes_passes_custom_instructions(monkeypatch):
+    """custom_extraction_instructions must flow through extract_attributes_from_nodes."""
+    clients, _ = _make_clients()
+    clients.llm_client.generate_response = AsyncMock(return_value={'summaries': []})
+    clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    captured = {}
+
+    async def fake_summaries_batch(
+        llm_client,
+        nodes,
+        episode,
+        previous_episodes,
+        should_summarize_node,
+        edges_by_node,
+        *,
+        skip_fact_appending=False,
+        entity_types=None,
+        custom_extraction_instructions=None,
+    ):
+        captured['custom_extraction_instructions'] = custom_extraction_instructions
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._extract_entity_summaries_batch',
+        fake_summaries_batch,
+    )
+
+    node = EntityNode(name='Node1', group_id='group', labels=['Entity'], summary='Old')
+
+    await extract_attributes_from_nodes(
+        clients,
+        [node],
+        episode=_make_episode(),
+        previous_episodes=[],
+        entity_types=None,
+        custom_extraction_instructions='Write every summary in Italian.',
+    )
+
+    assert captured['custom_extraction_instructions'] == 'Write every summary in Italian.'
