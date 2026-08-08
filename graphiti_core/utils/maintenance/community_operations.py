@@ -99,7 +99,12 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
+    # Synchronous label propagation oscillates forever on some projections
+    # (e.g. two nodes repeatedly swapping communities). Cap the number of
+    # iterations to guarantee termination; one iteration per node is
+    # deterministic and far exceeds the typical convergence time.
+    max_iterations = max(len(projection), 1)
+    for _ in range(max_iterations):
         no_change = True
         new_community_map: dict[str, int] = {}
 
