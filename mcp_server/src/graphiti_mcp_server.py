@@ -20,6 +20,7 @@ from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -1236,6 +1237,31 @@ async def initialize_server() -> ServerConfig:
         mcp.settings.host = config.server.host
     if config.server.port:
         mcp.settings.port = config.server.port
+
+    # Reconcile the transport DNS-rebinding protection with the configured host.
+    # FastMCP auto-enables a localhost-only allowlist at construction time (before
+    # the configured host is known), so a server bound to a non-localhost host — the
+    # default here, and the normal reverse-proxy deployment shape — 421-rejects every
+    # request that arrives with a non-localhost Host header. These knobs let a
+    # deployment extend the allowlist or opt out entirely without silently weakening
+    # the default.
+    if config.server.disable_transport_security:
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+        )
+    elif config.server.allowed_hosts or config.server.allowed_origins:
+        # Keep the SDK's localhost defaults so local health checks keep working.
+        localhost_hosts = ['127.0.0.1:*', 'localhost:*', '[::1]:*']
+        localhost_origins = [
+            'http://127.0.0.1:*',
+            'http://localhost:*',
+            'http://[::1]:*',
+        ]
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=localhost_hosts + config.server.allowed_hosts,
+            allowed_origins=localhost_origins + config.server.allowed_origins,
+        )
 
     # Return MCP configuration for transport
     return config.server

@@ -9,7 +9,16 @@ server:
   transport: "http"  # Options: stdio, sse (deprecated), http
   host: "0.0.0.0"
   port: 8000
-  
+  # DNS-rebinding protection (http/sse transports). By default only localhost Host
+  # headers are accepted, so requests forwarded by a reverse proxy are rejected with
+  # 421. Extend the allowlist with the public hostname, or disable it when a trusted
+  # proxy already validates Host/Origin.
+  # allowed_hosts:
+  #   - "memory.example.com"
+  # allowed_origins:
+  #   - "https://memory.example.com"
+  # disable_transport_security: false
+
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
   model: ${MODEL_NAME:gpt-5.5}
