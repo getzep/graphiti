@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 
-from graph_service.dto.common import Message
 from pydantic import BaseModel, Field
+
+from graph_service.dto.common import Message
 
 
 class SearchQuery(BaseModel):
