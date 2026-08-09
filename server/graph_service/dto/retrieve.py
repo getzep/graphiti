@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
-
 from graph_service.dto.common import Message
+from pydantic import BaseModel, Field
 
 
 class SearchQuery(BaseModel):
@@ -17,12 +16,8 @@ class FactResult(BaseModel):
     uuid: str
     name: str
     fact: str
-    source_node_uuid: str = Field(
-        description='The uuid of the entity node the fact points from'
-    )
-    target_node_uuid: str = Field(
-        description='The uuid of the entity node the fact points to'
-    )
+    source_node_uuid: str = Field(description='The uuid of the entity node the fact points from')
+    target_node_uuid: str = Field(description='The uuid of the entity node the fact points to')
     episodes: list[str] = Field(
         default_factory=list,
         description='The uuids of the episodes the fact was extracted from',
