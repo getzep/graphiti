@@ -16,6 +16,8 @@ limitations under the License.
 
 import logging
 from collections import defaultdict
+from collections.abc import Iterator
+from itertools import cycle, islice
 from time import time
 from typing import Any
 
@@ -1758,6 +1760,33 @@ async def get_edge_invalidation_candidates(
     invalidation_edges = [invalidation_edges_dict.get(edge.uuid, []) for edge in edges]
 
     return invalidation_edges
+
+
+def _roundrobin(iterables: list[list[EntityEdge]]) -> Iterator[EntityEdge]:
+    """Visit input iterables in a cycle until each is exhausted."""
+    if not iterables:
+        return
+    iterators = map(iter, iterables)
+    for num_active in range(len(iterables), 0, -1):
+        iterators = cycle(islice(iterators, num_active))
+        yield from map(next, iterators)
+
+
+def balanced_merge(result_sets: list[list[EntityEdge]], limit: int) -> list[EntityEdge]:
+    """Round-robin merge ranked edge lists, deduping by uuid, capped at limit."""
+    if limit <= 0 or not result_sets:
+        return []
+
+    selected: list[EntityEdge] = []
+    seen: set[str] = set()
+    for edge in _roundrobin(result_sets):
+        if edge.uuid in seen:
+            continue
+        seen.add(edge.uuid)
+        selected.append(edge)
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 # takes in a list of rankings of uuids
