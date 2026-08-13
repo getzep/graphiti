@@ -137,6 +137,15 @@ ENTITY RULES:
       from opinion statements ("from each according to his ability, to each
       according to his need", "the enemy of my enemy", "the perpetrator of a
       crime", "genuinely disadvantaged"). They are not retrievable referents.
+   i. Machine-generated run identifiers and log scaffolding from tool output or
+      session transcripts: process/job/run ids ("proc_4fe2d995903f", "run-8821",
+      "job_1f2e"), bare hex digests or SHAs ("a3f91c2", "7b10df78ca09"), key=value
+      counters ("attempt=1", "total=30", "fail=0", "rc=1"), throwaway script and
+      temp paths ("/tmp/gate3-1255.sh"), and bare log-level or status tokens
+      ("CI", "DONE", "OK", "WARN"). These identify one transient execution, not a
+      thing in the user's world, and they are never searched for later. Keep them
+      inside fact text when they carry meaning (e.g. "the hub-test run exited
+      rc=1"); name the durable subject instead ("hub-test suite", "PR #1255").
 7. Each entity appears exactly ONCE. Classify using the ENTITY TYPES provided.
 8. Only extract entities from CURRENT MESSAGES — PREVIOUS MESSAGES are context only.
 9. Skip didactic / tutorial scaffolding when the assistant is teaching a topic
