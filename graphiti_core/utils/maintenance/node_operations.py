@@ -788,7 +788,10 @@ async def _extract_entity_attributes(
     entity_type: type[BaseModel] | None,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
-        return {}
+        # No applicable type means nothing to extract, not "extracted nothing": return the
+        # node's prior attributes so the caller's assignment leaves them untouched. Returning
+        # {} here would clear attributes a previous typed pass stored on a deduplicated node.
+        return dict(node.attributes or {})
 
     attributes_context = _build_episode_context(
         # should not include summary
