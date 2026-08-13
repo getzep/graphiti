@@ -20,9 +20,16 @@ from .errors import RateLimitError
 from .openai_client import OpenAIClient
 from .token_tracker import TokenUsage, TokenUsageTracker
 
+# Optional — only available when claude-agent-sdk is installed
+try:
+    from .claude_code_client import ClaudeCodeClient
+except ImportError:
+    ClaudeCodeClient = None
+
 __all__ = [
     'LLMClient',
     'OpenAIClient',
+    'ClaudeCodeClient',
     'LLMConfig',
     'RateLimitError',
     'TokenUsage',
