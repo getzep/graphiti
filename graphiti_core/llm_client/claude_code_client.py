@@ -9,6 +9,7 @@ exceeds the threshold, it reconnects (kills + restarts the subprocess).
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import typing
@@ -18,7 +19,6 @@ from pydantic import BaseModel
 from ..prompts.models import Message
 from .client import LLMClient
 from .config import LLMConfig, ModelSize
-from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class ClaudeCodeClient(LLMClient):
     async def _ensure_client(self):
         """Create or reuse the Claude SDK client."""
         if self._client is None:
-            from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+            from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
             options = ClaudeAgentOptions(
                 system_prompt='You are a JSON extraction engine. Respond with ONLY valid JSON. No markdown fences, no explanation, no commentary.',
@@ -93,20 +93,16 @@ class ClaudeCodeClient(LLMClient):
     async def _reset_client(self):
         """Kill and restart the subprocess."""
         if self._client:
-            try:
+            with contextlib.suppress(Exception):
                 await self._client.disconnect()
-            except Exception:
-                pass
             self._client = None
         await self._ensure_client()
 
     async def close(self):
         """Clean up the subprocess."""
         if self._client:
-            try:
+            with contextlib.suppress(Exception):
                 await self._client.disconnect()
-            except Exception:
-                pass
             self._client = None
 
     async def _generate_response(
