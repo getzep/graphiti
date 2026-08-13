@@ -72,18 +72,18 @@ def handle_multiple_group_ids(func: F) -> F:
         if is_falkor and group_ids and len(group_ids) > 1:
             # Execute for each group_id concurrently
             driver = self.clients.driver
+            # Bind the call by name once. Popping group_ids from its original
+            # positional slot shifts every later positional argument down, so a
+            # caller that passed driver positionally collided with the keyword
+            # injected here (TypeError: got multiple values for argument
+            # 'driver') (#1758). Re-binding from the signature normalizes every
+            # argument to its declared name before the per-group rewrite.
+            bound = inspect.signature(func).bind(self, *args, **kwargs)
 
             async def execute_for_group(gid: str):
-                # Remove group_ids from args if it was passed positionally
-                filtered_args = list(args)
-                if group_ids_pos is not None and len(args) > group_ids_pos:
-                    filtered_args.pop(group_ids_pos)
-
-                return await func(
-                    self,
-                    *filtered_args,
-                    **{**kwargs, 'group_ids': [gid], 'driver': driver.clone(database=gid)},
-                )
+                bound.arguments['group_ids'] = [gid]
+                bound.arguments['driver'] = driver.clone(database=gid)
+                return await func(*bound.args, **bound.kwargs)
 
             results = await semaphore_gather(
                 *[execute_for_group(gid) for gid in group_ids],
