@@ -1355,6 +1355,16 @@
       "created_at": "2026-08-13T21:58:36Z",
       "repoId": 840056306,
       "pullRequestNo": 1765
+    },
+    {
+      "name": "connectsudhindra-gif",
+      "email": "connect.sudhindra@gmail.com",
+      "accountType": "personal",
+      "id": 293733569,
+      "comment_id": 5303489193,
+      "created_at": "2026-08-15T17:52:00Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1770
     }
   ]
 }
