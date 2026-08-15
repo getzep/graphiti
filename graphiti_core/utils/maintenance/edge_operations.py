@@ -330,16 +330,18 @@ async def resolve_extracted_edges(
     edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
     existing_edges_override: list[EntityEdge] | None = None,
-) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
+) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge], dict[str, set[str]]]:
     """Resolve extracted edges against existing graph context.
 
     Returns
     -------
-    tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]
-        A tuple of (resolved_edges, invalidated_edges, new_edges) where:
+    tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge], dict[str, set[str]]]
+        A tuple of (resolved_edges, invalidated_edges, new_edges, dropped_by_uuid) where:
         - resolved_edges: All edges after resolution (may include existing edges if duplicates found)
         - invalidated_edges: Edges that were invalidated/contradicted by new information
         - new_edges: Only edges that are new to the graph (not duplicates of existing edges)
+        - dropped_by_uuid: Mapping of ``edge.uuid -> dropped field names`` for
+          attributes removed by ``apply_capped_attributes`` during the merge.
     """
     # Fast path: deduplicate exact matches within the extracted edges before parallel processing
     seen: dict[tuple[str, str, str], EntityEdge] = {}
@@ -486,7 +488,7 @@ async def resolve_extracted_edges(
         edge_types_lst.append(extracted_edge_types)
 
     # resolve edges with related edges in the graph and find invalidation candidates
-    results: list[tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]] = list(
+    results: list[tuple[EntityEdge, list[EntityEdge], list[EntityEdge], set[str]]] = list(
         await semaphore_gather(
             *[
                 resolve_extracted_edge(
@@ -511,10 +513,14 @@ async def resolve_extracted_edges(
     resolved_edges: list[EntityEdge] = []
     invalidated_edges: list[EntityEdge] = []
     new_edges: list[EntityEdge] = []
+    dropped_by_uuid: dict[str, set[str]] = {}
     for extracted_edge, result in zip(extracted_edges, results, strict=True):
         resolved_edge = result[0]
         invalidated_edge_chunk = result[1]
         # result[2] is duplicate_edges list
+        dropped = result[3]
+        if dropped:
+            dropped_by_uuid[resolved_edge.uuid] = dropped
 
         resolved_edges.append(resolved_edge)
         invalidated_edges.extend(invalidated_edge_chunk)
@@ -532,7 +538,7 @@ async def resolve_extracted_edges(
         create_entity_edge_embeddings(embedder, invalidated_edges),
     )
 
-    return resolved_edges, invalidated_edges, new_edges
+    return resolved_edges, invalidated_edges, new_edges, dropped_by_uuid
 
 
 def resolve_edge_contradictions(
@@ -627,7 +633,7 @@ async def resolve_extracted_edge(
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
     edge_type_candidates: dict[str, type[BaseModel]] | None = None,
-) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
+) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge], set[str]]:
     """Resolve an extracted edge against existing graph context.
 
     Parameters
@@ -647,12 +653,15 @@ async def resolve_extracted_edge(
 
     Returns
     -------
-    tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]
-        The resolved edge, any duplicates, and edges to invalidate.
+    tuple[EntityEdge, list[EntityEdge], list[EntityEdge], set[str]]
+        The resolved edge, any duplicates, edges to invalidate, and the set of
+        attribute field names dropped by ``apply_capped_attributes`` during the
+        merge (empty when no attributes were cap-dropped).
     """
     if len(related_edges) == 0 and len(existing_edges) == 0:
         # Still extract custom attributes and timestamps even when no dedup needed
         edge_model = edge_type_candidates.get(extracted_edge.name) if edge_type_candidates else None
+        dropped: set[str] = set()
         if edge_model is not None and len(edge_model.model_fields) != 0:
             edge_attributes_context = {
                 'fact': extracted_edge.fact,
@@ -666,7 +675,7 @@ async def resolve_extracted_edge(
                 prompt_name='extract_edges.extract_attributes',
                 attribute_extraction=True,
             )
-            merged, _ = apply_capped_attributes(
+            merged, dropped = apply_capped_attributes(
                 edge_attributes_response,
                 edge_model,
                 extracted_edge.attributes,
@@ -679,7 +688,7 @@ async def resolve_extracted_edge(
 
         await _extract_edge_timestamps(llm_client, extracted_edge, episode)
 
-        return extracted_edge, [], []
+        return extracted_edge, [], [], dropped
 
     # Fast path: if the fact text and endpoints already exist verbatim, reuse the matching edge.
     normalized_fact = _normalize_string_exact(extracted_edge.fact)
@@ -692,7 +701,7 @@ async def resolve_extracted_edge(
             resolved = edge
             if episode is not None and episode.uuid not in resolved.episodes:
                 resolved.episodes.append(episode.uuid)
-            return resolved, [], []
+            return resolved, [], [], set()
 
     start = time()
 
@@ -778,6 +787,7 @@ async def resolve_extracted_edge(
     # Only extract structured attributes if the edge's relation_type matches an allowed custom type
     # AND the edge model exists for this node pair signature
     edge_model = edge_type_candidates.get(resolved_edge.name) if edge_type_candidates else None
+    dropped: set[str] = set()
     if edge_model is not None and len(edge_model.model_fields) != 0:
         edge_attributes_context = {
             'fact': resolved_edge.fact,
@@ -793,7 +803,7 @@ async def resolve_extracted_edge(
             attribute_extraction=True,
         )
 
-        merged, _ = apply_capped_attributes(
+        merged, dropped = apply_capped_attributes(
             edge_attributes_response,
             edge_model,
             resolved_edge.attributes,
@@ -844,7 +854,7 @@ async def resolve_extracted_edge(
     )
     duplicate_edges: list[EntityEdge] = [related_edges[idx] for idx in duplicate_fact_ids]
 
-    return resolved_edge, invalidated_edges, duplicate_edges
+    return resolved_edge, invalidated_edges, duplicate_edges, dropped
 
 
 async def filter_existing_duplicate_of_edges(

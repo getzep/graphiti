@@ -733,7 +733,17 @@ async def extract_attributes_from_nodes(
     edges: list[EntityEdge] | None = None,
     skip_fact_appending: bool = False,
     include_type_descriptions: bool = False,
-) -> list[EntityNode]:
+) -> tuple[list[EntityNode], dict[str, set[str]]]:
+    """Extract and merge attributes for a set of nodes.
+
+    Returns
+    -------
+    tuple[list[EntityNode], dict[str, set[str]]]
+        The hydrated nodes and a mapping of ``node.uuid -> dropped field names``
+        for attributes removed by ``apply_capped_attributes`` during the overlay
+        merge (so callers can distinguish "LLM never proposed it" from
+        "proposed but dropped for exceeding the length cap").
+    """
     llm_client = clients.llm_client
     embedder = clients.embedder
 
@@ -741,7 +751,7 @@ async def extract_attributes_from_nodes(
     edges_by_node = _build_edges_by_node(edges)
 
     # Extract attributes in parallel (per-entity calls)
-    attribute_results: list[dict[str, Any]] = await semaphore_gather(
+    attribute_results: list[tuple[dict[str, Any], set[str]]] = await semaphore_gather(
         *[
             _extract_entity_attributes(
                 llm_client,
@@ -759,9 +769,12 @@ async def extract_attributes_from_nodes(
     )
 
     # _extract_entity_attributes returns the already-merged attribute dict
-    # (overlay of prior + cap-kept fields), so direct assignment is the merge.
-    for node, attributes in zip(nodes, attribute_results, strict=True):
+    # (overlay of prior + cap-kept fields) plus the set of cap-dropped fields.
+    dropped_by_uuid: dict[str, set[str]] = {}
+    for node, (attributes, dropped) in zip(nodes, attribute_results, strict=True):
         node.attributes = attributes
+        if dropped:
+            dropped_by_uuid[node.uuid] = dropped
 
     # Extract summaries in batch
     await _extract_entity_summaries_batch(
@@ -777,7 +790,7 @@ async def extract_attributes_from_nodes(
 
     await create_entity_node_embeddings(embedder, nodes)
 
-    return nodes
+    return nodes, dropped_by_uuid
 
 
 async def _extract_entity_attributes(
@@ -786,9 +799,9 @@ async def _extract_entity_attributes(
     episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_type: type[BaseModel] | None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], set[str]]:
     if entity_type is None or len(entity_type.model_fields) == 0:
-        return {}
+        return {}, set()
 
     attributes_context = _build_episode_context(
         # should not include summary
@@ -812,7 +825,7 @@ async def _extract_entity_attributes(
 
     # Overlay merge: cap-dropped or LLM-omitted fields keep prior values.
     # See attribute_utils for the merge_mode contract; the edge path uses 'replace'.
-    merged, _ = apply_capped_attributes(
+    merged, dropped = apply_capped_attributes(
         llm_response,
         entity_type,
         node.attributes,
@@ -827,7 +840,7 @@ async def _extract_entity_attributes(
     # values that the merge above just preserved.
     entity_type(**merged)
 
-    return merged
+    return merged, dropped
 
 
 async def _extract_entity_summaries_batch(

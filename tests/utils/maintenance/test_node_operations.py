@@ -856,7 +856,7 @@ async def test_extract_attributes_from_nodes_with_callback():
         call_tracker.append(n.name)
         return 'User' not in n.labels
 
-    results = await extract_attributes_from_nodes(
+    results, dropped_by_uuid = await extract_attributes_from_nodes(
         clients,
         [node1, node2],
         episode=episode,
@@ -876,6 +876,53 @@ async def test_extract_attributes_from_nodes_with_callback():
 
     assert node1_result.summary == 'Old1'
     assert node2_result.summary == 'Old2'
+
+    # No attribute extraction was requested (entity_types=None), so nothing dropped
+    assert dropped_by_uuid == {}
+
+
+@pytest.mark.asyncio
+async def test_extract_attributes_from_nodes_surfaces_dropped_fields():
+    """Attribute fields dropped by the length cap must be surfaced per node uuid."""
+    from pydantic import BaseModel, Field
+
+    class _User(BaseModel):
+        name: str | None = None
+        bio: str | None = Field(default=None, max_length=2000, description='Long bio')
+
+    clients, llm_generate = _make_clients()
+
+    # First call (attribute extraction) returns an over-cap bio; the second
+    # call (batch summary) returns a condensed summary. The bio field's
+    # explicit max_length=2000 is the effective cap.
+    llm_generate.side_effect = [
+        {'bio': 'x' * 5000, 'name': 'Ada'},
+        {'summaries': []},
+    ]
+    clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    node = EntityNode(
+        name='Ada',
+        group_id='group',
+        labels=['Entity', 'User'],
+        attributes={'name': 'Ada', 'bio': 'Original bio'},
+    )
+    episode = _make_episode()
+
+    results, dropped_by_uuid = await extract_attributes_from_nodes(
+        clients,
+        [node],
+        episode=episode,
+        previous_episodes=[],
+        entity_types={'User': _User},
+    )
+
+    assert len(results) == 1
+    # Overlay merge keeps the prior value for the cap-dropped field.
+    assert results[0].attributes['bio'] == 'Original bio'
+    assert results[0].attributes['name'] == 'Ada'
+    assert dropped_by_uuid == {node.uuid: {'bio'}}
 
 
 @pytest.mark.asyncio

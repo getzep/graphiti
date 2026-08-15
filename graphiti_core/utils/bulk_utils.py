@@ -541,7 +541,7 @@ async def dedupe_edges_bulk(
             dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
 
     bulk_edge_resolutions: list[
-        tuple[EntityEdge, EntityEdge, list[EntityEdge]]
+        tuple[EntityEdge, EntityEdge, list[EntityEdge], set[str]]
     ] = await semaphore_gather(
         *[
             resolve_extracted_edge(
@@ -558,7 +558,7 @@ async def dedupe_edges_bulk(
 
     # For now we won't track edge invalidation
     duplicate_pairs: list[tuple[str, str]] = []
-    for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
+    for i, (_, _, duplicates, _) in enumerate(bulk_edge_resolutions):
         episode, edge, candidates = dedupe_tuples[i]
         for duplicate in duplicates:
             duplicate_pairs.append((edge.uuid, duplicate.uuid))

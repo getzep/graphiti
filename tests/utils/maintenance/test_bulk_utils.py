@@ -273,9 +273,9 @@ async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
                 and related.fact.strip().lower() == extracted_edge.fact.strip().lower()
             ):
                 # Return the related edge and mark extracted_edge as duplicate
-                return related, [], [related]
+                return related, [], [related], set()
         # Otherwise return the extracted edge as-is
-        return extracted_edge, [], []
+        return extracted_edge, [], [], set()
 
     monkeypatch.setattr(bulk_utils, 'resolve_extracted_edge', mock_resolve_extracted_edge)
 
