@@ -879,6 +879,37 @@ async def test_extract_attributes_from_nodes_with_callback():
 
 
 @pytest.mark.asyncio
+async def test_extract_attributes_from_nodes_preserves_attributes_without_entity_type():
+    """Regression test for #1763: attributes must not be wiped when no entity type applies."""
+    clients, _ = _make_clients()
+    clients.llm_client.generate_response = AsyncMock(return_value={'summaries': []})
+    clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    node = EntityNode(
+        name='Alice',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        summary='Old summary',
+        attributes={'age': 30, 'city': 'New York'},
+    )
+
+    episode = _make_episode()
+
+    # entity_types=None means no entity type applies to any node.
+    results = await extract_attributes_from_nodes(
+        clients,
+        [node],
+        episode=episode,
+        previous_episodes=[],
+        entity_types=None,
+    )
+
+    result = results[0]
+    assert result.attributes == {'age': 30, 'city': 'New York'}
+
+
+@pytest.mark.asyncio
 async def test_batch_summaries_calls_llm_for_long_summary():
     """Test that LLM is called when summary exceeds character limit."""
     from graphiti_core.edges import EntityEdge

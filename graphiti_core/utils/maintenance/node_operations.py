@@ -788,7 +788,7 @@ async def _extract_entity_attributes(
     entity_type: type[BaseModel] | None,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
-        return {}
+        return dict(node.attributes or {})
 
     attributes_context = _build_episode_context(
         # should not include summary
