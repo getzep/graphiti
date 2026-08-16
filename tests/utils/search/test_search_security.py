@@ -5,7 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+from graphiti_core.driver.falkordb.operations.search_ops import (
+    FalkorSearchOperations,
+    _build_falkor_fulltext_query,
+)
 from graphiti_core.driver.neo4j.operations.search_ops import (
     Neo4jSearchOperations,
     _build_neo4j_fulltext_query,
@@ -156,5 +159,42 @@ async def test_neo4j_similarity_search_filters_invalid_embeddings_before_cosine(
         await method(executor, [0.1, 0.2], SearchFilters(), group_ids=['tenant'])
 
     cosine_index = executor.cypher.index('vector.similarity.cosine')
+    guard_index = executor.cypher.index(expected_guard)
+    assert guard_index < cosine_index
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('method_name', 'expected_guard'),
+    [
+        (
+            'node_similarity_search',
+            'n.name_embedding IS NOT NULL AND size(n.name_embedding) = size($search_vector)',
+        ),
+        (
+            'edge_similarity_search',
+            'e.fact_embedding IS NOT NULL AND size(e.fact_embedding) = size($search_vector)',
+        ),
+        (
+            'community_similarity_search',
+            'c.name_embedding IS NOT NULL AND size(c.name_embedding) = size($search_vector)',
+        ),
+    ],
+)
+async def test_falkordb_similarity_search_filters_invalid_embeddings_before_cosine(
+    method_name, expected_guard
+):
+    executor = RecordingExecutor()
+    operations = FalkorSearchOperations()
+    method = getattr(operations, method_name)
+
+    if method_name == 'edge_similarity_search':
+        await method(executor, [0.1, 0.2], None, None, SearchFilters(), group_ids=['tenant'])
+    elif method_name == 'community_similarity_search':
+        await method(executor, [0.1, 0.2], group_ids=['tenant'])
+    else:
+        await method(executor, [0.1, 0.2], SearchFilters(), group_ids=['tenant'])
+
+    cosine_index = executor.cypher.index('vec.cosineDistance')
     guard_index = executor.cypher.index(expected_guard)
     assert guard_index < cosine_index
