@@ -129,7 +129,9 @@ def _create_graphiti_client(settings: Settings) -> ZepGraphiti:
         ollama_key = settings.openai_api_key or 'ollama'
         llm_model = settings.model_name or _OLLAMA_DEFAULT_LLM
         embed_model = settings.embedding_model_name or _OLLAMA_DEFAULT_EMBED
-        embed_dim = settings.embedding_dim if settings.embedding_dim != 2048 else _OLLAMA_DEFAULT_EMBED_DIM
+        embed_dim = (
+            settings.embedding_dim if settings.embedding_dim != 2048 else _OLLAMA_DEFAULT_EMBED_DIM
+        )
 
         logger.info(
             'Ollama provider: llm=%s embed=%s dim=%d url=%s',
