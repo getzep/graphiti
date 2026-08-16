@@ -237,11 +237,11 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_llm_client):
-    """Test that resolve_extracted_edge correctly uses integer indices for LLM duplicate detection."""
-    # Mock LLM to return duplicate_facts with integer indices
+async def test_resolve_extracted_edge_uses_prefixed_ids_for_duplicates(mock_llm_client):
+    """Test that resolve_extracted_edge correctly uses E-prefixed ids for LLM duplicate detection."""
+    # Mock LLM to return duplicate_facts with E-prefixed ids
     mock_llm_client.generate_response.return_value = {
-        'duplicate_facts': [0, 1],  # LLM identifies first two related edges as duplicates
+        'duplicate_facts': ['E0', 'E1'],  # LLM identifies first two related edges as duplicates
         'contradicted_facts': [],
     }
 
@@ -267,7 +267,7 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
         valid_at=datetime.now(timezone.utc),
     )
 
-    # Create multiple related edges - LLM should receive these with integer indices
+    # Create multiple related edges - LLM should receive these with E-prefixed ids
     related_edge_0 = EntityEdge(
         source_node_uuid='source_uuid',
         target_node_uuid='target_uuid',
@@ -318,8 +318,8 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
     # Verify LLM was called
     mock_llm_client.generate_response.assert_called_once()
 
-    # Verify the system correctly identified duplicates using integer indices
-    # The LLM returned [0, 1], so related_edge_0 and related_edge_1 should be marked as duplicates
+    # Verify the system correctly identified duplicates using E-prefixed ids
+    # The LLM returned ['E0', 'E1'], so related_edge_0 and related_edge_1 should be marked as duplicates
     assert len(duplicates) == 2
     assert related_edge_0 in duplicates
     assert related_edge_1 in duplicates
@@ -329,6 +329,149 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
     # Check UUID since the episode list gets modified
     assert resolved_edge.uuid == related_edge_0.uuid
     assert episode.uuid in resolved_edge.episodes
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_drops_malformed_ids(mock_llm_client, caplog):
+    """Malformed/out-of-range ids (X, E, E999, I-1) are dropped with a warning, never crash."""
+    mock_llm_client.generate_response.return_value = {
+        'duplicate_facts': ['X', 'E', 'E999', 'I-1'],
+        'contradicted_facts': ['X', 'E', 'E999', 'I-1'],
+    }
+
+    extracted_edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='test_edge',
+        group_id='group_1',
+        fact='User likes running',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=datetime.now(timezone.utc),
+        invalid_at=None,
+    )
+
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Episode content',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    related_edges = [
+        EntityEdge(
+            source_node_uuid='source_uuid',
+            target_node_uuid='target_uuid',
+            name='test_edge',
+            group_id='group_1',
+            fact='User likes swimming',
+            episodes=[],
+            created_at=datetime.now(timezone.utc) - timedelta(days=1),
+            valid_at=datetime.now(timezone.utc) - timedelta(days=1),
+            invalid_at=None,
+        )
+    ]
+    existing_edges = [
+        EntityEdge(
+            source_node_uuid='source_uuid',
+            target_node_uuid='target_uuid',
+            name='test_edge',
+            group_id='group_1',
+            fact='User stopped running',
+            episodes=[],
+            created_at=datetime.now(timezone.utc) - timedelta(days=2),
+            valid_at=datetime.now(timezone.utc) - timedelta(days=2),
+            invalid_at=None,
+        )
+    ]
+
+    resolved_edge, invalidated, duplicates = await resolve_extracted_edge(
+        mock_llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+    )
+
+    # Every id is malformed or out of range, so nothing may be resolved to an edge
+    assert duplicates == []
+    assert invalidated == []
+    assert resolved_edge is extracted_edge
+
+    assert 'malformed id' in caplog.text
+    assert 'out-of-range id' in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_maps_i_ids_to_invalidation_candidates(mock_llm_client):
+    """I-prefixed ids resolve to existing (invalidation) edges, never to related edges.
+
+    Regression test for the offset arithmetic bug: with 3 related and 3 existing
+    edges, an 'I2' id must map to existing_edges[2] and must not touch related_edges.
+    """
+    now = datetime.now(timezone.utc)
+    mock_llm_client.generate_response.return_value = {
+        'duplicate_facts': [],
+        'contradicted_facts': ['I2'],
+    }
+
+    extracted_edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='test_edge',
+        group_id='group_1',
+        fact='User now enjoys rock climbing',
+        episodes=[],
+        created_at=now,
+        valid_at=now,
+        invalid_at=None,
+    )
+
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Episode content',
+        valid_at=now,
+    )
+
+    def make_edge(fact: str, age_days: int) -> EntityEdge:
+        return EntityEdge(
+            source_node_uuid='source_uuid',
+            target_node_uuid='target_uuid',
+            name='test_edge',
+            group_id='group_1',
+            fact=fact,
+            episodes=[],
+            created_at=now - timedelta(days=age_days),
+            valid_at=now - timedelta(days=age_days),
+            invalid_at=None,
+        )
+
+    related_edges = [make_edge(f'Related fact {i}', i + 1) for i in range(3)]
+    existing_edges = [make_edge(f'Existing fact {i}', 10 + i) for i in range(3)]
+
+    resolved_edge, invalidated, duplicates = await resolve_extracted_edge(
+        mock_llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+    )
+
+    # 'I2' must map to existing_edges[2], invalidating it (its valid_at predates the new fact)
+    assert invalidated == [existing_edges[2]]
+    # None of the related edges may be invalidated, and no duplicates were found
+    assert duplicates == []
+    for related in related_edges:
+        assert related not in invalidated
 
 
 @pytest.mark.asyncio
