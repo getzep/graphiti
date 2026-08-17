@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    GRAPHITI_TELEMETRY_ENABLED=false
+
+WORKDIR /workspace
+
+# Resolve both local projects together so MCP uses this checkout's Graphiti Core.
+COPY pyproject.toml README.md LICENSE py.typed ./
+COPY graphiti_core ./graphiti_core
+COPY mcp_server ./mcp_server
+RUN python -m pip install --no-cache-dir . ./mcp_server
+
+RUN useradd --create-home --uid 10001 graphiti
+
+USER graphiti
+WORKDIR /workspace/mcp_server
+
+EXPOSE 8000
+CMD ["python", "main.py", "--config", "config/config-ark-neo4j.yaml"]

@@ -152,12 +152,12 @@ class LLMConfig(BaseModel):
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )
     max_tokens: int = Field(default=4096, description='Max tokens')
-    structured_output_mode: Literal['json_schema', 'json_object'] = Field(
+    structured_output_mode: Literal['json_schema', 'json_object', 'prompt_only'] = Field(
         default='json_schema',
         description=(
             'Structured output mode for OpenAIGenericClient: json_schema requests native '
-            'schema enforcement; json_object injects the schema into the prompt for '
-            'OpenAI-compatible providers that do not reliably honor json_schema.'
+            'schema enforcement; json_object injects the schema into the prompt; prompt_only '
+            'also omits response_format for providers that do not accept that parameter.'
         ),
     )
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)
@@ -175,9 +175,12 @@ class EmbedderProvidersConfig(BaseModel):
 class EmbedderConfig(BaseModel):
     """Embedder configuration."""
 
-    provider: str = Field(default='openai', description='Embedder provider')
+    provider: str = Field(
+        default='openai',
+        description='Embedder provider (local_hash, openai, azure_openai, gemini, or voyage)',
+    )
     model: str = Field(default='text-embedding-3-small', description='Model name')
-    dimensions: int = Field(default=1536, description='Embedding dimensions')
+    dimensions: int = Field(default=1536, ge=32, description='Embedding dimensions')
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
 
 

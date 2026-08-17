@@ -9,17 +9,20 @@ import pytest
 # Add the src directory to the path (mirrors the other factory tests)
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
+from graphiti_core.embedder import LocalHashEmbedder
 from graphiti_core.llm_client import OpenAIClient
 from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
 from config.schema import (
     AzureOpenAIProviderConfig,
+    EmbedderConfig,
     LLMConfig,
     LLMProvidersConfig,
     OpenAIProviderConfig,
 )
 from services.factories import (
+    EmbedderFactory,
     LLMClientFactory,
     is_non_openai_provider,
     reasoning_effort_for_model,
@@ -50,6 +53,8 @@ class TestIsNonOpenAIProvider:
             'http://localhost:1234/v1',  # LM Studio
             'http://localhost:8000/v1',  # vLLM
             'https://my-proxy.internal/v1',
+            'https://api.openai.com.evil.example/v1',
+            'not-a-valid-absolute-url',
         ],
     )
     def test_compatible_providers_are_non_openai(self, base_url):
@@ -92,6 +97,40 @@ class TestLLMClientFactoryRouting:
 
         assert isinstance(client, OpenAIGenericClient)
         assert client.structured_output_mode == 'json_object'
+
+    def test_generic_client_supports_prompt_only_mode(self):
+        config = self._config('https://ark.example.test/api/v3')
+        config.model = 'ep-placeholder'
+        config.structured_output_mode = 'prompt_only'
+
+        client = LLMClientFactory.create(config)
+
+        assert isinstance(client, OpenAIGenericClient)
+        assert client.model == 'ep-placeholder'
+        assert client.structured_output_mode == 'prompt_only'
+
+    def test_ark_endpoint_model_rejects_official_openai_url(self):
+        config = self._config('https://api.openai.com/v1')
+        config.model = 'ep-placeholder'
+
+        with pytest.raises(ValueError, match='Ark-compatible API URL'):
+            LLMClientFactory.create(config)
+
+    def test_blank_model_fails_before_client_default_can_be_used(self):
+        config = self._config('https://ark.example.test/api/v3')
+        config.model = '   '
+
+        with pytest.raises(ValueError, match='LLM model is not configured'):
+            LLMClientFactory.create(config)
+
+
+def test_local_hash_embedder_factory_needs_no_api_key():
+    client = EmbedderFactory.create(
+        EmbedderConfig(provider='local_hash', model='local-feature-hash', dimensions=64)
+    )
+
+    assert isinstance(client, LocalHashEmbedder)
+    assert client.config.embedding_dim == 64
 
 
 class TestLLMClientReasoningEffort:

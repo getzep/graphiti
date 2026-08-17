@@ -8,11 +8,13 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "cryptography>=44.0.0",
     "fastapi>=0.115.0",
-    "graphiti-core>=0.28.2",
+    "graphiti-core>=0.29.3",
     "pydantic-settings>=2.4.0",
     "uvicorn>=0.44.0",
     "httpx>=0.28.1",
+    "pypdf>=6.0.0,<7.0.0",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +35,9 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+graphiti-core = { path = "..", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["graph_service"]

@@ -203,20 +203,10 @@ class GraphitiService:
         """Initialize the Graphiti client with factory-created components."""
         try:
             # Create clients using factories
-            llm_client = None
-            embedder_client = None
-
-            # Create LLM client based on configured provider
-            try:
-                llm_client = LLMClientFactory.create(self.config.llm)
-            except Exception as e:
-                logger.warning(f'Failed to create LLM client: {e}')
-
-            # Create embedder client based on configured provider
-            try:
-                embedder_client = EmbedderFactory.create(self.config.embedder)
-            except Exception as e:
-                logger.warning(f'Failed to create embedder client: {e}')
+            # These components are required. Failing here avoids Graphiti silently
+            # constructing default OpenAI clients with the wrong endpoint/key.
+            llm_client = LLMClientFactory.create(self.config.llm)
+            embedder_client = EmbedderFactory.create(self.config.embedder)
 
             # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
             # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
@@ -255,11 +245,16 @@ class GraphitiService:
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
-                    # For Neo4j (default), use the original approach
+                    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
+                    neo4j_driver = Neo4jDriver(
+                        db_config['uri'],
+                        db_config['user'],
+                        db_config['password'],
+                        database=db_config['database'],
+                    )
                     self.client = Graphiti(
-                        uri=db_config['uri'],
-                        user=db_config['user'],
-                        password=db_config['password'],
+                        graph_driver=neo4j_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
                         cross_encoder=cross_encoder_client,
@@ -1137,7 +1132,7 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--embedder-provider',
-        choices=['openai', 'azure_openai', 'gemini', 'voyage'],
+        choices=['local_hash', 'openai', 'azure_openai', 'gemini', 'voyage'],
         help='Embedder provider to use',
     )
     parser.add_argument(

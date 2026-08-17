@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    GRAPHITI_TELEMETRY_ENABLED=false
+
+WORKDIR /workspace
+
+# Install the service and Graphiti Core from this checkout in one resolution.
+# This intentionally does not consume the service lockfile's PyPI graphiti-core.
+COPY pyproject.toml README.md LICENSE py.typed ./
+COPY graphiti_core ./graphiti_core
+COPY server ./server
+RUN python -m pip install --no-cache-dir . ./server
+
+RUN useradd --create-home --uid 10001 graphiti \
+    && mkdir -p /app/data \
+    && chown -R graphiti:graphiti /app/data
+
+USER graphiti
+WORKDIR /workspace/server
+
+EXPOSE 8000
+CMD ["uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]

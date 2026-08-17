@@ -1,7 +1,14 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
+from urllib.parse import urlparse
+
 from graphiti_core.cross_encoder.client import CrossEncoderClient
-from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.embedder import (
+    EmbedderClient,
+    LocalHashEmbedder,
+    LocalHashEmbedderConfig,
+    OpenAIEmbedder,
+)
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
@@ -81,7 +88,7 @@ def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     Raises:
         ValueError: If API key is None or empty
     """
-    if not api_key:
+    if not api_key or not api_key.strip():
         raise ValueError(
             f'{provider_name} API key is not configured. Please set the appropriate environment variable.'
         )
@@ -101,11 +108,16 @@ def is_non_openai_provider(base_url: str | None) -> bool:
     if not base_url:
         return False
 
-    # OpenAI's official endpoints
-    openai_domains = ['api.openai.com', 'openai.azure.com']
+    parsed = urlparse(base_url)
+    hostname = (parsed.hostname or '').lower()
+    if not hostname:
+        return True
 
-    # Check if base_url contains any official OpenAI domain
-    return not any(domain in base_url for domain in openai_domains)
+    return not (
+        hostname == 'api.openai.com'
+        or hostname == 'openai.azure.com'
+        or hostname.endswith('.openai.azure.com')
+    )
 
 
 def reasoning_effort_for_model(model: str) -> str | None:
@@ -134,10 +146,22 @@ class LLMClientFactory:
 
         provider = config.provider.lower()
 
+        if not config.model or not config.model.strip():
+            raise ValueError(
+                'LLM model is not configured. Set a model name or provider endpoint ID.'
+            )
+
         match provider:
             case 'openai':
                 if not config.providers.openai:
                     raise ValueError('OpenAI provider configuration not found')
+
+                if config.model.startswith(('ep-', 'doubao-')) and not is_non_openai_provider(
+                    config.providers.openai.api_url
+                ):
+                    raise ValueError(
+                        'An Ark model or endpoint requires a non-OpenAI Ark-compatible API URL.'
+                    )
 
                 api_key = config.providers.openai.api_key
                 _validate_api_key('OpenAI', api_key, logger)
@@ -311,6 +335,10 @@ class EmbedderFactory:
         provider = config.provider.lower()
 
         match provider:
+            case 'local_hash':
+                logger.info('Using dependency-free LocalHashEmbedder')
+                return LocalHashEmbedder(LocalHashEmbedderConfig(embedding_dim=config.dimensions))
+
             case 'openai':
                 if not config.providers.openai:
                     raise ValueError('OpenAI provider configuration not found')
@@ -415,7 +443,7 @@ class CrossEncoderFactory:
 
     Graphiti defaults the cross_encoder to OpenAIRerankerClient, which needs an OpenAI API key.
     To keep the server usable on non-OpenAI setups, pick a reranker from the LLM provider, then
-    the embedder provider, and fall back to the local BGE reranker.
+    the embedder provider, and fall back to the dependency-free lexical reranker.
     """
 
     @staticmethod
@@ -431,25 +459,10 @@ class CrossEncoderFactory:
             if reranker is not None:
                 return reranker
 
-        # No provider reranker available (e.g. Anthropic LLM + Voyage embedder), so use the
-        # local BGE cross-encoder, which needs no API key.
-        logger.warning(
-            'No provider reranker available, using local BGERerankerClient '
-            '(downloads BAAI/bge-reranker-v2-m3, ~2.3 GB, on first run)'
-        )
-        try:
-            from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
-        except ImportError as e:
-            raise ValueError(
-                'No provider reranker is available for this configuration, and the local '
-                'BGE fallback requires the optional sentence-transformers dependency. '
-                "Install the MCP server's 'providers' extra (uv sync --extra providers), "
-                "install graphiti-core's 'sentence-transformers' extra "
-                "(pip install 'graphiti-core[sentence-transformers]'), or configure the "
-                'LLM or embedder provider as OpenAI or Gemini with a valid API key.'
-            ) from e
+        from graphiti_core.cross_encoder import LexicalRerankerClient
 
-        return BGERerankerClient()
+        logger.info('No native reranker available; using dependency-free lexical reranker')
+        return LexicalRerankerClient()
 
     @staticmethod
     def _reranker_for_provider(
@@ -462,6 +475,11 @@ class CrossEncoderFactory:
             case 'openai':
                 if not config.providers.openai:
                     return None
+                if is_non_openai_provider(config.providers.openai.api_url):
+                    from graphiti_core.cross_encoder import LexicalRerankerClient
+
+                    logger.info(f'Using lexical reranker for OpenAI-compatible {source} provider')
+                    return LexicalRerankerClient()
                 from graphiti_core.cross_encoder.openai_reranker_client import (
                     OpenAIRerankerClient,
                 )
@@ -471,8 +489,16 @@ class CrossEncoderFactory:
                     config=GraphitiLLMConfig(
                         api_key=config.providers.openai.api_key,
                         base_url=config.providers.openai.api_url,
+                        # An LLM config carries a generation model. An embedder config does not;
+                        # in that case retain OpenAIRerankerClient's inexpensive default model.
+                        model=config.model if source == 'LLM' else None,
                     )
                 )
+
+            case 'local_hash':
+                from graphiti_core.cross_encoder import LexicalRerankerClient
+
+                return LexicalRerankerClient()
 
             case 'azure_openai':
                 azure_config = config.providers.azure_openai
@@ -540,13 +566,19 @@ class DatabaseDriverFactory:
                 uri = os.environ.get('NEO4J_URI', neo4j_config.uri)
                 username = os.environ.get('NEO4J_USER', neo4j_config.username)
                 password = os.environ.get('NEO4J_PASSWORD', neo4j_config.password)
+                database = os.environ.get('NEO4J_DATABASE', neo4j_config.database)
+
+                if not uri or not username or not password or not database:
+                    raise ValueError(
+                        'Neo4j configuration requires NEO4J_URI, NEO4J_USER, '
+                        'NEO4J_PASSWORD, and NEO4J_DATABASE.'
+                    )
 
                 return {
                     'uri': uri,
                     'user': username,
                     'password': password,
-                    # Note: database and use_parallel_runtime would need to be passed
-                    # to the driver after initialization if supported
+                    'database': database,
                 }
 
             case 'falkordb':

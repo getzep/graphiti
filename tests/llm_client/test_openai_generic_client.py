@@ -95,6 +95,35 @@ async def test_json_object_mode_uses_json_object_and_injects_schema():
 
 
 @pytest.mark.asyncio
+async def test_prompt_only_mode_omits_response_format_and_injects_schema():
+    client, completions = _make_client(structured_output_mode='prompt_only')
+
+    await client.generate_response(_messages(), response_model=ResponseModel)
+
+    call = completions.create_calls[0]
+    assert 'response_format' not in call
+    sent_user_content = call['messages'][-1]['content']
+    assert 'Respond with a JSON object in the following format' in sent_user_content
+    assert json.dumps(ResponseModel.model_json_schema()) in sent_user_content
+
+
+@pytest.mark.asyncio
+async def test_prompt_only_mode_without_response_model_omits_format_and_schema():
+    client, completions = _make_client(
+        content='{"any": "thing"}', structured_output_mode='prompt_only'
+    )
+
+    result = await client.generate_response(_messages())
+
+    call = completions.create_calls[0]
+    assert 'response_format' not in call
+    assert (
+        'Respond with a JSON object in the following format' not in call['messages'][-1]['content']
+    )
+    assert result == {'any': 'thing'}
+
+
+@pytest.mark.asyncio
 async def test_no_response_model_uses_json_object_without_injection():
     client, completions = _make_client(content='{"any": "thing"}')
 

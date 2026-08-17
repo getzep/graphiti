@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gpt-4.1-mini'
 
-StructuredOutputMode = Literal['json_schema', 'json_object']
+StructuredOutputMode = Literal['json_schema', 'json_object', 'prompt_only']
 
 
 class OpenAIGenericClient(LLMClient):
@@ -47,7 +47,8 @@ class OpenAIGenericClient(LLMClient):
     This client targets any OpenAI-compatible ``/chat/completions`` endpoint (OpenAI,
     vLLM, llama.cpp, Ollama, DeepSeek, Together, etc.). It defaults to native
     ``json_schema`` structured output (constrained decoding) and can fall back to
-    ``json_object`` for the minority of providers that do not support ``json_schema``.
+    ``json_object`` for providers that do not support ``json_schema`` or ``prompt_only``
+    for providers that reject the ``response_format`` parameter entirely.
 
     Attributes:
         client (AsyncOpenAI): The OpenAI client used to interact with the API.
@@ -74,11 +75,10 @@ class OpenAIGenericClient(LLMClient):
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
             max_tokens (int): The maximum number of tokens to generate. Defaults to 16384 (16K) for better compatibility with local models.
             structured_output_mode (StructuredOutputMode): Whether to request structured
-                output via native ``json_schema`` (the default, uses constrained decoding)
-                or to fall back to ``json_object``. Set to ``'json_object'`` for providers
-                that do not support the ``json_schema`` response format (e.g. DeepSeek); in
-                that mode the schema is injected into the prompt instead of being enforced
-                by the API.
+                output via native ``json_schema`` (the default, uses constrained decoding),
+                to fall back to ``json_object``, or to use ``prompt_only`` for compatible
+                providers that do not accept ``response_format`` at all. Both fallback modes
+                inject the schema into the prompt instead of relying on native enforcement.
 
         """
         # removed caching to simplify the `generate_response` override
@@ -99,14 +99,19 @@ class OpenAIGenericClient(LLMClient):
         else:
             self.client = client
 
-    def _build_response_format(self, response_model: type[BaseModel] | None) -> dict[str, Any]:
+    def _build_response_format(
+        self, response_model: type[BaseModel] | None
+    ) -> dict[str, Any] | None:
         """Build the ``response_format`` payload for the chat completion request.
 
         Uses native ``json_schema`` when a response model is provided and the client is in
-        ``json_schema`` mode; otherwise falls back to ``json_object``. In ``json_object``
-        mode the schema is not enforced by the API — ``generate_response`` injects it into
-        the prompt instead.
+        ``json_schema`` mode, falls back to ``json_object``, or returns ``None`` in
+        ``prompt_only`` mode so the request omits the parameter. In both fallback modes the
+        schema is injected into the prompt instead of being enforced by the API.
         """
+        if self.structured_output_mode == 'prompt_only':
+            return None
+
         if response_model is None or self.structured_output_mode == 'json_object':
             return {'type': 'json_object'}
 
@@ -152,13 +157,16 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model or DEFAULT_MODEL,
-                messages=openai_messages,
-                temperature=self.temperature,
-                max_tokens=max_tokens,
-                response_format=self._build_response_format(response_model),  # type: ignore[arg-type]
-            )
+            completion_args: dict[str, Any] = {
+                'model': self.model or DEFAULT_MODEL,
+                'messages': openai_messages,
+                'temperature': self.temperature,
+                'max_tokens': max_tokens,
+            }
+            response_format = self._build_response_format(response_model)
+            if response_format is not None:
+                completion_args['response_format'] = response_format
+            response = await self.client.chat.completions.create(**completion_args)
             result = response.choices[0].message.content or ''
             # An empty body (refusal, length finish_reason, or a flaky endpoint) would make
             # json.loads raise a cryptic JSONDecodeError; surface a clear error instead.
@@ -188,10 +196,13 @@ class OpenAIGenericClient(LLMClient):
         if max_tokens is None:
             max_tokens = self.max_tokens
 
-        # In json_object fallback mode the API does not enforce the schema, so embed it in
-        # the prompt to guide the model. In json_schema mode the schema is enforced via
+        # In fallback modes the API does not enforce the schema, so embed it in the prompt
+        # to guide the model. In json_schema mode the schema is requested via
         # response_format, so no prompt injection is needed.
-        if response_model is not None and self.structured_output_mode == 'json_object':
+        if response_model is not None and self.structured_output_mode in (
+            'json_object',
+            'prompt_only',
+        ):
             serialized_model = json.dumps(response_model.model_json_schema())
             messages[
                 -1

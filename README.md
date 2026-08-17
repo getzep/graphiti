@@ -37,6 +37,12 @@ Graphiti
 > [!TIP]
 > Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful
 > context graph-based memory with temporal awareness.
+>
+> 本仓库的 Ark + Neo4j + Studio + MCP 本地复现说明见
+> [中文快速开始与安全边界](docs/quickstart-zh.md)。
+> 启动 `docker-compose.studio.yml` 后打开 `http://localhost:8000`：本地文件可直接
+> 上传 PDF/DOCX/文本；飞书与 MeeGo 使用“连接账号”OAuth 授权并在页面选择目录
+> 或项目，普通用户不需要粘贴 API Key、token、folder token 或 project key。
 
 Graphiti is a framework for building and querying temporal context graphs for AI agents. Unlike static knowledge graphs,
 Graphiti's context graphs track how facts change over time, maintain provenance to source data, and support both

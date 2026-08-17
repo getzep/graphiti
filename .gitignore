@@ -164,5 +164,8 @@ cython_debug/
 # Cache files
 cache.db*
 
+# Graphiti Studio local sync state and uploaded source files
+server/data/
+
 # All DS_Store files
 .DS_Store
