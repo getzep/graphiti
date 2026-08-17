@@ -138,10 +138,16 @@ jobs:
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
           build-args: |
+            SOCKET_FIREWALL_ENABLED=true
+            SOCKET_SCAN_ID=${{ github.run_id }}-${{ github.run_attempt }}
             MCP_SERVER_VERSION=${{ steps.version.outputs.version }}
             GRAPHITI_CORE_VERSION=${{ steps.graphiti.outputs.graphiti_version }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
             VCS_REF=${{ steps.version.outputs.version }}
+          # Socket Firewall API key as a BuildKit secret (not a build-arg/ENV)
+          # so it is never baked into an image layer.
+          secrets: |
+            socket_api_key=${{ secrets.SOCKET_API_KEY }}
 
       - name: Create release summary
         run: |

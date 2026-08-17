@@ -1,0 +1,186 @@
+name: Socket Firewall Wrapper Check
+
+# Validates that the local composite action can install Socket Firewall
+# Enterprise wrapper mode and that supported package-manager commands are
+# routed through sfw in subsequent bash steps. Also verifies the conditional
+# Docker BuildKit-secret path (enforce when present, fallback when absent).
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/setup-socket-firewall/**"
+      - "**/Dockerfile"
+      - "**/Dockerfile.*"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/setup-socket-firewall/**"
+      - "**/Dockerfile"
+      - "**/Dockerfile.*"
+
+permissions:
+  contents: read
+
+jobs:
+  connectivity:
+    # Fork PRs do not receive SOCKET_API_KEY; skip rather than soft-skip so the
+    # smoke assertions (which require sfw routing) are not vacuously skipped.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Socket Firewall wrapper
+        uses: ./.github/actions/setup-socket-firewall
+        with:
+          socket-api-key: ${{ secrets.SOCKET_API_KEY }}
+
+      - name: Require Socket Firewall to be enabled
+        run: |
+          set -euo pipefail
+          if [ "${SOCKET_FIREWALL_ENABLED:-}" != "true" ]; then
+            echo "::error::SOCKET_API_KEY missing; cannot validate wrapper routing on a same-repo run."
+            exit 1
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
+        with:
+          version: "latest"
+
+      - name: Check uv is routed through sfw
+        run: |
+          set -euo pipefail
+          type uv
+          type uv | grep -F 'sfw uv'
+
+      - name: Prove a real install is brokered by sfw
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          # The BASH_ENV wrapper rewrites `uv pip` to `sfw uv pip`, so a
+          # successful install here proves sfw actually brokered the package
+          # download — not merely that the wrapper function is defined.
+          uv pip install --system --target "$work" \
+            --python-platform x86_64-manylinux_2_28 six==1.17.0
+          test -f "$work/six.py"
+
+  docker-guard:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - name: Verify conditional Socket Firewall Docker install paths
+        env:
+          SOCKET_API_KEY: ${{ secrets.SOCKET_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SOCKET_API_KEY:-}" ]; then
+            echo "::error::SOCKET_API_KEY missing; cannot validate Docker sfw paths on a same-repo run."
+            exit 1
+          fi
+
+          # Stable path so the cache-bust step below reuses this exact context.
+          work="$RUNNER_TEMP/sfw-guard"
+          mkdir -p "$work"
+          cat > "$work/Dockerfile" <<'EOF'
+          # syntax=docker/dockerfile:1.9
+          FROM python:3.12-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+              && rm -rf /var/lib/apt/lists/*
+          ARG TARGETARCH
+          RUN set -eux; \
+              case "${TARGETARCH:-amd64}" in \
+                amd64) SFW_ARCH=x86_64 ;; \
+                arm64) SFW_ARCH=arm64 ;; \
+                *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+              esac; \
+              curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
+                "https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-${SFW_ARCH}" \
+                -o /usr/local/bin/sfw; \
+              chmod +x /usr/local/bin/sfw
+          ADD https://astral.sh/uv/install.sh /uv-installer.sh
+          RUN sh /uv-installer.sh && rm /uv-installer.sh
+          ENV PATH="/root/.local/bin:$PATH"
+          ARG SOCKET_FIREWALL_ENABLED=false
+          ARG SOCKET_SCAN_ID=
+          # Mirrors Graphiti's conditional enforcement: sfw when secret present,
+          # direct install when absent (public OSS builds). SOCKET_SCAN_ID and
+          # UV_NO_CACHE mirror the release cache-bypass so sfw sees every fetch.
+          RUN --mount=type=cache,target=/root/.cache/uv \
+              --mount=type=secret,id=socket_api_key \
+              set -eu; \
+              export SFW_TELEMETRY_DISABLED=true; \
+              export SFW_CUSTOM_REGISTRIES="wrap:files.pythonhosted.org"; \
+              if [ "$SOCKET_FIREWALL_ENABLED" = "true" ]; then \
+                if [ ! -s /run/secrets/socket_api_key ]; then \
+                  echo "ERROR: SOCKET_FIREWALL_ENABLED=true but socket_api_key is missing" >&2; \
+                  exit 1; \
+                fi; \
+                export SOCKET_API_KEY="$(cat /run/secrets/socket_api_key)"; \
+                export UV_NO_CACHE=1; \
+                echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID})"; \
+                sfw uv pip install --system six==1.17.0; \
+              else \
+                echo "socket_api_key absent; installing without Socket Firewall"; \
+                uv pip install --system six==1.17.0; \
+              fi; \
+              date +%s%N > /socket-scan-stamp
+          EOF
+
+          # --no-cache on both: a secret mount's cache key does not depend on
+          # whether the secret was supplied, so without it the second build
+          # could reuse the first's cached layer.
+          echo "== WITH the secret: build must succeed via sfw =="
+          DOCKER_BUILDKIT=1 docker build --no-cache \
+            --build-arg SOCKET_FIREWALL_ENABLED=true \
+            --secret id=socket_api_key,env=SOCKET_API_KEY \
+            -t sfw-guard-ok "$work"
+
+          echo "== WITHOUT the secret: public fallback must still succeed =="
+          DOCKER_BUILDKIT=1 docker build --no-cache \
+            -t sfw-guard-fallback "$work"
+
+          echo "Conditional Socket Firewall Docker paths verified in both directions"
+
+      - name: Verify a new scan id defeats the layer cache
+        env:
+          SOCKET_API_KEY: ${{ secrets.SOCKET_API_KEY }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/sfw-guard"
+
+          # Deliberately no --no-cache here: the point is to prove that changing
+          # SOCKET_SCAN_ID alone re-runs the install layer. If it did not, a
+          # release could reuse a layer built before a package was flagged.
+          build() {
+            DOCKER_BUILDKIT=1 docker build \
+              --build-arg SOCKET_FIREWALL_ENABLED=true \
+              --build-arg "SOCKET_SCAN_ID=$1" \
+              --secret id=socket_api_key,env=SOCKET_API_KEY \
+              -t "sfw-cachebust:$1" "$work"
+          }
+
+          # Compare a stamp written during the install layer rather than reading
+          # the build log: BuildKit echoes the instruction text even for CACHED
+          # steps, so grepping the log would pass whether or not it re-ran.
+          stamp() { docker run --rm "sfw-cachebust:$1" cat /socket-scan-stamp; }
+
+          build scan-a; first="$(stamp scan-a)"
+          build scan-a; repeat="$(stamp scan-a)"
+          build scan-b; changed="$(stamp scan-b)"
+
+          # Positive control: without it, a build that never caches would make
+          # the assertion below pass vacuously.
+          if [ "$first" != "$repeat" ]; then
+            echo "::error::install layer re-ran for an unchanged SOCKET_SCAN_ID; the cache-bust test proves nothing."
+            exit 1
+          fi
+
+          if [ "$first" = "$changed" ]; then
+            echo "::error::install layer was served from cache despite a new SOCKET_SCAN_ID; sfw would not have seen these downloads."
+            exit 1
+          fi
+          echo "Changing SOCKET_SCAN_ID re-runs the sfw-brokered install layer"
