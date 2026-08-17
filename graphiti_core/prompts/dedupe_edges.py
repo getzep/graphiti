@@ -23,11 +23,11 @@ from .models import Message, PromptFunction, PromptVersion
 
 class EdgeDuplicate(BaseModel):
     duplicate_facts: list[int] = Field(
-        ...,
+        default_factory=list,
         description='List of idx values of duplicate facts (only from EXISTING FACTS range). Empty list if none.',
     )
     contradicted_facts: list[int] = Field(
-        ...,
+        default_factory=list,
         description='List of idx values of contradicted facts (from full idx range). Empty list if none.',
     )
 
