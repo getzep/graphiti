@@ -744,6 +744,32 @@ def _meego_work_item_records(value: Any) -> list[dict[str, Any]]:
     return records
 
 
+def _meego_view_records(value: Any) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def visit(node: Any) -> None:
+        if isinstance(node, list):
+            for child in node:
+                visit(child)
+            return
+        if not isinstance(node, dict):
+            return
+        attribute = node.get('work_item_attribute')
+        if isinstance(attribute, dict):
+            work_item_id = attribute.get('work_item_id') or attribute.get('id')
+            if work_item_id not in (None, '') and str(work_item_id) not in seen:
+                seen.add(str(work_item_id))
+                records.append(node)
+                return
+        for child in node.values():
+            if isinstance(child, dict | list):
+                visit(child)
+
+    visit(value)
+    return records
+
+
 class MeegoOAuthConnector(SourceConnector):
     """Read MeeGo through its user OAuth MCP data plane."""
 
@@ -751,9 +777,18 @@ class MeegoOAuthConnector(SourceConnector):
         super().__init__()
         self.connection_id = connection_id
         self.connection_manager = connection_manager
+        self.view_url = str(config.get('view_url') or '').strip()
+        self.view_id = str(config.get('view_id') or '').strip()
+        self.view_work_item_type = str(config.get('work_item_type_key') or '').strip()
         self.project_key = str(config.get('project_key') or '').strip()
+        self.project_name = str(config.get('project_name') or self.project_key).strip()
+        self.view_name = str(config.get('view_name') or self.view_id).strip()
         if not self.project_key or '`' in self.project_key:
             raise ConnectorError('MeeGo 项目标识无效')
+        if self.view_url and (not self.view_id or not self.view_work_item_type):
+            raise ConnectorError('MeeGo 视图配置不完整')
+        if any('`' in value for value in (self.view_id, self.view_work_item_type)):
+            raise ConnectorError('MeeGo 视图标识无效')
         raw_types = config.get('work_item_type_keys') or []
         if not isinstance(raw_types, list):
             raise ConnectorError('work_item_type_keys 必须是列表')
@@ -850,61 +885,176 @@ class MeegoOAuthConnector(SourceConnector):
                 deduplicated[str(work_item_id)] = record
         return list(deduplicated.values())
 
+    async def _query_view(self) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        page = 1
+        while page <= 200:
+            arguments: dict[str, Any] = {
+                'project_key': self.project_key,
+                'view_id': self.view_id,
+                'page_num': page,
+            }
+            if self.view_url:
+                arguments['url'] = self.view_url
+            value = await self._call(
+                'view',
+                'detail',
+                'get_view_detail',
+                arguments,
+            )
+            page_records = _meego_view_records(value)
+            records.extend(page_records)
+            pagination = _find_first_key(value, 'pagination')
+            has_more = pagination.get('has_more') if isinstance(pagination, dict) else None
+            if has_more is False or (has_more is None and len(page_records) < 50):
+                break
+            if not page_records:
+                break
+            page += 1
+
+        deduplicated: dict[str, dict[str, Any]] = {}
+        for record in records:
+            attribute = record.get('work_item_attribute') or {}
+            work_item_id = attribute.get('work_item_id') or attribute.get('id')
+            if work_item_id not in (None, ''):
+                deduplicated[str(work_item_id)] = record
+        return list(deduplicated.values())
+
     async def fetch(
         self, *, watermark_ms: int | None = None, full_sync: bool = False
     ) -> list[SourceDocument]:
         del watermark_ms, full_sync
         documents: list[SourceDocument] = []
+        view_items: list[dict[str, Any]] = []
+        view_updated_at: list[datetime] = []
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        for type_key in await self._types():
-            for row in await self._query_type(type_key):
-                work_item_id = row.get('work_item_id') or row.get('id')
-                if work_item_id in (None, ''):
-                    continue
-                external_id = f'{self.project_key}:{type_key}:{work_item_id}'
-                self.seen_external_ids.add(external_id)
-                try:
-                    brief = await self._call(
-                        'workitem',
-                        'get',
-                        'get_workitem_brief',
+        rows: list[tuple[str, dict[str, Any]]] = []
+        if self.view_id:
+            for row in await self._query_view():
+                attribute = row.get('work_item_attribute') or {}
+                work_item_type = attribute.get('work_item_type') or {}
+                type_key = str(work_item_type.get('key') or self.view_work_item_type)
+                rows.append((type_key, row))
+        else:
+            for type_key in await self._types():
+                rows.extend((type_key, row) for row in await self._query_type(type_key))
+
+        for type_key, row in rows:
+            attribute = row.get('work_item_attribute') or {}
+            work_item_id = (
+                attribute.get('work_item_id')
+                or attribute.get('id')
+                or row.get('work_item_id')
+                or row.get('id')
+            )
+            if work_item_id in (None, ''):
+                continue
+            external_id = f'{self.project_key}:{type_key}:{work_item_id}'
+            try:
+                brief = await self._call(
+                    'workitem',
+                    'get',
+                    'get_workitem_brief',
+                    {
+                        'project_key': self.project_key,
+                        'work_item_id': str(work_item_id),
+                        'fields': ['_all'],
+                        'page_size': 200,
+                    },
+                )
+            except Exception as exc:
+                self.errors.append(f'MeeGo 工作项 {work_item_id}: {exc}')
+                self.inventory_complete = False
+                continue
+            brief_payload = brief if isinstance(brief, dict) else row
+            payload = (
+                {'work_item': brief_payload, 'view_context': row}
+                if self.view_id
+                else brief_payload
+            )
+            updated_value = (
+                attribute.get('update_time')
+                or attribute.get('updated_at')
+                or _find_first_key(brief_payload, 'updated_at')
+                or _find_first_key(brief_payload, 'update_time')
+                or attribute.get('create_time')
+                or _find_first_key(brief_payload, 'created_at')
+                or now_ms
+            )
+            updated_at = _as_datetime(updated_value, milliseconds=True)
+            title = str(
+                attribute.get('work_item_name')
+                or attribute.get('name')
+                or brief_payload.get('name')
+                or brief_payload.get('title')
+                or row.get('name')
+                or work_item_id
+            )
+            metadata = {
+                'project_key': self.project_key,
+                'work_item_type_key': type_key,
+                'work_item_id': work_item_id,
+            }
+            if self.view_id:
+                metadata.update({'view_id': self.view_id, 'view_url': self.view_url})
+                view_items.append(
+                    {
+                        'title': title,
+                        'work_item_type_key': type_key,
+                        'work_item_id': work_item_id,
+                        'work_item': brief_payload,
+                        'view_context': row,
+                    }
+                )
+                view_updated_at.append(updated_at)
+                continue
+            self.seen_external_ids.add(external_id)
+            documents.append(
+                SourceDocument(
+                    external_id=external_id,
+                    title=title,
+                    content=json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                    updated_at=updated_at,
+                    remote_version=str(updated_value),
+                    metadata=metadata,
+                )
+            )
+        if self.view_id and view_items:
+            # A selected view is the user's import boundary. Keep it as one versioned
+            # source document so Graphiti can understand relationships across all rows
+            # without paying one complete extraction pipeline per work item.
+            external_id = (
+                f'{self.project_key}:{self.view_work_item_type or "work_item"}:view:{self.view_id}'
+            )
+            updated_at = max(view_updated_at)
+            self.seen_external_ids.add(external_id)
+            documents.append(
+                SourceDocument(
+                    external_id=external_id,
+                    title=f'{self.project_name} · {self.view_name}',
+                    content=json.dumps(
                         {
                             'project_key': self.project_key,
-                            'work_item_id': str(work_item_id),
-                            'fields': ['_all'],
-                            'page_size': 200,
+                            'project_name': self.project_name,
+                            'view_id': self.view_id,
+                            'view_name': self.view_name,
+                            'work_items': view_items,
                         },
-                    )
-                except Exception as exc:
-                    self.errors.append(f'MeeGo 工作项 {work_item_id}: {exc}')
-                    self.inventory_complete = False
-                    continue
-                payload = brief if isinstance(brief, dict) else row
-                updated_value = (
-                    payload.get('updated_at')
-                    or row.get('updated_at')
-                    or payload.get('created_at')
-                    or row.get('created_at')
-                    or now_ms
+                        ensure_ascii=False,
+                        indent=2,
+                        sort_keys=True,
+                    ),
+                    updated_at=updated_at,
+                    remote_version=str(int(updated_at.timestamp() * 1000)),
+                    metadata={
+                        'project_key': self.project_key,
+                        'work_item_type_key': self.view_work_item_type,
+                        'view_id': self.view_id,
+                        'view_url': self.view_url,
+                        'item_count': len(view_items),
+                    },
                 )
-                updated_at = _as_datetime(updated_value, milliseconds=True)
-                title = str(
-                    payload.get('name') or payload.get('title') or row.get('name') or work_item_id
-                )
-                documents.append(
-                    SourceDocument(
-                        external_id=external_id,
-                        title=title,
-                        content=json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
-                        updated_at=updated_at,
-                        remote_version=str(updated_value),
-                        metadata={
-                            'project_key': self.project_key,
-                            'work_item_type_key': type_key,
-                            'work_item_id': work_item_id,
-                        },
-                    )
-                )
+            )
         return documents
 
 

@@ -1,3 +1,3 @@
-from . import connections, ingest, retrieve, sources
+from . import connections, ingest, retrieve, sources, wikis
 
-__all__ = ['connections', 'ingest', 'retrieve', 'sources']
+__all__ = ['connections', 'ingest', 'retrieve', 'sources', 'wikis']

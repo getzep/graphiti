@@ -254,3 +254,30 @@ def test_apply_replace_legitimate_update_replaces_prior_and_clears_omitted():
     # phones was omitted by the LLM → cleared per replace semantics.
     assert merged == {'industry': 'SaaS'}
     assert dropped == set()
+
+
+def test_apply_overlay_unwraps_prompt_only_attributes_object_and_drops_nulls():
+    prior = {'industry': 'Software'}
+    llm = {
+        'attributes': {
+            'phones': None,
+            'industry': 'AI Platform',
+            'unexpected': 'must not reach graph storage',
+        }
+    }
+
+    merged, dropped = apply_capped_attributes(llm, _Person, prior, merge_mode='overlay')
+
+    assert merged == {'industry': 'AI Platform'}
+    assert dropped == set()
+
+
+def test_apply_overlay_treats_null_as_omitted_and_keeps_prior_value():
+    prior = {'phones': '415-555-0142'}
+
+    merged, dropped = apply_capped_attributes(
+        {'phones': None}, _Person, prior, merge_mode='overlay'
+    )
+
+    assert merged == prior
+    assert dropped == set()

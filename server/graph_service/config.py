@@ -109,19 +109,17 @@ class Settings(BaseSettings):
     feishu_app_id: str | None = Field(None)
     feishu_app_secret: str | None = Field(None, repr=False)
     feishu_base_url: str = Field('https://open.feishu.cn/open-apis')
-    feishu_authorize_url: str = Field(
-        'https://accounts.feishu.cn/open-apis/authen/v1/authorize'
-    )
-    feishu_token_url: str = Field('https://accounts.feishu.cn/oauth/v3/token')
+    feishu_authorize_url: str = Field('https://accounts.feishu.cn/open-apis/authen/v1/authorize')
+    feishu_token_url: str = Field('https://open.feishu.cn/open-apis/authen/v2/oauth/token')
     feishu_oauth_scopes: str = Field(
-        'offline_access space:document:retrieve docx:document:readonly drive:file:readonly'
+        'offline_access space:document:retrieve docx:document:readonly'
     )
 
     meego_plugin_id: str | None = Field(None)
     meego_plugin_secret: str | None = Field(None, repr=False)
     meego_user_key: str | None = Field(None, repr=False)
-    meego_base_url: str = Field('https://project.feishu.cn/open_api')
-    meego_host: str = Field('project.feishu.cn')
+    meego_base_url: str = Field('https://meego.larkoffice.com/open_api')
+    meego_host: str = Field('meego.larkoffice.com')
     mcp_public_url: str = Field('http://localhost:8001/mcp/')
 
     model_config = SettingsConfigDict(

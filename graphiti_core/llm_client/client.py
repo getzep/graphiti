@@ -21,7 +21,7 @@ import typing
 from abc import ABC, abstractmethod
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
@@ -64,7 +64,10 @@ def is_server_or_retry_error(exception):
     # provider/endpoint hiccup (common on the OpenAI-compatible/local servers the generic
     # client targets), which a retry can recover from. A persistent empty response still
     # fails after the bounded retries with a clear error.
-    if isinstance(exception, RateLimitError | EmptyResponseError | json.decoder.JSONDecodeError):
+    if isinstance(
+        exception,
+        RateLimitError | EmptyResponseError | json.decoder.JSONDecodeError | ValidationError,
+    ):
         return True
 
     return (

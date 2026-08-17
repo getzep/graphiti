@@ -1,5 +1,7 @@
 const state = {
   status: null,
+  wikis: [],
+  currentWikiId: localStorage.getItem('vaka.currentWikiId'),
   sources: [],
   jobs: [],
   connections: [],
@@ -11,14 +13,21 @@ const state = {
       root: false, folder: null, documents: new Map(),
     },
     meego: {
-      connectionId: null, parentId: '', path: [], items: [], nextPage: null,
-      project: null, workItemTypes: new Map(),
+      connectionId: null,
+      projects: [], project: null, projectsLoaded: false, projectsLoading: false, projectsError: null,
+      views: [], view: null, viewQuery: '', viewsLoading: false, viewsError: null, viewRequest: 0,
     },
   },
   sourceFilter: 'all',
+  sourceQuery: '',
   uploadSource: null,
   uploadFiles: [],
-  graph: { nodes: [], edges: [], selected: null },
+  graph: { nodes: [], edges: [], selected: null, loadedFor: null },
+  wikiMode: 'directory',
+  entityTab: 'overview',
+  wikiTask: null,
+  wikiPlan: null,
+  createFlow: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -84,7 +93,47 @@ function connectionLabel(connection) {
 }
 
 function connectionsFor(provider) {
-  return state.connections.filter((connection) => connectionProvider(connection) === provider);
+  const expectedHost = provider === 'meego' ? state.status?.oauth?.hosts?.meego : null;
+  return state.connections.filter((connection) => (
+    connectionProvider(connection) === provider
+    && (!expectedHost || connection.tenant_id === expectedHost)
+  ));
+}
+
+function currentWiki() {
+  return state.wikis.find((wiki) => wiki.id === state.currentWikiId) || null;
+}
+
+function renderWikiControls() {
+  const select = $('#wiki-select');
+  if (!state.wikis.length) {
+    select.innerHTML = '<option value="">请先创建 Wiki</option>';
+    select.disabled = true;
+  } else {
+    select.disabled = false;
+    select.innerHTML = state.wikis.map((wiki) => (
+      `<option value="${escapeHTML(wiki.id)}">${escapeHTML(wiki.name)} · ${escapeHTML(wiki.candidate_status)}</option>`
+    )).join('');
+    select.value = state.currentWikiId;
+  }
+  const wiki = currentWiki();
+  // Adding data is also the primary first-run entry. Keep it actionable even
+  // before a Wiki exists and continue the upload flow after Wiki creation.
+  $('#add-source-button').disabled = false;
+  $('#task-link').disabled = !wiki;
+  $('#plan-link').disabled = !wiki;
+  $('#mcp-link').disabled = !wiki;
+  if (wiki) {
+    const labels = { empty: '尚未构建', building: '构建中', ready: '等待发布', failed: '构建失败' };
+    const statusLabel = wiki.published_group_id === wiki.candidate_group_id
+      ? '已完成'
+      : labels[wiki.candidate_status] || '已完成';
+    $('#task-link-label').textContent = `${statusLabel} · 查看任务`;
+    $('#plan-link-label').textContent = `策略 v${wiki.plan_version || 1}`;
+  } else {
+    $('#task-link-label').textContent = '尚未构建 · 查看任务';
+    $('#plan-link-label').textContent = '策略 v1';
+  }
 }
 
 function selectedConnection(provider) {
@@ -92,17 +141,14 @@ function selectedConnection(provider) {
   return connectionsFor(provider).find((connection) => connection.id === id) || null;
 }
 
-const pageLabels = {
-  overview: '知识运行总览', sources: '数据源管理', graph: '图谱浏览', search: '搜索与 Agent',
-};
+const pageLabels = { library: '文件库', wiki: '我的 Wiki' };
 
 function navigate(view) {
   $$('.view').forEach((element) => element.classList.toggle('active', element.id === `view-${view}`));
-  $$('.nav-item').forEach((element) => element.classList.toggle('active', element.dataset.nav === view));
-  $('#page-label').textContent = pageLabels[view];
+  $$('.center-tabs [data-nav]').forEach((element) => element.classList.toggle('active', element.dataset.nav === view));
   location.hash = view;
-  $('.sidebar').classList.remove('open');
-  if (view === 'graph') setTimeout(resizeGraphCanvas, 20);
+  $('.app-rail').classList.remove('open');
+  if (view === 'wiki' && state.wikiMode === 'graph') setTimeout(resizeGraphCanvas, 20);
 }
 
 document.addEventListener('click', (event) => {
@@ -113,38 +159,23 @@ document.addEventListener('click', (event) => {
   }
 });
 
-$('#mobile-menu').addEventListener('click', () => $('.sidebar').classList.toggle('open'));
+$('#mobile-menu').addEventListener('click', () => $('.app-rail').classList.toggle('open'));
 $$('[data-close-dialog]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
 
 function renderStatus() {
   if (!state.status) return;
-  const { database, llm, embedding, connectors, stats } = state.status;
-  $('#system-chips').innerHTML = `
-    <span class="chip"><i class="status-dot ${database.ready === false ? 'error' : ''}"></i>${escapeHTML(database.provider)} ${database.ready === false ? '未连接' : '已连接'}</span>
-    <span class="chip"><i class="status-dot ${llm.configured ? '' : 'error'}"></i>${llm.configured ? '模型已配置' : '模型待配置'}</span>
-  `;
-  const metrics = $$('#metric-strip article');
-  metrics[0].querySelector('strong').textContent = stats.sources;
-  metrics[1].querySelector('strong').textContent = stats.items;
-  metrics[2].querySelector('strong').textContent = stats.active_jobs;
-  metrics[3].querySelector('strong').textContent = embedding.provider === 'local_hash' ? 'LOCAL HASH' : 'REMOTE MODEL';
-  $('#readiness-list').innerHTML = [
-    ['Neo4j / Graph DB', database.ready === false ? '未连通' : database.configured ? 'READY' : 'MISSING', database.ready !== false && database.configured],
-    ['火山方舟 / LLM', llm.configured ? (llm.model || 'READY') : 'MISSING', llm.configured],
-    ['本地文件', 'READY', true],
-    ['飞书连接器', connectors.feishu ? 'READY' : 'ENV NEEDED', connectors.feishu],
-    ['MeeGo 连接器', connectors.meego ? 'READY' : 'ENV NEEDED', connectors.meego],
-  ].map(([label, value, ready]) => `<div class="readiness-row"><span>${escapeHTML(label)}</span><span class="${ready ? '' : 'offline'}">${escapeHTML(value)}</span></div>`).join('');
-  $('#mcp-url').textContent = state.status.mcp_url;
+  const { database, llm } = state.status;
+  const ready = database.ready !== false && llm.configured;
+  $('#system-chips').classList.toggle('error', !ready);
+  $('#system-chips').innerHTML = `<i></i><span>${ready ? '知识底座已就绪' : '知识底座配置不完整'}</span>`;
+  const wiki = currentWiki();
+  const mcpUrl = wiki?.mcp_url || '尚未创建 Wiki';
+  $('#mcp-url').textContent = mcpUrl;
   $('#mcp-config').textContent = JSON.stringify({
-    mcpServers: { graphiti: { url: state.status.mcp_url } },
+    mcpServers: { vakaWiki: { url: mcpUrl } },
   }, null, 2);
-  const suggestedGroup = state.status.suggested_group_id || 'neo4j';
-  ['#graph-group', '#search-group', '#source-form input[name="group_id"]'].forEach((selector) => {
-    const input = $(selector);
-    if (input && (!input.dataset.initialized || input.value === 'neo4j')) input.value = suggestedGroup;
-    if (input) input.dataset.initialized = 'true';
-  });
+  renderWikiControls();
+  renderWiki();
 }
 
 function sourceDetail(source) {
@@ -156,29 +187,41 @@ function sourceDetail(source) {
     if (source.config.folder_token) return `${account}已选择文件夹`;
     return `${account}${(source.config.document_tokens || []).length} 个文档`;
   }
-  return `${account}项目 ${source.config.project_key || '—'} · ${(source.config.work_item_type_keys || []).join(', ') || '自动发现工作项类型'}`;
+  if (source.config.view_id) {
+    const project = source.config.project_name || source.config.project_key;
+    const view = source.config.view_name || source.config.view_id;
+    return `${account}${project} · ${view} · 需求视图`;
+  }
+  return `${account}项目 ${source.config.project_key || '—'} · 自动同步全部可读工作项`;
 }
 
 function renderSources() {
-  const filtered = state.sources.filter((source) => state.sourceFilter === 'all' || source.kind === state.sourceFilter);
+  const query = state.sourceQuery.toLocaleLowerCase();
+  const filtered = state.sources.filter((source) => (
+    (state.sourceFilter === 'all' || source.kind === state.sourceFilter)
+    && (!query || source.name.toLocaleLowerCase().includes(query))
+  ));
   const grid = $('#source-grid');
   if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">还没有这个类型的数据源。点击“添加数据源”开始。</div>';
+    grid.innerHTML = currentWiki()
+      ? state.sources.length
+        ? '<div class="table-empty">没有符合当前搜索或筛选条件的数据。</div>'
+        : '<div class="table-empty">还没有数据。点击右上角“添加数据”，可上传本地文件或连接飞书、MeeGo。</div>'
+      : '<div class="table-empty"><strong>还没有 Wiki，数据暂时无处归属</strong><br>先创建一个 Wiki，完成后会自动打开添加数据窗口。<br><button class="primary-button" data-action="start-create-upload">创建 Wiki 并添加数据</button></div>';
     return;
   }
   grid.innerHTML = filtered.map((source) => `
-    <article class="source-card" data-kind="${source.kind}" data-source-id="${source.id}">
-      <div class="source-card-head"><span class="source-icon">${source.kind === 'local' ? 'FILE' : source.kind === 'feishu' ? 'LARK' : 'MEE'}</span><span class="source-status ${source.status === 'error' ? 'error' : ''}">${source.status === 'syncing' ? 'SYNCING' : source.status === 'error' ? 'ERROR' : source.enabled ? 'ACTIVE' : 'PAUSED'}</span></div>
-      <h3>${escapeHTML(source.name)}</h3>
-      <div class="source-meta">${escapeHTML(kindName(source.kind))} / ${escapeHTML(source.group_id)}</div>
-      <p class="source-detail">${escapeHTML(sourceDetail(source))}</p>
-      <div class="source-meta">上次同步 ${formatDate(source.last_sync_at)}${source.last_error ? ` · ${escapeHTML(source.last_error)}` : ''}</div>
+    <article class="source-card" data-source-id="${source.id}">
+      <span class="source-icon">${source.kind === 'local' ? 'FILE' : source.kind === 'feishu' ? 'LARK' : 'MEE'}</span>
+      <div class="source-title"><h3>${escapeHTML(source.name)}</h3><small>${escapeHTML(sourceDetail(source))}</small></div>
+      <span class="source-kind">${escapeHTML(kindName(source.kind))}</span>
+      <span class="source-detail">${escapeHTML(source.last_error || '可被当前 Wiki 使用')}</span>
+      <span class="source-time">${formatDate(source.last_sync_at || source.created_at)}</span>
       <div class="source-actions">
-        ${source.kind === 'local' ? '<button class="primary" data-source-action="upload">上传文件</button>' : ''}
-        <button class="primary" data-source-action="sync">立即同步</button>
-        <button data-source-action="full-sync">全量对账</button>
+        <span class="source-status ${source.status === 'error' ? 'error' : ''}">${source.status === 'syncing' ? '同步中' : source.status === 'error' ? '异常' : source.enabled ? '可用' : '已停用'}</span>
+        ${source.kind === 'local' ? '<button data-source-action="upload">上传</button>' : ''}
         <button data-source-action="toggle">${source.enabled ? '停用' : '启用'}</button>
-        <button class="danger" data-source-action="delete">删除定义</button>
+        <button class="danger" data-source-action="delete">移除</button>
       </div>
     </article>
   `).join('');
@@ -186,21 +229,145 @@ function renderSources() {
 
 function renderJobs() {
   const names = Object.fromEntries(state.sources.map((source) => [source.id, source.name]));
-  const rows = state.jobs.map((job) => `
-    <tr>
-      <td><span class="job-badge ${job.status}">${escapeHTML(job.status.toUpperCase())}</span></td>
-      <td>${escapeHTML(names[job.source_id] || job.source_id.slice(0, 8))}</td>
-      <td>${job.scanned}</td><td>${job.created}</td><td>${job.updated}</td><td>${job.skipped}</td>
-      <td>${formatDate(job.started_at || job.created_at)}</td>
-      <td title="${escapeHTML(job.error || (job.warnings || []).join('\n'))}">${escapeHTML(job.error || (job.warnings || [])[0] || '—')}</td>
-    </tr>
+  const visibleJobs = state.jobs.filter((job) => job.source_id in names);
+  const recent = visibleJobs.slice(0, 5);
+  $('#recent-jobs').innerHTML = recent.length ? recent.map((job) => (
+    `<p>${escapeHTML(names[job.source_id] || 'Wiki 构建')} · ${escapeHTML(job.status)}</p>`
+  )).join('') : '暂无任务';
+}
+
+const typeNames = {
+  Project: '项目', Product: '产品', ProductModule: '产品模块', ProductFeature: '产品功能',
+  Version: '版本', Requirement: '产品需求', Defect: '缺陷', Person: '人员', Entity: '其他实体',
+};
+
+function nodeType(node) {
+  return (node.labels || []).find((label) => label !== 'Entity') || 'Entity';
+}
+
+function relationRows(node) {
+  if (!node) return [];
+  const byId = Object.fromEntries(state.graph.nodes.map((item) => [item.id, item]));
+  return state.graph.edges.filter((edge) => edge.source === node.id || edge.target === node.id)
+    .map((edge) => {
+      const outgoing = edge.source === node.id;
+      const other = byId[outgoing ? edge.target : edge.source];
+      return { ...edge, outgoing, other };
+    });
+}
+
+function renderWikiTree() {
+  const container = $('#wiki-tree');
+  const query = $('#tree-search').value.trim().toLocaleLowerCase();
+  const groups = new Map();
+  state.graph.nodes.forEach((node) => {
+    if (query && !node.name.toLocaleLowerCase().includes(query)) return;
+    const type = nodeType(node);
+    if (!groups.has(type)) groups.set(type, []);
+    groups.get(type).push(node);
+  });
+  if (!groups.size) {
+    container.innerHTML = `<div class="sidebar-empty">${currentWiki()?.published_group_id ? '没有匹配的实体' : '构建完成后将在这里显示实体目录'}</div>`;
+    return;
+  }
+  container.innerHTML = [...groups.entries()].sort(([a], [b]) => (typeNames[a] || a).localeCompare(typeNames[b] || b)).map(([type, nodes]) => `
+    <div class="tree-group">
+      <button class="tree-group-title"><span>▱ ${escapeHTML(typeNames[type] || type)}</span><small>${nodes.length}</small></button>
+      <div class="tree-items">${nodes.sort((a, b) => a.name.localeCompare(b.name)).map((node) => `
+        <button class="tree-item ${state.graph.selected?.id === node.id ? 'active' : ''}" data-node-id="${escapeHTML(node.id)}">${escapeHTML(node.name)}</button>
+      `).join('')}</div>
+    </div>
   `).join('');
-  $('#jobs-table').innerHTML = rows || '<tr><td colspan="8" class="empty-state">暂无任务</td></tr>';
-  const recent = state.jobs.slice(0, 5);
-  $('#recent-jobs').classList.toggle('empty-state', recent.length === 0);
-  $('#recent-jobs').innerHTML = recent.length ? recent.map((job) => `
-    <div class="timeline-item"><span class="job-dot ${job.status}"></span><div><strong>${escapeHTML(names[job.source_id] || '已删除的数据源')}</strong><p>${job.scanned} 扫描 · ${job.created} 新增 · ${job.updated} 更新 · ${job.skipped} 跳过</p></div><time>${formatDate(job.started_at || job.created_at)}</time></div>
-  `).join('') : '还没有同步任务';
+}
+
+function renderEntityBody() {
+  const node = state.graph.selected;
+  const body = $('#entity-body');
+  if (!node) {
+    body.innerHTML = '<div class="empty-note">从左侧目录选择一个实体</div>';
+    return;
+  }
+  const relations = relationRows(node);
+  const attributes = Object.entries(node.attributes || {}).filter(([, value]) => value !== null && value !== '' && (!Array.isArray(value) || value.length));
+  if (state.entityTab === 'attributes') {
+    body.innerHTML = attributes.length ? `<dl class="attribute-list">${attributes.map(([key, value]) => `<dt>${escapeHTML(key)}</dt><dd>${escapeHTML(Array.isArray(value) ? value.join('、') : value)}</dd>`).join('')}</dl>` : '<div class="empty-note">来源中没有可确认的结构化属性</div>';
+  } else if (state.entityTab === 'relations') {
+    body.innerHTML = relations.length ? `<div class="relation-list">${relations.map((edge) => `<article class="relation-card"><strong>${escapeHTML(edge.outgoing ? `${node.name} → ${edge.other?.name || '未知实体'}` : `${edge.other?.name || '未知实体'} → ${node.name}`)}</strong><p>${escapeHTML(edge.fact || edge.name)}</p></article>`).join('')}</div>` : '<div class="empty-note">当前实体没有已发布关系</div>';
+  } else if (state.entityTab === 'sources') {
+    body.innerHTML = `<section class="entity-section"><h3>来源与权限</h3><p>当前内容来自 ${state.sources.length} 个已关联数据源。MVP 按 Wiki 实例读取已发布版本；来源级证据定位将在 Graphiti Crosswalk 之上继续补齐。</p></section>${state.sources.map((source) => `<article class="relation-card"><strong>${escapeHTML(source.name)}</strong><p>${escapeHTML(kindName(source.kind))} · 最近同步 ${formatDate(source.last_sync_at)}</p></article>`).join('')}`;
+  } else if (state.entityTab === 'changes') {
+    const wiki = currentWiki();
+    body.innerHTML = `<section class="entity-section"><h3>变更记录</h3><p>当前读取发布版本：${formatDate(wiki?.published_at)}。自动构建使用独立 Candidate，失败不会覆盖该版本。</p></section><div class="empty-note">还没有人工更正记录</div>`;
+  } else {
+    const highlights = attributes.slice(0, 5);
+    body.innerHTML = `
+      <section class="entity-section"><h3>概览</h3><p>${escapeHTML(node.summary || '当前来源没有生成可确认的实体摘要。')}</p></section>
+      <section class="entity-section"><h3>关键属性</h3>${highlights.length ? `<dl class="attribute-list">${highlights.map(([key, value]) => `<dt>${escapeHTML(key)}</dt><dd>${escapeHTML(Array.isArray(value) ? value.join('、') : value)}</dd>`).join('')}</dl>` : '<p>暂无结构化属性。</p>'}</section>
+      <section class="entity-section"><h3>关联实体</h3>${relations.length ? `<div class="relation-list">${relations.slice(0, 10).map((edge) => `<article class="relation-card"><strong>${escapeHTML(edge.other?.name || '未知实体')}</strong><p>${escapeHTML(edge.fact || edge.name)}</p></article>`).join('')}</div>` : '<p>暂无已发布关系。</p>'}</section>`;
+  }
+}
+
+function renderEntityPage() {
+  const node = state.graph.selected;
+  const wiki = currentWiki();
+  $('#breadcrumbs').textContent = node ? `${wiki?.name || 'Wiki'} › ${typeNames[nodeType(node)] || nodeType(node)}` : wiki?.name || 'Wiki';
+  $('#entity-title').textContent = node?.name || wiki?.name || 'Wiki';
+  $('#entity-subtitle').textContent = node
+    ? `${typeNames[nodeType(node)] || nodeType(node)} · 更新于 ${formatDate(node.created_at)}`
+    : `${state.graph.nodes.length} 个实体 · ${state.graph.edges.length} 条关系`;
+  renderEntityBody();
+}
+
+function renderWiki() {
+  const wiki = currentWiki();
+  renderWikiTree();
+  const placeholder = $('#wiki-placeholder');
+  const buildState = $('#build-state');
+  const entityPage = $('#entity-page');
+  const graphPage = $('#graph-page');
+  [placeholder, buildState, entityPage, graphPage].forEach((element) => element.classList.add('hidden'));
+  if (!wiki) {
+    const action = placeholder.querySelector('[data-action]');
+    action.dataset.action = 'start-create-upload';
+    action.textContent = '创建 Wiki 并添加数据';
+    placeholder.querySelector('h2').textContent = '用对话创建第一个 Wiki';
+    placeholder.querySelector('p').textContent = '告诉 Vaka Copilot 你想管理什么知识。它会确认目标和数据范围，生成项目 Wiki 计划。';
+    placeholder.classList.remove('hidden');
+    return;
+  }
+  if (state.wikiMode === 'graph' && wiki.published_group_id) {
+    graphPage.classList.remove('hidden');
+    setTimeout(resizeGraphCanvas, 20);
+    return;
+  }
+  if (!wiki.published_group_id) {
+    if (wiki.candidate_status === 'building' || wiki.candidate_status === 'failed') {
+      buildState.classList.remove('hidden');
+      const failed = wiki.candidate_status === 'failed';
+      $('#build-state-title').textContent = failed ? 'Wiki 构建未完成' : 'Wiki 内容构建中';
+      $('#build-state-copy').textContent = failed
+        ? '候选结果没有发布。请查看任务错误，修复数据或授权后重新开始。'
+        : '任务会在后台继续运行。完成并通过检查后，将自动发布实体目录与图谱。';
+    } else {
+      placeholder.classList.remove('hidden');
+      const action = placeholder.querySelector('[data-action]');
+      if (state.sources.length) {
+        placeholder.querySelector('h2').textContent = `${state.sources.length} 项数据已添加`;
+        placeholder.querySelector('p').textContent = '数据已经进入当前 Wiki 的文件库，但构建尚未开始。可以直接恢复构建，无需重新添加。';
+        action.textContent = '开始构建';
+        action.dataset.action = 'start-build';
+      } else {
+        placeholder.querySelector('h2').textContent = `为“${wiki.name}”添加数据`;
+        placeholder.querySelector('p').textContent = '计划已经生成。添加本地文件、飞书或 MeeGo 数据后，系统会开始异步构建。';
+        action.textContent = '添加数据';
+        action.dataset.action = 'add-data';
+      }
+    }
+    return;
+  }
+  if (!state.graph.selected && state.graph.nodes.length) state.graph.selected = state.graph.nodes[0];
+  entityPage.classList.remove('hidden');
+  renderEntityPage();
 }
 
 function resetResourcePicker(provider) {
@@ -213,9 +380,10 @@ function resetResourcePicker(provider) {
     };
   } else {
     state.resourcePickers.meego = {
-      connectionId, parentId: '', path: [], items: [], nextPage: null,
-      loaded: false, loading: false, error: null,
-      project: null, workItemTypes: new Map(),
+      connectionId,
+      projects: [], project: null, projectsLoaded: false, projectsLoading: false,
+      projectsError: null, views: [], view: null, viewQuery: '', viewsLoading: false,
+      viewsError: null, viewRequest: 0,
     };
   }
   renderResourcePicker(provider);
@@ -231,33 +399,52 @@ function renderConnectionPanels() {
   ['feishu', 'meego'].forEach((provider) => {
     const providerAvailable = state.status?.oauth?.providers?.[provider] !== false;
     const connectButton = $(`[data-oauth-provider="${provider}"]`);
-    if (connectButton) {
-      connectButton.disabled = !providerAvailable;
-      connectButton.title = providerAvailable ? '' : '需要管理员先配置 OAuth 应用';
-      connectButton.textContent = providerAvailable
-        ? `连接 ${kindName(provider)}`
-        : `${kindName(provider)}待管理员配置`;
-    }
     const connections = connectionsFor(provider);
-    const select = $(`#${provider}-connection`);
     let selectedId = state.connectionSelection[provider];
     if (!connections.some((connection) => connection.id === selectedId)) {
       selectedId = connections[0]?.id || null;
       state.connectionSelection[provider] = selectedId;
     }
-    select.disabled = connections.length === 0;
-    select.innerHTML = connections.length
-      ? connections.map((connection) => `<option value="${escapeHTML(connection.id)}">${escapeHTML(connectionLabel(connection) + connectionStatus(connection))}</option>`).join('')
-      : '<option value="">尚未连接账号</option>';
-    select.value = selectedId || '';
     const connection = selectedConnection(provider);
-    $(`#${provider}-connection-label`).textContent = connection
-      ? connectionLabel(connection) + connectionStatus(connection)
-      : '尚未连接';
+    if (connectButton) {
+      connectButton.disabled = provider !== 'feishu' && !providerAvailable;
+      connectButton.title = '';
+      connectButton.textContent = provider === 'meego' && connection ? '重新连接' : `连接 ${kindName(provider)}`;
+    }
+    const select = $(`#${provider}-connection`);
+    if (select) {
+      select.disabled = connections.length === 0;
+      select.innerHTML = connections.length
+        ? connections.map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(connectionLabel(item) + connectionStatus(item))}</option>`).join('')
+        : '<option value="">尚未连接账号</option>';
+      select.value = selectedId || '';
+    }
+    if (provider === 'meego') {
+      const ready = Boolean(connection) && !connectionStatus(connection);
+      connectButton?.classList.toggle('hidden', ready);
+      $('#meego-connection-label').textContent = ready ? 'MeeGo 已连接' : 'MeeGo 尚未连接';
+      const rawName = connection ? connectionLabel(connection) : '';
+      const accountName = rawName.startsWith('MeeGo 账号 ·') ? '当前账号' : rawName;
+      $('#meego-account-detail').textContent = connection
+        ? `${accountName} · ${connection.tenant_id || state.status?.oauth?.hosts?.meego || 'MeeGo'}`
+        : '连接后同步你可见的需求视图';
+      const availability = $('#meego-connection-state');
+      availability.textContent = ready ? '可用' : '未连接';
+      availability.classList.toggle('ready', ready);
+    } else {
+      $('#feishu-connection-label').textContent = connection
+        ? connectionLabel(connection) + connectionStatus(connection)
+        : '尚未连接';
+    }
     const browse = $(`[data-resource-load="${provider}"]`);
     if (browse) browse.disabled = !connection;
     const picker = state.resourcePickers[provider];
     if (picker.connectionId !== selectedId) resetResourcePicker(provider);
+    const currentPicker = state.resourcePickers[provider];
+    if (provider === 'meego' && sourceForm.elements.kind?.value === 'meego' && connection
+      && !currentPicker.projectsLoaded && !currentPicker.projectsLoading) {
+      loadMeeGoProjects();
+    }
   });
 }
 
@@ -302,10 +489,6 @@ function isFeishuFolder(item) {
   return item.type === 'folder';
 }
 
-function isMeeGoProject(item, picker) {
-  return picker.path.length === 0 || item.type === 'project' || Boolean(item.metadata?.project_key);
-}
-
 function renderSelection(provider) {
   const picker = state.resourcePickers[provider];
   const container = $(`#${provider}-selection`);
@@ -319,20 +502,12 @@ function renderSelection(provider) {
     container.innerHTML = chips
       ? `<div class="selection-chips">${chips}</div><button type="button" data-clear-selection="feishu">清除选择</button>`
       : '尚未选择资源';
-  } else {
-    const project = picker.project
-      ? `<span class="selection-chip project">项目 · ${escapeHTML(picker.project.name)}</span>` : '';
-    const types = [...picker.workItemTypes.values()].map((item) => `<span class="selection-chip">${escapeHTML(item.name)}</span>`).join('');
-    container.innerHTML = project
-      ? `<div class="selection-chips">${project}${types}</div><button type="button" data-clear-selection="meego">清除选择</button>`
-      : '尚未选择项目';
   }
 }
 
 function resourceRow(provider, item, index) {
   const picker = state.resourcePickers[provider];
   const folder = provider === 'feishu' && isFeishuFolder(item);
-  const project = provider === 'meego' && isMeeGoProject(item, picker);
   let selectAction = '';
   let selected = false;
   if (provider === 'feishu' && folder && item.selectable) {
@@ -341,12 +516,6 @@ function resourceRow(provider, item, index) {
   } else if (provider === 'feishu' && !folder && item.selectable) {
     selected = picker.documents.has(item.id);
     selectAction = `<button type="button" data-toggle-document="${index}">${selected ? '取消' : '选择'}</button>`;
-  } else if (provider === 'meego' && project && item.selectable) {
-    selected = picker.project?.id === item.id;
-    selectAction = `<button type="button" data-select-project="${index}">${selected ? '已选择' : '选择项目'}</button>`;
-  } else if (provider === 'meego' && !project && item.selectable) {
-    selected = picker.workItemTypes.has(itemKey(item, 'work_item_type'));
-    selectAction = `<button type="button" data-toggle-work-type="${index}">${selected ? '取消' : '选择'}</button>`;
   }
   const openAction = item.has_children
     ? `<button type="button" data-resource-open="${index}">打开</button>` : '';
@@ -357,8 +526,68 @@ function resourceRow(provider, item, index) {
   </div>`;
 }
 
+function renderMeeGoSelectors() {
+  const picker = state.resourcePickers.meego;
+  const projectSelect = $('#meego-project-select');
+  projectSelect.disabled = !state.connectionSelection.meego || picker.projectsLoading
+    || Boolean(picker.projectsError) || !picker.projects.length;
+  if (!state.connectionSelection.meego) {
+    projectSelect.innerHTML = '<option value="">请先连接 MeeGo</option>';
+  } else if (picker.projectsLoading && !picker.projects.length) {
+    projectSelect.innerHTML = '<option value="">正在读取可见项目…</option>';
+  } else if (picker.projectsError) {
+    projectSelect.innerHTML = `<option value="">${escapeHTML(picker.projectsError)}</option>`;
+  } else {
+    projectSelect.innerHTML = '<option value="">请选择产品 / 项目</option>' + picker.projects.map((item) => (
+      `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)} (${escapeHTML(item.key)})</option>`
+    )).join('');
+    projectSelect.value = picker.project?.id || '';
+  }
+
+  const queryInput = $('#meego-view-query');
+  queryInput.disabled = !picker.project;
+  if (queryInput.value !== picker.viewQuery) queryInput.value = picker.viewQuery;
+  const viewSelect = $('#meego-view-select');
+  viewSelect.disabled = !picker.project || picker.viewsLoading || Boolean(picker.viewsError)
+    || !picker.views.length;
+  if (!picker.project) {
+    viewSelect.innerHTML = '<option value="">请先选择产品 / 项目</option>';
+  } else if (picker.viewsLoading) {
+    viewSelect.innerHTML = '<option value="">正在读取需求视图…</option>';
+  } else if (picker.viewsError) {
+    viewSelect.innerHTML = `<option value="">${escapeHTML(picker.viewsError)}</option>`;
+  } else if (!picker.views.length) {
+    viewSelect.innerHTML = '<option value="">没有匹配的需求视图，请输入名称查找</option>';
+  } else {
+    viewSelect.innerHTML = '<option value="">请选择导入范围</option>' + picker.views.map((item) => (
+      `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`
+    )).join('');
+    viewSelect.value = picker.view?.id || '';
+  }
+
+  const title = $('#meego-scope-title');
+  const detail = $('#meego-scope-detail');
+  if (picker.projectsError || picker.viewsError) {
+    title.textContent = '暂时无法读取 MeeGo 导入范围';
+    detail.textContent = picker.projectsError || picker.viewsError;
+  } else if (picker.view) {
+    title.textContent = `${picker.project.name} · ${picker.view.name}`;
+    detail.textContent = '将精确同步该需求视图当前筛选出的工作项，不会导入整个项目。';
+  } else if (picker.project) {
+    title.textContent = `${picker.project.name} · 请选择需求视图`;
+    detail.textContent = '下拉框展示默认候选；如果视图较多，可按视图名称查找。';
+  } else {
+    title.textContent = '选择产品 / 项目及需求视图';
+    detail.textContent = '只同步选中视图当前筛选出的需求；视图筛选发生变化后，下次同步会自动跟随。';
+  }
+}
+
 function renderResourcePicker(provider) {
   const picker = state.resourcePickers[provider];
+  if (provider === 'meego') {
+    renderMeeGoSelectors();
+    return;
+  }
   const browser = $(`#${provider}-resource-browser`);
   renderSelection(provider);
   if (!picker.loaded && !picker.loading && !picker.error) {
@@ -391,6 +620,79 @@ function renderResourcePicker(provider) {
       <div class="resource-breadcrumb">${crumbs}</div>
       <div>${picker.path.length ? '<button type="button" data-resource-back>返回上级</button>' : ''}${scopeAction}</div>
     </div><div class="resource-list">${rows}</div>${more}`;
+}
+
+async function loadMeeGoProjects() {
+  const picker = state.resourcePickers.meego;
+  const connectionId = state.connectionSelection.meego;
+  if (!connectionId) return;
+  picker.projectsLoading = true;
+  picker.projectsError = null;
+  renderResourcePicker('meego');
+  try {
+    const projects = new Map();
+    let page = '1';
+    for (let request = 0; request < 10 && page; request += 1) {
+      const payload = await api(
+        `/api/connections/${encodeURIComponent(connectionId)}/resources?page=${encodeURIComponent(page)}`,
+      );
+      (payload.items || []).forEach((item) => {
+        const id = String(item.id);
+        projects.set(id, {
+          ...item,
+          id,
+          name: String(item.name || id),
+          key: String(item.metadata?.simple_name || id),
+          metadata: item.metadata || {},
+        });
+      });
+      page = String(payload.next_page || '');
+    }
+    if (state.connectionSelection.meego !== connectionId) return;
+    picker.projects = [...projects.values()];
+    picker.projectsLoaded = true;
+  } catch (error) {
+    if (state.connectionSelection.meego !== connectionId
+      || state.resourcePickers.meego !== picker) return;
+    picker.projectsError = `无法读取产品 / 项目：${error.message}`;
+  } finally {
+    if (state.connectionSelection.meego !== connectionId
+      || state.resourcePickers.meego !== picker) return;
+    picker.projectsLoading = false;
+    renderResourcePicker('meego');
+  }
+}
+
+async function loadMeeGoViews() {
+  const picker = state.resourcePickers.meego;
+  const connectionId = state.connectionSelection.meego;
+  const project = picker.project;
+  if (!connectionId || !project) return;
+  picker.viewsLoading = true;
+  picker.viewsError = null;
+  picker.view = null;
+  const requestId = ++picker.viewRequest;
+  renderResourcePicker('meego');
+  try {
+    const query = new URLSearchParams({ project_key: project.key, query: picker.viewQuery });
+    const payload = await api(
+      `/api/connections/${encodeURIComponent(connectionId)}/meego/views?${query}`,
+    );
+    if (requestId !== picker.viewRequest || picker.project?.id !== project.id) return;
+    picker.views = (payload.items || []).map((item) => ({
+      id: String(item.id), name: String(item.name || item.id),
+    }));
+  } catch (error) {
+    if (requestId === picker.viewRequest) {
+      picker.viewsError = `无法读取需求视图：${error.message}`;
+      picker.views = [];
+    }
+  } finally {
+    if (requestId === picker.viewRequest) {
+      picker.viewsLoading = false;
+      renderResourcePicker('meego');
+    }
+  }
 }
 
 async function loadResources(provider, { parentId = '', path = [], page = 1, append = false } = {}) {
@@ -452,31 +754,46 @@ function toggleFeishuDocument(item) {
   renderResourcePicker('feishu');
 }
 
-function selectMeeGoProject(item) {
-  const picker = state.resourcePickers.meego;
-  if (picker.project?.id !== item.id) picker.workItemTypes.clear();
-  picker.project = { ...item, key: itemKey(item, 'project') };
-  renderResourcePicker('meego');
-}
-
-function toggleMeeGoWorkItemType(item) {
-  const picker = state.resourcePickers.meego;
-  const key = itemKey(item, 'work_item_type');
-  if (picker.workItemTypes.has(key)) picker.workItemTypes.delete(key);
-  else picker.workItemTypes.set(key, { ...item, key });
-  renderResourcePicker('meego');
-}
-
 async function refreshData({ quiet = false } = {}) {
   if (refreshData.inFlight) return refreshData.inFlight;
   refreshData.inFlight = (async () => {
     try {
-      const [status, sources, jobs] = await Promise.all([
-        api('/api/status'), api('/api/sources'), api('/api/jobs?limit=50'),
+      const [status, wikis, jobs] = await Promise.all([
+        api('/api/status'), api('/api/wikis'), api('/api/jobs?limit=50'),
       ]);
       state.status = status;
-      state.sources = sources;
+      state.wikis = wikis;
+      if (!state.wikis.some((wiki) => wiki.id === state.currentWikiId)) {
+        state.currentWikiId = state.wikis[0]?.id || null;
+      }
+      if (state.currentWikiId) localStorage.setItem('vaka.currentWikiId', state.currentWikiId);
+      else localStorage.removeItem('vaka.currentWikiId');
+      state.sources = state.currentWikiId
+        ? await api(`/api/sources?wiki_id=${encodeURIComponent(state.currentWikiId)}`)
+        : [];
       state.jobs = jobs;
+      const wiki = currentWiki();
+      if (wiki) {
+        const [task, plan] = await Promise.all([
+          api(`/api/wikis/${wiki.id}/task`), api(`/api/wikis/${wiki.id}/plan`),
+        ]);
+        state.wikiTask = task;
+        state.wikiPlan = plan;
+        if (wiki.published_group_id && state.graph.loadedFor !== wiki.published_group_id) {
+          const graph = await api(`/api/wikis/${wiki.id}/graph`);
+          state.graph.nodes = graph.nodes || [];
+          state.graph.edges = graph.edges || [];
+          state.graph.selected = state.graph.nodes[0] || null;
+          state.graph.loadedFor = wiki.published_group_id;
+          initializeGraph(state.graph.nodes, state.graph.edges);
+        } else if (!wiki.published_group_id) {
+          state.graph = { nodes: [], edges: [], selected: null, loadedFor: null };
+        }
+      } else {
+        state.wikiTask = null;
+        state.wikiPlan = null;
+        state.graph = { nodes: [], edges: [], selected: null, loadedFor: null };
+      }
       renderStatus(); renderSources(); renderJobs();
     } catch (error) {
       if (!quiet) toast(`无法读取服务状态：${error.message}`, 'error');
@@ -492,6 +809,11 @@ $$('[data-filter]').forEach((button) => button.addEventListener('click', () => {
   $$('[data-filter]').forEach((item) => item.classList.toggle('active', item === button));
   renderSources();
 }));
+$('#source-search').addEventListener('input', (event) => {
+  state.sourceQuery = event.target.value.trim();
+  renderSources();
+});
+$('#tree-search').addEventListener('input', renderWikiTree);
 $('#refresh-sources').addEventListener('click', () => refreshData());
 
 const sourceDialog = $('#source-dialog');
@@ -501,13 +823,38 @@ function setSourceKind(kind) {
   $$('.kind-fields', sourceForm).forEach((fields) => {
     fields.classList.toggle('hidden', fields.dataset.kindFields !== kind);
   });
+  const meego = kind === 'meego';
+  $('#source-dialog-kicker').textContent = meego ? 'MeeGo' : '文件库';
+  $('#source-dialog-title').textContent = meego ? '添加 MeeGo 数据' : '添加数据';
+  const description = $('#source-dialog-description');
+  description.textContent = meego ? '通过 Vaka 文件库统一管理' : '';
+  description.classList.toggle('hidden', !meego);
+  $('#source-generic-fields').classList.toggle('hidden', meego);
+  sourceForm.elements.name.required = !meego;
+  const submitButton = sourceForm.querySelector('button[type="submit"]');
+  if (!submitButton.disabled) {
+    submitButton.textContent = meego ? '同步到文件库' : '添加到文件库';
+  }
+  const picker = state.resourcePickers.meego;
+  if (meego && state.connectionSelection.meego
+    && !picker.projectsLoaded && !picker.projectsLoading) {
+    loadMeeGoProjects();
+  }
 }
 
 async function openSourceDialog() {
+  const wiki = currentWiki();
+  if (!wiki) {
+    navigate('wiki');
+    startCreateFlow('', 'add-data');
+    return;
+  }
   sourceForm.reset();
+  state.uploadFiles = [];
+  $('#source-file-input').value = '';
+  renderUploadFiles();
   setSourceKind('local');
-  const group = $('input[name="group_id"]', sourceForm);
-  group.value = state.status?.suggested_group_id || 'neo4j';
+  $('#source-wiki-name').value = wiki.name;
   resetResourcePicker('feishu');
   resetResourcePicker('meego');
   renderConnectionPanels();
@@ -527,27 +874,72 @@ $$('[data-provider-connection]', sourceForm).forEach((select) => select.addEvent
   renderConnectionPanels();
 }));
 
+$('#meego-project-select').addEventListener('change', (event) => {
+  const picker = state.resourcePickers.meego;
+  picker.project = picker.projects.find((item) => item.id === event.target.value) || null;
+  picker.viewQuery = '';
+  picker.views = [];
+  picker.view = null;
+  picker.viewsError = null;
+  renderResourcePicker('meego');
+  if (picker.project) loadMeeGoViews();
+});
+
+$('#meego-view-query').addEventListener('input', (event) => {
+  const picker = state.resourcePickers.meego;
+  picker.viewQuery = event.target.value;
+  picker.view = null;
+  renderResourcePicker('meego');
+  clearTimeout(picker.viewSearchTimer);
+  picker.viewSearchTimer = setTimeout(loadMeeGoViews, 350);
+});
+
+$('#meego-view-select').addEventListener('change', (event) => {
+  const picker = state.resourcePickers.meego;
+  picker.view = picker.views.find((item) => item.id === event.target.value) || null;
+  renderResourcePicker('meego');
+});
+
+function openOAuthPopup(provider, path) {
+  const width = 640; const height = 760;
+  const left = Math.max(0, window.screenX + (window.outerWidth - width) / 2);
+  const top = Math.max(0, window.screenY + (window.outerHeight - height) / 2);
+  const popup = window.open(
+    path,
+    `graphiti-oauth-${provider}`,
+    `popup=yes,width=${width},height=${height},left=${Math.round(left)},top=${Math.round(top)}`,
+  );
+  if (!popup) {
+    toast('浏览器阻止了授权窗口，请允许本站打开弹窗后重试', 'error');
+    return null;
+  }
+  state.oauthPopups.set(provider, popup);
+  popup.focus();
+  return popup;
+}
+
+async function completeOAuthConnection(provider, connectionId) {
+  await loadConnections({ preferredProvider: provider, preferredConnectionId: connectionId });
+  resetResourcePicker(provider);
+  toast(`${kindName(provider)}账号已连接`);
+  if (provider === 'feishu') await loadResources(provider);
+  else await loadMeeGoProjects();
+}
+
 function openOAuth(provider) {
   if (!['feishu', 'meego'].includes(provider)) return;
   if (state.status?.oauth?.providers?.[provider] === false) {
-    return toast(`${kindName(provider)} OAuth 需要管理员先配置应用`, 'error');
+    return toast(`${kindName(provider)} OAuth 连接服务尚未就绪`, 'error');
   }
   const current = state.oauthPopups.get(provider);
   if (current && !current.closed) {
     current.focus();
     return;
   }
-  const width = 640; const height = 760;
-  const left = Math.max(0, window.screenX + (window.outerWidth - width) / 2);
-  const top = Math.max(0, window.screenY + (window.outerHeight - height) / 2);
-  const popup = window.open(
+  openOAuthPopup(
+    provider,
     `/api/oauth/${encodeURIComponent(provider)}/start`,
-    `graphiti-oauth-${provider}`,
-    `popup=yes,width=${width},height=${height},left=${Math.round(left)},top=${Math.round(top)}`,
   );
-  if (!popup) return toast('浏览器阻止了授权窗口，请允许本站打开弹窗后重试', 'error');
-  state.oauthPopups.set(provider, popup);
-  popup.focus();
 }
 
 window.addEventListener('message', async (event) => {
@@ -568,13 +960,7 @@ window.addEventListener('message', async (event) => {
     return;
   }
   if (typeof payload.connection_id !== 'string' || !payload.connection_id) return;
-  await loadConnections({
-    preferredProvider: payload.provider,
-    preferredConnectionId: payload.connection_id,
-  });
-  resetResourcePicker(payload.provider);
-  toast(`${kindName(payload.provider)}账号已连接`);
-  await loadResources(payload.provider);
+  await completeOAuthConnection(payload.provider, payload.connection_id);
 });
 
 sourceForm.addEventListener('click', (event) => {
@@ -601,9 +987,6 @@ sourceForm.addEventListener('click', (event) => {
   } else if (target.hasAttribute('data-resource-open')) {
     const item = picker.items[Number(target.dataset.resourceOpen)];
     if (!item) return;
-    if (provider === 'meego' && isMeeGoProject(item, picker) && item.selectable) {
-      selectMeeGoProject(item);
-    }
     loadResources(provider, {
       parentId: item.id,
       path: [...picker.path, { id: item.id, name: item.name, type: item.type }],
@@ -619,31 +1002,27 @@ sourceForm.addEventListener('click', (event) => {
   } else if (target.hasAttribute('data-toggle-document')) {
     const item = picker.items[Number(target.dataset.toggleDocument)];
     if (item) toggleFeishuDocument(item);
-  } else if (target.hasAttribute('data-select-project')) {
-    const item = picker.items[Number(target.dataset.selectProject)];
-    if (item) selectMeeGoProject(item);
-  } else if (target.hasAttribute('data-toggle-work-type')) {
-    const item = picker.items[Number(target.dataset.toggleWorkType)];
-    if (item) toggleMeeGoWorkItemType(item);
   } else if (target.hasAttribute('data-clear-selection')) {
-    if (provider === 'feishu') {
-      picker.root = false; picker.folder = null; picker.documents.clear();
-    } else {
-      picker.project = null; picker.workItemTypes.clear();
-    }
+    picker.root = false; picker.folder = null; picker.documents.clear();
     renderResourcePicker(provider);
   }
 });
 
 $('#source-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  // Event.currentTarget is cleared once an async listener yields. Keep the
+  // concrete form reference for the post-request reset and button updates.
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   const kind = form.get('kind');
+  if (kind === 'local' && !state.uploadFiles.length) {
+    return toast('请先选择要上传的文件', 'error');
+  }
   const config = {};
   const payload = {
     kind,
     name: String(form.get('name') || '').trim(),
-    group_id: String(form.get('group_id') || '').trim(),
+    wiki_id: state.currentWikiId,
     config,
   };
   if (kind === 'feishu') {
@@ -665,23 +1044,41 @@ $('#source-form').addEventListener('submit', async (event) => {
     const picker = state.resourcePickers.meego;
     const connectionId = state.connectionSelection.meego;
     if (!connectionId) return toast('请先连接 MeeGo 账号', 'error');
-    if (!picker.project) return toast('请选择一个 MeeGo 项目', 'error');
+    if (!picker.project) return toast('请选择产品 / 项目', 'error');
+    if (!picker.view) return toast('请选择要导入的需求视图', 'error');
     payload.connection_id = connectionId;
+    payload.name = `${picker.project.name} · ${picker.view.name}`;
     config.project_key = picker.project.key;
-    config.work_item_type_keys = [...picker.workItemTypes.keys()];
-    config.page_size = Number(form.get('page_size') || 100);
+    config.project_name = picker.project.name;
+    config.work_item_type_key = 'story';
+    config.view_id = picker.view.id;
+    config.view_name = picker.view.name;
   }
+  const submitButton = formElement.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = kind === 'local' ? '正在上传…' : '正在添加…';
   try {
     const source = await api('/api/sources', {
       method: 'POST', body: JSON.stringify(payload),
     });
-    sourceDialog.close(); event.currentTarget.reset();
+    const uploadResult = source.kind === 'local'
+      ? await uploadFilesToSource(source, state.uploadFiles)
+      : null;
+    sourceDialog.close(); formElement.reset();
+    state.uploadFiles = [];
+    renderUploadFiles();
     setSourceKind('local');
     resetResourcePicker('feishu'); resetResourcePicker('meego');
-    toast(`已创建“${source.name}”`);
+    toast(uploadResult
+      ? `“${source.name}”已添加 ${uploadResult.saved.length} 个文件`
+      : `已创建“${source.name}”`);
     await refreshData({ quiet: true });
-    if (source.kind === 'local') openUpload(source);
+    await startWikiBuild();
   } catch (error) { toast(error.message, 'error'); }
+  finally {
+    submitButton.disabled = false;
+    submitButton.textContent = kind === 'meego' ? '同步到文件库' : '添加到文件库';
+  }
 });
 
 $('#source-grid').addEventListener('click', async (event) => {
@@ -709,10 +1106,11 @@ $('#source-grid').addEventListener('click', async (event) => {
 });
 
 async function quickLocal() {
+  if (!currentWiki()) return startCreateFlow();
   let source = state.sources.find((item) => item.kind === 'local' && item.enabled);
   if (!source) {
     try {
-      source = await api('/api/sources', { method: 'POST', body: JSON.stringify({ kind: 'local', name: '本地资料库', group_id: state.status?.suggested_group_id || 'neo4j', config: {} }) });
+      source = await api('/api/sources', { method: 'POST', body: JSON.stringify({ kind: 'local', name: '本地资料库', wiki_id: state.currentWikiId, config: {} }) });
       await refreshData({ quiet: true });
     } catch (error) { return toast(error.message, 'error'); }
   }
@@ -723,11 +1121,13 @@ $$('[data-action="quick-local"]').forEach((button) => button.addEventListener('c
 const uploadDialog = $('#upload-dialog');
 function openUpload(source) {
   state.uploadSource = source; state.uploadFiles = [];
-  $('#upload-source-name').textContent = `将文件写入“${source.name}”，Group ID：${source.group_id}`;
+  $('#upload-source-name').textContent = `将文件写入“${source.name}”。保存后会自动开始 Wiki 构建。`;
   $('#file-input').value = ''; renderUploadFiles(); uploadDialog.showModal();
 }
 function renderUploadFiles() {
-  $('#file-list').innerHTML = state.uploadFiles.map((file) => `<div class="file-row"><span>${escapeHTML(file.name)}</span><span>${(file.size / 1024).toFixed(1)} KiB</span></div>`).join('');
+  const markup = state.uploadFiles.map((file) => `<div class="file-row"><span>${escapeHTML(file.name)}</span><span>${(file.size / 1024).toFixed(1)} KiB</span></div>`).join('');
+  $('#file-list').innerHTML = markup;
+  $('#source-file-list').innerHTML = markup;
 }
 function addFiles(files) {
   const byName = new Map(state.uploadFiles.map((file) => [file.name, file]));
@@ -735,10 +1135,12 @@ function addFiles(files) {
   state.uploadFiles = [...byName.values()]; renderUploadFiles();
 }
 $('#file-input').addEventListener('change', (event) => addFiles(event.target.files));
-const dropZone = $('#drop-zone');
-['dragenter', 'dragover'].forEach((name) => dropZone.addEventListener(name, (event) => { event.preventDefault(); dropZone.classList.add('dragging'); }));
-['dragleave', 'drop'].forEach((name) => dropZone.addEventListener(name, (event) => { event.preventDefault(); dropZone.classList.remove('dragging'); }));
-dropZone.addEventListener('drop', (event) => addFiles(event.dataTransfer.files));
+$('#source-file-input').addEventListener('change', (event) => addFiles(event.target.files));
+[$('#drop-zone'), $('#source-drop-zone')].forEach((dropZone) => {
+  ['dragenter', 'dragover'].forEach((name) => dropZone.addEventListener(name, (event) => { event.preventDefault(); dropZone.classList.add('dragging'); }));
+  ['dragleave', 'drop'].forEach((name) => dropZone.addEventListener(name, (event) => { event.preventDefault(); dropZone.classList.remove('dragging'); }));
+  dropZone.addEventListener('drop', (event) => addFiles(event.dataTransfer.files));
+});
 
 function fileAsBase64(file) {
   return new Promise((resolve, reject) => {
@@ -748,39 +1150,35 @@ function fileAsBase64(file) {
     reader.readAsDataURL(file);
   });
 }
+
+async function uploadFilesToSource(source, selectedFiles) {
+  const files = [];
+  for (const file of selectedFiles) {
+    files.push({
+      filename: file.name,
+      content_base64: await fileAsBase64(file),
+      modified_at: new Date(file.lastModified).toISOString(),
+    });
+  }
+  return api(`/api/sources/${source.id}/files`, {
+    method: 'POST',
+    body: JSON.stringify({ files, sync: !source.wiki_id }),
+  });
+}
+
 $('#upload-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!state.uploadFiles.length) return toast('请先选择文件', 'error');
   const button = event.currentTarget.querySelector('button[type="submit"]');
   button.disabled = true; button.textContent = '正在上传…';
   try {
-    const files = [];
-    for (const file of state.uploadFiles) {
-      files.push({
-        filename: file.name,
-        content_base64: await fileAsBase64(file),
-        modified_at: new Date(file.lastModified).toISOString(),
-      });
-    }
-    const result = await api(`/api/sources/${state.uploadSource.id}/files`, { method: 'POST', body: JSON.stringify({ files, sync: true }) });
+    const result = await uploadFilesToSource(state.uploadSource, state.uploadFiles);
     uploadDialog.close();
-    toast(`${result.saved.length} 个文件已保存，同步任务已启动`);
+    toast(`${result.saved.length} 个文件已保存`);
     await refreshData({ quiet: true });
+    if (state.uploadSource.wiki_id) await startWikiBuild();
   } catch (error) { toast(error.message, 'error'); }
-  finally { button.disabled = false; button.textContent = '上传并同步'; }
-});
-
-$('#search-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const container = $('#search-results');
-  container.className = 'search-results empty-state'; container.textContent = '正在检索图谱…';
-  try {
-    const payload = await api('/search', { method: 'POST', body: JSON.stringify({ query: $('#search-query').value, group_ids: [$('#search-group').value], max_facts: 12 }) });
-    container.className = 'search-results';
-    container.innerHTML = payload.facts.length ? payload.facts.map((fact) => `
-      <article class="fact-result"><strong>${escapeHTML(fact.name || 'FACT')}</strong><p>${escapeHTML(fact.fact)}</p><small>有效：${formatDate(fact.valid_at)} · ${fact.invalid_at ? `失效：${formatDate(fact.invalid_at)}` : '当前有效'}</small></article>
-    `).join('') : '<div class="empty-state">没有找到相关事实</div>';
-  } catch (error) { container.textContent = error.message; toast(error.message, 'error'); }
+  finally { button.disabled = false; button.textContent = '保存文件'; }
 });
 
 async function copyText(value) {
@@ -788,7 +1186,6 @@ async function copyText(value) {
   catch (_) { toast('无法访问剪贴板，请手动复制', 'error'); }
 }
 $('#copy-mcp').addEventListener('click', () => copyText($('#mcp-url').textContent));
-$('#copy-mcp-mini').addEventListener('click', () => copyText(state.status?.mcp_url || 'http://localhost:8001/mcp/'));
 $('#copy-config').addEventListener('click', () => copyText($('#mcp-config').textContent));
 
 const canvas = $('#graph-canvas');
@@ -812,6 +1209,8 @@ function seededAngle(id) {
 }
 
 function initializeGraph(nodes, edges) {
+  const loadedFor = currentWiki()?.published_group_id || state.graph.loadedFor;
+  const selectedId = state.graph.selected?.id;
   const nodeMap = new Map();
   const radius = Math.max(100, Math.sqrt(nodes.length) * 42);
   nodes.forEach((node, index) => {
@@ -820,11 +1219,16 @@ function initializeGraph(nodes, edges) {
     nodeMap.set(node.id, node);
   });
   edges.forEach((edge) => { edge.a = nodeMap.get(edge.source); edge.b = nodeMap.get(edge.target); });
-  state.graph = { nodes, edges: edges.filter((edge) => edge.a && edge.b), selected: null };
+  state.graph = {
+    nodes,
+    edges: edges.filter((edge) => edge.a && edge.b),
+    selected: nodes.find((node) => node.id === selectedId) || nodes[0] || null,
+    loadedFor,
+  };
   graphViewport.scale = Math.min(1.25, Math.max(.4, 520 / (radius * 2)));
   graphViewport.x = canvas.clientWidth / 2; graphViewport.y = canvas.clientHeight / 2; graphViewport.ticks = 0;
   $('#graph-empty').classList.toggle('hidden', nodes.length > 0);
-  $('#graph-empty').textContent = nodes.length ? '' : '当前 Group 还没有实体节点';
+  $('#graph-empty').textContent = nodes.length ? '' : '当前 Wiki 还没有实体节点';
   requestAnimationFrame(simulateGraph);
 }
 
@@ -861,17 +1265,23 @@ function drawGraph() {
   context.lineWidth = 1;
   state.graph.edges.forEach((edge) => {
     const a = screenPoint(edge.a); const b = screenPoint(edge.b);
-    context.strokeStyle = edge.expired_at ? 'rgba(255,118,94,.20)' : 'rgba(114,132,142,.32)';
+    context.strokeStyle = 'rgba(86,96,109,.34)';
     context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+    const angle = Math.atan2(b.y - a.y, b.x - a.x);
+    const arrowX = b.x - Math.cos(angle) * 11; const arrowY = b.y - Math.sin(angle) * 11;
+    context.beginPath(); context.moveTo(arrowX, arrowY);
+    context.lineTo(arrowX - Math.cos(angle - .45) * 6, arrowY - Math.sin(angle - .45) * 6);
+    context.lineTo(arrowX - Math.cos(angle + .45) * 6, arrowY - Math.sin(angle + .45) * 6);
+    context.closePath(); context.fillStyle = 'rgba(86,96,109,.48)'; context.fill();
   });
   state.graph.nodes.forEach((node) => {
     const point = screenPoint(node); const selected = state.graph.selected?.id === node.id;
     const radius = selected ? 8 : 5.5;
     context.beginPath(); context.arc(point.x, point.y, radius, 0, Math.PI * 2);
-    context.fillStyle = selected ? '#ff765e' : '#c8ff4d'; context.fill();
-    if (selected) { context.strokeStyle = 'rgba(255,118,94,.3)'; context.lineWidth = 7; context.stroke(); context.lineWidth = 1; }
+    context.fillStyle = selected ? '#556f42' : '#8da676'; context.fill();
+    if (selected) { context.strokeStyle = 'rgba(85,111,66,.22)'; context.lineWidth = 7; context.stroke(); context.lineWidth = 1; }
     if (graphViewport.scale > .55 || selected) {
-      context.fillStyle = selected ? '#f3f0e8' : 'rgba(214,220,222,.72)'; context.font = `${selected ? 11 : 9}px sans-serif`;
+      context.fillStyle = '#4f5661'; context.font = `${selected ? 11 : 9}px sans-serif`;
       context.fillText(node.name.slice(0, 22), point.x + 10, point.y + 3);
     }
   });
@@ -883,7 +1293,8 @@ function findNode(x, y) {
 function showNode(node) {
   state.graph.selected = node; drawGraph();
   const relations = state.graph.edges.filter((edge) => edge.source === node.id || edge.target === node.id).slice(0, 18);
-  $('#graph-inspector').innerHTML = `<span class="eyebrow">ENTITY</span><h2>${escapeHTML(node.name)}</h2><p>${escapeHTML(node.summary || '暂无摘要')}</p><div class="source-meta">${escapeHTML((node.labels || []).join(' · '))}</div><div class="relation-list">${relations.map((edge) => `<div class="relation-chip"><strong>${escapeHTML(edge.name || 'RELATES_TO')}</strong><br>${escapeHTML(edge.fact || '')}</div>`).join('') || '<p>当前快照中没有可见关系</p>'}</div>`;
+  $('#graph-inspector').innerHTML = `<h3>${escapeHTML(node.name)}</h3><p>${escapeHTML(node.summary || '暂无摘要')}</p><p>${escapeHTML(typeNames[nodeType(node)] || nodeType(node))} · ${relations.length} 条直接关系</p>`;
+  renderWikiTree();
 }
 
 canvas.addEventListener('pointerdown', (event) => {
@@ -905,21 +1316,252 @@ canvas.addEventListener('wheel', (event) => {
   graphViewport.x = event.offsetX - before.x * graphViewport.scale; graphViewport.y = event.offsetY - before.y * graphViewport.scale; drawGraph();
 }, { passive: false });
 
-$('#graph-form').addEventListener('submit', async (event) => {
-  event.preventDefault(); $('#graph-empty').classList.remove('hidden'); $('#graph-empty').textContent = '正在从 Neo4j 加载…';
+async function loadCurrentGraph() {
+  const wiki = currentWiki();
+  if (!wiki?.published_group_id) return toast('Wiki 尚未发布', 'error');
+  $('#graph-empty').classList.remove('hidden');
+  $('#graph-empty').textContent = '正在加载已发布图谱…';
   try {
-    const payload = await api(`/api/graph?group_id=${encodeURIComponent($('#graph-group').value)}&limit=120`);
-    initializeGraph(payload.nodes, payload.edges);
-  } catch (error) { $('#graph-empty').textContent = error.message; toast(error.message, 'error'); }
-});
+    const payload = await api(`/api/wikis/${wiki.id}/graph`);
+    initializeGraph(payload.nodes || [], payload.edges || []);
+    renderWikiTree();
+  } catch (error) {
+    $('#graph-empty').textContent = error.message;
+    toast(error.message, 'error');
+  }
+}
 
-window.addEventListener('hashchange', () => navigate(location.hash.slice(1) in pageLabels ? location.hash.slice(1) : 'overview'));
+function resetGraphView() {
+  if (!state.graph.nodes.length) return;
+  initializeGraph(state.graph.nodes, state.graph.edges.map((edge) => ({ ...edge })));
+}
+
+async function startWikiBuild() {
+  const wiki = currentWiki();
+  if (!wiki || !state.sources.length || wiki.candidate_status === 'building') return;
+  try {
+    const result = await api(`/api/wikis/${wiki.id}/build`, { method: 'POST' });
+    appendAssistant(`已提交 Wiki 构建任务，${result.jobs.length} 个数据源进入离线队列。完成后会自动发布。`);
+    toast('Wiki 构建已开始');
+    navigate('wiki');
+    await refreshData({ quiet: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function taskStatusName(status) {
+  return { empty: '尚未构建', building: '构建中', ready: '已完成', failed: '失败' }[status] || status;
+}
+
+function openTaskDialog() {
+  const wiki = currentWiki();
+  const task = state.wikiTask;
+  if (!wiki || !task) return toast('当前没有 Wiki 任务', 'error');
+  const errors = (task.jobs || []).filter((job) => job.error).map((job) => job.error);
+  $('#task-detail').innerHTML = `
+    <div class="task-hero"><h2>Wiki ${taskStatusName(task.status)}</h2><p>${task.status === 'building' ? '任务会在后台继续运行，可关闭此窗口。' : task.status === 'failed' ? '候选版本未发布，线上继续读取上一版本。' : '当前结果已发布，Wiki 页面与 MCP 读取同一版本。'}</p></div>
+    <dl class="detail-grid"><dt>任务 ID</dt><dd>${escapeHTML(task.id || '—')}</dd><dt>任务类型</dt><dd>${escapeHTML(task.type)}</dd><dt>当前状态</dt><dd>${escapeHTML(taskStatusName(task.status))}</dd><dt>开始时间</dt><dd>${formatDate(task.started_at)}</dd><dt>完成时间</dt><dd>${formatDate(task.finished_at)}</dd><dt>数据范围</dt><dd>${task.source_count} 项关联数据</dd><dt>策略版本</dt><dd>v${task.plan_version}</dd></dl>
+    ${errors.length ? `<div class="form-callout">${escapeHTML(errors.join('\n'))}</div>` : ''}
+    ${task.status === 'failed' ? '<div class="modal-actions"><button class="primary-button" data-task-action="retry">重新开始</button></div>' : ''}`;
+  $('#task-dialog').showModal();
+}
+
+function openPlanDialog() {
+  const plan = state.wikiPlan;
+  if (!plan) return toast('当前没有 Wiki 计划', 'error');
+  const content = plan.plan || {};
+  $('#plan-detail').innerHTML = `
+    <h2>${escapeHTML(content.template_name || '项目 Wiki')} · v${plan.version}</h2>
+    <div class="form-callout"><strong>创建目标</strong><br>${escapeHTML(plan.goal || '未填写')}</div>
+    <div class="plan-types">${(content.entity_types || []).map((type) => `<div class="plan-type"><strong>${escapeHTML(type.name)}</strong><small>${escapeHTML((type.fields || []).join(' · '))}</small></div>`).join('')}</div>
+    <h3>Link 类型</h3><p>${escapeHTML((content.link_types || []).join('、'))}</p>
+    <h3>质量规则</h3><ul>${(content.quality_rules || []).map((rule) => `<li>${escapeHTML(rule)}</li>`).join('')}</ul>`;
+  $('#plan-dialog').showModal();
+}
+
+function openCopilot() {
+  $('#copilot').classList.remove('closed');
+  $('#copilot-fab').classList.add('hidden');
+  $('#chat-input').focus();
+}
+
+function appendUser(text) {
+  $('#chat-log').insertAdjacentHTML('beforeend', `<div class="user-message">${escapeHTML(text)}</div>`);
+  $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
+}
+
+function appendAssistant(text, card = '') {
+  $('#chat-log').insertAdjacentHTML('beforeend', `<div class="assistant-message">${escapeHTML(text)}</div>${card}`);
+  $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
+}
+
+function extractWikiName(text) {
+  const quoted = text.match(/[“"]([^”"]+)[”"]/);
+  if (quoted) return quoted[1].trim();
+  const colon = text.split(/[：:]/);
+  if (colon.length > 1) return colon.at(-1).replace(/wiki/ig, '').trim();
+  const match = text.match(/(?:创建|新建)(?:一个|新的|一份)*\s*([^，。]{2,40}?)\s*(?:Wiki|wiki)/);
+  if (match && !/项目$/.test(match[1])) return match[1].trim();
+  return '';
+}
+
+function startCreateFlow(seed = '', afterCreate = null) {
+  state.createFlow = {
+    step: 'name', name: '', goal: '', dataScope: 'specified', afterCreate,
+  };
+  openCopilot();
+  const name = extractWikiName(seed);
+  if (name) {
+    state.createFlow.name = name;
+    state.createFlow.step = 'goal';
+    appendAssistant(`好的，新 Wiki 名称是“${name}”。请说明建库目标：希望管理哪些对象、给谁使用、主要回答什么问题？`);
+  } else if (afterCreate === 'add-data') {
+    appendAssistant('添加数据前，需要先确定它属于哪个 Wiki。我们先创建一个项目 Wiki，请告诉我名称。');
+  } else appendAssistant('我们来创建一个项目 Wiki。先告诉我 Wiki 名称。');
+}
+
+function showPlanConfirmation() {
+  const flow = state.createFlow;
+  const card = `<div class="chat-card"><h4>${escapeHTML(flow.name)} · 创建计划 v1</h4><p>${escapeHTML(flow.goal)}</p><p>模板：项目 Wiki<br>数据范围：${flow.dataScope === 'all' ? '全部数据' : '指定数据'}<br>实体类型：项目、产品、产品模块、产品功能、版本、产品需求、缺陷、人员</p><button class="primary-button" data-chat-action="confirm-create">确认计划</button><button class="quiet-button" data-chat-action="cancel-create">重新填写</button></div>`;
+  appendAssistant('我已根据目标生成 MVP 项目 Wiki 计划。确认后创建实例，再添加数据。', card);
+}
+
+async function confirmCreateFlow() {
+  const flow = state.createFlow;
+  if (!flow) return;
+  const afterCreate = flow.afterCreate;
+  try {
+    const wiki = await api('/api/wikis', {
+      method: 'POST',
+      body: JSON.stringify({ name: flow.name, goal: flow.goal, data_scope: flow.dataScope }),
+    });
+    state.currentWikiId = wiki.id;
+    localStorage.setItem('vaka.currentWikiId', wiki.id);
+    state.createFlow = null;
+    appendAssistant(`“${wiki.name}”已创建，策略 v1 已锁定。现在添加本地文件、飞书或 MeeGo 数据。`, '<div class="chat-card"><button class="primary-button" data-chat-action="add-data">添加数据</button><button class="quiet-button" data-chat-action="view-plan">查看计划</button></div>');
+    await refreshData();
+    if (afterCreate === 'add-data') {
+      navigate('library');
+      await openSourceDialog();
+    }
+  } catch (error) {
+    appendAssistant(`创建失败：${error.message}`);
+  }
+}
+
+async function handleChat(text) {
+  const flow = state.createFlow;
+  if (flow) {
+    if (flow.step === 'name') {
+      const name = extractWikiName(text) || text.replace(/wiki/ig, '').trim();
+      if (!name) return appendAssistant('请提供一个明确的 Wiki 名称。');
+      flow.name = name.slice(0, 120); flow.step = 'goal';
+      return appendAssistant(`名称已记录为“${flow.name}”。请继续说明建库目标和主要使用场景。`);
+    }
+    if (flow.step === 'goal') {
+      flow.goal = text; flow.step = 'scope';
+      return appendAssistant('数据范围使用“全部数据”，还是只选择指定文件、目录或 MeeGo 项目？');
+    }
+    if (flow.step === 'scope') {
+      flow.dataScope = text.includes('全部') ? 'all' : 'specified'; flow.step = 'confirm';
+      return showPlanConfirmation();
+    }
+  }
+  if (/创建|新建/.test(text) && /wiki/i.test(text)) return startCreateFlow(text);
+  if (/任务|进度|构建/.test(text)) {
+    if (!currentWiki()) return appendAssistant('当前还没有 Wiki。你可以先说“帮我创建一个 Wiki”。');
+    openTaskDialog();
+    return appendAssistant(`当前任务状态：${taskStatusName(state.wikiTask?.status || 'empty')}。`);
+  }
+  if (/计划|策略/.test(text)) {
+    openPlanDialog(); return appendAssistant('已打开当前 Wiki 的只读创建计划。');
+  }
+  const wiki = currentWiki();
+  if (!wiki?.published_group_id) return appendAssistant('当前 Wiki 还没有已发布内容。先添加数据，完成构建后我就能检索。');
+  try {
+    appendAssistant('正在检索当前 Wiki 的已发布事实…');
+    const payload = await api(`/api/wikis/${wiki.id}/search`, { method: 'POST', body: JSON.stringify({ query: text, max_facts: 8 }) });
+    const card = payload.facts.length ? `<div class="chat-card">${payload.facts.map((fact) => `<p><strong>${escapeHTML(fact.name || '事实')}</strong><br>${escapeHTML(fact.fact)}</p>`).join('')}</div>` : '';
+    appendAssistant(payload.facts.length ? `找到 ${payload.facts.length} 条相关事实。` : '没有找到足够相关的已发布事实。', card);
+  } catch (error) { appendAssistant(`检索失败：${error.message}`); }
+}
+
+window.addEventListener('hashchange', () => navigate(location.hash.slice(1) in pageLabels ? location.hash.slice(1) : 'wiki'));
 
 async function boot() {
   const initial = location.hash.slice(1);
-  navigate(pageLabels[initial] ? initial : 'overview');
+  navigate(pageLabels[initial] ? initial : 'wiki');
   await refreshData();
   await loadConnections({ quiet: true });
   setInterval(() => refreshData({ quiet: true }), 5000);
 }
+
+$('#wiki-select').addEventListener('change', async (event) => {
+  state.currentWikiId = event.target.value || null;
+  if (state.currentWikiId) localStorage.setItem('vaka.currentWikiId', state.currentWikiId);
+  await refreshData();
+});
+
+$('#new-wiki-button').addEventListener('click', () => startCreateFlow());
+$('#task-link').addEventListener('click', openTaskDialog);
+$('#build-task-button').addEventListener('click', openTaskDialog);
+$('#plan-link').addEventListener('click', openPlanDialog);
+$('#mcp-link').addEventListener('click', () => currentWiki() ? $('#mcp-dialog').showModal() : toast('请先创建 Wiki', 'error'));
+$('#manage-data-button').addEventListener('click', () => navigate('library'));
+$('#graph-load').addEventListener('click', loadCurrentGraph);
+$('#graph-reset').addEventListener('click', resetGraphView);
+$('#task-detail').addEventListener('click', (event) => {
+  if (event.target.closest('[data-task-action="retry"]')) { $('#task-dialog').close(); startWikiBuild(); }
+});
+$('#wiki-tree').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-node-id]');
+  if (!button) return;
+  state.graph.selected = state.graph.nodes.find((node) => node.id === button.dataset.nodeId) || null;
+  state.wikiMode = 'directory';
+  renderWiki();
+});
+$$('[data-wiki-mode]').forEach((button) => button.addEventListener('click', () => {
+  state.wikiMode = button.dataset.wikiMode;
+  $$('[data-wiki-mode]').forEach((item) => item.classList.toggle('active', item === button));
+  renderWiki();
+}));
+$$('[data-entity-tab]').forEach((button) => button.addEventListener('click', () => {
+  state.entityTab = button.dataset.entityTab;
+  $$('[data-entity-tab]').forEach((item) => item.classList.toggle('active', item === button));
+  renderEntityBody();
+}));
+document.addEventListener('click', (event) => {
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action === 'start-create') startCreateFlow();
+  if (action === 'start-create-upload') startCreateFlow('', 'add-data');
+  if (action === 'add-data') {
+    navigate('library');
+    openSourceDialog();
+  }
+  if (action === 'start-build') startWikiBuild();
+});
+$('#copilot-toggle').addEventListener('click', () => { $('#copilot').classList.add('closed'); $('#copilot-fab').classList.remove('hidden'); });
+$('#copilot-fab').addEventListener('click', openCopilot);
+$('#chat-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const text = $('#chat-input').value.trim();
+  if (!text) return;
+  $('#chat-input').value = '';
+  appendUser(text);
+  await handleChat(text);
+});
+$('#chat-suggestions').addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button) return;
+  $('#chat-input').value = button.textContent;
+  $('#chat-form').requestSubmit();
+});
+$('#chat-log').addEventListener('click', (event) => {
+  const action = event.target.closest('[data-chat-action]')?.dataset.chatAction;
+  if (action === 'confirm-create') confirmCreateFlow();
+  if (action === 'cancel-create') startCreateFlow('', state.createFlow?.afterCreate || null);
+  if (action === 'add-data') { navigate('library'); openSourceDialog(); }
+  if (action === 'view-plan') openPlanDialog();
+});
 boot();

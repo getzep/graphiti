@@ -10,7 +10,7 @@ from .models import utc_now_iso
 
 
 class SourceStore:
-    """Small SQLite state store for sources, document fingerprints, and jobs."""
+    """Small SQLite control store for wikis, sources, fingerprints, and jobs."""
 
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -32,6 +32,7 @@ class SourceStore:
                     id TEXT PRIMARY KEY,
                     kind TEXT NOT NULL,
                     name TEXT NOT NULL,
+                    wiki_id TEXT,
                     group_id TEXT NOT NULL,
                     config_json TEXT NOT NULL DEFAULT '{}',
                     enabled INTEGER NOT NULL DEFAULT 1,
@@ -80,6 +81,24 @@ class SourceStore:
                     ON sync_jobs(created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_source_items_synced_at
                     ON source_items(synced_at DESC);
+
+                CREATE TABLE IF NOT EXISTS wikis (
+                    id TEXT PRIMARY KEY,
+                    slug TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    goal TEXT NOT NULL DEFAULT '',
+                    data_scope TEXT NOT NULL DEFAULT 'specified',
+                    template TEXT NOT NULL DEFAULT 'project_wiki',
+                    plan_version INTEGER NOT NULL DEFAULT 1,
+                    plan_json TEXT NOT NULL DEFAULT '{}',
+                    candidate_group_id TEXT NOT NULL,
+                    published_group_id TEXT,
+                    candidate_status TEXT NOT NULL DEFAULT 'empty',
+                    candidate_started_at TEXT,
+                    published_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
             source_columns = {
@@ -87,9 +106,31 @@ class SourceStore:
             }
             if 'connection_id' not in source_columns:
                 connection.execute('ALTER TABLE sources ADD COLUMN connection_id TEXT')
+            if 'wiki_id' not in source_columns:
+                connection.execute('ALTER TABLE sources ADD COLUMN wiki_id TEXT')
             connection.execute(
                 'CREATE INDEX IF NOT EXISTS idx_sources_connection_id ON sources(connection_id)'
             )
+            connection.execute('CREATE INDEX IF NOT EXISTS idx_sources_wiki_id ON sources(wiki_id)')
+            wiki_columns = {
+                row['name'] for row in connection.execute('PRAGMA table_info(wikis)').fetchall()
+            }
+            wiki_migrations = {
+                'goal': "ALTER TABLE wikis ADD COLUMN goal TEXT NOT NULL DEFAULT ''",
+                'data_scope': (
+                    "ALTER TABLE wikis ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'specified'"
+                ),
+                'template': (
+                    "ALTER TABLE wikis ADD COLUMN template TEXT NOT NULL DEFAULT 'project_wiki'"
+                ),
+                'plan_version': (
+                    'ALTER TABLE wikis ADD COLUMN plan_version INTEGER NOT NULL DEFAULT 1'
+                ),
+                'plan_json': "ALTER TABLE wikis ADD COLUMN plan_json TEXT NOT NULL DEFAULT '{}'",
+            }
+            for column, statement in wiki_migrations.items():
+                if column not in wiki_columns:
+                    connection.execute(statement)
 
     @staticmethod
     def _source(row: sqlite3.Row) -> dict[str, Any]:
@@ -105,12 +146,218 @@ class SourceStore:
         result['warnings'] = json.loads(result.pop('warnings_json'))
         return result
 
+    @staticmethod
+    def _wiki(row: sqlite3.Row) -> dict[str, Any]:
+        result = dict(row)
+        result['plan'] = json.loads(result.pop('plan_json', '{}') or '{}')
+        return result
+
+    @staticmethod
+    def _candidate_group_id(wiki_id: str) -> str:
+        return f'wiki_{wiki_id}_build_{uuid4().hex[:8]}'
+
+    def create_wiki(
+        self,
+        *,
+        name: str,
+        slug: str | None = None,
+        goal: str = '',
+        data_scope: str = 'specified',
+        plan: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        wiki_id = uuid4().hex
+        now = utc_now_iso()
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO wikis (
+                        id, slug, name, goal, data_scope, plan_json,
+                        candidate_group_id, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        wiki_id,
+                        slug or f'wiki-{wiki_id[:8]}',
+                        name,
+                        goal,
+                        data_scope,
+                        json.dumps(plan or {}, ensure_ascii=False),
+                        self._candidate_group_id(wiki_id),
+                        now,
+                        now,
+                    ),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError('Wiki slug 已存在') from exc
+        return self.get_wiki(wiki_id)
+
+    def get_wiki(self, wiki_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute('SELECT * FROM wikis WHERE id = ?', (wiki_id,)).fetchone()
+        if row is None:
+            raise KeyError(wiki_id)
+        return self._wiki(row)
+
+    def list_wikis(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute('SELECT * FROM wikis ORDER BY created_at DESC').fetchall()
+        return [self._wiki(row) for row in rows]
+
+    def list_wiki_jobs(
+        self,
+        wiki_id: str,
+        limit: int = 50,
+        *,
+        created_since: str | None = None,
+    ) -> list[dict[str, Any]]:
+        since_clause = 'AND j.created_at >= ?' if created_since else ''
+        parameters: list[Any] = [wiki_id]
+        if created_since:
+            parameters.append(created_since)
+        parameters.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT j.* FROM sync_jobs j
+                JOIN sources s ON s.id = j.source_id
+                WHERE s.wiki_id = ? {since_clause}
+                ORDER BY j.created_at DESC LIMIT ?
+                """,  # noqa: S608 -- the optional clause is selected from a fixed literal
+                parameters,
+            ).fetchall()
+        return [self._job(row) for row in rows]
+
+    def prepare_wiki_build(self, wiki_id: str) -> tuple[dict[str, Any], list[str]]:
+        """Start a clean candidate build and return the enabled source IDs.
+
+        A new namespace is deliberately used for every build. This keeps published
+        data immutable without copying or changing Graphiti's node/edge model.
+        """
+        now = utc_now_iso()
+        candidate_group_id = self._candidate_group_id(wiki_id)
+        with self._connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            wiki = connection.execute('SELECT * FROM wikis WHERE id = ?', (wiki_id,)).fetchone()
+            if wiki is None:
+                raise KeyError(wiki_id)
+            active = connection.execute(
+                """
+                SELECT 1 FROM sync_jobs j
+                JOIN sources s ON s.id = j.source_id
+                WHERE s.wiki_id = ? AND j.status IN ('queued', 'running')
+                LIMIT 1
+                """,
+                (wiki_id,),
+            ).fetchone()
+            if active is not None:
+                raise ValueError('该 Wiki 正在构建')
+            source_rows = connection.execute(
+                'SELECT id FROM sources WHERE wiki_id = ? AND enabled = 1 ORDER BY created_at',
+                (wiki_id,),
+            ).fetchall()
+            source_ids = [row['id'] for row in source_rows]
+            if not source_ids:
+                raise ValueError('请先为 Wiki 添加至少一个已启用数据源')
+            connection.execute(
+                """
+                UPDATE wikis SET candidate_group_id = ?, candidate_status = 'building',
+                    candidate_started_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (candidate_group_id, now, now, wiki_id),
+            )
+            connection.execute(
+                """
+                UPDATE sources SET group_id = ?, status = 'idle', last_sync_at = NULL,
+                    last_error = NULL, watermark_ms = NULL, updated_at = ?
+                WHERE wiki_id = ?
+                """,
+                (candidate_group_id, now, wiki_id),
+            )
+            connection.execute(
+                'DELETE FROM source_items WHERE source_id IN '
+                '(SELECT id FROM sources WHERE wiki_id = ?)',
+                (wiki_id,),
+            )
+        return self.get_wiki(wiki_id), source_ids
+
+    def refresh_wiki_build_status(self, wiki_id: str) -> dict[str, Any]:
+        wiki = self.get_wiki(wiki_id)
+        started_at = wiki['candidate_started_at']
+        if started_at is None:
+            return wiki
+        with self._connect() as connection:
+            active = connection.execute(
+                """
+                SELECT COUNT(*) FROM sync_jobs j
+                JOIN sources s ON s.id = j.source_id
+                WHERE s.wiki_id = ? AND j.status IN ('queued', 'running')
+                """,
+                (wiki_id,),
+            ).fetchone()[0]
+            sources = connection.execute(
+                """
+                SELECT group_id, status, last_sync_at FROM sources
+                WHERE wiki_id = ? AND enabled = 1
+                """,
+                (wiki_id,),
+            ).fetchall()
+            if active:
+                candidate_status = 'building'
+            elif sources and all(
+                source['group_id'] == wiki['candidate_group_id']
+                and source['status'] == 'idle'
+                and source['last_sync_at'] is not None
+                and source['last_sync_at'] >= started_at
+                for source in sources
+            ):
+                candidate_status = 'ready'
+            else:
+                candidate_status = 'failed'
+            connection.execute(
+                'UPDATE wikis SET candidate_status = ?, updated_at = ? WHERE id = ?',
+                (candidate_status, utc_now_iso(), wiki_id),
+            )
+        return self.get_wiki(wiki_id)
+
+    def publish_wiki(self, wiki_id: str) -> dict[str, Any]:
+        wiki = self.refresh_wiki_build_status(wiki_id)
+        if wiki['candidate_status'] != 'ready':
+            raise ValueError('只有构建成功的 Candidate 才能发布')
+        now = utc_now_iso()
+        with self._connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            connection.execute(
+                """
+                UPDATE wikis SET published_group_id = candidate_group_id,
+                    published_at = ?, updated_at = ? WHERE id = ?
+                """,
+                (now, now, wiki_id),
+            )
+        return self.get_wiki(wiki_id)
+
+    def get_published_group(self, wiki_id: str) -> str:
+        wiki = self.get_wiki(wiki_id)
+        group_id = wiki['published_group_id']
+        if not group_id:
+            raise ValueError('该 Wiki 尚未发布')
+        return str(group_id)
+
+    def source_can_sync(self, source: dict[str, Any]) -> bool:
+        wiki_id = source.get('wiki_id')
+        if not wiki_id:
+            return True
+        wiki = self.get_wiki(wiki_id)
+        return source['group_id'] != wiki['published_group_id']
+
     def create_source(
         self,
         *,
         kind: str,
         name: str,
         group_id: str,
+        wiki_id: str | None = None,
         connection_id: str | None = None,
         config: dict[str, Any],
         enabled: bool,
@@ -121,14 +368,15 @@ class SourceStore:
             connection.execute(
                 """
                 INSERT INTO sources (
-                    id, kind, name, group_id, connection_id, config_json, enabled,
+                    id, kind, name, wiki_id, group_id, connection_id, config_json, enabled,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source_id,
                     kind,
                     name,
+                    wiki_id,
                     group_id,
                     connection_id,
                     json.dumps(config, ensure_ascii=False),
@@ -146,9 +394,17 @@ class SourceStore:
             raise KeyError(source_id)
         return self._source(row)
 
-    def list_sources(self) -> list[dict[str, Any]]:
+    def list_sources(self, wiki_id: str | None = None) -> list[dict[str, Any]]:
         with self._connect() as connection:
-            rows = connection.execute('SELECT * FROM sources ORDER BY created_at DESC').fetchall()
+            if wiki_id is None:
+                rows = connection.execute(
+                    'SELECT * FROM sources ORDER BY created_at DESC'
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    'SELECT * FROM sources WHERE wiki_id = ? ORDER BY created_at DESC',
+                    (wiki_id,),
+                ).fetchall()
         return [self._source(row) for row in rows]
 
     def update_source(self, source_id: str, values: dict[str, Any]) -> dict[str, Any]:
@@ -431,6 +687,13 @@ class SourceStore:
                 WHERE status = 'syncing'
                 """
             )
+            connection.execute(
+                """
+                UPDATE wikis SET candidate_status = 'failed', updated_at = ?
+                WHERE id IN (SELECT DISTINCT wiki_id FROM sources WHERE status = 'error')
+                """,
+                (now,),
+            )
         return cursor.rowcount
 
     def update_job(self, job_id: str, **values: Any) -> dict[str, Any]:
@@ -467,9 +730,10 @@ class SourceStore:
 
     def stats(self) -> dict[str, int]:
         with self._connect() as connection:
+            wikis = connection.execute('SELECT COUNT(*) FROM wikis').fetchone()[0]
             sources = connection.execute('SELECT COUNT(*) FROM sources').fetchone()[0]
             items = connection.execute('SELECT COUNT(*) FROM source_items').fetchone()[0]
             running = connection.execute(
                 "SELECT COUNT(*) FROM sync_jobs WHERE status IN ('queued', 'running')"
             ).fetchone()[0]
-        return {'sources': sources, 'items': items, 'active_jobs': running}
+        return {'wikis': wikis, 'sources': sources, 'items': items, 'active_jobs': running}

@@ -192,6 +192,25 @@ async def list_connection_resources(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get('/connections/{connection_id}/meego/views')
+async def list_meego_views(
+    connection_id: str,
+    manager: ManagerDep,
+    project_key: str = Query(min_length=1, max_length=128),
+    query: str = Query(default='', max_length=128),
+):
+    try:
+        return {
+            'items': await manager.meego_views(
+                connection_id,
+                project_key=project_key,
+                query=query,
+            )
+        }
+    except (ConnectionManagerError, KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.delete('/connections/{connection_id}', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_connection(
     connection_id: str,

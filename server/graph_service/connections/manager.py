@@ -116,7 +116,7 @@ class ConnectionManager:
         if provider is None:
             raise ConnectionManagerError('不支持的 OAuth 服务')
         if not provider.configured:
-            raise ConnectionManagerError(f'{provider_name} OAuth 尚未由管理员配置')
+            raise ConnectionManagerError(f'{provider_name} OAuth 服务未就绪')
         return provider
 
     def validate_connection(self, connection_id: str, provider_name: str) -> dict[str, Any]:
@@ -213,6 +213,29 @@ class ConnectionManager:
             if isinstance(context.get('metadata'), dict)
             else {},
         }
+        existing = next(
+            (
+                item
+                for item in self.store.list_connections(provider=provider_name)
+                if item.get('subject_id') == identity.account_id
+                and item.get('tenant_id') == identity.tenant_id
+            ),
+            None,
+        )
+        if existing:
+            return self.store.update_connection(
+                str(existing['id']),
+                access_token=tokens.access_token,
+                refresh_token=tokens.refresh_token or None,
+                provider_context=provider_context,
+                expires_at=expires_at,
+                display_name=identity.account_name,
+                subject_id=identity.account_id,
+                tenant_id=identity.tenant_id,
+                scopes=tokens.scope.split(),
+                status='active',
+                last_error=None,
+            )
         return self.store.create_connection(
             provider=provider_name,
             access_token=tokens.access_token,
@@ -317,4 +340,25 @@ class ConnectionManager:
         except (OAuthProviderError, httpx.HTTPError) as exc:
             raise ConnectionManagerError(
                 _safe_provider_error(exc, '读取 MeeGo 数据失败，请稍后重试')
+            ) from exc
+
+    async def meego_views(
+        self,
+        connection_id: str,
+        *,
+        project_key: str,
+        query: str = '',
+    ) -> list[dict[str, str]]:
+        token = await self.get_access_token(connection_id, 'meego')
+        provider = self.providers['meego']
+        try:
+            return await provider.search_views(
+                token,
+                project_key=project_key,
+                query=query,
+                view_scope='story',
+            )
+        except (OAuthProviderError, httpx.HTTPError) as exc:
+            raise ConnectionManagerError(
+                _safe_provider_error(exc, '读取 MeeGo 需求视图失败，请稍后重试')
             ) from exc

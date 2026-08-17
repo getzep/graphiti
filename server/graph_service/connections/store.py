@@ -451,6 +451,7 @@ class ConnectionStore:
         subject_id: str | None | _UnsetType = UNSET,
         tenant_id: str | None | _UnsetType = UNSET,
         scopes: list[str] | tuple[str, ...] | _UnsetType = UNSET,
+        provider_context: dict[str, Any] | None | _UnsetType = UNSET,
         status: str | _UnsetType = UNSET,
         access_token: str | _UnsetType = UNSET,
         refresh_token: str | None | _UnsetType = UNSET,
@@ -489,6 +490,24 @@ class ConnectionStore:
                         _scopes(cast(list[str] | tuple[str, ...], scopes)), ensure_ascii=False
                     )
                 )
+            if provider_context is not UNSET:
+                if provider_context is None:
+                    updates.extend(
+                        ('provider_context_nonce = NULL', 'provider_context_ciphertext = NULL')
+                    )
+                else:
+                    context_json = _context_json(
+                        cast(dict[str, Any], provider_context), field='provider_context'
+                    )
+                    encrypted = self._cipher.encrypt_text(
+                        context_json,
+                        associated_data=self._token_aad(connection_id, row['provider'], 'context'),
+                    )
+                    updates.extend(
+                        ('provider_context_nonce = ?', 'provider_context_ciphertext = ?')
+                    )
+                    parameters.extend((encrypted.nonce, encrypted.ciphertext))
+                token_changed = True
             if status is not UNSET:
                 if status not in _CONNECTION_STATUSES:
                     raise ValueError('status is invalid')

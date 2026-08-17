@@ -1,7 +1,7 @@
-# Graphiti Studio 中文快速开始
+# Vaka Wiki（Graphiti 底座）中文快速开始
 
 这套本地编排用于复现当前工作区代码，而不是安装 PyPI 上的旧版
-graphiti-core。默认启动 Neo4j、Graphiti Studio REST 服务和 Graphiti MCP
+graphiti-core。默认启动 Neo4j、Vaka Wiki 控制面 REST 服务和 Graphiti MCP
 服务，支持本地文件、飞书、MeeGo 数据源及增量同步。
 
 ## 架构与端口
@@ -9,18 +9,18 @@ graphiti-core。默认启动 Neo4j、Graphiti Studio REST 服务和 Graphiti MCP
     浏览器
       │  http://localhost:8000
       ▼
-    Graphiti Studio ── SQLite 同步状态 + 上传文件
+    Vaka 知识中心 ── SQLite Wiki/计划/构建/发布状态 + 上传文件
       │
       ├── Graphiti Core ───────────────┐
       │                                ▼
-    Working Agent ── MCP /mcp/ ── Graphiti Core ── Neo4j
+    Working Agent ── MCP /wiki/{wiki_id}/mcp ── Graphiti Core ── Neo4j
                          :8001                    :7687
 
-- Studio 提供数据源管理、同步、搜索和图谱浏览。
+- Vaka 知识中心提供 Copilot 对话创建、计划查看、文件库、离线任务、实体目录、
+  图谱、检索和 MCP 管理。
 - REST 与 MCP 都从当前 checkout 构建，并连接同一个 Neo4j。
 - graphiti_data 保存 SQLite 增量状态和上传文件；neo4j_data 保存图数据。
-- MCP 不是静态“导出文件”格式。Agent 通过 MCP 协议端点
-  http://localhost:8001/mcp/ 实时查询和更新 Neo4j 中的图谱。
+- 每个 Wiki 自动生成一个只读 MCP URL；Agent 只会读取该 Wiki 当前已发布的版本。
 
 当前 Compose 默认只把端口绑定到 127.0.0.1，避免把无认证的管理接口直接
 暴露到局域网或公网。
@@ -37,7 +37,7 @@ Neo4j/FalkorDB 入口以兼容既有工作流，不要把两套编排同时启�
 至少修改以下三项：
 
     ARK_API_KEY=替换为新建或已轮换的方舟密钥
-    ARK_CHAT_MODEL=替换为方舟 Chat Endpoint ID
+    ARK_CHAT_MODEL=ep-20260805000513-69bnd
     NEO4J_PASSWORD=替换为强密码
 
 ARK_CHAT_MODEL 应填写可调用 Doubao Seed Chat Completions 的 Endpoint ID，
@@ -47,7 +47,7 @@ OpenAI-compatible API 地址。
 官方参考：[Ark ChatCompletions API](https://api.volcengine.com/api-docs/view?action=ChatCompletions&serviceCode=ark&version=2024-01-01)。
 
 不要提交 .env。密钥如果曾出现在聊天、日志或截图中，应先在控制台撤销并
-重新生成；不要继续使用已暴露的值。本仓库的示例文件只保存占位符。
+重新生成；不要继续使用已暴露的值。本仓库的示例文件不保存真实密钥。
 
 ## 2. 启动与检查
 
@@ -59,7 +59,7 @@ OpenAI-compatible API 地址。
 
 常用入口：
 
-- Studio：http://localhost:8000/
+- Vaka 知识中心：http://localhost:8000/
 - OpenAPI：http://localhost:8000/docs
 - REST 健康检查：http://localhost:8000/healthcheck
 - Neo4j Browser：http://localhost:7474/
@@ -77,23 +77,31 @@ OpenAI-compatible API 地址。
 在上述 down 命令后增加 -v 会删除 Neo4j、同步状态和上传文件卷，属于不可恢复
 的清理操作；执行前先备份。
 
-## 3. Database 与 Group ID 必须对齐
+## 3. Wiki、Candidate 与 Published
 
-本分支的服务适配层会按显式 group_id 路由图数据。Neo4j Community 只提供
-默认的 neo4j database，因此本地数据库设置为：
+所有 Wiki 复用同一个 Neo4j database：
 
     NEO4J_DATABASE=neo4j
 
-MCP 配置直接从 NEO4J_DATABASE 派生默认 group_id；Studio 中新建数据源、
-图谱浏览和搜索也应使用 neo4j。不要沿用旧示例中的 main，否则可能出现
-database not found。REST、MCP 和 Studio 必须使用同一个值；已有 main 数据源
-定义需要先迁移或重新创建，不能仅修改搜索框。
+控制面为每次 Wiki 构建自动分配新的 Graphiti `group_id`。数据源只写入
+Candidate namespace；构建成功后，系统自动原子切换 Wiki 的
+`published_group_id`。搜索、图谱页和 Wiki MCP 始终解析这个发布指针，不会读到
+构建中的部分数据。用户不需要、也不能在 Studio 中手工管理 `group_id`。
+
+最小操作流程：
+
+1. 在「我的 Wiki」右侧 Vaka Copilot 输入“帮我创建一个新的 Wiki：xxx”；
+2. 按对话补充建库目标和数据范围，确认项目 Wiki 计划；
+3. 在「文件库」添加一个或多个本地、飞书或 MeeGo 数据源；
+4. 上传或关联数据后，系统自动提交离线构建；
+5. 构建成功后自动发布，在 Wiki 左侧浏览实体目录或图谱；
+6. 点击左下角 MCP 入口，复制当前 Wiki 的 MCP URL 给 Agent。
 
 ## 4. 数据源与增量同步
 
 ### 本地文件
 
-在 Studio 创建“本地文件”数据源后上传文件。当前支持 PDF、txt、Markdown、
+在当前 Wiki 的「文件库」中创建“本地文件”数据源并上传文件后，系统会自动开始构建。当前支持 PDF、txt、Markdown、
 CSV、TSV、JSON、JSONL、YAML、XML、HTML、日志和 DOCX。默认单文件上限为
 25 MiB，可用 MAX_UPLOAD_BYTES 调整。
 
@@ -116,26 +124,28 @@ PDF 使用文档已有的文本层进行提取，适合可以选中文字或复�
 
 ### 飞书
 
-管理员先在飞书开放平台创建一个网页应用，并在根目录 `.env` 配置：
+用户侧只有个人 OAuth 授权，不需要填写 App ID、App Secret、token、folder token，
+也没有额外的角色配置步骤：
 
-    FEISHU_APP_ID=替换为内部应用 ID
-    FEISHU_APP_SECRET=替换为内部应用密钥
-    OAUTH_PUBLIC_BASE_URL=http://localhost:8000
+1. 在 Vaka 点击“添加数据 → 飞书 → 连接飞书”；
+2. 在飞书官方页面使用自己的账号确认授权；
+3. 回到 Vaka 浏览自己可见的空间，选择整个空间、文件夹或若干文档；
+4. 添加数据并构建 Wiki。
 
-在应用“安全设置”中登记完整回调地址：
+OAuth 只代表当前用户，不会绕过飞书文档 ACL。Vaka 只会读取该用户原本有权限访问的
+内容。
+
+Vaka 使用标准 OAuth Authorization Code + PKCE。部署 Vaka 时需要注册一个网页应用，
+登记回调地址并把 Client 凭据仅注入服务端；这是服务部署配置，终端用户不参与：
 
     http://localhost:8000/api/oauth/feishu/callback
 
-并申请 `.env.example` 中 `FEISHU_OAUTH_SCOPES` 所列只读权限及
-`offline_access`，发布可用版本。普通用户不填写 App Secret、token、folder_token：
+    FEISHU_APP_ID=Vaka OAuth Client ID
+    FEISHU_APP_SECRET=Vaka OAuth Client Secret
+    OAUTH_PUBLIC_BASE_URL=http://localhost:8000
 
-1. 在 Studio 点击“添加数据源 → 飞书 → 连接飞书”；
-2. 在飞书官方页面确认授权；
-3. 回到 Studio 浏览“我的空间”，选择整个空间、一个文件夹或若干文档；
-4. 创建数据源并同步。
-
-访问令牌与 PKCE 状态只在后端处理，并使用 AES-256-GCM 加密保存在 SQLite；前端
-只收到连接 ID 和账号显示名。刷新令牌轮换也在后端原子更新，不进入浏览器存储。
+用户访问令牌与 OAuth 状态只在后端处理，并使用 AES-256-GCM 加密保存在 SQLite；
+前端只收到连接 ID 和账号显示名。刷新令牌轮换也在后端原子更新，不进入浏览器存储。
 本地 Compose 未显式配置 `OAUTH_TOKEN_ENCRYPTION_KEY` 时，会在持久卷中生成一个
 仅供本实例使用的密钥；生产环境应由 secret manager 注入固定的 32 字节密钥。
 
@@ -158,20 +168,29 @@ OAuth 只代表当前授权用户，不会绕过飞书文档 ACL。建议：
 新建数据源使用 MeeGo 官方的新 OAuth + MCP 数据面，不需要插件 ID、插件密钥、
 User Key，也不需要用户复制 project_key。默认配置只有：
 
-    MEEGO_HOST=project.feishu.cn
+    MEEGO_HOST=meego.larkoffice.com
     OAUTH_PUBLIC_BASE_URL=http://localhost:8000
+
+`MEEGO_HOST` 必须与用户实际 MeeGo URL 的域名一致。例如
+`https://meego.larkoffice.com/ai_search_rec/...` 对应 `meego.larkoffice.com`。
+不同域名是相互隔离的站点，OAuth 授权和视图数据不能复用。
 
 使用步骤：
 
 1. 在 Studio 点击“添加数据源 → MeeGo → 连接 MeeGo”；
 2. 在 MeeGo 页面授权；
-3. 回到 Studio 从当前账号可见空间中选择项目及工作项类型；
-4. 创建数据源并同步。
+3. 回到 Studio，从当前账号可见范围中选择产品或项目；
+4. 在“导入范围”中选择具体需求视图；视图较多时可按名称查找；
+5. 点击“同步到文件库”。后端保存选择结果的项目 Key 和 View ID，并通过
+   `get_view_detail` 精确读取该视图当前筛选出的需求，
+   再补充每条需求的完整字段。视图筛选发生变化后，下一次同步会自动跟随。
+
+终端用户不需要复制 MeeGo 链接，也不需要理解或填写 project_key、view_id。
 
 后端按 OAuth Discovery 动态注册 PKCE 客户端，随后以 Bearer token 调用 MeeGo
-MCP，并先执行 `tools/list` 再选择服务端实际提供的项目/工作项工具。最终可见范围
+MCP，并先执行 `tools/list` 再选择服务端实际提供的视图/工作项工具。最终可见范围
 仍由当前 MeeGo 用户权限决定。部分企业租户可能限制网页回调或动态注册；若授权页
-拒绝当前回调地址，需要由 MeeGo 管理员调整租户策略，而不是让用户粘贴 token。
+拒绝当前回调地址，需要调整对应租户策略，而不是让用户粘贴 token。
 
 旧版本中 `MEEGO_PLUGIN_*` / `MEEGO_USER_KEY` 只用于已有、未绑定
 `connection_id` 的数据源兼容；Studio 不再提供创建这种数据源的 UI。
@@ -209,25 +228,27 @@ endpoint 当成 embedding 模型。官方参数和模型要求见
 向量索引维度也必须一致。生产切换前应备份，并在干净的数据库实例中重建索引和
 重新摄取数据；不要直接在已有图上改维度。
 
-## 6. Working Agent 接入 MCP
+## 6. Working Agent 接入 Wiki MCP
 
 支持 Streamable HTTP 的客户端可使用类似配置：
 
     {
       "mcpServers": {
-        "graphiti": {
-          "url": "http://localhost:8001/mcp/"
+        "vakaWiki": {
+          "url": "http://localhost:8001/wiki/<wiki_id>/mcp"
         }
       }
     }
 
-末尾的 /mcp/ 需要保留。默认 group_id 为 neo4j，与 NEO4J_DATABASE 对齐。
+Wiki ID 和完整 URL 可直接从 Studio 复制。Wiki MCP 仅暴露 `item.search`、
+`item.get` 和 `link.traverse` 三个只读工具。`/mcp/` 依然保留为开发管理端点，
+包含写入和删除工具，不应交给 Wiki 消费方。
 
 ### MCP 安全边界
 
-当前 /mcp/ 没有内建的用户认证或租户授权，并且提供读、写及清理图数据的工具。
-USER_ID 只是操作标识，不是身份认证。任何能访问该端点的 Agent 都应被视为
-拥有该图谱的高权限。
+当前 MCP 没有内建的用户认证或租户授权。Wiki URL 会强制查询对应的
+Published namespace，但 URL 隔离不等于身份认证；拿到 URL 的调用方可以读取该 Wiki。
+`/mcp/` 管理端点还提供读、写及清理图数据的工具。
 
 因此：
 
@@ -245,7 +266,7 @@ Studio REST API 当前同样不应被视为带认证的公网控制面。若需�
 
 - 所有曾暴露的 API key 已轮换，密钥由 secrets manager 注入。
 - Neo4j、Studio 与 MCP 不直接监听公网，入口有认证、TLS 和审计。
-- NEO4J_DATABASE 以及 Studio/MCP 的 group_id 都是 neo4j。
+- NEO4J_DATABASE 为 neo4j；Wiki namespace 由控制面自动生成。
 - REST 与 MCP 使用同一 embedding endpoint 和维度。
 - Feishu/MeeGo 应用只拥有目标数据的只读最小权限。
 - 定期备份 neo4j_data 与 graphiti_data，并验证恢复流程。

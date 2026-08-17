@@ -34,7 +34,7 @@ services:
       ARK_API_KEY: "${ARK_API_KEY:-}"
       ARK_BASE_URL: "${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
       ARK_CHAT_MODEL: "${ARK_CHAT_MODEL:-}"
-      ARK_STRUCTURED_OUTPUT_MODE: "${STRUCTURED_OUTPUT_MODE:-prompt_only}"
+      ARK_STRUCTURED_OUTPUT_MODE: "${STRUCTURED_OUTPUT_MODE:-json_schema}"
       ARK_TEMPERATURE: "${LLM_TEMPERATURE:-0}"
       ARK_MAX_TOKENS: "${LLM_MAX_TOKENS:-8192}"
       EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-local_hash}"
@@ -50,19 +50,19 @@ services:
       SOURCE_STATE_PATH: /app/data/source_state.db
       UPLOAD_ROOT: /app/data/uploads
       MAX_UPLOAD_BYTES: "${MAX_UPLOAD_BYTES:-26214400}"
-      SYNC_CONCURRENCY: "${SYNC_CONCURRENCY:-1}"
+      SYNC_CONCURRENCY: "${SYNC_CONCURRENCY:-2}"
       OAUTH_PUBLIC_BASE_URL: "${OAUTH_PUBLIC_BASE_URL:-http://localhost:8000}"
       OAUTH_TOKEN_ENCRYPTION_KEY: "${OAUTH_TOKEN_ENCRYPTION_KEY:-}"
       OAUTH_COOKIE_SECURE: "${OAUTH_COOKIE_SECURE:-false}"
       FEISHU_APP_ID: "${FEISHU_APP_ID:-}"
       FEISHU_APP_SECRET: "${FEISHU_APP_SECRET:-}"
       FEISHU_BASE_URL: "${FEISHU_BASE_URL:-https://open.feishu.cn/open-apis}"
-      FEISHU_OAUTH_SCOPES: "${FEISHU_OAUTH_SCOPES:-offline_access space:document:retrieve docx:document:readonly drive:file:readonly}"
-      MEEGO_HOST: "${MEEGO_HOST:-project.feishu.cn}"
+      FEISHU_OAUTH_SCOPES: "${FEISHU_OAUTH_SCOPES:-offline_access space:document:retrieve docx:document:readonly}"
+      MEEGO_HOST: "${MEEGO_HOST:-meego.larkoffice.com}"
       MEEGO_PLUGIN_ID: "${MEEGO_PLUGIN_ID:-}"
       MEEGO_PLUGIN_SECRET: "${MEEGO_PLUGIN_SECRET:-}"
       MEEGO_USER_KEY: "${MEEGO_USER_KEY:-}"
-      MEEGO_BASE_URL: "${MEEGO_BASE_URL:-https://project.feishu.cn/open_api}"
+      MEEGO_BASE_URL: "${MEEGO_BASE_URL:-https://meego.larkoffice.com/open_api}"
       MCP_PUBLIC_URL: "${MCP_PUBLIC_URL:-http://localhost:8001/mcp/}"
       GRAPHITI_TELEMETRY_ENABLED: "false"
     healthcheck:
@@ -86,6 +86,8 @@ services:
     command: ["python", "main.py", "--config", "config/config-ark-neo4j.yaml"]
     ports:
       - "127.0.0.1:${GRAPHITI_MCP_PORT:-8001}:8000"
+    volumes:
+      - graphiti_data:/app/vaka-data:ro
     depends_on:
       neo4j:
         condition: service_healthy
@@ -93,7 +95,7 @@ services:
       ARK_API_KEY: "${ARK_API_KEY:-}"
       ARK_BASE_URL: "${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
       ARK_CHAT_MODEL: "${ARK_CHAT_MODEL:-}"
-      LLM__STRUCTURED_OUTPUT_MODE: "${STRUCTURED_OUTPUT_MODE:-prompt_only}"
+      LLM__STRUCTURED_OUTPUT_MODE: "${STRUCTURED_OUTPUT_MODE:-json_schema}"
       LLM__TEMPERATURE: "${LLM_TEMPERATURE:-0}"
       LLM__MAX_TOKENS: "${LLM_MAX_TOKENS:-8192}"
       NEO4J_URI: bolt://neo4j:7687
@@ -107,6 +109,7 @@ services:
       EMBEDDER__DIMENSIONS: "${EMBEDDING_DIM:-1024}"
       EMBEDDER__PROVIDERS__OPENAI__API_KEY: "${EMBEDDING_API_KEY:-}"
       EMBEDDER__PROVIDERS__OPENAI__API_URL: "${EMBEDDING_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
+      VAKA_STATE_PATH: /app/vaka-data/source_state.db
       GRAPHITI_TELEMETRY_ENABLED: "false"
     healthcheck:
       test:

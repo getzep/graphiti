@@ -9,6 +9,10 @@ from typing import Any
 from graphiti_core.nodes import EpisodeType
 
 from graph_service.config import Settings
+from graph_service.wikis.templates import (
+    PROJECT_WIKI_ENTITY_TYPES,
+    PROJECT_WIKI_EXTRACTION_INSTRUCTIONS,
+)
 from graph_service.zep_graphiti import ZepGraphiti, create_graphiti_client
 
 from .connectors import ConnectorError, build_connector
@@ -94,6 +98,8 @@ class SyncManager:
             source=EpisodeType.text,
             source_description=(f'{source["kind"]}:{source["id"]}:{document.external_id}'[:500]),
             saga=f'source:{source["id"]}:{document.external_id}'[:500],
+            entity_types=PROJECT_WIKI_ENTITY_TYPES,
+            custom_extraction_instructions=PROJECT_WIKI_EXTRACTION_INSTRUCTIONS,
             **kwargs,
         )
         # Graphiti interprets a supplied UUID as an already-persisted episode to reprocess.
@@ -136,6 +142,11 @@ class SyncManager:
 
             for document in documents:
                 counts['scanned'] += 1
+                # Persist discovery before the expensive Graphiti extraction so the UI does
+                # not look stuck at 0 while a document is being processed by the model.
+                self.store.update_job(
+                    job_id, **counts, warnings=connector.warnings + connector.errors
+                )
                 existing = self.store.get_item(source['id'], document.external_id)
                 if not document.content.strip():
                     counts['failed'] += 1
@@ -242,6 +253,10 @@ class SyncManager:
             self.store.set_source_state(source['id'], status='error', last_error=error)
             logger.exception('Source sync job %s failed', job_id)
         finally:
+            if source.get('wiki_id'):
+                wiki = self.store.refresh_wiki_build_status(source['wiki_id'])
+                if wiki['candidate_status'] == 'ready':
+                    self.store.publish_wiki(source['wiki_id'])
             if graphiti is not None:
                 try:
                     await graphiti.close()

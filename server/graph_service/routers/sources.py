@@ -4,9 +4,11 @@ import base64
 import binascii
 import json
 import os
+import re
 from datetime import timezone
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -59,6 +61,11 @@ SENSITIVE_CONFIG_KEYS = {
     'token',
     'user_key',
 }
+MEEGO_VIEW_PATH = re.compile(
+    r'^/(?P<project_key>[A-Za-z0-9_-]{1,128})/'
+    r'(?P<work_item_type>[A-Za-z0-9_-]{1,64})View/'
+    r'(?P<view_id>[A-Za-z0-9_-]{1,128})/?$'
+)
 
 
 def _not_found(kind: str, identifier: str) -> HTTPException:
@@ -95,7 +102,46 @@ def _config_string_list(config: dict[str, Any], key: str) -> list[str]:
     return result
 
 
-def _normalize_config(kind: str, config: dict[str, Any]) -> dict[str, Any]:
+def _normalize_meego_view_url(value: Any, *, expected_host: str | None = None) -> dict[str, str]:
+    if not isinstance(value, str):
+        raise HTTPException(status_code=422, detail='config.view_url 必须是字符串')
+    view_url = value.strip()
+    if not view_url or len(view_url) > 2048 or any(ord(character) < 32 for character in view_url):
+        raise HTTPException(status_code=422, detail='config.view_url 格式无效')
+    parsed = urlsplit(view_url)
+    host = (parsed.hostname or '').lower()
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail='请粘贴完整的 MeeGo HTTPS 视图链接') from exc
+    if parsed.scheme != 'https' or not host or parsed.username or parsed.password or port:
+        raise HTTPException(status_code=422, detail='请粘贴完整的 MeeGo HTTPS 视图链接')
+    if expected_host and host != expected_host.strip().lower():
+        raise HTTPException(
+            status_code=422,
+            detail=f'该视图属于 {host}，请粘贴 {expected_host} 中的 MeeGo 视图链接',
+        )
+    matched = MEEGO_VIEW_PATH.fullmatch(parsed.path)
+    if not matched:
+        raise HTTPException(
+            status_code=422,
+            detail='MeeGo 视图链接应类似 /项目标识/storyView/视图ID',
+        )
+    result = matched.groupdict()
+    return {
+        'view_url': view_url,
+        'project_key': result['project_key'],
+        'work_item_type_key': result['work_item_type'],
+        'view_id': result['view_id'],
+    }
+
+
+def _normalize_config(
+    kind: str,
+    config: dict[str, Any],
+    *,
+    meego_host: str | None = None,
+) -> dict[str, Any]:
     allowed = {
         'local': set(),
         'feishu': {
@@ -105,7 +151,16 @@ def _normalize_config(kind: str, config: dict[str, Any]) -> dict[str, Any]:
             'recursive',
             'root_folder',
         },
-        'meego': {'project_key', 'work_item_type_keys', 'page_size'},
+        'meego': {
+            'view_url',
+            'view_id',
+            'view_name',
+            'project_key',
+            'project_name',
+            'work_item_type_key',
+            'work_item_type_keys',
+            'page_size',
+        },
     }[kind]
     rejected = set(config) - allowed
     if rejected:
@@ -163,11 +218,41 @@ def _normalize_config(kind: str, config: dict[str, Any]) -> dict[str, Any]:
             or not 1 <= page_size <= 200
         ):
             raise HTTPException(status_code=422, detail='config.page_size 必须是 1 到 200 的整数')
-        normalized = {
-            'project_key': _config_string(config, 'project_key', required=True),
-            'work_item_type_keys': _config_string_list(config, 'work_item_type_keys'),
-            'page_size': page_size,
-        }
+        if config.get('view_url'):
+            normalized = {
+                **_normalize_meego_view_url(config['view_url'], expected_host=meego_host),
+                'page_size': page_size,
+            }
+            view_name = _config_string(config, 'view_name')
+            project_name = _config_string(config, 'project_name')
+            if view_name:
+                normalized['view_name'] = view_name
+            if project_name:
+                normalized['project_name'] = project_name
+        elif config.get('view_id'):
+            normalized = {
+                'view_url': '',
+                'view_id': _config_string(config, 'view_id', required=True),
+                'project_key': _config_string(config, 'project_key', required=True),
+                'work_item_type_key': _config_string(
+                    config, 'work_item_type_key', required=True
+                ),
+                'page_size': page_size,
+            }
+            view_name = _config_string(config, 'view_name')
+            project_name = _config_string(config, 'project_name')
+            if view_name:
+                normalized['view_name'] = view_name
+            if project_name:
+                normalized['project_name'] = project_name
+        else:
+            # Keep existing project-level sources readable. New sources are created from a
+            # concrete MeeGo view selected through OAuth so their scope matches the UI.
+            normalized = {
+                'project_key': _config_string(config, 'project_key', required=True),
+                'work_item_type_keys': _config_string_list(config, 'work_item_type_keys'),
+                'page_size': page_size,
+            }
 
     if len(json.dumps(normalized, ensure_ascii=False).encode('utf-8')) > MAX_CONFIG_BYTES:
         raise HTTPException(status_code=422, detail='数据源 config 过大')
@@ -198,6 +283,14 @@ def _validate_config(kind: str, config: dict[str, Any]) -> dict[str, Any]:
 def _ensure_source_idle(store: SourceStore, source_id: str) -> None:
     if store.active_job_for_source(source_id):
         raise HTTPException(status_code=409, detail='数据源正在同步，请等待任务结束后重试')
+
+
+def _ensure_source_writable(store: SourceStore, source: dict[str, Any]) -> None:
+    if not store.source_can_sync(source):
+        raise HTTPException(
+            status_code=409,
+            detail='该数据源所在 Wiki 已发布，请使用 Wiki 构建接口生成新 Candidate',
+        )
 
 
 def _decode_uploads(
@@ -241,7 +334,7 @@ async def dashboard_status(request: Request, settings: SettingsDep, store: Store
     oauth_providers = connection_manager.provider_status()
     connections = connection_manager.store.list_connections()
     return {
-        'service': 'Graphiti Studio',
+        'service': 'Vaka Wiki',
         'database': {
             'provider': settings.db_backend,
             'configured': bool(
@@ -273,6 +366,7 @@ async def dashboard_status(request: Request, settings: SettingsDep, store: Store
         },
         'oauth': {
             'providers': oauth_providers,
+            'hosts': {'meego': settings.meego_host},
             'active_connections': sum(item['status'] == 'active' for item in connections),
         },
         'suggested_group_id': _suggested_group_id(settings),
@@ -282,8 +376,13 @@ async def dashboard_status(request: Request, settings: SettingsDep, store: Store
 
 
 @router.get('/sources')
-async def list_sources(store: StoreDep):
-    return [_public_source(source) for source in store.list_sources()]
+async def list_sources(store: StoreDep, wiki_id: str | None = Query(default=None)):
+    if wiki_id is not None:
+        try:
+            store.get_wiki(wiki_id)
+        except KeyError as exc:
+            raise _not_found('Wiki', wiki_id) from exc
+    return [_public_source(source) for source in store.list_sources(wiki_id)]
 
 
 @router.post('/sources', status_code=status.HTTP_201_CREATED)
@@ -291,9 +390,19 @@ async def create_source(
     request: SourceCreateRequest,
     store: StoreDep,
     connections: ConnectionManagerDep,
+    settings: SettingsDep,
 ):
     values = request.model_dump()
-    values['config'] = _normalize_config(request.kind, request.config)
+    values['config'] = _normalize_config(
+        request.kind,
+        request.config,
+        meego_host=settings.meego_host if request.kind == 'meego' else None,
+    )
+    if request.wiki_id:
+        try:
+            values['group_id'] = store.get_wiki(request.wiki_id)['candidate_group_id']
+        except KeyError as exc:
+            raise _not_found('Wiki', request.wiki_id) from exc
     if request.kind == 'local':
         if request.connection_id is not None:
             raise HTTPException(status_code=422, detail='本地数据源不能绑定远程账号')
@@ -313,6 +422,7 @@ async def update_source(
     request: SourceUpdateRequest,
     store: StoreDep,
     connections: ConnectionManagerDep,
+    settings: SettingsDep,
 ):
     values = request.model_dump(exclude_unset=True)
     try:
@@ -322,7 +432,13 @@ async def update_source(
     if 'config' in values:
         if values['config'] is None:
             raise HTTPException(status_code=422, detail='config 不能为空')
-        values['config'] = _normalize_config(current['kind'], values['config'])
+        values['config'] = _normalize_config(
+            current['kind'],
+            values['config'],
+            meego_host=settings.meego_host if current['kind'] == 'meego' else None,
+        )
+    if current.get('wiki_id') and 'group_id' in values:
+        raise HTTPException(status_code=422, detail='Wiki 数据源的 group_id 由构建流程管理')
     if current['kind'] == 'local':
         if values.get('connection_id') is not None:
             raise HTTPException(status_code=422, detail='本地数据源不能绑定远程账号')
@@ -387,6 +503,7 @@ async def upload_files(
         raise HTTPException(status_code=409, detail='数据源已停用；请先启用或关闭自动同步')
     if request.sync:
         _ensure_source_idle(store, source_id)
+        _ensure_source_writable(store, source)
 
     # Decode and validate the complete batch before touching the filesystem. A malformed later
     # entry must not leave earlier files silently committed.
@@ -434,7 +551,8 @@ async def sync_source(
     manager: SyncManagerDep,
 ):
     try:
-        store.get_source(source_id)
+        source = store.get_source(source_id)
+        _ensure_source_writable(store, source)
         return manager.enqueue(source_id, full_sync=request.full)
     except KeyError as exc:
         raise _not_found('数据源', source_id) from exc

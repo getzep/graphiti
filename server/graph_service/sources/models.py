@@ -46,6 +46,7 @@ class SourceDocument:
 class SourceCreateRequest(BaseModel):
     kind: SourceKind
     name: str = Field(min_length=1, max_length=120)
+    wiki_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
     group_id: str = Field(default=DEFAULT_GROUP_ID, pattern=r'^[a-zA-Z0-9_-]+$')
     connection_id: str | None = Field(default=None, min_length=1, max_length=64)
     config: dict[str, Any] = Field(default_factory=dict)

@@ -110,6 +110,21 @@ async def test_oauth_state_callback_persists_encrypted_connection_and_rejects_re
         'parent_id': 'folder-1',
         'next_page': 'next',
     }
+    second_url = await manager.start(
+        'feishu',
+        public_base_url='http://localhost:8000',
+        browser_session='browser-session-value-with-enough-entropy',
+    )
+    second_state = parse_qs(urlparse(second_url).query)['state'][0]
+    reconnected = await manager.complete(
+        'feishu',
+        state=second_state,
+        browser_session='browser-session-value-with-enough-entropy',
+        code='one-time-code',
+        oauth_error=None,
+    )
+    assert reconnected['id'] == connection['id']
+    assert len(store.list_connections(provider='feishu')) == 1
     with pytest.raises(ConnectionManagerError):
         await manager.complete(
             'feishu',

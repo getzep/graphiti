@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from graph_service.config import get_settings
 from graph_service.connections.manager import ConnectionManager, load_or_create_encryption_key
 from graph_service.connections.store import ConnectionStore
-from graph_service.routers import connections, ingest, retrieve, sources
+from graph_service.routers import connections, ingest, retrieve, sources, wikis
 from graph_service.sources.store import SourceStore
 from graph_service.sources.sync import SyncManager
 from graph_service.zep_graphiti import initialize_graphiti
@@ -47,8 +47,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title='Graphiti Studio',
-    description='Incremental knowledge graph ingestion from local files, Feishu, and MeeGo.',
+    title='Vaka Wiki Control Plane',
+    description='Vaka Wiki product and governance layer backed by Graphiti.',
     lifespan=lifespan,
 )
 
@@ -57,6 +57,7 @@ app.include_router(retrieve.router)
 app.include_router(ingest.router)
 app.include_router(connections.router)
 app.include_router(sources.router)
+app.include_router(wikis.router)
 app.mount('/static', StaticFiles(directory=STATIC_ROOT), name='static')
 
 

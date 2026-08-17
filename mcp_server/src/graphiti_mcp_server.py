@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -21,7 +22,9 @@ from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
+from starlette.applications import Starlette
 from starlette.responses import JSONResponse
+from starlette.routing import Mount
 
 from config.schema import GraphitiConfig, ServerConfig
 from models.response_types import (
@@ -53,6 +56,7 @@ from utils.type_config import (
     coerce_group_ids,
     parse_reference_time,
 )
+from vaka_wiki_mcp import create_vaka_wiki_mcp
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -344,6 +348,28 @@ class GraphitiService:
         if self.client is None:
             raise RuntimeError('Failed to initialize Graphiti client')
         return self.client
+
+
+def create_http_application(admin_server: FastMCP, wiki_server: FastMCP) -> Starlette:
+    """Mount the admin MCP and the read-only per-Wiki MCP in one process."""
+    admin_app = admin_server.streamable_http_app()
+    wiki_app = wiki_server.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        async with (
+            admin_app.router.lifespan_context(admin_app),
+            wiki_app.router.lifespan_context(wiki_app),
+        ):
+            yield
+
+    return Starlette(
+        routes=[
+            Mount('/wiki/{wiki_id}', app=wiki_app),
+            Mount('/', app=admin_app),
+        ],
+        lifespan=lifespan,
+    )
 
 
 @mcp.tool()
@@ -1273,7 +1299,21 @@ async def run_mcp_server():
         # Configure uvicorn logging to match our format
         configure_uvicorn_logging()
 
-        await mcp.run_streamable_http_async()
+        if graphiti_service is None:
+            raise RuntimeError('Graphiti service not initialized')
+        wiki_mcp = create_vaka_wiki_mcp(graphiti_service.get_client)
+        application = create_http_application(mcp, wiki_mcp)
+        import uvicorn
+
+        server = uvicorn.Server(
+            uvicorn.Config(
+                application,
+                host=mcp.settings.host,
+                port=mcp.settings.port,
+                log_level=mcp.settings.log_level.lower(),
+            )
+        )
+        await server.serve()
     else:
         raise ValueError(
             f'Unsupported transport: {mcp_config.transport}. Use "sse", "stdio", or "http"'

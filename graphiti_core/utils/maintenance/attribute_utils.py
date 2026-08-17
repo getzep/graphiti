@@ -177,9 +177,25 @@ def cap_string_attributes(
     Logging deliberately uses ``entity_uuid`` (not name) per AGENTS.md "no PII in logs".
     """
     effective_default = _resolve_default_max_length(default_max_length)
+    model_fields = model.model_fields
+    # Some prompt-only structured-output providers wrap the requested object in an
+    # ``attributes`` key. Custom entity models cannot define that reserved EntityNode
+    # field, so it is safe to normalize this common wrapper before validation/storage.
+    wrapped = response.get('attributes')
+    if isinstance(wrapped, dict) and not any(key in model_fields for key in response):
+        response = wrapped
     kept: dict[str, Any] = {}
     dropped: set[str] = set()
     for field_name, value in response.items():
+        # Pydantic's default extra='ignore' would let unknown LLM keys pass shape
+        # validation while they still leak into the graph property map.
+        if field_name not in model_fields:
+            continue
+        # ``null`` means no sourced value. Treat it like omission: overlay mode keeps
+        # an existing value, replace mode clears it, and no graph backend receives an
+        # unsupported null property value.
+        if value is None:
+            continue
         max_len = _field_max_length(model, field_name) or effective_default
         exceeded, reason, observed_length, breached_cap = _check_value_against_cap(value, max_len)
         if not exceeded:

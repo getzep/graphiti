@@ -76,6 +76,21 @@ def _check_feishu(payload: dict[str, Any], operation: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else payload
 
 
+def _feishu_http_error(response: httpx.Response, operation: str) -> OAuthProviderError:
+    try:
+        payload = response.json()
+    except (json.JSONDecodeError, ValueError):
+        return OAuthProviderError(f'{operation}失败（HTTP {response.status_code}）')
+    if not isinstance(payload, dict):
+        return OAuthProviderError(f'{operation}失败（HTTP {response.status_code}）')
+    code = payload.get('code') or payload.get('error')
+    message = payload.get('msg') or payload.get('error_description')
+    detail = '：'.join(str(part) for part in (code, message) if part)
+    if detail:
+        return OAuthProviderError(f'{operation}失败：{detail[:240]}')
+    return OAuthProviderError(f'{operation}失败（HTTP {response.status_code}）')
+
+
 class FeishuOAuthProvider:
     name = 'feishu'
 
@@ -88,7 +103,7 @@ class FeishuOAuthProvider:
 
     async def start(self, redirect_uri: str, state: str) -> OAuthStart:
         if not self.configured:
-            raise OAuthProviderError('管理员尚未配置飞书 OAuth 应用')
+            raise OAuthProviderError('飞书 OAuth 服务未就绪')
         verifier, challenge = generate_pkce()
         scopes = ' '.join(self.settings.feishu_oauth_scopes.split())
         query = urlencode(
@@ -133,7 +148,7 @@ class FeishuOAuthProvider:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(token_url, json=body)
         if response.status_code >= 400:
-            raise OAuthProviderError('飞书授权码交换失败，请重新授权')
+            raise _feishu_http_error(response, '飞书授权码交换')
         data = _check_feishu(_json_object(response, '飞书授权'), '飞书授权')
         access_token = str(data.get('access_token') or '')
         if not access_token:
@@ -147,7 +162,7 @@ class FeishuOAuthProvider:
 
     async def refresh(self, refresh_token: str, client_id: str) -> OAuthTokens:
         if not self.settings.feishu_app_secret:
-            raise OAuthProviderError('管理员尚未配置飞书 OAuth 应用密钥')
+            raise OAuthProviderError('飞书 OAuth 服务未就绪，请重新连接')
         body = {
             'grant_type': 'refresh_token',
             'client_id': client_id,
@@ -157,7 +172,7 @@ class FeishuOAuthProvider:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(self.settings.feishu_token_url, json=body)
         if response.status_code >= 400:
-            raise OAuthProviderError('飞书授权已过期，请重新连接')
+            raise _feishu_http_error(response, '刷新飞书授权')
         data = _check_feishu(_json_object(response, '刷新飞书授权'), '刷新飞书授权')
         access_token = str(data.get('access_token') or '')
         if not access_token:
@@ -356,6 +371,66 @@ def find_meego_work_item_types(value: Any) -> list[dict[str, Any]]:
 
     visit(value)
     return types
+
+
+def find_meego_views(value: Any) -> list[dict[str, str]]:
+    views: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def visit(node: Any) -> None:
+        if isinstance(node, list):
+            for child in node:
+                visit(child)
+            return
+        if not isinstance(node, dict):
+            return
+        view_id = node.get('view_id') or node.get('viewId')
+        if view_id and str(view_id) not in seen:
+            key = str(view_id)
+            seen.add(key)
+            views.append(
+                {
+                    'id': key,
+                    'name': str(node.get('view_name') or node.get('name') or key),
+                }
+            )
+        for child in node.values():
+            if isinstance(child, dict | list):
+                visit(child)
+
+    visit(value)
+    return views
+
+
+def find_meego_user(value: Any) -> dict[str, str] | None:
+    if isinstance(value, list):
+        for item in value:
+            found = find_meego_user(item)
+            if found:
+                return found
+        return None
+    if not isinstance(value, dict):
+        return None
+    account_id = value.get('user_key') or value.get('out_id') or value.get('lark_user_id')
+    if account_id:
+        return {
+            'id': str(account_id),
+            'name': str(
+                value.get('name_cn')
+                or value.get('name_en')
+                or value.get('email')
+                or value.get('username')
+                or account_id
+            ),
+            'email': str(value.get('email') or ''),
+            'avatar_url': str(value.get('avatar_url') or ''),
+        }
+    for child in value.values():
+        if isinstance(child, dict | list):
+            found = find_meego_user(child)
+            if found:
+                return found
+    return None
 
 
 class MeegoOAuthProvider:
@@ -568,22 +643,26 @@ class MeegoOAuthProvider:
         return _mcp_data(payload)
 
     async def identity(self, access_token: str) -> OAuthIdentity:
-        projects = find_meego_projects(
+        user = find_meego_user(
             await self.business_call(
                 access_token,
-                resource='project',
+                resource='user',
                 method='search',
-                fallback='search_project_info',
-                arguments={'page_num': 1},
+                fallback='search_user_info',
+                arguments={'user_keys': ['current_login_user()']},
             )
         )
-        suffix = f' · {projects[0]["name"]}' if projects else ''
-        token_fingerprint = hashlib.sha256(access_token.encode()).hexdigest()[:20]
+        if not user:
+            raise OAuthProviderError('MeeGo 未返回当前账号信息')
         return OAuthIdentity(
-            account_id=f'{self.host}:{token_fingerprint}',
-            account_name=f'MeeGo 账号{suffix}',
+            account_id=user['id'],
+            account_name=user['name'],
             tenant_id=self.host,
-            metadata={'host': self.host},
+            metadata={
+                'host': self.host,
+                'email': user['email'],
+                'avatar_url': user['avatar_url'],
+            },
         )
 
     async def resources(
@@ -618,3 +697,26 @@ class MeegoOAuthProvider:
             'parent_id': '',
             'root_selectable': False,
         }
+
+    async def search_views(
+        self,
+        access_token: str,
+        *,
+        project_key: str,
+        query: str = '',
+        view_scope: str = 'story',
+    ) -> list[dict[str, str]]:
+        value = await self.business_call(
+            access_token,
+            resource='view',
+            method='search',
+            fallback='search_view_by_title',
+            arguments={
+                # MeeGo rejects an empty keyword. A single space returns default
+                # visible candidates; a real query narrows the server-side result.
+                'key_word': query.strip() or ' ',
+                'project_key': project_key,
+                'view_scope': view_scope,
+            },
+        )
+        return find_meego_views(value)

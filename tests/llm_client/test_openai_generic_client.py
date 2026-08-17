@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import openai
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
@@ -171,6 +171,27 @@ def test_empty_response_error_is_retryable():
     from graphiti_core.llm_client.client import is_server_or_retry_error
 
     assert is_server_or_retry_error(EmptyResponseError('empty')) is True
+
+
+@pytest.mark.asyncio
+async def test_invalid_structured_response_fails_at_provider_boundary():
+    client, _ = _make_client(content='{"$defs": {}, "type": "object"}')
+
+    with pytest.raises(ValidationError):
+        await client._generate_response(_messages(), response_model=ResponseModel)
+
+
+def test_invalid_structured_response_is_retryable():
+    from graphiti_core.llm_client.client import is_server_or_retry_error
+
+    error = None
+    try:
+        ResponseModel.model_validate({'$defs': {}})
+    except ValidationError as exc:
+        error = exc
+
+    assert error is not None
+    assert is_server_or_retry_error(error) is True
 
 
 @pytest.mark.asyncio

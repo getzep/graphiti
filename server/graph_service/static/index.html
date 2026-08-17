@@ -3,250 +3,208 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <meta
-      name="description"
-      content="Graphiti Studio — 从本地文件、飞书和 MeeGo 增量构建时态知识图谱。"
-    />
-    <title>Graphiti Studio</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="Vaka Wiki — 持续生长的团队知识库" />
+    <title>Vaka · 知识中心</title>
+    <link rel="stylesheet" href="/static/styles.css?v=9" />
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="sidebar" aria-label="主导航">
-        <a class="brand" href="#overview" data-nav="overview" aria-label="Graphiti Studio 首页">
-          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span><strong>Graphiti</strong><small>STUDIO / 时态知识台</small></span>
-        </a>
-
-        <nav class="nav-list">
-          <button class="nav-item active" data-nav="overview"><span>01</span>总览</button>
-          <button class="nav-item" data-nav="sources"><span>02</span>数据源</button>
-          <button class="nav-item" data-nav="graph"><span>03</span>图谱浏览</button>
-          <button class="nav-item" data-nav="search"><span>04</span>搜索与 Agent</button>
+    <div class="product-shell">
+      <aside class="app-rail">
+        <a class="vaka-logo" href="#wiki">vaka</a>
+        <nav class="app-nav" aria-label="Vaka 导航">
+          <button><span>◌</span>我的 vaka</button>
+          <button class="active"><span>⌘</span>知识中心</button>
+          <button><span>▣</span>记忆中心</button>
         </nav>
-
-        <div class="sidebar-spacer"></div>
-        <div class="mcp-mini">
-          <div class="eyebrow">AGENT GATEWAY</div>
-          <div class="mcp-state"><span class="pulse-dot"></span>MCP 已就绪</div>
-          <button class="text-button" id="copy-mcp-mini">复制连接地址 →</button>
+        <div class="rail-section">
+          <span>置顶任务</span>
+          <p>Viking 团队背景资料汇总</p>
         </div>
-        <div class="build-stamp">GRAPHITI / NEO4J<br />LOCAL CONTROL PLANE</div>
+        <div class="rail-section recent"><span>最近任务</span><div id="recent-jobs">暂无任务</div></div>
+        <div class="rail-user"><i>V</i><span>当前用户</span></div>
       </aside>
 
-      <main class="main-panel">
-        <header class="topbar">
-          <button class="mobile-menu" id="mobile-menu" aria-label="打开导航">☰</button>
-          <div class="breadcrumb"><span>WORKSPACE</span><strong id="page-label">知识运行总览</strong></div>
-          <div class="system-chips" id="system-chips" aria-live="polite">
-            <span class="chip"><i class="status-dot pending"></i>正在检查服务</span>
-          </div>
+      <main class="knowledge-center">
+        <header class="center-header">
+          <div class="header-title"><button id="mobile-menu" aria-label="打开导航">☰</button><h1>知识中心</h1></div>
+          <div id="system-chips" class="system-state"><i></i><span>正在连接知识底座</span></div>
         </header>
+        <nav class="center-tabs" aria-label="知识中心分区">
+          <button data-nav="library">文件库</button>
+          <button class="active" data-nav="wiki">我的 Wiki</button>
+        </nav>
 
-        <section class="view active" id="view-overview" aria-labelledby="overview-title">
-          <div class="hero-grid">
-            <div class="hero-copy">
-              <div class="eyebrow accent">TEMPORAL KNOWLEDGE, ALWAYS CURRENT</div>
-              <h1 id="overview-title">让散落的知识，<br /><em>长成会更新的图。</em></h1>
-              <p>
-                把飞书文档、MeeGo 工作项和本地文件汇入同一个时态知识层。内容没变就跳过，内容变化就追加新版本，历史事实仍可追溯。
-              </p>
-              <div class="hero-actions">
-                <button class="primary-button" data-action="quick-local">上传第一份文件</button>
-                <button class="ghost-button" data-nav="sources">连接企业数据源</button>
-              </div>
+        <section class="view library-view" id="view-library">
+          <aside class="library-nav">
+            <button class="active">▱ <span>我的数据</span></button>
+            <button>♙ <span>团队数据</span></button>
+            <button>⌘ <span>与我分享的</span></button>
+            <button>◎ <span>我分享的</span></button>
+          </aside>
+          <div class="library-main">
+            <div class="page-heading">
+              <div><h2>我的数据</h2><p>统一管理用于 Wiki 构建的本地文件、飞书和 MeeGo 数据。</p></div>
+              <button class="primary-button" id="add-source-button">＋ 添加数据</button>
             </div>
-            <div class="hero-orbit" aria-hidden="true">
-              <div class="orbit-ring ring-one"></div>
-              <div class="orbit-ring ring-two"></div>
-              <div class="core-node">G</div>
-              <span class="satellite sat-one">飞书</span>
-              <span class="satellite sat-two">MeeGo</span>
-              <span class="satellite sat-three">Files</span>
-              <span class="fact-line line-one"></span>
-              <span class="fact-line line-two"></span>
-              <span class="fact-line line-three"></span>
+            <div class="toolbar-row">
+              <label class="search-control">⌕<input id="source-search" placeholder="搜索数据源" /></label>
+              <div class="filter-pills">
+                <button class="active" data-filter="all">全部</button>
+                <button data-filter="local">本地文件</button>
+                <button data-filter="feishu">飞书</button>
+                <button data-filter="meego">MeeGo</button>
+              </div>
+              <button class="quiet-button" id="refresh-sources">刷新</button>
             </div>
-          </div>
-
-          <div class="metric-strip" id="metric-strip">
-            <article><span>数据源</span><strong>—</strong><small>CONNECTED SOURCES</small></article>
-            <article><span>已跟踪条目</span><strong>—</strong><small>VERSIONED ITEMS</small></article>
-            <article><span>活动任务</span><strong>—</strong><small>SYNC IN FLIGHT</small></article>
-            <article><span>向量方式</span><strong class="metric-word">—</strong><small>EMBEDDING MODE</small></article>
-          </div>
-
-          <div class="overview-lower">
-            <article class="panel activity-panel">
-              <div class="panel-heading">
-                <div><span class="eyebrow">SYNC LEDGER</span><h2>最近同步</h2></div>
-                <button class="text-button" data-nav="sources">管理数据源 →</button>
-              </div>
-              <div id="recent-jobs" class="timeline-list empty-state">还没有同步任务</div>
-            </article>
-            <article class="panel readiness-panel">
-              <div class="panel-heading">
-                <div><span class="eyebrow">READINESS</span><h2>接入状态</h2></div>
-              </div>
-              <div id="readiness-list" class="readiness-list"></div>
-              <p class="panel-note">密钥只从服务端环境变量读取，前端不会保存或回显凭证。</p>
-            </article>
+            <div id="source-grid" class="source-table"></div>
           </div>
         </section>
 
-        <section class="view" id="view-sources" aria-labelledby="sources-title">
-          <div class="section-hero compact">
-            <div><span class="eyebrow accent">INGESTION LAYER</span><h1 id="sources-title">数据源与增量同步</h1><p>同一条远端记录用内容指纹识别版本；重复同步不会重复调用大模型。</p></div>
-            <button class="primary-button" id="add-source-button">＋ 添加数据源</button>
-          </div>
-          <div class="source-toolbar">
-            <div class="filter-pills" role="group" aria-label="数据源筛选">
-              <button class="active" data-filter="all">全部</button>
-              <button data-filter="local">本地文件</button>
-              <button data-filter="feishu">飞书</button>
-              <button data-filter="meego">MeeGo</button>
+        <section class="view wiki-view active" id="view-wiki">
+          <aside class="wiki-sidebar">
+            <div class="wiki-select-row">
+              <span class="book-icon">▤</span>
+              <select id="wiki-select" aria-label="当前 Wiki"><option>正在读取 Wiki…</option></select>
+              <button id="new-wiki-button" title="创建 Wiki">＋</button>
             </div>
-            <button class="ghost-button small" id="refresh-sources">刷新</button>
-          </div>
-          <div id="source-grid" class="source-grid"></div>
+            <button class="wiki-meta-link" id="task-link"><span>◴</span><b id="task-link-label">尚未构建 · 查看任务</b></button>
+            <button class="wiki-meta-link" id="plan-link"><span>▧</span><b id="plan-link-label">策略 v1</b></button>
+            <div class="wiki-mode-switch">
+              <button class="active" data-wiki-mode="directory">☰ 目录</button>
+              <button data-wiki-mode="graph">⌘ 图谱</button>
+            </div>
+            <label class="tree-search">⌕<input id="tree-search" placeholder="搜索目录" /></label>
+            <div id="wiki-tree" class="wiki-tree"><div class="sidebar-empty">创建 Wiki 后将在这里显示实体目录</div></div>
+            <div class="wiki-lint"><span>✓ Wiki Lint · <b id="lint-count">0</b> 阻断</span><button id="mcp-link" title="Wiki MCP">⌁</button></div>
+          </aside>
 
-          <article class="panel jobs-panel">
-            <div class="panel-heading">
-              <div><span class="eyebrow">JOB HISTORY</span><h2>同步任务</h2></div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>状态</th><th>数据源</th><th>扫描</th><th>新增</th><th>更新</th><th>跳过</th><th>开始时间</th><th>信息</th></tr></thead>
-                <tbody id="jobs-table"></tbody>
-              </table>
-            </div>
-          </article>
-        </section>
+          <div class="wiki-main">
+            <section class="wiki-placeholder" id="wiki-placeholder">
+              <div class="placeholder-mark">✦</div>
+              <h2>用对话创建第一个 Wiki</h2>
+              <p>告诉 Vaka Copilot 你想管理什么知识。它会确认目标和数据范围，生成项目 Wiki 计划。</p>
+              <button class="primary-button" data-action="start-create-upload">创建 Wiki 并添加数据</button>
+            </section>
 
-        <section class="view graph-view" id="view-graph" aria-labelledby="graph-title">
-          <div class="section-hero compact graph-heading">
-            <div><span class="eyebrow accent">LIVE GRAPH</span><h1 id="graph-title">图谱浏览</h1><p>节点是实体，连线是带有效时间的事实。点击节点查看摘要。</p></div>
-            <form class="inline-form" id="graph-form">
-              <label>GROUP ID<input id="graph-group" value="neo4j" pattern="[A-Za-z0-9_-]+" /></label>
-              <button class="primary-button" type="submit">加载图谱</button>
+            <section class="build-state hidden" id="build-state">
+              <div class="state-icon">◴</div>
+              <h2 id="build-state-title">Wiki 内容构建中</h2>
+              <p id="build-state-copy">任务会在后台继续运行。完成并通过检查后，将自动发布实体目录与图谱。</p>
+              <button class="quiet-button" id="build-task-button">查看任务</button>
+            </section>
+
+            <section class="entity-page hidden" id="entity-page">
+              <header class="entity-header">
+                <div class="breadcrumbs" id="breadcrumbs">Wiki</div>
+                <div class="entity-title-row">
+                  <div><h2 id="entity-title">选择一个实体</h2><p id="entity-subtitle"></p></div>
+                  <button class="quiet-button" id="manage-data-button">⌁ 管理数据</button>
+                </div>
+              </header>
+              <nav class="entity-tabs">
+                <button class="active" data-entity-tab="overview">概览</button>
+                <button data-entity-tab="attributes">属性</button>
+                <button data-entity-tab="relations">关系</button>
+                <button data-entity-tab="sources">来源与权限</button>
+                <button data-entity-tab="changes">变更记录</button>
+              </nav>
+              <div class="entity-body" id="entity-body"></div>
+            </section>
+
+            <section class="graph-page hidden" id="graph-page">
+              <div class="graph-toolbar">
+                <div><h2>知识图谱</h2><p>Item 是节点，Link 是带方向的事实关系。</p></div>
+                <div><button class="quiet-button" id="graph-reset">重置视图</button><button class="primary-button" id="graph-load">加载图谱</button></div>
+              </div>
+              <div class="graph-workbench">
+                <canvas id="graph-canvas" aria-label="知识图谱交互画布"></canvas>
+                <div class="graph-empty" id="graph-empty">发布 Wiki 后可浏览图谱</div>
+                <aside class="graph-inspector" id="graph-inspector"><h3>选择节点或关系</h3><p>这里会展示实体摘要、属性和直接关系。</p></aside>
+              </div>
+            </section>
+          </div>
+
+          <aside class="copilot" id="copilot">
+            <header><div><i>✦</i><strong>Vaka Copilot</strong></div><button id="copilot-toggle">×</button></header>
+            <div class="chat-log" id="chat-log">
+              <div class="assistant-message">我可以帮你创建、查询和整理当前 Wiki。实体或关系的修改会保留变更记录。</div>
+            </div>
+            <div class="chat-suggestions" id="chat-suggestions">
+              <button>帮我创建一个项目 Wiki</button><button>这个 Wiki 有哪些实体？</button><button>查看当前构建任务</button>
+            </div>
+            <form class="chat-composer" id="chat-form">
+              <textarea id="chat-input" rows="3" placeholder="询问 Wiki，或告诉我你想创建什么…"></textarea>
+              <button type="submit" aria-label="发送">➤</button>
             </form>
-          </div>
-          <div class="graph-workbench">
-            <div class="graph-canvas-wrap">
-              <canvas id="graph-canvas" aria-label="知识图谱交互画布"></canvas>
-              <div class="graph-legend"><span><i class="legend-node"></i>实体</span><span><i class="legend-edge"></i>事实关系</span><span>滚轮缩放 · 拖拽平移</span></div>
-              <div class="graph-empty" id="graph-empty">选择 Group ID 后加载图谱</div>
-            </div>
-            <aside class="graph-inspector" id="graph-inspector">
-              <span class="eyebrow">INSPECTOR</span>
-              <h2>选择一个节点</h2>
-              <p>这里会显示实体摘要，以及它在当前快照中的关系。</p>
-            </aside>
-          </div>
-        </section>
-
-        <section class="view" id="view-search" aria-labelledby="search-title">
-          <div class="section-hero compact">
-            <div><span class="eyebrow accent">RETRIEVAL & MCP</span><h1 id="search-title">搜索与 Agent 接入</h1><p>用自然语言检索事实，或把同一张图交给支持 MCP 的 working agent。</p></div>
-          </div>
-          <div class="search-layout">
-            <article class="panel search-panel">
-              <form id="search-form" class="search-form">
-                <label for="search-query">问这张图一个问题</label>
-                <div class="search-box"><input id="search-query" placeholder="例如：当前 Graphiti 项目有哪些数据接入要求？" required /><button type="submit">检索</button></div>
-                <label class="group-field">GROUP ID<input id="search-group" value="neo4j" pattern="[A-Za-z0-9_-]+" /></label>
-              </form>
-              <div id="search-results" class="search-results empty-state">检索结果会显示在这里</div>
-            </article>
-            <article class="panel agent-panel">
-              <span class="eyebrow">MODEL CONTEXT PROTOCOL</span>
-              <h2>给 Agent 一条知识通道</h2>
-              <p>启动仓库内的 MCP 服务后，Agent 可通过 HTTP 查询事实、节点和 episode，也可写入新记忆。</p>
-              <label class="copy-field">MCP URL<span><code id="mcp-url">http://localhost:8001/mcp/</code><button id="copy-mcp">复制</button></span></label>
-              <div class="code-block"><pre id="mcp-config"></pre><button id="copy-config">复制配置</button></div>
-              <div class="security-note"><strong>部署提醒</strong><span>MCP 默认没有身份认证；只绑定 localhost/内网，公网使用时应放在带 TLS 与鉴权的反向代理后。</span></div>
-            </article>
-          </div>
+          </aside>
+          <button class="copilot-fab hidden" id="copilot-fab" aria-label="打开 Vaka Copilot">✦</button>
         </section>
       </main>
     </div>
 
-    <dialog id="source-dialog" class="modal">
+    <dialog id="source-dialog" class="modal wide-modal">
       <form method="dialog" class="modal-card" id="source-form">
         <button class="modal-close" type="button" data-close-dialog aria-label="关闭">×</button>
-        <span class="eyebrow accent">NEW SOURCE</span>
-        <h2>添加数据源</h2>
-        <div class="source-type-tabs" role="radiogroup">
+        <small class="modal-kicker" id="source-dialog-kicker">文件库</small><h2 id="source-dialog-title">添加数据</h2>
+        <p class="modal-description hidden" id="source-dialog-description"></p>
+        <div class="source-type-tabs">
           <label><input type="radio" name="kind" value="local" checked /><span>本地文件<small>PDF · TXT · MD · CSV · DOCX</small></span></label>
-          <label><input type="radio" name="kind" value="feishu" /><span>飞书<small>目录 · Docx · 普通文件</small></span></label>
-          <label><input type="radio" name="kind" value="meego" /><span>MeeGo<small>项目工作项</small></span></label>
+          <label><input type="radio" name="kind" value="feishu" /><span>飞书<small>目录 · 文档 · 表格</small></span></label>
+          <label><input type="radio" name="kind" value="meego" /><span>MeeGo<small>需求视图</small></span></label>
         </div>
-        <div class="form-grid">
-          <label>数据源名称<input name="name" required placeholder="例如：产品知识库" /></label>
-          <label>Group ID<input name="group_id" value="neo4j" required pattern="[A-Za-z0-9_-]+" /><small>应与当前 Neo4j database 一致</small></label>
+        <div class="form-grid" id="source-generic-fields">
+          <label>数据名称<input name="name" required placeholder="例如：产品知识资料" /></label>
+          <label>用于 Wiki<input id="source-wiki-name" value="未选择" disabled /></label>
         </div>
         <div class="kind-fields" data-kind-fields="local">
-          <div class="form-callout">创建后即可上传文件；同名文件再次上传会作为增量版本处理。PDF 支持提取可复制的文本层，扫描件请先完成 OCR。</div>
+          <label class="drop-zone compact-drop-zone" id="source-drop-zone"><input type="file" id="source-file-input" multiple accept=".pdf,.txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.ndjson,.yaml,.yml,.xml,.html,.htm,.log,.docx" /><strong>拖入文件，或点击选择</strong><span>单文件最大 25 MiB；支持 PDF、TXT、Markdown、CSV 和 DOCX</span></label>
+          <div id="source-file-list" class="file-list"></div>
+          <div class="form-callout">同名文件再次上传时，会作为新的来源版本处理。</div>
         </div>
         <div class="kind-fields hidden" data-kind-fields="feishu">
-          <div class="connection-picker" data-connection-panel="feishu">
-            <div class="connection-picker-head">
-              <div><span>连接账号</span><strong id="feishu-connection-label">尚未连接</strong></div>
-              <button class="ghost-button small" type="button" data-oauth-provider="feishu">连接飞书</button>
-            </div>
-            <label class="connection-select-wrap">使用连接<select id="feishu-connection" data-provider-connection="feishu" disabled><option>尚未连接账号</option></select></label>
-            <p>通过飞书官方 OAuth 授权。访问凭证只保存在服务端，不会进入浏览器存储。</p>
+          <div class="connection-picker">
+            <div class="connection-picker-head"><div><span>连接账号</span><strong id="feishu-connection-label">尚未连接</strong></div><button class="quiet-button" type="button" data-oauth-provider="feishu">连接飞书</button></div>
+            <label>使用连接<select id="feishu-connection" data-provider-connection="feishu" disabled><option>尚未连接账号</option></select></label>
           </div>
           <div class="resource-picker" data-resource-picker="feishu">
-            <div class="resource-picker-head">
-              <div><strong>选择同步范围</strong><small>可选整个空间、一个文件夹，或多份文档</small></div>
-              <button type="button" data-resource-load="feishu">浏览飞书空间</button>
-            </div>
-            <div class="resource-selection" id="feishu-selection">尚未选择资源</div>
-            <div class="resource-browser hidden" id="feishu-resource-browser"></div>
+            <div class="resource-picker-head"><div><strong>选择同步范围</strong><small>整个空间、文件夹或多份文档</small></div><button type="button" data-resource-load="feishu">浏览飞书空间</button></div>
+            <div class="resource-selection" id="feishu-selection">尚未选择资源</div><div class="resource-browser hidden" id="feishu-resource-browser"></div>
           </div>
           <label class="check-label"><input type="checkbox" name="recursive" checked />递归读取子文件夹</label>
         </div>
         <div class="kind-fields hidden" data-kind-fields="meego">
-          <div class="connection-picker" data-connection-panel="meego">
-            <div class="connection-picker-head">
-              <div><span>连接账号</span><strong id="meego-connection-label">尚未连接</strong></div>
-              <button class="ghost-button small" type="button" data-oauth-provider="meego">连接 MeeGo</button>
-            </div>
-            <label class="connection-select-wrap">使用连接<select id="meego-connection" data-provider-connection="meego" disabled><option>尚未连接账号</option></select></label>
-            <p>授权完成后从账号可见范围内选择项目，不需要复制项目 Key 或粘贴 API 凭据。</p>
+          <div class="meego-account-card">
+            <span class="connection-provider-icon">◇</span>
+            <div><strong id="meego-connection-label">MeeGo 尚未连接</strong><small id="meego-account-detail">连接后同步你可见的需求视图</small></div>
+            <span class="connection-availability" id="meego-connection-state">未连接</span>
+            <button class="quiet-button" type="button" data-oauth-provider="meego">连接 MeeGo</button>
           </div>
-          <div class="resource-picker" data-resource-picker="meego">
-            <div class="resource-picker-head">
-              <div><strong>选择项目与工作项类型</strong><small>工作项类型可留空，由同步服务自动发现</small></div>
-              <button type="button" data-resource-load="meego">浏览 MeeGo 项目</button>
-            </div>
-            <div class="resource-selection" id="meego-selection">尚未选择项目</div>
-            <div class="resource-browser hidden" id="meego-resource-browser"></div>
+          <div class="form-grid">
+            <label>产品 / 项目<select id="meego-project-select" disabled><option value="">正在读取可见项目…</option></select></label>
+            <label>查找需求视图<input id="meego-view-query" type="search" placeholder="输入视图名称，可留空" disabled /></label>
           </div>
-          <label>单页读取数量<select name="page_size"><option value="50">50</option><option value="100" selected>100</option><option value="200">200</option></select><small>同步服务会自动翻页</small></label>
+          <label>导入范围<select id="meego-view-select" disabled><option value="">请先选择产品 / 项目</option></select></label>
+          <div class="form-callout meego-sync-note"><strong id="meego-scope-title">选择产品 / 项目及需求视图</strong><span id="meego-scope-detail">只同步选中视图当前筛选出的需求；视图筛选发生变化后，下次同步会自动跟随。</span></div>
         </div>
-        <div class="modal-actions"><button class="ghost-button" type="button" data-close-dialog>取消</button><button class="primary-button" type="submit" value="default">创建数据源</button></div>
+        <div class="modal-actions"><button class="quiet-button" type="button" data-close-dialog>取消</button><button class="primary-button" type="submit">添加到文件库</button></div>
       </form>
     </dialog>
 
     <dialog id="upload-dialog" class="modal">
-      <form method="dialog" class="modal-card upload-card" id="upload-form">
-        <button class="modal-close" type="button" data-close-dialog aria-label="关闭">×</button>
-        <span class="eyebrow accent">LOCAL INGEST</span><h2>上传本地文件</h2>
-        <p id="upload-source-name"></p>
-        <label class="drop-zone" id="drop-zone">
-          <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.ndjson,.yaml,.yml,.xml,.html,.htm,.log,.docx" />
-          <strong>拖入文件，或点击选择</strong><span>单文件最大 25 MiB；同名文件会原子替换并触发增量同步</span>
-        </label>
-        <div class="form-callout">PDF 仅提取可选择、可复制的文本层；纯图片扫描件未内置 OCR，请先使用 OCR 工具生成文本层后再上传。</div>
+      <form method="dialog" class="modal-card" id="upload-form">
+        <button class="modal-close" type="button" data-close-dialog>×</button><small class="modal-kicker">本地数据</small><h2>上传文件</h2><p id="upload-source-name"></p>
+        <label class="drop-zone" id="drop-zone"><input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.ndjson,.yaml,.yml,.xml,.html,.htm,.log,.docx" /><strong>拖入文件，或点击选择</strong><span>单文件最大 25 MiB；扫描 PDF 请先生成文本层</span></label>
         <div id="file-list" class="file-list"></div>
-        <div class="modal-actions"><button class="ghost-button" type="button" data-close-dialog>取消</button><button class="primary-button" type="submit" value="default">上传并同步</button></div>
+        <div class="modal-actions"><button class="quiet-button" type="button" data-close-dialog>取消</button><button class="primary-button" type="submit">保存文件</button></div>
       </form>
     </dialog>
 
+    <dialog id="task-dialog" class="modal"><div class="modal-card task-card"><button class="modal-close" type="button" data-close-dialog>×</button><small class="modal-kicker">任务详情</small><div id="task-detail"></div></div></dialog>
+    <dialog id="plan-dialog" class="modal"><div class="modal-card plan-card"><button class="modal-close" type="button" data-close-dialog>×</button><small class="modal-kicker">创建计划</small><div id="plan-detail"></div></div></dialog>
+    <dialog id="mcp-dialog" class="modal"><div class="modal-card mcp-card"><button class="modal-close" type="button" data-close-dialog>×</button><small class="modal-kicker">Agent 接入</small><h2>知识库 MCP <span class="available">✓ 可用</span></h2><p>Wiki 创建后自动生成。Working Agent 只读取当前已发布版本。</p><label class="copy-field">MCP Server URL<span><code id="mcp-url">尚未创建 Wiki</code><button id="copy-mcp">复制</button></span></label><pre id="mcp-config"></pre><button class="quiet-button" id="copy-config">复制客户端配置</button></div></dialog>
+
     <div id="toast-region" class="toast-region" aria-live="polite"></div>
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=15" defer></script>
   </body>
 </html>

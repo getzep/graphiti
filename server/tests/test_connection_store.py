@@ -113,6 +113,14 @@ def test_connection_crud_coexists_with_source_store_and_never_exposes_tokens(tmp
     assert updated_tokens.refresh_token is None
     assert updated_tokens.expires_at == expires_at + timedelta(hours=1)
 
+    context_update = store.update_connection(
+        'connection-one', provider_context={'client_id': 'rotated-client-id'}
+    )
+    assert context_update['token_version'] == 3
+    assert store.get_connection_tokens('connection-one').provider_context == {
+        'client_id': 'rotated-client-id'
+    }
+
     store.delete_connection('connection-one')
     with pytest.raises(KeyError):
         store.get_connection('connection-one')
