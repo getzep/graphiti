@@ -273,8 +273,7 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                     group_id=group_id,
                 )
                 projection[node.uuid] = [
-                    Neighbor(node_uuid=r['uuid'], edge_count=r['count'])
-                    for r in records
+                    Neighbor(node_uuid=r['uuid'], edge_count=r['count']) for r in records
                 ]
 
             cluster_uuids = label_propagation(projection)
@@ -389,6 +388,7 @@ def _entity_node_from_pg(record: dict) -> EntityNode:
     attributes = record.get('attributes', {}) or {}
     if isinstance(attributes, str):
         import json
+
         attributes = json.loads(attributes)
     attributes.pop('uuid', None)
     attributes.pop('name', None)

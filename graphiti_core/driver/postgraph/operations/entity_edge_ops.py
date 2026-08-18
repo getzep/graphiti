@@ -149,7 +149,8 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
         target_node_uuid: str,
     ) -> list[EntityEdge]:
         records, _, _ = await executor.execute_query(
-            _SELECT + ' WHERE source_node_uuid = $source_node_uuid AND target_node_uuid = $target_node_uuid',
+            _SELECT
+            + ' WHERE source_node_uuid = $source_node_uuid AND target_node_uuid = $target_node_uuid',
             source_node_uuid=source_node_uuid,
             target_node_uuid=target_node_uuid,
         )

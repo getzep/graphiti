@@ -77,7 +77,8 @@ class PGNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
         uuid: str,
     ) -> NextEpisodeEdge:
         records, _, _ = await executor.execute_query(
-            _SELECT + ' WHERE uuid = $uuid', uuid=uuid,
+            _SELECT + ' WHERE uuid = $uuid',
+            uuid=uuid,
         )
         edges = [_parse(r) for r in records]
         if not edges:
@@ -90,7 +91,8 @@ class PGNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
         uuids: list[str],
     ) -> list[NextEpisodeEdge]:
         records, _, _ = await executor.execute_query(
-            _SELECT + ' WHERE uuid = ANY($uuids)', uuids=uuids,
+            _SELECT + ' WHERE uuid = ANY($uuids)',
+            uuids=uuids,
         )
         return [_parse(r) for r in records]
 

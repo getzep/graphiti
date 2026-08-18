@@ -67,7 +67,10 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
         run = tx.run if tx else executor.execute_query
         await run('DELETE FROM episodic_edges WHERE source_node_uuid = $uuid', uuid=node.uuid)
         await run('DELETE FROM has_episode_edges WHERE target_node_uuid = $uuid', uuid=node.uuid)
-        await run('DELETE FROM next_episode_edges WHERE source_node_uuid = $uuid OR target_node_uuid = $uuid', uuid=node.uuid)
+        await run(
+            'DELETE FROM next_episode_edges WHERE source_node_uuid = $uuid OR target_node_uuid = $uuid',
+            uuid=node.uuid,
+        )
         await run('DELETE FROM episodic_nodes WHERE uuid = $uuid', uuid=node.uuid)
         logger.debug(f'Deleted Node: {node.uuid}')
 

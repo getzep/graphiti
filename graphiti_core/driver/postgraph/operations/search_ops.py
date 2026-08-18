@@ -40,7 +40,7 @@ class PGSearchOperations(SearchOperations):
                    ts_rank(search_vector, to_tsquery('simple', $ts_query)) AS score
             FROM entity_nodes
             {where}
-              {"AND" if conditions else "WHERE"} search_vector @@ to_tsquery('simple', $ts_query)
+              {'AND' if conditions else 'WHERE'} search_vector @@ to_tsquery('simple', $ts_query)
             ORDER BY score DESC
             LIMIT {limit}
         """
@@ -67,7 +67,7 @@ class PGSearchOperations(SearchOperations):
                    1 - (name_embedding <=> $search_vector::vector) AS score
             FROM entity_nodes
             {where}
-              {"AND" if conditions else "WHERE"} name_embedding IS NOT NULL
+              {'AND' if conditions else 'WHERE'} name_embedding IS NOT NULL
             HAVING 1 - (name_embedding <=> $search_vector::vector) > $min_score
             ORDER BY score DESC
             LIMIT {limit}
@@ -79,7 +79,7 @@ class PGSearchOperations(SearchOperations):
                        1 - (name_embedding <=> $search_vector::vector) AS score
                 FROM entity_nodes
                 {where}
-                  {"AND" if conditions else "WHERE"} name_embedding IS NOT NULL
+                  {'AND' if conditions else 'WHERE'} name_embedding IS NOT NULL
             ) sub
             WHERE score > $min_score
             ORDER BY score DESC
@@ -158,7 +158,7 @@ class PGSearchOperations(SearchOperations):
                    ts_rank(search_vector, to_tsquery('simple', $ts_query)) AS score
             FROM entity_edges
             {where}
-              {"AND" if conditions else "WHERE"} search_vector @@ to_tsquery('simple', $ts_query)
+              {'AND' if conditions else 'WHERE'} search_vector @@ to_tsquery('simple', $ts_query)
             ORDER BY score DESC
             LIMIT {limit}
         """
@@ -197,7 +197,7 @@ class PGSearchOperations(SearchOperations):
                        1 - (fact_embedding <=> $search_vector::vector) AS score
                 FROM entity_edges
                 {where}
-                  {"AND" if conditions else "WHERE"} fact_embedding IS NOT NULL
+                  {'AND' if conditions else 'WHERE'} fact_embedding IS NOT NULL
             ) sub
             WHERE score > $min_score
             ORDER BY score DESC
@@ -225,8 +225,8 @@ class PGSearchOperations(SearchOperations):
         if conditions:
             filter_clause = ' AND ' + ' AND '.join(
                 c.replace('group_id', 'ee.group_id')
-                 .replace('name ', 'ee.name ')
-                 .replace('uuid ', 'ee.uuid ')
+                .replace('name ', 'ee.name ')
+                .replace('uuid ', 'ee.uuid ')
                 for c in conditions
             )
 
@@ -285,7 +285,7 @@ class PGSearchOperations(SearchOperations):
                    ts_rank(search_vector, to_tsquery('simple', $ts_query)) AS score
             FROM episodic_nodes
             {where}
-              {"AND" if conditions else "WHERE"} search_vector @@ to_tsquery('simple', $ts_query)
+              {'AND' if conditions else 'WHERE'} search_vector @@ to_tsquery('simple', $ts_query)
             ORDER BY score DESC
             LIMIT {limit}
         """
@@ -319,7 +319,7 @@ class PGSearchOperations(SearchOperations):
                    ts_rank(search_vector, to_tsquery('simple', $ts_query)) AS score
             FROM community_nodes
             {where}
-              {"AND" if conditions else "WHERE"} search_vector @@ to_tsquery('simple', $ts_query)
+              {'AND' if conditions else 'WHERE'} search_vector @@ to_tsquery('simple', $ts_query)
             ORDER BY score DESC
             LIMIT {limit}
         """
@@ -352,7 +352,7 @@ class PGSearchOperations(SearchOperations):
                        1 - (name_embedding <=> $search_vector::vector) AS score
                 FROM community_nodes
                 {where}
-                  {"AND" if conditions else "WHERE"} name_embedding IS NOT NULL
+                  {'AND' if conditions else 'WHERE'} name_embedding IS NOT NULL
             ) sub
             WHERE score > $min_score
             ORDER BY score DESC
@@ -482,6 +482,7 @@ class PGSearchOperations(SearchOperations):
 
 
 # --- helpers ---
+
 
 def _build_ts_query(query: str, max_length: int = 128) -> str:
     words = query.strip().split()[:max_length]

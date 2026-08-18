@@ -104,9 +104,7 @@ async def _execute_sql(
     query: str,
     params: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], None, None]:
-    clean_params = {
-        k: v for k, v in params.items() if k not in ('routing_', 'database_')
-    }
+    clean_params = {k: v for k, v in params.items() if k not in ('routing_', 'database_')}
 
     # Convert $param_name to $1, $2, ... for asyncpg
     param_names: list[str] = []
@@ -260,7 +258,7 @@ class PostGraphDriver(GraphDriver):
             self._pool = None
 
     def delete_all_indexes(self) -> Coroutine:
-        return self.execute_query("SELECT 1")
+        return self.execute_query('SELECT 1')
 
     async def build_indices_and_constraints(self, delete_existing: bool = False):
         pool = await self._ensure_pool()
