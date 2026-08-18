@@ -33,16 +33,14 @@ class PGEntityNodeOperations(EntityNodeOperations):
             'summary': node.summary,
             'labels': labels,
             'attributes': attributes,
-            'created_at': (
-                node.created_at.isoformat()
-                if node.created_at
-                else None
-            ),
+            'created_at': (node.created_at.isoformat() if node.created_at else None),
         }
 
         # Resolve existing vertex id for upsert by payload UUID
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         await client.upsert_vertex(
             TABLE,
@@ -104,11 +102,15 @@ class PGEntityNodeOperations(EntityNodeOperations):
             json.dumps({'uuid': node.uuid}),
         )
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         if v_id is not None:
             await client.delete_vertex(
-                TABLE, node.group_id, str(v_id),
+                TABLE,
+                node.group_id,
+                str(v_id),
             )
         logger.debug(f'Deleted Node: {node.uuid}')
 
@@ -143,7 +145,9 @@ class PGEntityNodeOperations(EntityNodeOperations):
         vertices = await client.get_vertices(TABLE, group_id)
         for v in vertices:
             await client.delete_vertex(
-                TABLE, group_id, str(v.id),
+                TABLE,
+                group_id,
+                str(v.id),
             )
 
     async def delete_by_uuids(
@@ -156,18 +160,12 @@ class PGEntityNodeOperations(EntityNodeOperations):
         if not uuids:
             return
         client = executor.client
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
 
         # Collect all realms that contain these nodes
         id_rows = await client._fetch(
-            f'SELECT realm, id FROM "{TABLE}" '
-            f'WHERE {placeholders}',
+            f'SELECT realm, id FROM "{TABLE}" WHERE {placeholders}',
             *uuid_json_list,
         )
         if not id_rows:
@@ -175,32 +173,33 @@ class PGEntityNodeOperations(EntityNodeOperations):
 
         realm_ids: dict[str, list[int]] = {}
         for row in id_rows:
-            realm_ids.setdefault(row['realm'], []).append(
-                row['id']
-            )
+            realm_ids.setdefault(row['realm'], []).append(row['id'])
 
         # Delete referencing edges
         for realm, ids in realm_ids.items():
             id_arr = ids
             await client._execute(
-                'DELETE FROM "episodic_edges" '
-                'WHERE realm = $1 AND to_id = ANY($2)',
-                realm, id_arr,
+                'DELETE FROM "episodic_edges" WHERE realm = $1 AND to_id = ANY($2)',
+                realm,
+                id_arr,
             )
             await client._execute(
                 'DELETE FROM "entity_edges" '
                 'WHERE realm = $1 AND '
                 '(from_id = ANY($2) OR to_id = ANY($2))',
-                realm, id_arr,
+                realm,
+                id_arr,
             )
             await client._execute(
-                'DELETE FROM "community_edges" '
-                'WHERE realm = $1 AND to_id = ANY($2)',
-                realm, id_arr,
+                'DELETE FROM "community_edges" WHERE realm = $1 AND to_id = ANY($2)',
+                realm,
+                id_arr,
             )
             for vid in ids:
                 await client.delete_vertex(
-                    TABLE, realm, str(vid),
+                    TABLE,
+                    realm,
+                    str(vid),
                 )
 
     async def get_by_uuid(
@@ -231,13 +230,8 @@ class PGEntityNodeOperations(EntityNodeOperations):
         if not uuids:
             return []
         client = executor.client
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
         rows = await client._fetch(
             'SELECT realm, id, space, fqid, payload, '
             'created_at, updated_at, '
@@ -262,20 +256,20 @@ class PGEntityNodeOperations(EntityNodeOperations):
         results: list[EntityNode] = []
         for realm in group_ids:
             vertices = await client.get_vertices(
-                TABLE, realm,
+                TABLE,
+                realm,
             )
             for v in vertices:
                 results.append(_vertex_to_entity_node(v))
 
         # Sort by payload uuid descending for cursor pagination
         results.sort(
-            key=lambda n: n.uuid, reverse=True,
+            key=lambda n: n.uuid,
+            reverse=True,
         )
 
         if uuid_cursor:
-            results = [
-                n for n in results if n.uuid < uuid_cursor
-            ]
+            results = [n for n in results if n.uuid < uuid_cursor]
         if limit is not None:
             results = results[:limit]
         return results
@@ -310,13 +304,8 @@ class PGEntityNodeOperations(EntityNodeOperations):
             return
         client = executor.client
         uuids = [n.uuid for n in nodes]
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
         rows = await client._fetch(
             'SELECT payload, '
             "to_jsonb(t)->>'embedding' AS embedding_text "
@@ -331,9 +320,7 @@ class PGEntityNodeOperations(EntityNodeOperations):
                 p = json.loads(p)
             row_uuid = p.get('uuid')
             if row_uuid:
-                embedding_map[row_uuid] = _parse_vec(
-                    r.get('embedding_text')
-                )
+                embedding_map[row_uuid] = _parse_vec(r.get('embedding_text'))
         for node in nodes:
             if node.uuid in embedding_map:
                 node.name_embedding = embedding_map[node.uuid]
@@ -345,8 +332,13 @@ def _vertex_to_entity_node(v: Vertex) -> EntityNode:
     attributes = dict(p.get('attributes', {}) or {})
     # Remove keys that are top-level fields, not attributes
     for key in (
-        'uuid', 'name', 'group_id', 'name_embedding',
-        'summary', 'created_at', 'labels',
+        'uuid',
+        'name',
+        'group_id',
+        'name_embedding',
+        'summary',
+        'created_at',
+        'labels',
     ):
         attributes.pop(key, None)
 
@@ -376,8 +368,13 @@ def _row_to_entity_node(row: dict) -> EntityNode:
 
     attributes = dict(p.get('attributes', {}) or {})
     for key in (
-        'uuid', 'name', 'group_id', 'name_embedding',
-        'summary', 'created_at', 'labels',
+        'uuid',
+        'name',
+        'group_id',
+        'name_embedding',
+        'summary',
+        'created_at',
+        'labels',
     ):
         attributes.pop(key, None)
 

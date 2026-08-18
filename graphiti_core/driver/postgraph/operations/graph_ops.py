@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import suppress
 from typing import Any
 
 from post_graph import AsyncPostGraph, Vertex
@@ -73,20 +74,20 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
         self._embedding_dim = embedding_dim
 
     async def build_indices_and_constraints_pg(
-        self, client: AsyncPostGraph, embedding_dim: int,
+        self,
+        client: AsyncPostGraph,
+        embedding_dim: int,
     ) -> None:
         from post_graph.errors import TableExistsError
 
         for vt in VERTEX_TABLES:
             vdim = embedding_dim if vt in ('entity_nodes', 'community_nodes') else None
-            try:
+            with suppress(TableExistsError, Exception):
                 await client.create_vertex_table(vt, vector_dim=vdim)
-            except (TableExistsError, Exception):
-                pass
 
         for edef in EDGE_DEFS:
             vdim = embedding_dim if edef.get('vector') else None
-            try:
+            with suppress(TableExistsError, Exception):
                 await client.create_edge_table(
                     edef['name'],
                     from_vertex_table=edef['from'],
@@ -95,20 +96,14 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                     cascade_delete_from=True,
                     cascade_delete_to=True,
                 )
-            except (TableExistsError, Exception):
-                pass
 
         for stmt in _tsvector_ddl():
-            try:
+            with suppress(Exception):
                 await client._execute(stmt)
-            except Exception:
-                pass
 
         for stmt in _extra_index_ddl():
-            try:
+            with suppress(Exception):
                 await client._execute(stmt)
-            except Exception:
-                pass
 
     async def build_indices_and_constraints_raw(self, _conn) -> None:
         pass
@@ -124,10 +119,8 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
         client = executor.client
         if group_ids is None:
             for table in ALL_TABLES:
-                try:
+                with suppress(Exception):
                     await client._execute(f'DELETE FROM "{table}"')
-                except Exception:
-                    pass
         else:
             for gid in group_ids:
                 await client.delete_realm(gid)
@@ -185,13 +178,15 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                     WHERE (from_id = $1 OR to_id = $1) AND realm = $2
                     GROUP BY 1
                     """,
-                    v_id, group_id,
+                    v_id,
+                    group_id,
                 )
                 neighbors = []
                 for r in rows:
                     other_rows = await client._fetch(
                         'SELECT payload->>\'uuid\' AS uuid FROM "entity_nodes" WHERE realm = $1 AND id = $2',
-                        group_id, r['other_id'],
+                        group_id,
+                        r['other_id'],
                     )
                     if other_rows:
                         neighbors.append(
@@ -208,9 +203,10 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                 for uuid in cluster:
                     v_rows = await client._fetch(
                         'SELECT realm, id, space, fqid, payload, created_at, updated_at, '
-                        'uuid::text AS uuid_text, to_jsonb(t)->>\'embedding\' AS embedding_text '
+                        "uuid::text AS uuid_text, to_jsonb(t)->>'embedding' AS embedding_text "
                         'FROM "entity_nodes" t WHERE realm = $1 AND payload @> $2::jsonb',
-                        group_id, json.dumps({'uuid': uuid}),
+                        group_id,
+                        json.dumps({'uuid': uuid}),
                     )
                     if v_rows:
                         cluster_nodes.append(_row_to_entity_node(v_rows[0]))
@@ -227,12 +223,8 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
         client = executor.client
         if group_ids:
             for gid in group_ids:
-                await client._execute(
-                    'DELETE FROM "community_edges" WHERE realm = $1', gid
-                )
-                await client._execute(
-                    'DELETE FROM "community_nodes" WHERE realm = $1', gid
-                )
+                await client._execute('DELETE FROM "community_edges" WHERE realm = $1', gid)
+                await client._execute('DELETE FROM "community_nodes" WHERE realm = $1', gid)
         else:
             await client._execute('DELETE FROM "community_edges"')
             await client._execute('DELETE FROM "community_nodes"')
@@ -253,7 +245,8 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
             JOIN "community_edges" ce ON ce.from_id = c.id AND ce.realm = c.realm
             WHERE ce.to_id = $1 AND c.realm = $2
             """,
-            v_id, entity.group_id,
+            v_id,
+            entity.group_id,
         )
         if rows:
             return
@@ -281,7 +274,8 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                 JOIN "episodic_edges" ee ON ee.to_id = n.id AND ee.realm = n.realm
                 WHERE ee.from_id = $1 AND n.realm = ANY($2)
                 """,
-                ep_vid, group_ids,
+                ep_vid,
+                group_ids,
             )
             for r in rows:
                 node = _row_to_entity_node(r)
@@ -312,7 +306,8 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                 JOIN "community_edges" ce ON ce.from_id = c.id AND ce.realm = c.realm
                 WHERE ce.to_id = $1 AND c.realm = ANY($2)
                 """,
-                v_id, group_ids,
+                v_id,
+                group_ids,
             )
             for r in rows:
                 cn = _row_to_community_node(r)

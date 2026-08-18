@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
 from post_graph import Vertex
 
@@ -32,24 +31,20 @@ class PGSagaNodeOperations(SagaNodeOperations):
             'first_episode_uuid': node.first_episode_uuid,
             'last_episode_uuid': node.last_episode_uuid,
             'last_summarized_at': (
-                node.last_summarized_at.isoformat()
-                if node.last_summarized_at
-                else None
+                node.last_summarized_at.isoformat() if node.last_summarized_at else None
             ),
             'last_summarized_episode_valid_at': (
                 node.last_summarized_episode_valid_at.isoformat()
                 if node.last_summarized_episode_valid_at
                 else None
             ),
-            'created_at': (
-                node.created_at.isoformat()
-                if node.created_at
-                else None
-            ),
+            'created_at': (node.created_at.isoformat() if node.created_at else None),
         }
 
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         await client.upsert_vertex(
             TABLE,
@@ -84,14 +79,19 @@ class PGSagaNodeOperations(SagaNodeOperations):
             '  SELECT id FROM "saga_nodes" '
             '  WHERE realm = $1 AND payload @> $2::jsonb'
             ')',
-            node.group_id, uuid_json,
+            node.group_id,
+            uuid_json,
         )
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         if v_id is not None:
             await client.delete_vertex(
-                TABLE, node.group_id, str(v_id),
+                TABLE,
+                node.group_id,
+                str(v_id),
             )
         logger.debug(f'Deleted Node: {node.uuid}')
 
@@ -112,11 +112,14 @@ class PGSagaNodeOperations(SagaNodeOperations):
             group_id,
         )
         vertices = await client.get_vertices(
-            TABLE, group_id,
+            TABLE,
+            group_id,
         )
         for v in vertices:
             await client.delete_vertex(
-                TABLE, group_id, str(v.id),
+                TABLE,
+                group_id,
+                str(v.id),
             )
 
     async def delete_by_uuids(
@@ -129,17 +132,11 @@ class PGSagaNodeOperations(SagaNodeOperations):
         if not uuids:
             return
         client = executor.client
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
 
         id_rows = await client._fetch(
-            f'SELECT realm, id FROM "{TABLE}" '
-            f'WHERE {placeholders}',
+            f'SELECT realm, id FROM "{TABLE}" WHERE {placeholders}',
             *uuid_json_list,
         )
         if not id_rows:
@@ -147,20 +144,19 @@ class PGSagaNodeOperations(SagaNodeOperations):
 
         realm_ids: dict[str, list[int]] = {}
         for row in id_rows:
-            realm_ids.setdefault(row['realm'], []).append(
-                row['id']
-            )
+            realm_ids.setdefault(row['realm'], []).append(row['id'])
 
         for realm, ids in realm_ids.items():
             await client._execute(
-                'DELETE FROM "has_episode_edges" '
-                'WHERE realm = $1 AND '
-                'from_id = ANY($2)',
-                realm, ids,
+                'DELETE FROM "has_episode_edges" WHERE realm = $1 AND from_id = ANY($2)',
+                realm,
+                ids,
             )
             for vid in ids:
                 await client.delete_vertex(
-                    TABLE, realm, str(vid),
+                    TABLE,
+                    realm,
+                    str(vid),
                 )
 
     async def get_by_uuid(
@@ -189,13 +185,8 @@ class PGSagaNodeOperations(SagaNodeOperations):
         if not uuids:
             return []
         client = executor.client
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
         rows = await client._fetch(
             'SELECT realm, id, space, fqid, payload, '
             'created_at, updated_at, '
@@ -204,9 +195,7 @@ class PGSagaNodeOperations(SagaNodeOperations):
             f'WHERE {placeholders}',
             *uuid_json_list,
         )
-        return [
-            _row_to_saga_node(dict(r)) for r in rows
-        ]
+        return [_row_to_saga_node(dict(r)) for r in rows]
 
     async def get_by_group_ids(
         self,
@@ -221,22 +210,19 @@ class PGSagaNodeOperations(SagaNodeOperations):
         results: list[SagaNode] = []
         for realm in group_ids:
             vertices = await client.get_vertices(
-                TABLE, realm,
+                TABLE,
+                realm,
             )
             for v in vertices:
-                results.append(
-                    _vertex_to_saga_node(v)
-                )
+                results.append(_vertex_to_saga_node(v))
 
         results.sort(
-            key=lambda n: n.uuid, reverse=True,
+            key=lambda n: n.uuid,
+            reverse=True,
         )
 
         if uuid_cursor:
-            results = [
-                n for n in results
-                if n.uuid < uuid_cursor
-            ]
+            results = [n for n in results if n.uuid < uuid_cursor]
         if limit is not None:
             results = results[:limit]
         return results
@@ -246,9 +232,7 @@ def _vertex_to_saga_node(v: Vertex) -> SagaNode:
     """Convert a post-graph Vertex to a SagaNode."""
     p = v.payload or {}
     last_summarized_at = p.get('last_summarized_at')
-    last_ep_valid_at = p.get(
-        'last_summarized_episode_valid_at'
-    )
+    last_ep_valid_at = p.get('last_summarized_episode_valid_at')
     return SagaNode(
         uuid=p.get('uuid', ''),
         name=p.get('name', ''),
@@ -257,15 +241,9 @@ def _vertex_to_saga_node(v: Vertex) -> SagaNode:
         summary=p.get('summary', '') or '',
         first_episode_uuid=p.get('first_episode_uuid'),
         last_episode_uuid=p.get('last_episode_uuid'),
-        last_summarized_at=(
-            parse_db_date(last_summarized_at)
-            if last_summarized_at
-            else None
-        ),
+        last_summarized_at=(parse_db_date(last_summarized_at) if last_summarized_at else None),
         last_summarized_episode_valid_at=(
-            parse_db_date(last_ep_valid_at)
-            if last_ep_valid_at
-            else None
+            parse_db_date(last_ep_valid_at) if last_ep_valid_at else None
         ),
     )
 
@@ -277,9 +255,7 @@ def _row_to_saga_node(row: dict) -> SagaNode:
         p = json.loads(p)
 
     last_summarized_at = p.get('last_summarized_at')
-    last_ep_valid_at = p.get(
-        'last_summarized_episode_valid_at'
-    )
+    last_ep_valid_at = p.get('last_summarized_episode_valid_at')
     return SagaNode(
         uuid=p.get('uuid', ''),
         name=p.get('name', ''),
@@ -288,14 +264,8 @@ def _row_to_saga_node(row: dict) -> SagaNode:
         summary=p.get('summary', '') or '',
         first_episode_uuid=p.get('first_episode_uuid'),
         last_episode_uuid=p.get('last_episode_uuid'),
-        last_summarized_at=(
-            parse_db_date(last_summarized_at)
-            if last_summarized_at
-            else None
-        ),
+        last_summarized_at=(parse_db_date(last_summarized_at) if last_summarized_at else None),
         last_summarized_episode_valid_at=(
-            parse_db_date(last_ep_valid_at)
-            if last_ep_valid_at
-            else None
+            parse_db_date(last_ep_valid_at) if last_ep_valid_at else None
         ),
     )

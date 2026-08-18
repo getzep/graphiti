@@ -31,15 +31,13 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
             'uuid': node.uuid,
             'name': node.name,
             'summary': node.summary,
-            'created_at': (
-                node.created_at.isoformat()
-                if node.created_at
-                else None
-            ),
+            'created_at': (node.created_at.isoformat() if node.created_at else None),
         }
 
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         await client.upsert_vertex(
             TABLE,
@@ -75,14 +73,19 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
             '  SELECT id FROM "community_nodes" '
             '  WHERE realm = $1 AND payload @> $2::jsonb'
             ')',
-            node.group_id, uuid_json,
+            node.group_id,
+            uuid_json,
         )
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         if v_id is not None:
             await client.delete_vertex(
-                TABLE, node.group_id, str(v_id),
+                TABLE,
+                node.group_id,
+                str(v_id),
             )
         logger.debug(f'Deleted Node: {node.uuid}')
 
@@ -103,11 +106,14 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
             group_id,
         )
         vertices = await client.get_vertices(
-            TABLE, group_id,
+            TABLE,
+            group_id,
         )
         for v in vertices:
             await client.delete_vertex(
-                TABLE, group_id, str(v.id),
+                TABLE,
+                group_id,
+                str(v.id),
             )
 
     async def delete_by_uuids(
@@ -120,17 +126,11 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
         if not uuids:
             return
         client = executor.client
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
 
         id_rows = await client._fetch(
-            f'SELECT realm, id FROM "{TABLE}" '
-            f'WHERE {placeholders}',
+            f'SELECT realm, id FROM "{TABLE}" WHERE {placeholders}',
             *uuid_json_list,
         )
         if not id_rows:
@@ -138,20 +138,19 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
 
         realm_ids: dict[str, list[int]] = {}
         for row in id_rows:
-            realm_ids.setdefault(row['realm'], []).append(
-                row['id']
-            )
+            realm_ids.setdefault(row['realm'], []).append(row['id'])
 
         for realm, ids in realm_ids.items():
             await client._execute(
-                'DELETE FROM "community_edges" '
-                'WHERE realm = $1 AND '
-                'from_id = ANY($2)',
-                realm, ids,
+                'DELETE FROM "community_edges" WHERE realm = $1 AND from_id = ANY($2)',
+                realm,
+                ids,
             )
             for vid in ids:
                 await client.delete_vertex(
-                    TABLE, realm, str(vid),
+                    TABLE,
+                    realm,
+                    str(vid),
                 )
 
     async def get_by_uuid(
@@ -182,13 +181,8 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
         if not uuids:
             return []
         client = executor.client
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
         rows = await client._fetch(
             'SELECT realm, id, space, fqid, payload, '
             'created_at, updated_at, '
@@ -199,9 +193,7 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
             f'WHERE {placeholders}',
             *uuid_json_list,
         )
-        return [
-            _row_to_community_node(dict(r)) for r in rows
-        ]
+        return [_row_to_community_node(dict(r)) for r in rows]
 
     async def get_by_group_ids(
         self,
@@ -216,22 +208,19 @@ class PGCommunityNodeOperations(CommunityNodeOperations):
         results: list[CommunityNode] = []
         for realm in group_ids:
             vertices = await client.get_vertices(
-                TABLE, realm,
+                TABLE,
+                realm,
             )
             for v in vertices:
-                results.append(
-                    _vertex_to_community_node(v)
-                )
+                results.append(_vertex_to_community_node(v))
 
         results.sort(
-            key=lambda n: n.uuid, reverse=True,
+            key=lambda n: n.uuid,
+            reverse=True,
         )
 
         if uuid_cursor:
-            results = [
-                n for n in results
-                if n.uuid < uuid_cursor
-            ]
+            results = [n for n in results if n.uuid < uuid_cursor]
         if limit is not None:
             results = results[:limit]
         return results

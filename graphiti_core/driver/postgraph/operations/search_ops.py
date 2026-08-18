@@ -64,15 +64,16 @@ class PGSearchOperations(SearchOperations):
         results = []
         realms = group_ids or []
         if not realms:
-            realm_rows = await client._fetch(
-                'SELECT DISTINCT realm FROM "entity_nodes"'
-            )
+            realm_rows = await client._fetch('SELECT DISTINCT realm FROM "entity_nodes"')
             realms = [r['realm'] for r in realm_rows]
 
         for realm in realms:
             hits = await client.vector_search(
-                'entity_nodes', realm, search_vector,
-                top_k=limit, distance_metric='cosine',
+                'entity_nodes',
+                realm,
+                search_vector,
+                top_k=limit,
+                distance_metric='cosine',
             )
             for vertex, distance in hits:
                 score = 1.0 - distance
@@ -101,8 +102,7 @@ class PGSearchOperations(SearchOperations):
 
         for origin_uuid in origin_uuids:
             origin_row = await client._fetch(
-                'SELECT realm, id FROM "entity_nodes" '
-                'WHERE payload @> $1::jsonb',
+                'SELECT realm, id FROM "entity_nodes" WHERE payload @> $1::jsonb',
                 json.dumps({'uuid': origin_uuid}),
             )
             if not origin_row:
@@ -128,15 +128,17 @@ class PGSearchOperations(SearchOperations):
                 step_id = step['id']
                 v_rows = await client._fetch(
                     'SELECT realm, id, payload, created_at, '
-                    'to_jsonb(t)->>\'embedding\' AS embedding_text '
+                    "to_jsonb(t)->>'embedding' AS embedding_text "
                     'FROM "entity_nodes" t WHERE realm = $1 AND id = $2',
-                    realm, int(step_id),
+                    realm,
+                    int(step_id),
                 )
                 if v_rows:
                     node = _parse_entity(v_rows[0])
-                    if _matches_node_filter(node, search_filter):
-                        if not any(n.uuid == node.uuid for n in results):
-                            results.append(node)
+                    if _matches_node_filter(node, search_filter) and not any(
+                        n.uuid == node.uuid for n in results
+                    ):
+                        results.append(node)
 
         return results[:limit]
 
@@ -191,15 +193,16 @@ class PGSearchOperations(SearchOperations):
         results = []
         realms = group_ids or []
         if not realms:
-            realm_rows = await client._fetch(
-                'SELECT DISTINCT realm FROM "entity_edges"'
-            )
+            realm_rows = await client._fetch('SELECT DISTINCT realm FROM "entity_edges"')
             realms = [r['realm'] for r in realm_rows]
 
         for realm in realms:
             hits = await client.vector_search_edges(
-                'entity_edges', realm, search_vector,
-                top_k=limit, distance_metric='cosine',
+                'entity_edges',
+                realm,
+                search_vector,
+                top_k=limit,
+                distance_metric='cosine',
             )
             for edge_obj, distance in hits:
                 score = 1.0 - distance
@@ -234,8 +237,7 @@ class PGSearchOperations(SearchOperations):
 
         for origin_uuid in origin_uuids:
             origin_row = await client._fetch(
-                'SELECT realm, id FROM "entity_nodes" '
-                'WHERE payload @> $1::jsonb',
+                'SELECT realm, id FROM "entity_nodes" WHERE payload @> $1::jsonb',
                 json.dumps({'uuid': origin_uuid}),
             )
             if not origin_row:
@@ -257,13 +259,11 @@ class PGSearchOperations(SearchOperations):
 
             visited_edge_ids = set()
             for step in traversal:
-                for eid in (step.get('edge_ids') or []):
+                for eid in step.get('edge_ids') or []:
                     if eid in visited_edge_ids:
                         continue
                     visited_edge_ids.add(eid)
-                    edge_obj = await client.get_edge(
-                        'entity_edges', realm, eid
-                    )
+                    edge_obj = await client.get_edge('entity_edges', realm, eid)
                     if edge_obj:
                         edge = _edge_from_pg_edge(edge_obj)
                         if _matches_edge_filter(edge, search_filter):
@@ -364,15 +364,16 @@ class PGSearchOperations(SearchOperations):
         results = []
         realms = group_ids or []
         if not realms:
-            realm_rows = await client._fetch(
-                'SELECT DISTINCT realm FROM "community_nodes"'
-            )
+            realm_rows = await client._fetch('SELECT DISTINCT realm FROM "community_nodes"')
             realms = [r['realm'] for r in realm_rows]
 
         for realm in realms:
             hits = await client.vector_search(
-                'community_nodes', realm, search_vector,
-                top_k=limit, distance_metric='cosine',
+                'community_nodes',
+                realm,
+                search_vector,
+                top_k=limit,
+                distance_metric='cosine',
             )
             for vertex, distance in hits:
                 score = 1.0 - distance
@@ -406,9 +407,9 @@ class PGSearchOperations(SearchOperations):
 
         for uuid in filtered_uuids:
             vid_rows = await client._fetch(
-                'SELECT id FROM "entity_nodes" '
-                'WHERE realm = $1 AND payload @> $2::jsonb',
-                realm, json.dumps({'uuid': uuid}),
+                'SELECT id FROM "entity_nodes" WHERE realm = $1 AND payload @> $2::jsonb',
+                realm,
+                json.dumps({'uuid': uuid}),
             )
             if not vid_rows:
                 scores[uuid] = float('inf')
@@ -423,7 +424,9 @@ class PGSearchOperations(SearchOperations):
                     OR (from_id = $3 AND to_id = $2))
                 LIMIT 1
                 """,
-                realm, center_vid, vid,
+                realm,
+                center_vid,
+                vid,
             )
             scores[uuid] = 1.0 if edge_rows else float('inf')
 
@@ -444,7 +447,7 @@ class PGSearchOperations(SearchOperations):
         for uuid in reranked_uuids:
             rows = await client._fetch(
                 'SELECT realm, id, payload, created_at, '
-                'to_jsonb(t)->>\'embedding\' AS embedding_text '
+                "to_jsonb(t)->>'embedding' AS embedding_text "
                 'FROM "entity_nodes" t WHERE payload @> $1::jsonb',
                 json.dumps({'uuid': uuid}),
             )
@@ -466,8 +469,7 @@ class PGSearchOperations(SearchOperations):
 
         for uuid in node_uuids:
             vid_rows = await client._fetch(
-                'SELECT realm, id FROM "entity_nodes" '
-                'WHERE payload @> $1::jsonb',
+                'SELECT realm, id FROM "entity_nodes" WHERE payload @> $1::jsonb',
                 json.dumps({'uuid': uuid}),
             )
             if not vid_rows:
@@ -477,9 +479,9 @@ class PGSearchOperations(SearchOperations):
             realm = vid_rows[0]['realm']
             vid = vid_rows[0]['id']
             count_rows = await client._fetch(
-                'SELECT count(*) AS cnt FROM "episodic_edges" '
-                'WHERE realm = $1 AND to_id = $2',
-                realm, vid,
+                'SELECT count(*) AS cnt FROM "episodic_edges" WHERE realm = $1 AND to_id = $2',
+                realm,
+                vid,
             )
             scores[uuid] = float(count_rows[0]['cnt']) if count_rows else float('inf')
 
@@ -495,7 +497,7 @@ class PGSearchOperations(SearchOperations):
         for uuid in reranked_uuids:
             rows = await client._fetch(
                 'SELECT realm, id, payload, created_at, '
-                'to_jsonb(t)->>\'embedding\' AS embedding_text '
+                "to_jsonb(t)->>'embedding' AS embedding_text "
                 'FROM "entity_nodes" t WHERE payload @> $1::jsonb',
                 json.dumps({'uuid': uuid}),
             )
@@ -596,11 +598,11 @@ def _add_date_filters(
             for df in or_list:
                 op = df.comparison_operator.value
                 if op in ('IS NULL', 'IS NOT NULL'):
-                    and_parts.append(
-                        f"((payload->>'{field_name}') {op})"
-                    )
+                    and_parts.append(f"((payload->>'{field_name}') {op})")
                 else:
-                    params.append(df.date.isoformat() if hasattr(df.date, 'isoformat') else str(df.date))
+                    params.append(
+                        df.date.isoformat() if hasattr(df.date, 'isoformat') else str(df.date)
+                    )
                     and_parts.append(
                         f"((payload->>'{field_name}')::timestamptz {op} ${len(params)}::timestamptz)"
                     )
@@ -714,13 +716,9 @@ def _parse_episode(row: dict) -> EpisodicNode:
     valid_at = parse_db_date(p.get('valid_at'))
 
     if created_at is None:
-        raise ValueError(
-            f'created_at cannot be None for episode {p.get("uuid", "unknown")}'
-        )
+        raise ValueError(f'created_at cannot be None for episode {p.get("uuid", "unknown")}')
     if valid_at is None:
-        raise ValueError(
-            f'valid_at cannot be None for episode {p.get("uuid", "unknown")}'
-        )
+        raise ValueError(f'valid_at cannot be None for episode {p.get("uuid", "unknown")}')
 
     return EpisodicNode(
         content=p.get('content', ''),
@@ -752,17 +750,10 @@ def _parse_community(row: dict) -> CommunityNode:
 
 
 def _matches_node_filter(node: EntityNode, sf: SearchFilters) -> bool:
-    if sf.node_labels is not None:
-        if not set(sf.node_labels) & set(node.labels):
-            return False
-    return True
+    return not (sf.node_labels is not None and not set(sf.node_labels) & set(node.labels))
 
 
 def _matches_edge_filter(edge: EntityEdge, sf: SearchFilters) -> bool:
-    if sf.edge_types is not None:
-        if edge.name not in sf.edge_types:
-            return False
-    if sf.edge_uuids is not None:
-        if edge.uuid not in sf.edge_uuids:
-            return False
-    return True
+    if sf.edge_types is not None and edge.name not in sf.edge_types:
+        return False
+    return not (sf.edge_uuids is not None and edge.uuid not in sf.edge_uuids)

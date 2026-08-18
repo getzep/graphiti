@@ -26,10 +26,14 @@ class PGEpisodicEdgeOperations(EpisodicEdgeOperations):
     ) -> None:
         client = executor.client
         from_id = await executor._resolve_vertex_id(
-            SOURCE_TABLE, edge.group_id, edge.source_node_uuid,
+            SOURCE_TABLE,
+            edge.group_id,
+            edge.source_node_uuid,
         )
         to_id = await executor._resolve_vertex_id(
-            TARGET_TABLE, edge.group_id, edge.target_node_uuid,
+            TARGET_TABLE,
+            edge.group_id,
+            edge.target_node_uuid,
         )
         if from_id is None or to_id is None:
             logger.warning(
@@ -48,7 +52,8 @@ class PGEpisodicEdgeOperations(EpisodicEdgeOperations):
 
         e_id = await executor._resolve_edge_id(TABLE, edge.group_id, edge.uuid)
         await client.upsert_edge(
-            TABLE, edge.group_id,
+            TABLE,
+            edge.group_id,
             from_id=from_id,
             to_id=to_id,
             relation_type='MENTIONS',
@@ -78,7 +83,8 @@ class PGEpisodicEdgeOperations(EpisodicEdgeOperations):
         if e_id is not None:
             await client._execute(
                 f'DELETE FROM "{TABLE}" WHERE realm = $1 AND id = $2',
-                edge.group_id, e_id,
+                edge.group_id,
+                e_id,
             )
         logger.debug(f'Deleted Edge: {edge.uuid}')
 
@@ -92,9 +98,7 @@ class PGEpisodicEdgeOperations(EpisodicEdgeOperations):
             return
         client = executor.client
         uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb' for i in range(len(uuids))
-        )
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
         await client._execute(
             f'DELETE FROM "{TABLE}" WHERE {placeholders}',
             *uuid_json_list,
@@ -123,9 +127,7 @@ class PGEpisodicEdgeOperations(EpisodicEdgeOperations):
         if not uuids:
             return []
         client = executor.client
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb' for i in range(len(uuids))
-        )
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
         uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
         rows = await client._fetch(
             f'SELECT realm, id, from_id, to_id, payload, created_at FROM "{TABLE}" '
@@ -147,7 +149,7 @@ class PGEpisodicEdgeOperations(EpisodicEdgeOperations):
         conditions = ['realm = ANY($1)']
         params: list[Any] = [group_ids]
         if uuid_cursor:
-            conditions.append(f"(payload->>'uuid') < $2")
+            conditions.append("(payload->>'uuid') < $2")
             params.append(uuid_cursor)
         where = ' AND '.join(conditions)
         limit_clause = f' LIMIT {limit}' if limit is not None else ''

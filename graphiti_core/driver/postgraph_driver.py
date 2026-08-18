@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 try:
-    from post_graph import AsyncPostGraph, Vertex, Edge
+    from post_graph import AsyncPostGraph
 except ImportError:
     raise ImportError(
         'post-graph is required for PostGraphDriver. '
@@ -286,21 +286,29 @@ class PostGraphDriver(GraphDriver):
         return ts_query or ''
 
     async def _resolve_vertex_id(
-        self, table_name: str, realm: str, graphiti_uuid: str,
+        self,
+        table_name: str,
+        realm: str,
+        graphiti_uuid: str,
     ) -> int | None:
         """Get post-graph's integer id from a Graphiti UUID stored in payload."""
         rows = await self.client._fetch(
             f'SELECT id FROM "{table_name}" WHERE realm = $1 AND payload @> $2::jsonb',
-            realm, json.dumps({'uuid': graphiti_uuid}),
+            realm,
+            json.dumps({'uuid': graphiti_uuid}),
         )
         return rows[0]['id'] if rows else None
 
     async def _resolve_edge_id(
-        self, table_name: str, realm: str, graphiti_uuid: str,
+        self,
+        table_name: str,
+        realm: str,
+        graphiti_uuid: str,
     ) -> int | None:
         """Get post-graph's integer edge id from a Graphiti UUID stored in payload."""
         rows = await self.client._fetch(
             f'SELECT id FROM "{table_name}" WHERE realm = $1 AND payload @> $2::jsonb',
-            realm, json.dumps({'uuid': graphiti_uuid}),
+            realm,
+            json.dumps({'uuid': graphiti_uuid}),
         )
         return rows[0]['id'] if rows else None

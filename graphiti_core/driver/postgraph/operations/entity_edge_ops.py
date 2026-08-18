@@ -37,13 +37,19 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
     ) -> None:
         client = executor.client
         from_id = await executor._resolve_vertex_id(
-            SOURCE_TABLE, edge.group_id, edge.source_node_uuid,
+            SOURCE_TABLE,
+            edge.group_id,
+            edge.source_node_uuid,
         )
         to_id = await executor._resolve_vertex_id(
-            TARGET_TABLE, edge.group_id, edge.target_node_uuid,
+            TARGET_TABLE,
+            edge.group_id,
+            edge.target_node_uuid,
         )
         existing_id = await executor._resolve_edge_id(
-            TABLE, edge.group_id, edge.uuid,
+            TABLE,
+            edge.group_id,
+            edge.uuid,
         )
         payload = _build_payload(edge)
         await client.upsert_edge(
@@ -76,11 +82,15 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
     ) -> None:
         client = executor.client
         eid = await executor._resolve_edge_id(
-            TABLE, edge.group_id, edge.uuid,
+            TABLE,
+            edge.group_id,
+            edge.uuid,
         )
         if eid is not None:
             await client.delete_edge(
-                TABLE, edge.group_id, eid,
+                TABLE,
+                edge.group_id,
+                eid,
             )
         logger.debug('Deleted Edge: %s', edge.uuid)
 
@@ -94,8 +104,7 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
             return
         client = executor.client
         await client._execute(
-            f'DELETE FROM "{TABLE}" '
-            "WHERE payload->>'uuid' = ANY($1)",
+            f'DELETE FROM "{TABLE}" WHERE payload->>\'uuid\' = ANY($1)',
             uuids,
         )
 
@@ -106,8 +115,7 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
     ) -> EntityEdge:
         client = executor.client
         rows = await client._fetch(
-            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
-            'WHERE payload @> $1::jsonb',
+            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t WHERE payload @> $1::jsonb',
             json.dumps({'uuid': uuid}),
         )
         edges = [_parse(r) for r in rows]
@@ -124,8 +132,7 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
             return []
         client = executor.client
         rows = await client._fetch(
-            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
-            "WHERE payload->>'uuid' = ANY($1)",
+            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t WHERE payload->>\'uuid\' = ANY($1)',
             uuids,
         )
         return [_parse(r) for r in rows]
@@ -138,10 +145,7 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
         uuid_cursor: str | None = None,
     ) -> list[EntityEdge]:
         client = executor.client
-        query = (
-            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
-            'WHERE realm = ANY($1)'
-        )
+        query = f'SELECT {_EDGE_COLS} FROM "{TABLE}" t WHERE realm = ANY($1)'
         args: list = [group_ids]
         if uuid_cursor:
             query += " AND payload->>'uuid' < $2"
@@ -238,26 +242,11 @@ def _build_payload(edge: EntityEdge) -> dict:
         'name': edge.name,
         'fact': edge.fact,
         'episodes': edge.episodes,
-        'created_at': (
-            edge.created_at.isoformat()
-            if edge.created_at else None
-        ),
-        'expired_at': (
-            edge.expired_at.isoformat()
-            if edge.expired_at else None
-        ),
-        'valid_at': (
-            edge.valid_at.isoformat()
-            if edge.valid_at else None
-        ),
-        'invalid_at': (
-            edge.invalid_at.isoformat()
-            if edge.invalid_at else None
-        ),
-        'reference_time': (
-            edge.reference_time.isoformat()
-            if edge.reference_time else None
-        ),
+        'created_at': (edge.created_at.isoformat() if edge.created_at else None),
+        'expired_at': (edge.expired_at.isoformat() if edge.expired_at else None),
+        'valid_at': (edge.valid_at.isoformat() if edge.valid_at else None),
+        'invalid_at': (edge.invalid_at.isoformat() if edge.invalid_at else None),
+        'reference_time': (edge.reference_time.isoformat() if edge.reference_time else None),
         'attributes': dict(edge.attributes or {}),
     }
 
@@ -277,9 +266,7 @@ def _parse(row) -> EntityEdge:
             row.get('embedding_text'),
         ),
         group_id=row['realm'],
-        episodes=list(
-            payload.get('episodes', []) or []
-        ),
+        episodes=list(payload.get('episodes', []) or []),
         created_at=parse_db_date(
             payload.get('created_at'),
         ),
@@ -308,9 +295,5 @@ def _parse_embedding(value) -> list[float] | None:
         value = value.strip()
         if value.startswith('['):
             return json.loads(value)
-        return [
-            float(x)
-            for x in value.split(',')
-            if x.strip()
-        ]
+        return [float(x) for x in value.split(',') if x.strip()]
     return list(value)

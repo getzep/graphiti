@@ -34,21 +34,15 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
             'source': node.source.value,
             'source_description': node.source_description,
             'content': node.content,
-            'valid_at': (
-                node.valid_at.isoformat()
-                if node.valid_at
-                else None
-            ),
+            'valid_at': (node.valid_at.isoformat() if node.valid_at else None),
             'entity_edges': node.entity_edges,
-            'created_at': (
-                node.created_at.isoformat()
-                if node.created_at
-                else None
-            ),
+            'created_at': (node.created_at.isoformat() if node.created_at else None),
         }
 
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         await client.upsert_vertex(
             TABLE,
@@ -83,7 +77,8 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
             '  SELECT id FROM "episodic_nodes" '
             '  WHERE realm = $1 AND payload @> $2::jsonb'
             ')',
-            node.group_id, uuid_json,
+            node.group_id,
+            uuid_json,
         )
         await client._execute(
             'DELETE FROM "has_episode_edges" '
@@ -91,7 +86,8 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
             '  SELECT id FROM "episodic_nodes" '
             '  WHERE realm = $1 AND payload @> $2::jsonb'
             ')',
-            node.group_id, uuid_json,
+            node.group_id,
+            uuid_json,
         )
         await client._execute(
             'DELETE FROM "next_episode_edges" '
@@ -104,14 +100,19 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
             '    WHERE realm = $1 AND payload @> $2::jsonb'
             '  )'
             ')',
-            node.group_id, uuid_json,
+            node.group_id,
+            uuid_json,
         )
         v_id = await executor._resolve_vertex_id(
-            TABLE, node.group_id, node.uuid,
+            TABLE,
+            node.group_id,
+            node.uuid,
         )
         if v_id is not None:
             await client.delete_vertex(
-                TABLE, node.group_id, str(v_id),
+                TABLE,
+                node.group_id,
+                str(v_id),
             )
         logger.debug(f'Deleted Node: {node.uuid}')
 
@@ -155,7 +156,9 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
         vertices = await client.get_vertices(TABLE, group_id)
         for v in vertices:
             await client.delete_vertex(
-                TABLE, group_id, str(v.id),
+                TABLE,
+                group_id,
+                str(v.id),
             )
 
     async def delete_by_uuids(
@@ -168,17 +171,11 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
         if not uuids:
             return
         client = executor.client
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
 
         id_rows = await client._fetch(
-            f'SELECT realm, id FROM "{TABLE}" '
-            f'WHERE {placeholders}',
+            f'SELECT realm, id FROM "{TABLE}" WHERE {placeholders}',
             *uuid_json_list,
         )
         if not id_rows:
@@ -186,31 +183,32 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
 
         realm_ids: dict[str, list[int]] = {}
         for row in id_rows:
-            realm_ids.setdefault(row['realm'], []).append(
-                row['id']
-            )
+            realm_ids.setdefault(row['realm'], []).append(row['id'])
 
         for realm, ids in realm_ids.items():
             id_arr = ids
             await client._execute(
-                'DELETE FROM "episodic_edges" '
-                'WHERE realm = $1 AND from_id = ANY($2)',
-                realm, id_arr,
+                'DELETE FROM "episodic_edges" WHERE realm = $1 AND from_id = ANY($2)',
+                realm,
+                id_arr,
             )
             await client._execute(
-                'DELETE FROM "has_episode_edges" '
-                'WHERE realm = $1 AND to_id = ANY($2)',
-                realm, id_arr,
+                'DELETE FROM "has_episode_edges" WHERE realm = $1 AND to_id = ANY($2)',
+                realm,
+                id_arr,
             )
             await client._execute(
                 'DELETE FROM "next_episode_edges" '
                 'WHERE realm = $1 AND '
                 '(from_id = ANY($2) OR to_id = ANY($2))',
-                realm, id_arr,
+                realm,
+                id_arr,
             )
             for vid in ids:
                 await client.delete_vertex(
-                    TABLE, realm, str(vid),
+                    TABLE,
+                    realm,
+                    str(vid),
                 )
 
     async def get_by_uuid(
@@ -239,13 +237,8 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
         if not uuids:
             return []
         client = executor.client
-        placeholders = ' OR '.join(
-            f'payload @> ${i + 1}::jsonb'
-            for i in range(len(uuids))
-        )
-        uuid_json_list = [
-            json.dumps({'uuid': u}) for u in uuids
-        ]
+        placeholders = ' OR '.join(f'payload @> ${i + 1}::jsonb' for i in range(len(uuids)))
+        uuid_json_list = [json.dumps({'uuid': u}) for u in uuids]
         rows = await client._fetch(
             'SELECT realm, id, space, fqid, payload, '
             'created_at, updated_at, '
@@ -254,9 +247,7 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
             f'WHERE {placeholders}',
             *uuid_json_list,
         )
-        return [
-            _row_to_episodic_node(dict(r)) for r in rows
-        ]
+        return [_row_to_episodic_node(dict(r)) for r in rows]
 
     async def get_by_group_ids(
         self,
@@ -271,21 +262,19 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
         results: list[EpisodicNode] = []
         for realm in group_ids:
             vertices = await client.get_vertices(
-                TABLE, realm,
+                TABLE,
+                realm,
             )
             for v in vertices:
-                results.append(
-                    _vertex_to_episodic_node(v)
-                )
+                results.append(_vertex_to_episodic_node(v))
 
         results.sort(
-            key=lambda n: n.uuid, reverse=True,
+            key=lambda n: n.uuid,
+            reverse=True,
         )
 
         if uuid_cursor:
-            results = [
-                n for n in results if n.uuid < uuid_cursor
-            ]
+            results = [n for n in results if n.uuid < uuid_cursor]
         if limit is not None:
             results = results[:limit]
         return results
@@ -310,9 +299,7 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
             'WHERE en.payload @> $1::jsonb',
             json.dumps({'uuid': entity_node_uuid}),
         )
-        return [
-            _row_to_episodic_node(dict(r)) for r in rows
-        ]
+        return [_row_to_episodic_node(dict(r)) for r in rows]
 
     async def retrieve_episodes(
         self,
@@ -334,22 +321,12 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
                 "(e.payload->>'valid_at') <= $1",
             ]
             if group_ids:
-                realm_ph = ', '.join(
-                    f'${i + len(params) + 1}'
-                    for i in range(len(group_ids))
-                )
-                conditions.append(
-                    f'e.realm IN ({realm_ph})'
-                )
+                realm_ph = ', '.join(f'${i + len(params) + 1}' for i in range(len(group_ids)))
+                conditions.append(f'e.realm IN ({realm_ph})')
                 params.extend(group_ids)
             if source:
-                params.append(
-                    json.dumps({'source': source})
-                )
-                conditions.append(
-                    f'e.payload @> '
-                    f'${len(params)}::jsonb'
-                )
+                params.append(json.dumps({'source': source}))
+                conditions.append(f'e.payload @> ${len(params)}::jsonb')
 
             params.append(json.dumps({'uuid': saga}))
             saga_param = f'${len(params)}'
@@ -378,22 +355,12 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
                 "(payload->>'valid_at') <= $1",
             ]
             if group_ids:
-                realm_ph = ', '.join(
-                    f'${i + len(params) + 1}'
-                    for i in range(len(group_ids))
-                )
-                conditions.append(
-                    f'realm IN ({realm_ph})'
-                )
+                realm_ph = ', '.join(f'${i + len(params) + 1}' for i in range(len(group_ids)))
+                conditions.append(f'realm IN ({realm_ph})')
                 params.extend(group_ids)
             if source:
-                params.append(
-                    json.dumps({'source': source})
-                )
-                conditions.append(
-                    f'payload @> '
-                    f'${len(params)}::jsonb'
-                )
+                params.append(json.dumps({'source': source}))
+                conditions.append(f'payload @> ${len(params)}::jsonb')
 
             where = ' AND '.join(conditions)
             query = (
@@ -407,9 +374,7 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
             )
 
         rows = await client._fetch(query, *params)
-        return [
-            _row_to_episodic_node(dict(r)) for r in rows
-        ]
+        return [_row_to_episodic_node(dict(r)) for r in rows]
 
 
 def _vertex_to_episodic_node(v: Vertex) -> EpisodicNode:
@@ -419,15 +384,9 @@ def _vertex_to_episodic_node(v: Vertex) -> EpisodicNode:
     valid_at = parse_db_date(p.get('valid_at'))
 
     if created_at is None:
-        raise ValueError(
-            'created_at cannot be None for episode '
-            f'{p.get("uuid", "unknown")}'
-        )
+        raise ValueError(f'created_at cannot be None for episode {p.get("uuid", "unknown")}')
     if valid_at is None:
-        raise ValueError(
-            'valid_at cannot be None for episode '
-            f'{p.get("uuid", "unknown")}'
-        )
+        raise ValueError(f'valid_at cannot be None for episode {p.get("uuid", "unknown")}')
 
     return EpisodicNode(
         content=p.get('content', ''),
@@ -435,16 +394,10 @@ def _vertex_to_episodic_node(v: Vertex) -> EpisodicNode:
         valid_at=valid_at,
         uuid=p.get('uuid', ''),
         group_id=v.realm or '',
-        source=EpisodeType.from_str(
-            p.get('source', 'text')
-        ),
+        source=EpisodeType.from_str(p.get('source', 'text')),
         name=p.get('name', ''),
-        source_description=p.get(
-            'source_description', ''
-        ),
-        entity_edges=list(
-            p.get('entity_edges', []) or []
-        ),
+        source_description=p.get('source_description', ''),
+        entity_edges=list(p.get('entity_edges', []) or []),
     )
 
 
@@ -458,15 +411,9 @@ def _row_to_episodic_node(row: dict) -> EpisodicNode:
     valid_at = parse_db_date(p.get('valid_at'))
 
     if created_at is None:
-        raise ValueError(
-            'created_at cannot be None for episode '
-            f'{p.get("uuid", "unknown")}'
-        )
+        raise ValueError(f'created_at cannot be None for episode {p.get("uuid", "unknown")}')
     if valid_at is None:
-        raise ValueError(
-            'valid_at cannot be None for episode '
-            f'{p.get("uuid", "unknown")}'
-        )
+        raise ValueError(f'valid_at cannot be None for episode {p.get("uuid", "unknown")}')
 
     return EpisodicNode(
         content=p.get('content', ''),
@@ -474,14 +421,8 @@ def _row_to_episodic_node(row: dict) -> EpisodicNode:
         valid_at=valid_at,
         uuid=p.get('uuid', ''),
         group_id=row.get('realm', ''),
-        source=EpisodeType.from_str(
-            p.get('source', 'text')
-        ),
+        source=EpisodeType.from_str(p.get('source', 'text')),
         name=p.get('name', ''),
-        source_description=p.get(
-            'source_description', ''
-        ),
-        entity_edges=list(
-            p.get('entity_edges', []) or []
-        ),
+        source_description=p.get('source_description', ''),
+        entity_edges=list(p.get('entity_edges', []) or []),
     )
