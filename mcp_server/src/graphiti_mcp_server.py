@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
+from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
@@ -44,6 +45,15 @@ from services.factories import (
     LLMClientFactory,
 )
 from services.queue_service import QueueService
+from utils.falkor_routing import (
+    ENTITY_EDGE_UUID_QUERY,
+    EPISODE_UUID_QUERY,
+    EPISODE_UUIDS_QUERY,
+    client_bound_to,
+    driver_for_uuid,
+    drivers_for_uuids,
+    is_falkor,
+)
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
 from utils.type_config import (
     build_edge_type_map,
@@ -659,10 +669,14 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
-        # Get the entity edge by UUID
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
-        # Delete the edge using its delete method
-        await entity_edge.delete(client.driver)
+        driver = client.driver
+        if is_falkor(driver):
+            driver, group_id = await driver_for_uuid(driver, ENTITY_EDGE_UUID_QUERY, uuid)
+            if group_id is None:
+                return ErrorResponse(error=f'Entity edge with UUID {uuid} not found')
+
+        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
+        await entity_edge.delete(driver)
         return SuccessResponse(message=f'Entity edge with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
@@ -690,8 +704,17 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
         client = await graphiti_service.get_client()
 
         # remove_episode cascades cleanup of episode-created entities/edges,
-        # unlike EpisodicNode.delete which would orphan them.
-        await client.remove_episode(uuid)
+        # unlike EpisodicNode.delete which would orphan them. FalkorDB stores
+        # each group in a separate graph, so route the cascade to the graph
+        # containing this UUID without rebinding the shared client.
+        driver = client.driver
+        if is_falkor(driver):
+            driver, group_id = await driver_for_uuid(driver, EPISODE_UUID_QUERY, uuid)
+            if group_id is None:
+                return ErrorResponse(error=f'Episode with UUID {uuid} not found')
+            await type(client).remove_episode(client_bound_to(client, driver), uuid)
+        else:
+            await client.remove_episode(uuid)
         return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
@@ -714,11 +737,13 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
-        # Get the entity edge directly using the EntityEdge class method
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+        driver = client.driver
+        if is_falkor(driver):
+            driver, group_id = await driver_for_uuid(driver, ENTITY_EDGE_UUID_QUERY, uuid)
+            if group_id is None:
+                return ErrorResponse(error=f'Entity edge with UUID {uuid} not found')
 
-        # Use the format_fact_result function to serialize the edge
-        # Return the Python dict directly - MCP will handle serialization
+        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
         return format_fact_result(entity_edge)
     except Exception as e:
         error_msg = str(e)
@@ -999,8 +1024,20 @@ async def get_episode_entities(
 
     try:
         client = await graphiti_service.get_client()
-
-        results = await client.get_nodes_and_edges_by_episode(episode_uuids)
+        if is_falkor(client.driver):
+            # Episode UUIDs may span tenant graphs. Resolve and batch them with
+            # one probe per graph before invoking the existing provenance query.
+            buckets = await drivers_for_uuids(client.driver, EPISODE_UUIDS_QUERY, episode_uuids)
+            nodes, edges = [], []
+            for driver, uuids in buckets.values():
+                partial = await type(client).get_nodes_and_edges_by_episode(
+                    client_bound_to(client, driver), uuids
+                )
+                nodes.extend(partial.nodes)
+                edges.extend(partial.edges)
+            results = SearchResults(nodes=nodes, edges=edges)
+        else:
+            results = await client.get_nodes_and_edges_by_episode(episode_uuids)
 
         return EpisodeEntitiesResponse(
             message=f'Retrieved provenance for {len(episode_uuids)} episode(s)',
