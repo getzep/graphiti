@@ -72,15 +72,20 @@ def handle_multiple_group_ids(func: F) -> F:
         if is_falkor and group_ids and len(group_ids) > 1:
             # Execute for each group_id concurrently
             driver = self.clients.driver
-            # Bind the call by name once. Popping group_ids from its original
-            # positional slot shifts every later positional argument down, so a
-            # caller that passed driver positionally collided with the keyword
-            # injected here (TypeError: got multiple values for argument
-            # 'driver') (#1758). Re-binding from the signature normalizes every
-            # argument to its declared name before the per-group rewrite.
-            bound = inspect.signature(func).bind(self, *args, **kwargs)
 
             async def execute_for_group(gid: str):
+                # Bind the call by name, per task, from the original args.
+                # Popping group_ids from its original positional slot shifts
+                # every later positional argument down, so a caller that
+                # passed driver positionally collided with the keyword
+                # injected here (TypeError: got multiple values for argument
+                # 'driver') (#1758). Re-binding from the signature normalizes
+                # every argument to its declared name before the per-group
+                # rewrite; a fresh BoundArguments per task also avoids
+                # sharing one mutated-in-place object across concurrent
+                # tasks, which is safe only as long as nothing awaits
+                # between the rewrite and the read.
+                bound = inspect.signature(func).bind(self, *args, **kwargs)
                 bound.arguments['group_ids'] = [gid]
                 bound.arguments['driver'] = driver.clone(database=gid)
                 return await func(*bound.args, **bound.kwargs)
