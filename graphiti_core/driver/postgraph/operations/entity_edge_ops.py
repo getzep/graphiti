@@ -2,15 +2,30 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
-from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
-from graphiti_core.driver.query_executor import QueryExecutor, Transaction
+from graphiti_core.driver.operations.entity_edge_ops import (
+    EntityEdgeOperations,
+)
+from graphiti_core.driver.query_executor import (
+    QueryExecutor,
+    Transaction,
+)
 from graphiti_core.edges import EntityEdge
 from graphiti_core.errors import EdgeNotFoundError
 from graphiti_core.helpers import parse_db_date
 
 logger = logging.getLogger(__name__)
+
+TABLE = 'entity_edges'
+SOURCE_TABLE = 'entity_nodes'
+TARGET_TABLE = 'entity_nodes'
+
+_EDGE_COLS = (
+    'realm, id, space, fqid, from_id, to_id, '
+    'relation_type, payload, created_at, updated_at, '
+    'uuid::text AS uuid_text, '
+    "to_jsonb(t)->>'embedding' AS embedding_text"
+)
 
 
 class PGEntityEdgeOperations(EntityEdgeOperations):
@@ -18,91 +33,84 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
         self,
         executor: QueryExecutor,
         edge: EntityEdge,
-        tx: Transaction | None = None,
+        _tx: Transaction | None = None,
     ) -> None:
-        attributes = dict(edge.attributes or {})
-        query = """
-            INSERT INTO entity_edges
-                (uuid, source_node_uuid, target_node_uuid, name, fact, fact_embedding,
-                 group_id, episodes, created_at, expired_at, valid_at, invalid_at,
-                 reference_time, attributes)
-            VALUES ($uuid, $source_node_uuid, $target_node_uuid, $name, $fact, $fact_embedding,
-                    $group_id, $episodes, $created_at, $expired_at, $valid_at, $invalid_at,
-                    $reference_time, $attributes)
-            ON CONFLICT (uuid) DO UPDATE SET
-                source_node_uuid = EXCLUDED.source_node_uuid,
-                target_node_uuid = EXCLUDED.target_node_uuid,
-                name = EXCLUDED.name,
-                fact = EXCLUDED.fact,
-                fact_embedding = EXCLUDED.fact_embedding,
-                group_id = EXCLUDED.group_id,
-                episodes = EXCLUDED.episodes,
-                created_at = EXCLUDED.created_at,
-                expired_at = EXCLUDED.expired_at,
-                valid_at = EXCLUDED.valid_at,
-                invalid_at = EXCLUDED.invalid_at,
-                reference_time = EXCLUDED.reference_time,
-                attributes = EXCLUDED.attributes
-        """
-        run = tx.run if tx else executor.execute_query
-        await run(
-            query,
-            uuid=edge.uuid,
-            source_node_uuid=edge.source_node_uuid,
-            target_node_uuid=edge.target_node_uuid,
-            name=edge.name,
-            fact=edge.fact,
-            fact_embedding=_vec(edge.fact_embedding),
-            group_id=edge.group_id,
-            episodes=edge.episodes,
-            created_at=edge.created_at,
-            expired_at=edge.expired_at,
-            valid_at=edge.valid_at,
-            invalid_at=edge.invalid_at,
-            reference_time=edge.reference_time,
-            attributes=json.dumps(attributes),
+        client = executor.client
+        from_id = await executor._resolve_vertex_id(
+            SOURCE_TABLE, edge.group_id, edge.source_node_uuid,
         )
-        logger.debug(f'Saved Edge to Graph: {edge.uuid}')
+        to_id = await executor._resolve_vertex_id(
+            TARGET_TABLE, edge.group_id, edge.target_node_uuid,
+        )
+        existing_id = await executor._resolve_edge_id(
+            TABLE, edge.group_id, edge.uuid,
+        )
+        payload = _build_payload(edge)
+        await client.upsert_edge(
+            TABLE,
+            realm=edge.group_id,
+            from_id=str(from_id),
+            to_id=str(to_id),
+            relation_type=edge.name,
+            edge_id=existing_id,
+            payload=payload,
+            embedding=edge.fact_embedding,
+        )
+        logger.debug('Saved Edge to Graph: %s', edge.uuid)
 
     async def save_bulk(
         self,
         executor: QueryExecutor,
         edges: list[EntityEdge],
-        tx: Transaction | None = None,
-        batch_size: int = 100,
+        _tx: Transaction | None = None,
+        _batch_size: int = 100,
     ) -> None:
         for edge in edges:
-            await self.save(executor, edge, tx=tx)
+            await self.save(executor, edge)
 
     async def delete(
         self,
         executor: QueryExecutor,
         edge: EntityEdge,
-        tx: Transaction | None = None,
+        _tx: Transaction | None = None,
     ) -> None:
-        run = tx.run if tx else executor.execute_query
-        await run('DELETE FROM entity_edges WHERE uuid = $uuid', uuid=edge.uuid)
-        logger.debug(f'Deleted Edge: {edge.uuid}')
+        client = executor.client
+        eid = await executor._resolve_edge_id(
+            TABLE, edge.group_id, edge.uuid,
+        )
+        if eid is not None:
+            await client.delete_edge(
+                TABLE, edge.group_id, eid,
+            )
+        logger.debug('Deleted Edge: %s', edge.uuid)
 
     async def delete_by_uuids(
         self,
         executor: QueryExecutor,
         uuids: list[str],
-        tx: Transaction | None = None,
+        _tx: Transaction | None = None,
     ) -> None:
-        run = tx.run if tx else executor.execute_query
-        await run('DELETE FROM entity_edges WHERE uuid = ANY($uuids)', uuids=uuids)
+        if not uuids:
+            return
+        client = executor.client
+        await client._execute(
+            f'DELETE FROM "{TABLE}" '
+            "WHERE payload->>'uuid' = ANY($1)",
+            uuids,
+        )
 
     async def get_by_uuid(
         self,
         executor: QueryExecutor,
         uuid: str,
     ) -> EntityEdge:
-        records, _, _ = await executor.execute_query(
-            _SELECT + ' WHERE uuid = $uuid',
-            uuid=uuid,
+        client = executor.client
+        rows = await client._fetch(
+            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
+            'WHERE payload @> $1::jsonb',
+            json.dumps({'uuid': uuid}),
         )
-        edges = [_parse(r) for r in records]
+        edges = [_parse(r) for r in rows]
         if not edges:
             raise EdgeNotFoundError(uuid)
         return edges[0]
@@ -114,11 +122,13 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
     ) -> list[EntityEdge]:
         if not uuids:
             return []
-        records, _, _ = await executor.execute_query(
-            _SELECT + ' WHERE uuid = ANY($uuids)',
-            uuids=uuids,
+        client = executor.client
+        rows = await client._fetch(
+            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
+            "WHERE payload->>'uuid' = ANY($1)",
+            uuids,
         )
-        return [_parse(r) for r in records]
+        return [_parse(r) for r in rows]
 
     async def get_by_group_ids(
         self,
@@ -127,20 +137,20 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ) -> list[EntityEdge]:
-        cursor_clause = 'AND uuid < $uuid_cursor' if uuid_cursor else ''
-        limit_clause = f'LIMIT {limit}' if limit is not None else ''
-        query = f"""
-            {_SELECT}
-            WHERE group_id = ANY($group_ids)
-            {cursor_clause}
-            ORDER BY uuid DESC
-            {limit_clause}
-        """
-        params: dict[str, Any] = {'group_ids': group_ids}
+        client = executor.client
+        query = (
+            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
+            'WHERE realm = ANY($1)'
+        )
+        args: list = [group_ids]
         if uuid_cursor:
-            params['uuid_cursor'] = uuid_cursor
-        records, _, _ = await executor.execute_query(query, **params)
-        return [_parse(r) for r in records]
+            query += " AND payload->>'uuid' < $2"
+            args.append(uuid_cursor)
+        query += ' ORDER BY id DESC'
+        if limit is not None:
+            query += f' LIMIT {limit}'
+        rows = await client._fetch(query, *args)
+        return [_parse(r) for r in rows]
 
     async def get_between_nodes(
         self,
@@ -148,110 +158,159 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
         source_node_uuid: str,
         target_node_uuid: str,
     ) -> list[EntityEdge]:
-        records, _, _ = await executor.execute_query(
-            _SELECT
-            + ' WHERE source_node_uuid = $source_node_uuid AND target_node_uuid = $target_node_uuid',
-            source_node_uuid=source_node_uuid,
-            target_node_uuid=target_node_uuid,
+        client = executor.client
+        rows = await client._fetch(
+            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
+            "WHERE payload->>'source_node_uuid' = $1 "
+            "AND payload->>'target_node_uuid' = $2",
+            source_node_uuid,
+            target_node_uuid,
         )
-        return [_parse(r) for r in records]
+        return [_parse(r) for r in rows]
 
     async def get_by_node_uuid(
         self,
         executor: QueryExecutor,
         node_uuid: str,
     ) -> list[EntityEdge]:
-        records, _, _ = await executor.execute_query(
-            _SELECT + ' WHERE source_node_uuid = $node_uuid OR target_node_uuid = $node_uuid',
-            node_uuid=node_uuid,
+        client = executor.client
+        rows = await client._fetch(
+            f'SELECT {_EDGE_COLS} FROM "{TABLE}" t '
+            "WHERE payload->>'source_node_uuid' = $1 "
+            "OR payload->>'target_node_uuid' = $1",
+            node_uuid,
         )
-        return [_parse(r) for r in records]
+        return [_parse(r) for r in rows]
 
     async def load_embeddings(
         self,
         executor: QueryExecutor,
         edge: EntityEdge,
     ) -> None:
-        records, _, _ = await executor.execute_query(
-            'SELECT fact_embedding FROM entity_edges WHERE uuid = $uuid',
-            uuid=edge.uuid,
+        client = executor.client
+        rows = await client._fetch(
+            'SELECT '
+            "to_jsonb(t)->>'embedding' AS embedding_text "
+            f'FROM "{TABLE}" t '
+            'WHERE payload @> $1::jsonb',
+            json.dumps({'uuid': edge.uuid}),
         )
-        if not records:
+        if not rows:
             raise EdgeNotFoundError(edge.uuid)
-        edge.fact_embedding = _parse_vec(records[0]['fact_embedding'])
+        edge.fact_embedding = _parse_embedding(
+            rows[0]['embedding_text'],
+        )
 
     async def load_embeddings_bulk(
         self,
         executor: QueryExecutor,
         edges: list[EntityEdge],
-        batch_size: int = 100,
+        _batch_size: int = 100,
     ) -> None:
+        if not edges:
+            return
+        client = executor.client
         uuids = [e.uuid for e in edges]
-        records, _, _ = await executor.execute_query(
-            'SELECT DISTINCT uuid, fact_embedding FROM entity_edges WHERE uuid = ANY($uuids)',
-            uuids=uuids,
+        rows = await client._fetch(
+            'SELECT '
+            "payload->>'uuid' AS edge_uuid, "
+            "to_jsonb(t)->>'embedding' AS embedding_text "
+            f'FROM "{TABLE}" t '
+            "WHERE payload->>'uuid' = ANY($1)",
+            uuids,
         )
-        embedding_map = {r['uuid']: _parse_vec(r['fact_embedding']) for r in records}
+        emb_map = {
+            r['edge_uuid']: _parse_embedding(
+                r['embedding_text'],
+            )
+            for r in rows
+        }
         for edge in edges:
-            if edge.uuid in embedding_map:
-                edge.fact_embedding = embedding_map[edge.uuid]
+            if edge.uuid in emb_map:
+                edge.fact_embedding = emb_map[edge.uuid]
 
 
-_SELECT = """
-    SELECT uuid, source_node_uuid, target_node_uuid, name, fact,
-           group_id, episodes, created_at, expired_at, valid_at,
-           invalid_at, reference_time, attributes
-    FROM entity_edges
-"""
+def _build_payload(edge: EntityEdge) -> dict:
+    return {
+        'uuid': edge.uuid,
+        'source_node_uuid': edge.source_node_uuid,
+        'target_node_uuid': edge.target_node_uuid,
+        'name': edge.name,
+        'fact': edge.fact,
+        'episodes': edge.episodes,
+        'created_at': (
+            edge.created_at.isoformat()
+            if edge.created_at else None
+        ),
+        'expired_at': (
+            edge.expired_at.isoformat()
+            if edge.expired_at else None
+        ),
+        'valid_at': (
+            edge.valid_at.isoformat()
+            if edge.valid_at else None
+        ),
+        'invalid_at': (
+            edge.invalid_at.isoformat()
+            if edge.invalid_at else None
+        ),
+        'reference_time': (
+            edge.reference_time.isoformat()
+            if edge.reference_time else None
+        ),
+        'attributes': dict(edge.attributes or {}),
+    }
 
 
-def _parse(record: dict) -> EntityEdge:
-    attributes = record.get('attributes', {}) or {}
-    if isinstance(attributes, str):
-        attributes = json.loads(attributes)
-    attributes.pop('uuid', None)
-    attributes.pop('source_node_uuid', None)
-    attributes.pop('target_node_uuid', None)
-    attributes.pop('fact', None)
-    attributes.pop('fact_embedding', None)
-    attributes.pop('name', None)
-    attributes.pop('group_id', None)
-    attributes.pop('episodes', None)
-    attributes.pop('created_at', None)
-    attributes.pop('expired_at', None)
-    attributes.pop('valid_at', None)
-    attributes.pop('invalid_at', None)
-    attributes.pop('reference_time', None)
-
+def _parse(row) -> EntityEdge:
+    payload = row['payload']
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    payload = payload or {}
     return EntityEdge(
-        uuid=record['uuid'],
-        source_node_uuid=record['source_node_uuid'],
-        target_node_uuid=record['target_node_uuid'],
-        fact=record['fact'],
-        fact_embedding=record.get('fact_embedding'),
-        name=record['name'],
-        group_id=record['group_id'],
-        episodes=list(record.get('episodes', []) or []),
-        created_at=parse_db_date(record['created_at']),
-        expired_at=parse_db_date(record.get('expired_at')),
-        valid_at=parse_db_date(record.get('valid_at')),
-        invalid_at=parse_db_date(record.get('invalid_at')),
-        reference_time=parse_db_date(record.get('reference_time')),
-        attributes=attributes,
+        uuid=payload['uuid'],
+        source_node_uuid=payload['source_node_uuid'],
+        target_node_uuid=payload['target_node_uuid'],
+        name=payload['name'],
+        fact=payload['fact'],
+        fact_embedding=_parse_embedding(
+            row.get('embedding_text'),
+        ),
+        group_id=row['realm'],
+        episodes=list(
+            payload.get('episodes', []) or []
+        ),
+        created_at=parse_db_date(
+            payload.get('created_at'),
+        ),
+        expired_at=parse_db_date(
+            payload.get('expired_at'),
+        ),
+        valid_at=parse_db_date(
+            payload.get('valid_at'),
+        ),
+        invalid_at=parse_db_date(
+            payload.get('invalid_at'),
+        ),
+        reference_time=parse_db_date(
+            payload.get('reference_time'),
+        ),
+        attributes=payload.get('attributes', {}),
     )
 
 
-def _vec(embedding: list[float] | None) -> str | None:
-    if embedding is None:
-        return None
-    return str(embedding)
-
-
-def _parse_vec(value) -> list[float] | None:
+def _parse_embedding(value) -> list[float] | None:
     if value is None:
         return None
     if isinstance(value, list):
         return value
     if isinstance(value, str):
-        return [float(x) for x in value.strip('[]').split(',')]
+        value = value.strip()
+        if value.startswith('['):
+            return json.loads(value)
+        return [
+            float(x)
+            for x in value.split(',')
+            if x.strip()
+        ]
     return list(value)

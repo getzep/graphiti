@@ -23,18 +23,18 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
     async def node_save_bulk(
         self, _cls: Any, driver: Any, transaction: Any, nodes: list[Any], batch_size: int = 100,
     ) -> None:
-        await driver.entity_node_ops.save_bulk(driver, nodes, tx=transaction, batch_size=batch_size)
+        await driver.entity_node_ops.save_bulk(driver, nodes)
 
     async def node_delete_by_group_id(
         self, _cls: Any, driver: Any, group_id: str, batch_size: int = 100,
     ) -> None:
-        await driver.entity_node_ops.delete_by_group_id(driver, group_id, batch_size=batch_size)
+        await driver.entity_node_ops.delete_by_group_id(driver, group_id)
 
     async def node_delete_by_uuids(
         self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None,
         batch_size: int = 100,
     ) -> None:
-        await driver.entity_node_ops.delete_by_uuids(driver, uuids, batch_size=batch_size)
+        await driver.entity_node_ops.delete_by_uuids(driver, uuids)
 
     async def node_get_by_uuid(self, _cls: Any, driver: Any, uuid: str) -> Any:
         return await driver.entity_node_ops.get_by_uuid(driver, uuid)
@@ -58,7 +58,7 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
     async def node_load_embeddings_bulk(
         self, driver: Any, nodes: list[Any], batch_size: int = 100,
     ) -> dict[str, list[float]]:
-        await driver.entity_node_ops.load_embeddings_bulk(driver, nodes, batch_size=batch_size)
+        await driver.entity_node_ops.load_embeddings_bulk(driver, nodes)
         return {n.uuid: n.name_embedding for n in nodes if n.name_embedding is not None}
 
     # --- Episodic Node ---
@@ -72,18 +72,18 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
     async def episodic_node_save_bulk(
         self, _cls: Any, driver: Any, transaction: Any, nodes: list[Any], batch_size: int = 100,
     ) -> None:
-        await driver.episode_node_ops.save_bulk(driver, nodes, tx=transaction, batch_size=batch_size)
+        await driver.episode_node_ops.save_bulk(driver, nodes)
 
     async def episodic_node_delete_by_group_id(
         self, _cls: Any, driver: Any, group_id: str, batch_size: int = 100,
     ) -> None:
-        await driver.episode_node_ops.delete_by_group_id(driver, group_id, batch_size=batch_size)
+        await driver.episode_node_ops.delete_by_group_id(driver, group_id)
 
     async def episodic_node_delete_by_uuids(
         self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None,
         batch_size: int = 100,
     ) -> None:
-        await driver.episode_node_ops.delete_by_uuids(driver, uuids, batch_size=batch_size)
+        await driver.episode_node_ops.delete_by_uuids(driver, uuids)
 
     async def episodic_node_get_by_uuid(self, _cls: Any, driver: Any, uuid: str) -> Any:
         return await driver.episode_node_ops.get_by_uuid(driver, uuid)
@@ -127,19 +127,19 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
         self, _cls: Any, driver: Any, transaction: Any, nodes: list[Any], batch_size: int = 100,
     ) -> None:
         await driver.community_node_ops.save_bulk(
-            driver, nodes, tx=transaction, batch_size=batch_size,
+            driver, nodes,
         )
 
     async def community_node_delete_by_group_id(
         self, _cls: Any, driver: Any, group_id: str, batch_size: int = 100,
     ) -> None:
-        await driver.community_node_ops.delete_by_group_id(driver, group_id, batch_size=batch_size)
+        await driver.community_node_ops.delete_by_group_id(driver, group_id)
 
     async def community_node_delete_by_uuids(
         self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None,
         batch_size: int = 100,
     ) -> None:
-        await driver.community_node_ops.delete_by_uuids(driver, uuids, batch_size=batch_size)
+        await driver.community_node_ops.delete_by_uuids(driver, uuids)
 
     async def community_node_get_by_uuid(self, _cls: Any, driver: Any, uuid: str) -> Any:
         return await driver.community_node_ops.get_by_uuid(driver, uuid)
@@ -172,19 +172,19 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
         self, _cls: Any, driver: Any, transaction: Any, nodes: list[Any], batch_size: int = 100,
     ) -> None:
         await driver.saga_node_ops.save_bulk(
-            driver, nodes, tx=transaction, batch_size=batch_size,
+            driver, nodes,
         )
 
     async def saga_node_delete_by_group_id(
         self, _cls: Any, driver: Any, group_id: str, batch_size: int = 100,
     ) -> None:
-        await driver.saga_node_ops.delete_by_group_id(driver, group_id, batch_size=batch_size)
+        await driver.saga_node_ops.delete_by_group_id(driver, group_id)
 
     async def saga_node_delete_by_uuids(
         self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None,
         batch_size: int = 100,
     ) -> None:
-        await driver.saga_node_ops.delete_by_uuids(driver, uuids, batch_size=batch_size)
+        await driver.saga_node_ops.delete_by_uuids(driver, uuids)
 
     async def saga_node_get_by_uuid(self, _cls: Any, driver: Any, uuid: str) -> Any:
         return await driver.saga_node_ops.get_by_uuid(driver, uuid)
@@ -214,7 +214,7 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
         self, _cls: Any, driver: Any, transaction: Any, edges: list[Any], batch_size: int = 100,
     ) -> None:
         await driver.entity_edge_ops.save_bulk(
-            driver, edges, tx=transaction, batch_size=batch_size,
+            driver, edges,
         )
 
     async def edge_delete_by_uuids(
@@ -244,7 +244,7 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
     async def edge_load_embeddings_bulk(
         self, driver: Any, edges: list[Any], batch_size: int = 100,
     ) -> dict[str, list[float]]:
-        await driver.entity_edge_ops.load_embeddings_bulk(driver, edges, batch_size=batch_size)
+        await driver.entity_edge_ops.load_embeddings_bulk(driver, edges)
         return {e.uuid: e.fact_embedding for e in edges if e.fact_embedding is not None}
 
     async def edge_get_between_nodes(
@@ -272,7 +272,7 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
         episodic_edges: list[Any], batch_size: int = 100,
     ) -> None:
         await driver.episodic_edge_ops.save_bulk(
-            driver, episodic_edges, tx=transaction, batch_size=batch_size,
+            driver, episodic_edges,
         )
 
     async def episodic_edge_delete_by_uuids(
@@ -337,7 +337,7 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
         self, _cls: Any, driver: Any, transaction: Any, edges: list[Any], batch_size: int = 100,
     ) -> None:
         await driver.has_episode_edge_ops.save_bulk(
-            driver, edges, tx=transaction, batch_size=batch_size,
+            driver, edges,
         )
 
     async def has_episode_edge_delete_by_uuids(
@@ -373,7 +373,7 @@ class PostGraphOperationsInterface(GraphOperationsInterface):
         self, _cls: Any, driver: Any, transaction: Any, edges: list[Any], batch_size: int = 100,
     ) -> None:
         await driver.next_episode_edge_ops.save_bulk(
-            driver, edges, tx=transaction, batch_size=batch_size,
+            driver, edges,
         )
 
     async def next_episode_edge_delete_by_uuids(

@@ -1,8 +1,11 @@
 """
 PostGraph driver — a PostgreSQL-backed graph backend for Graphiti.
 
-Uses asyncpg for async PostgreSQL access with pgvector for embeddings,
-tsvector for fulltext search, and recursive CTEs for graph traversal.
+Uses the post-graph library (AsyncPostGraph) for connection management,
+vertex/edge CRUD, vector search, and graph traversal.  Graphiti's domain
+fields are stored in post-graph's ``payload`` JSONB column; embeddings
+map to post-graph's ``embedding`` vector column; and Graphiti's
+``group_id`` maps to post-graph's ``realm``.
 """
 
 from __future__ import annotations
@@ -16,10 +19,10 @@ from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 try:
-    import asyncpg
+    from post_graph import AsyncPostGraph, Vertex, Edge
 except ImportError:
     raise ImportError(
-        'asyncpg is required for PostGraphDriver. '
+        'post-graph is required for PostGraphDriver. '
         'Install it with: pip install graphiti-core[postgraph]'
     ) from None
 
@@ -65,49 +68,48 @@ EMBEDDING_DIM = int(os.getenv('EMBEDDING_DIM', '1024'))
 class PostGraphDriverSession(GraphDriverSession):
     provider = GraphProvider.POSTGRAPH
 
-    def __init__(self, pool: asyncpg.Pool):
-        self._pool = pool
-        self._conn: asyncpg.Connection | None = None
+    def __init__(self, client: AsyncPostGraph):
+        self._client = client
+        self._conn = None
 
     async def __aenter__(self):
-        self._conn = await self._pool.acquire()
+        pool = self._client.connection
+        self._conn = await pool.acquire()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
         if self._conn is not None:
-            await self._pool.release(self._conn)
+            pool = self._client.connection
+            await pool.release(self._conn)
             self._conn = None
 
     async def run(self, query: str, **kwargs: Any) -> Any:
-        conn = self._conn or self._pool
+        conn = self._conn or self._client.connection
         return await _execute_sql(conn, query, kwargs)
 
     async def close(self):
         if self._conn is not None:
-            await self._pool.release(self._conn)
+            pool = self._client.connection
+            await pool.release(self._conn)
             self._conn = None
 
     async def execute_write(self, func, *args, **kwargs):
-        async with self._pool.acquire() as conn, conn.transaction():
+        pool = self._client.connection
+        async with pool.acquire() as conn, conn.transaction():
             return await func(conn, *args, **kwargs)
 
 
 class _PGTransaction(Transaction):
-    def __init__(self, conn: asyncpg.Connection):
+    def __init__(self, conn):
         self._conn = conn
 
     async def run(self, query: str, **kwargs: Any) -> Any:
         return await _execute_sql(self._conn, query, kwargs)
 
 
-async def _execute_sql(
-    conn: asyncpg.Connection | asyncpg.Pool,
-    query: str,
-    params: dict[str, Any],
-) -> tuple[list[dict[str, Any]], None, None]:
+async def _execute_sql(conn, query: str, params: dict[str, Any]):
     clean_params = {k: v for k, v in params.items() if k not in ('routing_', 'database_')}
 
-    # Convert $param_name to $1, $2, ... for asyncpg
     param_names: list[str] = []
     converted = query
     for key in sorted(clean_params.keys(), key=len, reverse=True):
@@ -152,8 +154,9 @@ class PostGraphDriver(GraphDriver):
         super().__init__()
         self._dsn = dsn or f'postgresql://{user}:{password}@{host}:{port}/{database}'
         self._database = database
-        self._pool: asyncpg.Pool | None = None
         self._embedding_dim = embedding_dim or EMBEDDING_DIM
+
+        self._client: AsyncPostGraph | None = None
 
         self._entity_node_ops = PGEntityNodeOperations()
         self._episode_node_ops = PGEpisodeNodeOperations()
@@ -177,13 +180,20 @@ class PostGraphDriver(GraphDriver):
             pass
 
     async def _init(self):
-        await self._ensure_pool()
+        await self._ensure_client()
         await self.build_indices_and_constraints()
 
-    async def _ensure_pool(self) -> asyncpg.Pool:
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(self._dsn, min_size=2, max_size=10)
-        return self._pool
+    async def _ensure_client(self) -> AsyncPostGraph:
+        if self._client is None:
+            self._client = AsyncPostGraph(dsn=self._dsn)
+            await self._client.connect()
+        return self._client
+
+    @property
+    def client(self) -> AsyncPostGraph:
+        if self._client is None:
+            raise RuntimeError('PostGraphDriver not initialized. Await _ensure_client() first.')
+        return self._client
 
     @property
     def entity_node_ops(self) -> EntityNodeOperations:
@@ -231,7 +241,8 @@ class PostGraphDriver(GraphDriver):
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[Transaction]:
-        pool = await self._ensure_pool()
+        client = await self._ensure_client()
+        pool = client.connection
         async with pool.acquire() as conn:
             tx = conn.transaction()
             await tx.start()
@@ -243,32 +254,29 @@ class PostGraphDriver(GraphDriver):
                 raise
 
     async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
-        pool = await self._ensure_pool()
-        return await _execute_sql(pool, cypher_query_, kwargs)
+        client = await self._ensure_client()
+        return await _execute_sql(client.connection, cypher_query_, kwargs)
 
     def session(self, database: str | None = None) -> GraphDriverSession:
-        if self._pool is None:
-            raise RuntimeError('PostGraphDriver pool not initialized. Await _ensure_pool() first.')
-        return PostGraphDriverSession(self._pool)
+        if self._client is None:
+            raise RuntimeError('PostGraphDriver not initialized. Await _ensure_client() first.')
+        return PostGraphDriverSession(self._client)
 
     async def close(self) -> None:
         if self._init_task is not None and not self._init_task.done():
             self._init_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._init_task
-        if self._pool is not None:
-            await self._pool.close()
-            self._pool = None
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
 
     def delete_all_indexes(self) -> Coroutine:
         return self.execute_query('SELECT 1')
 
     async def build_indices_and_constraints(self, delete_existing: bool = False):
-        pool = await self._ensure_pool()
-        async with pool.acquire() as conn:
-            if delete_existing:
-                await self._graph_ops.delete_all_indexes_raw(conn)
-            await self._graph_ops.build_indices_and_constraints_raw(conn)
+        client = await self._ensure_client()
+        await self._graph_ops.build_indices_and_constraints_pg(client, self._embedding_dim)
 
     def build_fulltext_query(
         self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
@@ -276,3 +284,23 @@ class PostGraphDriver(GraphDriver):
         words = query.strip().split()[:max_query_length]
         ts_query = ' & '.join(w for w in words if w)
         return ts_query or ''
+
+    async def _resolve_vertex_id(
+        self, table_name: str, realm: str, graphiti_uuid: str,
+    ) -> int | None:
+        """Get post-graph's integer id from a Graphiti UUID stored in payload."""
+        rows = await self.client._fetch(
+            f'SELECT id FROM "{table_name}" WHERE realm = $1 AND payload @> $2::jsonb',
+            realm, json.dumps({'uuid': graphiti_uuid}),
+        )
+        return rows[0]['id'] if rows else None
+
+    async def _resolve_edge_id(
+        self, table_name: str, realm: str, graphiti_uuid: str,
+    ) -> int | None:
+        """Get post-graph's integer edge id from a Graphiti UUID stored in payload."""
+        rows = await self.client._fetch(
+            f'SELECT id FROM "{table_name}" WHERE realm = $1 AND payload @> $2::jsonb',
+            realm, json.dumps({'uuid': graphiti_uuid}),
+        )
+        return rows[0]['id'] if rows else None
