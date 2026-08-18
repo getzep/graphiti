@@ -250,6 +250,49 @@ class TestAnthropicClientGenerateResponse:
         assert mock_async_anthropic.messages.create.call_count == 2
         assert result['test_field'] == 'correct_value'
 
+    @pytest.mark.asyncio
+    async def test_generate_response_honors_model_override(
+        self, anthropic_client, mock_async_anthropic
+    ):
+        content_item = MagicMock()
+        content_item.type = 'tool_use'
+        content_item.input = {'test_field': 'test_value'}
+        mock_response = MagicMock()
+        mock_response.content = [content_item]
+        mock_async_anthropic.messages.create.return_value = mock_response
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        await anthropic_client.generate_response(
+            messages=messages,
+            response_model=ResponseModel,
+            model='claude-3-5-haiku-latest',
+        )
+        assert (
+            mock_async_anthropic.messages.create.call_args.kwargs['model']
+            == 'claude-3-5-haiku-latest'
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_response_omitted_model_uses_instance(
+        self, anthropic_client, mock_async_anthropic
+    ):
+        content_item = MagicMock()
+        content_item.type = 'tool_use'
+        content_item.input = {'test_field': 'test_value'}
+        mock_response = MagicMock()
+        mock_response.content = [content_item]
+        mock_async_anthropic.messages.create.return_value = mock_response
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        await anthropic_client.generate_response(messages=messages, response_model=ResponseModel)
+        assert mock_async_anthropic.messages.create.call_args.kwargs['model'] == 'test-model'
+
 
 if __name__ == '__main__':
     pytest.main(['-v', 'test_anthropic_client.py'])

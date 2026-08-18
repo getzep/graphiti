@@ -23,8 +23,9 @@ from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
-from graphiti_core.prompts.lib import BUILTIN_PROMPT_SPECS, get_prompt_builder
-from graphiti_core.prompts.models import ChatPrompt
+from graphiti_core.llm_client.llm_runtime import LLMRuntime
+from graphiti_core.prompts.lib import get_prompt_builder, resolve_response_model
+from graphiti_core.prompts.names import PromptName
 from graphiti_core.tracer import Tracer
 
 
@@ -36,14 +37,13 @@ class GraphitiClients(BaseModel):
     tracer: Tracer
     # PromptLibrary is an ABC / duck-typed object; store as Any for Pydantic compatibility.
     prompt_library: Any
-    # Optional PromptBoundLLM bundle; when set, complete_prompt routes through it.
-    prompt_bound_llm: Any | None = None
+    llm_runtime: LLMRuntime | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     async def complete_prompt(
         self,
-        prompt_name: str,
+        prompt_name: PromptName,
         context: dict[str, Any],
         *,
         response_model: type[BaseModel] | None = None,
@@ -54,11 +54,12 @@ class GraphitiClients(BaseModel):
     ) -> dict[str, Any]:
         """Resolve prompt text + fixed schema and call the LLM.
 
-        Legacy path (no bundle): builder → ChatPrompt.as_messages → llm_client.generate_response.
-        Bundle path: PromptBoundLLM.complete (model_size ignored; attribute_extraction honored).
+        Legacy path (no runtime): builder → ChatPrompt.as_messages → llm_client.generate_response.
+        Runtime path: LLMRuntime.complete. ``model_size`` is forwarded on both paths.
+        Schemas come from the immutable builtin registry, not the user library.
         """
-        if self.prompt_bound_llm is not None:
-            return await self.prompt_bound_llm.complete(
+        if self.llm_runtime is not None:
+            return await self.llm_runtime.complete(
                 prompt_name,
                 context,
                 response_model=response_model,
@@ -68,35 +69,9 @@ class GraphitiClients(BaseModel):
                 model_size=model_size,
             )
 
-        specs = getattr(self.prompt_library, 'specs', BUILTIN_PROMPT_SPECS)
-        spec = specs.get(prompt_name) or BUILTIN_PROMPT_SPECS.get(prompt_name)
-        if spec is None:
-            raise ValueError(f'Unknown prompt_name: {prompt_name}')
-
-        if spec.dynamic_schema:
-            if response_model is None:
-                raise ValueError(
-                    f'prompt {prompt_name} has dynamic_schema=True; response_model is required'
-                )
-            resolved_model: type[BaseModel] | None = response_model
-        else:
-            resolved_model = spec.response_model
-            if response_model is not None and response_model is not resolved_model:
-                raise ValueError(
-                    f'Prompt schema overrides are not allowed for {prompt_name}: '
-                    f'got {response_model.__name__}, expected '
-                    f'{resolved_model.__name__ if resolved_model else None}'
-                )
-
+        resolved_model = resolve_response_model(prompt_name, response_model)
         builder = get_prompt_builder(self.prompt_library, prompt_name)
-        chat_prompt = builder(context)
-        if not isinstance(chat_prompt, ChatPrompt):
-            raise TypeError(
-                f'Prompt builder for {prompt_name} must return ChatPrompt, '
-                f'got {type(chat_prompt).__name__}. '
-                'Return ChatPrompt(system=..., user=...).'
-            )
-        messages = chat_prompt.as_messages()
+        messages = builder(context).as_messages()
 
         return await self.llm_client.generate_response(
             messages,

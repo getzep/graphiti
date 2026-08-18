@@ -168,3 +168,17 @@ async def test_non_retryable_error_is_not_retried():
         await client.generate_response(_messages(), response_model=ResponseModel)
 
     assert len(completions.create_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_response_honors_model_override():
+    client, completions = _make_client()
+    await client.generate_response(_messages(), response_model=ResponseModel, model='qwen')
+    assert completions.create_calls[0]['model'] == 'qwen'
+
+
+@pytest.mark.asyncio
+async def test_generate_response_omitted_model_uses_instance():
+    client, completions = _make_client()
+    await client.generate_response(_messages(), response_model=ResponseModel)
+    assert completions.create_calls[0]['model'] == 'test-model'

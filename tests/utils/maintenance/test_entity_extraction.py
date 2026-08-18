@@ -367,7 +367,7 @@ class TestExtractEntitySummariesBatch:
             episode=None,
             previous_episodes=None,
             should_summarize_node=None,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # LLM should not be called
@@ -398,7 +398,7 @@ class TestExtractEntitySummariesBatch:
             episode=None,
             previous_episodes=None,
             should_summarize_node=None,
-            edges_by_node=edges_by_node
+            edges_by_node=edges_by_node,
         )
 
         # LLM should not be called
@@ -432,7 +432,7 @@ class TestExtractEntitySummariesBatch:
             episode=_make_episode(),
             previous_episodes=[],
             should_summarize_node=None,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # LLM should be called
@@ -462,7 +462,7 @@ class TestExtractEntitySummariesBatch:
             episode=_make_episode(),
             previous_episodes=[],
             should_summarize_node=reject_all,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # LLM should not be called
@@ -495,7 +495,7 @@ class TestExtractEntitySummariesBatch:
             episode=_make_episode(),
             previous_episodes=[],
             should_summarize_node=None,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # LLM should be called exactly once (batch call)
@@ -529,7 +529,7 @@ class TestExtractEntitySummariesBatch:
             episode=_make_episode(),
             previous_episodes=[],
             should_summarize_node=None,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # Alice should have updated summary
@@ -553,7 +553,7 @@ class TestExtractEntitySummariesBatch:
             episode=None,
             previous_episodes=None,
             should_summarize_node=None,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # LLM should not be called - no content to summarize
@@ -591,7 +591,7 @@ class TestExtractEntitySummariesBatch:
             episode=_make_episode(),
             previous_episodes=[],
             should_summarize_node=None,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # With MAX_NODES=2 and 5 nodes, we should have 3 flights (2+2+1)
@@ -623,7 +623,7 @@ class TestExtractEntitySummariesBatch:
             episode=_make_episode(),
             previous_episodes=[],
             should_summarize_node=None,
-            edges_by_node={}
+            edges_by_node={},
         )
 
         # Should match despite case difference

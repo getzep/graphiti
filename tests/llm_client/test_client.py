@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import pytest
+
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.prompts.models import Message
@@ -22,7 +24,16 @@ from graphiti_core.prompts.models import Message
 class MockLLMClient(LLMClient):
     """Concrete implementation of LLMClient for testing"""
 
-    async def _generate_response(self, messages, response_model=None):
+    async def _generate_response(
+        self,
+        messages,
+        response_model=None,
+        max_tokens=None,
+        model_size=None,
+        *,
+        model=None,
+        small_model=None,
+    ):
         return {'content': 'test'}
 
 
@@ -106,3 +117,67 @@ def test_attribute_extraction_preamble_handles_empty_messages():
     messages: list[Message] = []
     client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
     assert messages == []
+
+
+class RecordingLLMClient(LLMClient):
+    """Captures the model overrides forwarded into ``_generate_response``."""
+
+    def __init__(self) -> None:
+        super().__init__(LLMConfig(model='default-model'), cache=False)
+        self.received: dict | None = None
+
+    async def _generate_response(
+        self,
+        messages,
+        response_model=None,
+        max_tokens=None,
+        model_size=None,
+        *,
+        model=None,
+        small_model=None,
+    ):
+        self.received = {'model': model, 'small_model': small_model}
+        return {'content': 'test'}
+
+
+class LegacySignatureClient(LLMClient):
+    """Pre-override ``_generate_response`` signature; must still work when unused."""
+
+    def __init__(self) -> None:
+        super().__init__(LLMConfig(model='default-model'), cache=False)
+        self.called = False
+
+    async def _generate_response(
+        self, messages, response_model=None, max_tokens=None, model_size=None
+    ):
+        self.called = True
+        return {'content': 'ok'}
+
+
+def _sys_user() -> list[Message]:
+    return [Message(role='system', content='sys'), Message(role='user', content='hi')]
+
+
+@pytest.mark.asyncio
+async def test_generate_response_forwards_model_overrides():
+    client = RecordingLLMClient()
+    await client.generate_response(_sys_user(), model='x', small_model='y')
+    assert client.received == {'model': 'x', 'small_model': 'y'}
+
+
+@pytest.mark.asyncio
+async def test_generate_response_omitted_overrides_do_not_break_legacy_signature():
+    client = LegacySignatureClient()
+    result = await client.generate_response(_sys_user())
+    assert client.called is True
+    assert result == {'content': 'ok'}
+
+
+def test_cache_key_includes_model_override():
+    client = MockLLMClient(LLMConfig(model='default-model'))
+    messages = _sys_user()
+    default_key = client._get_cache_key(messages)
+    omitted_key = client._get_cache_key(messages, model=None)
+    override_key = client._get_cache_key(messages, model='x')
+    assert default_key == omitted_key
+    assert override_key != default_key

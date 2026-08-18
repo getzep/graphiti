@@ -91,3 +91,64 @@ async def test_complete_prompt_rejects_wrong_schema():
             },
             response_model=Other,
         )
+
+
+@pytest.mark.asyncio
+async def test_complete_prompt_legacy_passes_model_size_and_attribute_flag():
+    from graphiti_core.llm_client.config import ModelSize
+
+    clients = _clients()
+    await clients.complete_prompt(
+        'extract_nodes.extract_message',
+        {
+            'episode_content': 'hi',
+            'previous_episodes': [],
+            'custom_extraction_instructions': '',
+            'entity_types': [],
+            'source_description': 't',
+        },
+        model_size=ModelSize.small,
+        attribute_extraction=True,
+        group_id='g1',
+    )
+    kwargs = clients.llm_client.generate_response.await_args.kwargs
+    assert kwargs['model_size'] is ModelSize.small
+    assert kwargs['attribute_extraction'] is True
+    assert kwargs['group_id'] == 'g1'
+
+
+@pytest.mark.asyncio
+async def test_complete_prompt_routes_to_runtime_when_set():
+    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
+
+    transport = MagicMock()
+    transport.generate_response = AsyncMock(return_value={'extracted_entities': []})
+    runtime = LLMRuntime(
+        transport,
+        model=LLMModel(id='gpt-4.1'),
+    )
+    clients = GraphitiClients.model_construct(
+        driver=MagicMock(),
+        llm_client=MagicMock(),
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+        tracer=MagicMock(),
+        prompt_library=prompt_library,
+        llm_runtime=runtime,
+    )
+    clients.llm_client.generate_response = AsyncMock(return_value={})
+    await clients.complete_prompt(
+        'extract_nodes.extract_message',
+        {
+            'episode_content': 'hi',
+            'previous_episodes': [],
+            'custom_extraction_instructions': '',
+            'entity_types': [],
+            'source_description': 't',
+        },
+    )
+    transport.generate_response.assert_awaited_once()
+    kwargs = transport.generate_response.await_args.kwargs
+    assert kwargs['model'] == 'gpt-4.1'
+    assert kwargs['small_model'] is None
+    assert clients.llm_client.generate_response.await_count == 0

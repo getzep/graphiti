@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library as default_prompt_library
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.utils.maintenance.edge_operations import (
