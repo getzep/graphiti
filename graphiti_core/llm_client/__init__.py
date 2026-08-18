@@ -17,18 +17,20 @@ limitations under the License.
 from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
+from .llm_runtime import LLMRuntime
 from .openai_client import OpenAIClient
-from .prompt_bound import LLMModelConfig, PromptBoundLLM, create_prompt_bound_llm
+from .prompt_config import LLMModel, LLMPromptOverrides, PromptRoutes
 from .token_tracker import TokenUsage, TokenUsageTracker
 
 __all__ = [
     'LLMClient',
-    'LLMModelConfig',
-    'OpenAIClient',
     'LLMConfig',
-    'PromptBoundLLM',
+    'LLMModel',
+    'LLMPromptOverrides',
+    'LLMRuntime',
+    'OpenAIClient',
+    'PromptRoutes',
     'RateLimitError',
     'TokenUsage',
     'TokenUsageTracker',
-    'create_prompt_bound_llm',
 ]

@@ -134,9 +134,21 @@ class LLMClient(ABC):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
+        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         try:
-            return await self._generate_response(messages, response_model, max_tokens, model_size)
+            # Only splat overrides when set so third-party subclasses with the
+            # pre-existing four-param signature still work on the legacy path.
+            overrides: dict[str, typing.Any] = {}
+            if model is not None:
+                overrides['model'] = model
+            if small_model is not None:
+                overrides['small_model'] = small_model
+            return await self._generate_response(
+                messages, response_model, max_tokens, model_size, **overrides
+            )
         except (httpx.HTTPStatusError, RateLimitError) as e:
             raise e
 
@@ -147,13 +159,16 @@ class LLMClient(ABC):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
+        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         pass
 
-    def _get_cache_key(self, messages: list[Message]) -> str:
+    def _get_cache_key(self, messages: list[Message], model: str | None = None) -> str:
         # Create a unique cache key based on the messages and model
         message_str = json.dumps([m.model_dump() for m in messages], sort_keys=True)
-        key_str = f'{self.model}:{message_str}'
+        key_str = f'{model or self.model}:{message_str}'
         return hashlib.md5(key_str.encode()).hexdigest()
 
     def _apply_attribute_extraction_preamble(
@@ -204,6 +219,8 @@ class LLMClient(ABC):
         prompt_name: str | None = None,
         *,
         attribute_extraction: bool = False,
+        model: str | None = None,
+        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
@@ -240,7 +257,7 @@ class LLMClient(ABC):
 
             # Check cache first
             if self.cache_enabled and self.cache_dir is not None:
-                cache_key = self._get_cache_key(messages)
+                cache_key = self._get_cache_key(messages, model=model)
                 cached_response = self.cache_dir.get(cache_key)
                 if cached_response is not None:
                     logger.debug(f'Cache hit for {cache_key}')
@@ -252,7 +269,12 @@ class LLMClient(ABC):
             # Execute LLM call
             try:
                 response = await self._generate_response_with_retry(
-                    messages, response_model, max_tokens, model_size
+                    messages,
+                    response_model,
+                    max_tokens,
+                    model_size,
+                    model=model,
+                    small_model=small_model,
                 )
             except Exception as e:
                 span.set_status('error', str(e))
@@ -261,7 +283,7 @@ class LLMClient(ABC):
 
             # Cache response if enabled
             if self.cache_enabled and self.cache_dir is not None:
-                cache_key = self._get_cache_key(messages)
+                cache_key = self._get_cache_key(messages, model=model)
                 self.cache_dir.set(cache_key, response)
 
             return response

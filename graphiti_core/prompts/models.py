@@ -66,7 +66,7 @@ class PromptSpec(BaseModel):
     Schemas are not overridable — only text builders may be customized.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     name: str
     response_model: type[BaseModel] | None = None

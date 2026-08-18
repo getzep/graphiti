@@ -1,6 +1,5 @@
 import logging
 from collections import defaultdict
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -776,7 +775,7 @@ async def test_batch_summaries_callback_skip_summary():
         episode=episode,
         previous_episodes=[],
         should_summarize_node=skip_summary_filter,
-        edges_by_node={}
+        edges_by_node={},
     )
 
     # Summary should remain unchanged
@@ -811,7 +810,7 @@ async def test_batch_summaries_selective_callback():
         episode=episode,
         previous_episodes=[],
         should_summarize_node=selective_filter,
-        edges_by_node={}
+        edges_by_node={},
     )
 
     # User summary should remain unchanged (callback returned False)
@@ -901,7 +900,7 @@ async def test_batch_summaries_calls_llm_for_long_summary():
         episode=episode,
         previous_episodes=[],
         should_summarize_node=None,
-        edges_by_node=edges_by_node
+        edges_by_node=edges_by_node,
     )
 
     # LLM should have been called to condense the long summary

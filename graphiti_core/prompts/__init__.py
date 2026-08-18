@@ -7,13 +7,16 @@ from .lib import (
     validate_prompt_library,
 )
 from .models import ChatPrompt, Message, PromptFunction, PromptSpec, SystemMessage, UserMessage
+from .names import PromptGroup, PromptName
 
 __all__ = [
     'ChatPrompt',
     'DefaultPromptLibrary',
     'Message',
     'PromptFunction',
+    'PromptGroup',
     'PromptLibrary',
+    'PromptName',
     'PromptOverrides',
     'PromptSpec',
     'SystemMessage',

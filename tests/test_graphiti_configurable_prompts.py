@@ -1,4 +1,4 @@
-"""Tests for Graphiti constructor prompt_library / prompt_bound_llm wiring."""
+"""Tests for Graphiti constructor prompt_library / llm_runtime wiring."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -25,15 +25,18 @@ def _custom_extract_message(context: dict) -> ChatPrompt:
 
 
 def _make_graphiti(**kwargs) -> Graphiti:
-    llm_client = MagicMock()
-    llm_client.set_tracer = MagicMock()
+    if 'llm_runtime' not in kwargs and 'llm_client' not in kwargs:
+        llm_client = MagicMock()
+        llm_client.set_tracer = MagicMock()
+        kwargs['llm_client'] = llm_client
+    elif kwargs.get('llm_client') is not None:
+        kwargs['llm_client'].set_tracer = MagicMock()
     with patch(
         'graphiti_core.graphiti.GraphitiClients',
         side_effect=lambda **kw: GraphitiClients.model_construct(**kw),
     ):
         return Graphiti(
             graph_driver=MagicMock(),
-            llm_client=llm_client,
             embedder=MagicMock(),
             cross_encoder=MagicMock(),
             **kwargs,
@@ -167,34 +170,41 @@ def test_create_prompt_library_does_not_mutate_default_prompt_library():
     assert before != 'custom system'
 
 
-def test_graphiti_rejects_prompt_library_and_prompt_bound_llm_together():
-    from graphiti_core.llm_client.prompt_bound import LLMModelConfig, create_prompt_bound_llm
+def test_graphiti_rejects_prompt_library_and_llm_runtime_together():
+    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
 
     custom = create_prompt_library({'extract_nodes': {'extract_message': _custom_extract_message}})
     llm = MagicMock()
     llm.set_tracer = MagicMock()
-    bundle = create_prompt_bound_llm(
-        llm,
-        models={'default': LLMModelConfig(model='gpt-4.1-mini')},
-    )
-    with pytest.raises(ValueError, match='either prompt_library or prompt_bound_llm'):
-        _make_graphiti(prompt_library=custom, prompt_bound_llm=bundle)
+    runtime = LLMRuntime(llm, model=LLMModel(id='gpt-4.1-mini'))
+    with pytest.raises(ValueError, match='cannot be combined with: prompt_library'):
+        _make_graphiti(prompt_library=custom, llm_runtime=runtime)
 
 
-def test_graphiti_prompt_bound_llm_populates_prompt_library_from_bundle():
-    from graphiti_core.llm_client.prompt_bound import LLMModelConfig, create_prompt_bound_llm
+def test_graphiti_rejects_llm_client_and_llm_runtime_together():
+    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
+
+    llm = MagicMock()
+    llm.set_tracer = MagicMock()
+    runtime = LLMRuntime(llm, model=LLMModel(id='gpt-4.1-mini'))
+    with pytest.raises(ValueError, match='cannot be combined with: llm_client'):
+        _make_graphiti(llm_client=MagicMock(), llm_runtime=runtime)
+
+
+def test_graphiti_llm_runtime_populates_prompt_library_from_bundle():
+    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
 
     llm = MagicMock()
     llm.set_tracer = MagicMock()
     custom = create_prompt_library({'extract_nodes': {'extract_message': _custom_extract_message}})
-    bundle = create_prompt_bound_llm(
+    runtime = LLMRuntime(
         llm,
-        models={'default': LLMModelConfig(model='gpt-4.1-mini')},
-        prompt_library=custom,
+        model=LLMModel(id='gpt-4.1-mini'),
+        library=custom,
     )
-    graphiti = _make_graphiti(prompt_bound_llm=bundle)
-    assert graphiti.prompt_bound_llm is bundle
-    assert graphiti.clients.prompt_bound_llm is bundle
+    graphiti = _make_graphiti(llm_runtime=runtime)
+    assert graphiti.llm_runtime is runtime
+    assert graphiti.clients.llm_runtime is runtime
     assert graphiti.llm_client is llm
     assert (
         graphiti.prompt_library.extract_nodes.extract_message({}).system.content == 'custom system'

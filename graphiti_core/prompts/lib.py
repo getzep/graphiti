@@ -18,7 +18,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any
+
+from pydantic import BaseModel
 
 from .dedupe_edges import DedupeEdgesPrompts, DefaultDedupeEdgesPrompts, EdgeDuplicate
 from .dedupe_nodes import (
@@ -193,7 +196,36 @@ def _builtin_specs() -> dict[str, PromptSpec]:
     }
 
 
-BUILTIN_PROMPT_SPECS: dict[str, PromptSpec] = _builtin_specs()
+BUILTIN_PROMPT_SPECS: Mapping[str, PromptSpec] = MappingProxyType(_builtin_specs())
+
+
+def resolve_response_model(
+    prompt_name: str,
+    response_model: type[BaseModel] | None = None,
+) -> type[BaseModel] | None:
+    """Return the fixed schema for ``prompt_name``, or the caller schema if dynamic.
+
+    Raises ``ValueError`` for unknown names, missing dynamic schemas, and attempts
+    to replace a fixed schema.
+    """
+    spec = BUILTIN_PROMPT_SPECS.get(prompt_name)
+    if spec is None:
+        raise ValueError(f'Unknown prompt_name: {prompt_name}')
+
+    if spec.dynamic_schema:
+        if response_model is None:
+            raise ValueError(
+                f'prompt {prompt_name} has dynamic_schema=True; response_model is required'
+            )
+        return response_model
+
+    if response_model is not None and response_model is not spec.response_model:
+        raise ValueError(
+            f'Prompt schema overrides are not allowed for {prompt_name}: '
+            f'got {response_model.__name__}, expected '
+            f'{spec.response_model.__name__ if spec.response_model else None}'
+        )
+    return spec.response_model
 
 
 class PromptLibrary(ABC):
@@ -331,7 +363,7 @@ class _ComposedPromptLibrary:
         raise AttributeError(name)
 
 
-def _ensure_chat_prompt(result: Any, label: str) -> ChatPrompt:
+def ensure_chat_prompt(result: Any, label: str) -> ChatPrompt:
     if isinstance(result, ChatPrompt):
         return result
     if isinstance(result, list):
@@ -339,6 +371,10 @@ def _ensure_chat_prompt(result: Any, label: str) -> ChatPrompt:
     raise TypeError(
         f'{label} must return ChatPrompt, got {type(result).__name__}. {CHAT_PROMPT_MIGRATION_NOTE}'
     )
+
+
+def _ensure_chat_prompt(result: Any, label: str) -> ChatPrompt:
+    return ensure_chat_prompt(result, label)
 
 
 def get_prompt_builder(library: Any, prompt_name: str) -> PromptFunction:
@@ -356,7 +392,7 @@ def get_prompt_builder(library: Any, prompt_name: str) -> PromptFunction:
         raise ValueError(f'Prompt library function must be callable: {prompt_name}')
 
     def _call(context: dict[str, Any]) -> ChatPrompt:
-        return _ensure_chat_prompt(builder(context), prompt_name)
+        return ensure_chat_prompt(builder(context), prompt_name)
 
     return _call
 

@@ -46,8 +46,7 @@ from graphiti_core.helpers import (
     validate_excluded_entity_types,
     validate_group_id,
 )
-from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.llm_client.prompt_bound import PromptBoundLLM
+from graphiti_core.llm_client import LLMClient, LLMRuntime, OpenAIClient
 from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
@@ -156,7 +155,7 @@ class Graphiti:
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
         prompt_library: PromptLibrary | None = None,
-        prompt_bound_llm: PromptBoundLLM | None = None,
+        llm_runtime: LLMRuntime | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -175,7 +174,7 @@ class Graphiti:
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
-            When ``prompt_bound_llm`` is set, the bundle's transport is used instead.
+            Cannot be combined with ``llm_runtime``.
         embedder : EmbedderClient | None, optional
             An instance of EmbedderClient for embedding tasks.
             If not provided, a default OpenAIEmbedder will be initialized.
@@ -200,11 +199,12 @@ class Graphiti:
             For partial customization, compose overrides with
             ``create_prompt_library(overrides)`` and pass the result here.
             Override callables must return ``ChatPrompt``.
-            Cannot be combined with ``prompt_bound_llm``.
-        prompt_bound_llm : PromptBoundLLM | None, optional
-            Opt-in multi-model prompt bundle wrapping a single LLMClient transport.
-            When set, owns prompt selection and per-prompt model routing.
-            Cannot be combined with ``prompt_library``.
+            Cannot be combined with ``llm_runtime``.
+        llm_runtime : LLMRuntime | None, optional
+            Opt-in runtime coupling a single LLMClient transport with a required
+            default ``LLMModel``, optional per-prompt ``routes``, and prompt text
+            overrides. When set, owns prompt selection and per-prompt model routing.
+            Cannot be combined with ``llm_client`` or ``prompt_library``.
 
         Returns
         -------
@@ -225,11 +225,14 @@ class Graphiti:
         Graphiti if you're using the default OpenAIClient.
         """
 
-        if prompt_library is not None and prompt_bound_llm is not None:
-            raise ValueError(
-                'Pass either prompt_library or prompt_bound_llm, not both. '
-                'The PromptBoundLLM bundle owns the active prompt library.'
-            )
+        if llm_runtime is not None:
+            extras = [
+                name
+                for name, value in (('llm_client', llm_client), ('prompt_library', prompt_library))
+                if value is not None
+            ]
+            if extras:
+                raise ValueError('llm_runtime cannot be combined with: ' + ', '.join(extras) + '.')
 
         if graph_driver:
             self.driver = graph_driver
@@ -241,10 +244,10 @@ class Graphiti:
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
 
-        self.prompt_bound_llm = prompt_bound_llm
-        if prompt_bound_llm is not None:
-            self.llm_client = prompt_bound_llm.transport
-            self.prompt_library = ensure_prompt_library_wrapped(prompt_bound_llm.prompt_library)
+        self.llm_runtime = llm_runtime
+        if llm_runtime is not None:
+            self.llm_client = llm_runtime.transport
+            self.prompt_library = llm_runtime.library
         else:
             if llm_client:
                 self.llm_client = llm_client
@@ -269,7 +272,10 @@ class Graphiti:
         self.tracer = create_tracer(tracer, trace_span_prefix)
 
         # Set tracer on clients
-        self.llm_client.set_tracer(self.tracer)
+        if self.llm_runtime is not None:
+            self.llm_runtime.set_tracer(self.tracer)
+        else:
+            self.llm_client.set_tracer(self.tracer)
 
         self.clients = GraphitiClients(
             driver=self.driver,
@@ -278,7 +284,7 @@ class Graphiti:
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
             prompt_library=self.prompt_library,
-            prompt_bound_llm=self.prompt_bound_llm,
+            llm_runtime=self.llm_runtime,
         )
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
@@ -1546,7 +1552,7 @@ class Graphiti:
         # Clear existing communities (scoped: only the groups being rebuilt)
         await remove_communities(driver, group_ids=group_ids)
 
-        # Prefer the resolved clients bundle (prompt_bound_llm / prompt_library),
+        # Prefer the resolved clients bundle (llm_runtime / prompt_library),
         # but honor an explicit driver override when provided.
         clients = self.clients
         if driver is not None and driver is not self.driver:
