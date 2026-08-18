@@ -87,9 +87,8 @@ class PostGraphDriverSession(GraphDriverSession):
             self._conn = None
 
     async def execute_write(self, func, *args, **kwargs):
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                return await func(conn, *args, **kwargs)
+        async with self._pool.acquire() as conn, conn.transaction():
+            return await func(conn, *args, **kwargs)
 
 
 class _PGTransaction(Transaction):
@@ -252,11 +251,10 @@ class PostGraphDriver(GraphDriver):
         return PostGraphDriverSession(self._pool)
 
     async def close(self) -> None:
-        if self._init_task is not None:
-            if not self._init_task.done():
-                self._init_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await self._init_task
+        if self._init_task is not None and not self._init_task.done():
+            self._init_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._init_task
         if self._pool is not None:
             await self._pool.close()
             self._pool = None

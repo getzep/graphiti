@@ -42,7 +42,7 @@ def _ddl(embedding_dim: int) -> list[str]:
             ) STORED
         )
         """,
-        f"""
+        """
         CREATE TABLE IF NOT EXISTS episodic_nodes (
             uuid                TEXT PRIMARY KEY,
             name                TEXT NOT NULL,
@@ -148,19 +148,19 @@ def _index_ddl(embedding_dim: int) -> list[str]:
     return [
         'CREATE INDEX IF NOT EXISTS idx_entity_nodes_group_id ON entity_nodes (group_id)',
         'CREATE INDEX IF NOT EXISTS idx_entity_nodes_search ON entity_nodes USING GIN (search_vector)',
-        f'CREATE INDEX IF NOT EXISTS idx_entity_nodes_embedding ON entity_nodes USING hnsw (name_embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)',
+        'CREATE INDEX IF NOT EXISTS idx_entity_nodes_embedding ON entity_nodes USING hnsw (name_embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)',
         'CREATE INDEX IF NOT EXISTS idx_episodic_nodes_group_id ON episodic_nodes (group_id)',
         'CREATE INDEX IF NOT EXISTS idx_episodic_nodes_search ON episodic_nodes USING GIN (search_vector)',
         'CREATE INDEX IF NOT EXISTS idx_episodic_nodes_valid_at ON episodic_nodes (valid_at DESC)',
         'CREATE INDEX IF NOT EXISTS idx_community_nodes_group_id ON community_nodes (group_id)',
         'CREATE INDEX IF NOT EXISTS idx_community_nodes_search ON community_nodes USING GIN (search_vector)',
-        f'CREATE INDEX IF NOT EXISTS idx_community_nodes_embedding ON community_nodes USING hnsw (name_embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)',
+        'CREATE INDEX IF NOT EXISTS idx_community_nodes_embedding ON community_nodes USING hnsw (name_embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)',
         'CREATE INDEX IF NOT EXISTS idx_saga_nodes_group_id ON saga_nodes (group_id)',
         'CREATE INDEX IF NOT EXISTS idx_entity_edges_group_id ON entity_edges (group_id)',
         'CREATE INDEX IF NOT EXISTS idx_entity_edges_source ON entity_edges (source_node_uuid)',
         'CREATE INDEX IF NOT EXISTS idx_entity_edges_target ON entity_edges (target_node_uuid)',
         'CREATE INDEX IF NOT EXISTS idx_entity_edges_search ON entity_edges USING GIN (search_vector)',
-        f'CREATE INDEX IF NOT EXISTS idx_entity_edges_embedding ON entity_edges USING hnsw (fact_embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)',
+        'CREATE INDEX IF NOT EXISTS idx_entity_edges_embedding ON entity_edges USING hnsw (fact_embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)',
         'CREATE INDEX IF NOT EXISTS idx_episodic_edges_source ON episodic_edges (source_node_uuid)',
         'CREATE INDEX IF NOT EXISTS idx_episodic_edges_target ON episodic_edges (target_node_uuid)',
         'CREATE INDEX IF NOT EXISTS idx_episodic_edges_group_id ON episodic_edges (group_id)',
