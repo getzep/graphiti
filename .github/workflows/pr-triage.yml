@@ -32,7 +32,7 @@ jobs:
     steps:
       - id: check
         run: |
-          if [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
             echo "is_fork=true" >> $GITHUB_OUTPUT
           else
             echo "is_fork=false" >> $GITHUB_OUTPUT
