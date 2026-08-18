@@ -14,6 +14,12 @@ permissions:
 
 jobs:
   CLAAssistant:
+    # The CLA applies to external contributors. Internal same-repository PRs
+    # already run under LegalZoom's workforce contribution agreement and must
+    # not depend on an unconfigured external-signature GitHub App.
+    if: >-
+      github.event_name != 'pull_request_target' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       # Mint a short-lived GitHub App installation token (≈1h, auto-revoked at job
