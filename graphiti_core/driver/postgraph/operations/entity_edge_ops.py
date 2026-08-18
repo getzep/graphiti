@@ -46,6 +46,16 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
             edge.group_id,
             edge.target_node_uuid,
         )
+        if from_id is None or to_id is None:
+            logger.warning(
+                'Cannot save edge %s: source=%s (id=%s) target=%s (id=%s)',
+                edge.uuid,
+                edge.source_node_uuid,
+                from_id,
+                edge.target_node_uuid,
+                to_id,
+            )
+            return
         existing_id = await executor._resolve_edge_id(
             TABLE,
             edge.group_id,
@@ -55,8 +65,8 @@ class PGEntityEdgeOperations(EntityEdgeOperations):
         await client.upsert_edge(
             TABLE,
             realm=edge.group_id,
-            from_id=str(from_id),
-            to_id=str(to_id),
+            from_id=from_id,
+            to_id=to_id,
             relation_type=edge.name,
             edge_id=existing_id,
             payload=payload,

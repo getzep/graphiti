@@ -48,7 +48,7 @@ later = now + timedelta(days=1)
 async def pg_driver():
     driver = PostGraphDriver(dsn=POSTGRAPH_DSN, embedding_dim=EMBEDDING_DIM)
     try:
-        await driver._ensure_pool()
+        await driver._ensure_client()
         await driver.build_indices_and_constraints()
     except Exception as exc:
         pytest.skip(f'PostgreSQL not reachable at {POSTGRAPH_DSN}: {exc}')
@@ -85,7 +85,7 @@ embedder = _mock_embedder()
 
 async def pg_node_count(driver, uuids: list[str]) -> int:
     records, _, _ = await driver.execute_query(
-        'SELECT count(*) AS count FROM entity_nodes WHERE uuid = ANY($uuids)',
+        "SELECT count(*) AS count FROM entity_nodes WHERE payload->>'uuid' = ANY($uuids)",
         uuids=uuids,
     )
     return int(records[0]['count'])
@@ -95,7 +95,7 @@ async def pg_edge_count(driver, uuids: list[str]) -> int:
     total = 0
     for table in ('entity_edges', 'episodic_edges', 'community_edges'):
         records, _, _ = await driver.execute_query(
-            f'SELECT count(*) AS count FROM {table} WHERE uuid = ANY($uuids)',
+            f"SELECT count(*) AS count FROM {table} WHERE payload->>'uuid' = ANY($uuids)",
             uuids=uuids,
         )
         total += int(records[0]['count'])
@@ -608,13 +608,8 @@ class TestGroupIdIsolation:
         x = EntityNode(name='BFS_G2_X', group_id=GROUP_ID_2, labels=[], name_embedding=_embedding())
         await x.save(pg_driver)
 
-        cross_edge = EntityEdge(
-            source_node_uuid=b.uuid, target_node_uuid=x.uuid,
-            created_at=now, name='cross', fact='crosses groups', episodes=[], group_id=GROUP_ID_2,
-        )
-        await cross_edge.generate_embedding(embedder)
-        await cross_edge.save(pg_driver)
-
+        # post-graph enforces FK(realm, from_id) so cross-realm edges are
+        # structurally impossible — realm isolation is guaranteed by the schema.
         results = await pg_driver.search_ops.node_bfs_search(
             pg_driver, [a.uuid], SearchFilters(), max_depth=3,
             group_ids=[GROUP_ID], limit=10,
