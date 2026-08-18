@@ -321,9 +321,12 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
             SELECT c.uuid, c.name, c.group_id, c.name_embedding, c.summary, c.created_at
             FROM community_nodes c
             JOIN community_edges ce ON ce.source_node_uuid = c.uuid
+                AND ce.group_id = c.group_id
             WHERE ce.target_node_uuid = $entity_uuid
+              AND c.group_id = $group_id
             """,
             entity_uuid=entity.uuid,
+            group_id=entity.group_id,
         )
 
         if len(records) > 0:
@@ -334,13 +337,17 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
             SELECT c.uuid, c.name, c.group_id, c.name_embedding, c.summary, c.created_at
             FROM community_nodes c
             JOIN community_edges ce ON ce.source_node_uuid = c.uuid
+                AND ce.group_id = c.group_id
             JOIN entity_nodes m ON ce.target_node_uuid = m.uuid
+                AND m.group_id = c.group_id
             JOIN entity_edges ee ON (
                 (ee.source_node_uuid = m.uuid AND ee.target_node_uuid = $entity_uuid)
                 OR (ee.target_node_uuid = m.uuid AND ee.source_node_uuid = $entity_uuid)
-            )
+            ) AND ee.group_id = c.group_id
+            WHERE c.group_id = $group_id
             """,
             entity_uuid=entity.uuid,
+            group_id=entity.group_id,
         )
 
     async def get_mentioned_nodes(
@@ -349,6 +356,7 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
         episodes: list[EpisodicNode],
     ) -> list[EntityNode]:
         episode_uuids = [ep.uuid for ep in episodes]
+        group_ids = list({ep.group_id for ep in episodes})
 
         records, _, _ = await executor.execute_query(
             """
@@ -356,9 +364,12 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                    n.attributes, n.created_at
             FROM entity_nodes n
             JOIN episodic_edges ee ON ee.target_node_uuid = n.uuid
+                AND ee.group_id = n.group_id
             WHERE ee.source_node_uuid = ANY($uuids)
+              AND n.group_id = ANY($group_ids)
             """,
             uuids=episode_uuids,
+            group_ids=group_ids,
         )
 
         return [_entity_node_from_pg(r) for r in records]
@@ -369,6 +380,7 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
         nodes: list[EntityNode],
     ) -> list[CommunityNode]:
         node_uuids = [n.uuid for n in nodes]
+        group_ids = list({n.group_id for n in nodes})
 
         records, _, _ = await executor.execute_query(
             """
@@ -376,9 +388,12 @@ class PGGraphMaintenanceOperations(GraphMaintenanceOperations):
                    c.summary, c.created_at
             FROM community_nodes c
             JOIN community_edges ce ON ce.source_node_uuid = c.uuid
+                AND ce.group_id = c.group_id
             WHERE ce.target_node_uuid = ANY($uuids)
+              AND c.group_id = ANY($group_ids)
             """,
             uuids=node_uuids,
+            group_ids=group_ids,
         )
 
         return [community_node_from_record(r) for r in records]

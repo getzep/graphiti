@@ -107,6 +107,10 @@ class PGSearchOperations(SearchOperations):
         if conditions:
             filter_clause = ' AND ' + ' AND '.join(conditions)
 
+        group_filter = ''
+        if group_ids is not None:
+            group_filter = ' AND ee.group_id = ANY($group_ids)'
+
         sql = f"""
             WITH RECURSIVE bfs AS (
                 SELECT uuid, 0 AS depth
@@ -119,7 +123,7 @@ class PGSearchOperations(SearchOperations):
                     bfs.depth + 1
                 FROM bfs
                 JOIN entity_edges ee ON (ee.source_node_uuid = bfs.uuid OR ee.target_node_uuid = bfs.uuid)
-                WHERE bfs.depth < {max_depth}
+                WHERE bfs.depth < {max_depth}{group_filter}
             )
             SELECT DISTINCT n.uuid, n.name, n.group_id, n.labels, n.summary,
                    n.attributes, n.created_at
@@ -230,6 +234,10 @@ class PGSearchOperations(SearchOperations):
                 for c in conditions
             )
 
+        group_filter = ''
+        if group_ids is not None:
+            group_filter = ' AND ee2.group_id = ANY($group_ids)'
+
         sql = f"""
             WITH RECURSIVE bfs AS (
                 SELECT uuid, 0 AS depth
@@ -242,7 +250,7 @@ class PGSearchOperations(SearchOperations):
                     bfs.depth + 1
                 FROM bfs
                 JOIN entity_edges ee2 ON (ee2.source_node_uuid = bfs.uuid OR ee2.target_node_uuid = bfs.uuid)
-                WHERE bfs.depth < {max_depth}
+                WHERE bfs.depth < {max_depth}{group_filter}
             )
             SELECT DISTINCT ee.uuid, ee.source_node_uuid, ee.target_node_uuid, ee.name, ee.fact,
                    ee.group_id, ee.episodes, ee.created_at, ee.expired_at, ee.valid_at,
@@ -380,7 +388,7 @@ class PGSearchOperations(SearchOperations):
             JOIN entity_edges ee ON (
                 (ee.source_node_uuid = $center_uuid AND ee.target_node_uuid = n.uuid)
                 OR (ee.target_node_uuid = $center_uuid AND ee.source_node_uuid = n.uuid)
-            )
+            ) AND ee.group_id = n.group_id
             WHERE n.uuid = ANY($node_uuids)
             """,
             node_uuids=filtered_uuids,
@@ -431,6 +439,7 @@ class PGSearchOperations(SearchOperations):
             SELECT count(*) AS score, n.uuid
             FROM entity_nodes n
             JOIN episodic_edges ee ON ee.target_node_uuid = n.uuid
+                AND ee.group_id = n.group_id
             WHERE n.uuid = ANY($node_uuids)
             GROUP BY n.uuid
             """,
