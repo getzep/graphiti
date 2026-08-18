@@ -108,13 +108,23 @@ def episodic_node_from_record(record: Any) -> EpisodicNode:
     )
 
 
+def _parse_embedding(value: Any) -> list[float] | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        return [float(x) for x in value.strip('[]').split(',')]
+    return list(value)
+
+
 def community_node_from_record(record: Any) -> CommunityNode:
     """Parse a community node from a database record."""
     return CommunityNode(
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
-        name_embedding=record['name_embedding'],
+        name_embedding=_parse_embedding(record['name_embedding']),
         created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
         summary=record['summary'],
     )

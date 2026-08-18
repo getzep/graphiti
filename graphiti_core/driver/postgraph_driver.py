@@ -35,6 +35,7 @@ from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeO
 from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
+from graphiti_core.driver.postgraph.graph_operations_interface import PostGraphOperationsInterface
 from graphiti_core.driver.postgraph.operations.community_edge_ops import (
     PGCommunityEdgeOperations,
 )
@@ -165,6 +166,8 @@ class PostGraphDriver(GraphDriver):
         self._next_episode_edge_ops = PGNextEpisodeEdgeOperations()
         self._search_ops = PGSearchOperations()
         self._graph_ops = PGGraphMaintenanceOperations(self._embedding_dim)
+
+        self.graph_operations_interface = PostGraphOperationsInterface(self)
 
         self._init_task: asyncio.Task | None = None
         try:
