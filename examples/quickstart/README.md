@@ -90,9 +90,9 @@ After running this example, you can:
 
 ## Troubleshooting
 
-### "Graph not found: default_db" Error
+### Neo4j: "Graph not found: default_db" Error
 
-If you encounter the error `Neo.ClientError.Database.DatabaseNotFound: Graph not found: default_db`, this occurs when the driver is trying to connect to a database that doesn't exist.
+If you encounter the error `Neo.ClientError.Database.DatabaseNotFound: Graph not found: default_db` while running **`quickstart_neo4j.py`**, the Neo4j driver is trying to connect to a database that does not exist.
 
 **Solution:**
 The Neo4j driver defaults to using `neo4j` as the database name. If you need to use a different database, modify the driver constructor in the script:
@@ -104,6 +104,15 @@ driver = Neo4jDriver(uri=neo4j_uri, user=neo4j_user, password=neo4j_password)
 # To specify a different database:
 driver = Neo4jDriver(uri=neo4j_uri, user=neo4j_user, password=neo4j_password, database="your_db_name")
 ```
+
+### FalkorDB: connection refused or wrong script
+
+If you are using FalkorDB but see Neo4j-specific errors (for example `Neo.ClientError`), you are likely running **`quickstart_neo4j.py`** instead of **`quickstart_falkordb.py`**.
+
+**Solution:**
+1. Start a FalkorDB server locally (see [FalkorDB docs](https://docs.falkordb.com/)).
+2. Confirm `FALKORDB_URI` points at your instance (default: `falkor://localhost:6379`).
+3. Run `python quickstart_falkordb.py`.
 
 ## Understanding the Output
 
