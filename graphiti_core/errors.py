@@ -75,7 +75,7 @@ class EntityTypeValidationError(GraphitiError):
         super().__init__(self.message)
 
 
-class GroupIdValidationError(GraphitiError):
+class GroupIdValidationError(GraphitiError, ValueError):
     """Raised when a group_id contains invalid characters."""
 
     def __init__(self, group_id: str):
@@ -91,5 +91,16 @@ class NodeLabelValidationError(GraphitiError, ValueError):
         self.message = (
             'node_labels must start with a letter or underscore and contain only '
             f'alphanumeric characters or underscores: {label_list}'
+        )
+        super().__init__(self.message)
+
+
+class PropertyNameValidationError(GraphitiError, ValueError):
+    """Raised when a property filter name is not a safe Cypher identifier."""
+
+    def __init__(self, property_name: str):
+        self.message = (
+            f'property filter name "{property_name}" must start with a letter or underscore '
+            'and contain only alphanumeric characters or underscores'
         )
         super().__init__(self.message)
