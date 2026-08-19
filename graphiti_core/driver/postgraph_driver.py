@@ -155,6 +155,14 @@ class PostGraphDriver(GraphDriver):
         self._dsn = dsn or f'postgresql://{user}:{password}@{host}:{port}/{database}'
         self._database = database
         self._embedding_dim = embedding_dim or EMBEDDING_DIM
+        # Without this, search_utils falls back to raw Cypher, which PostgreSQL
+        # rejects at the first query. The implementations already exist in
+        # operations/search_ops.py; this is what makes them reachable.
+        from graphiti_core.driver.postgraph.search_interface import (
+            PostGraphSearchInterface,
+        )
+
+        self.search_interface = PostGraphSearchInterface()
 
         self._client: AsyncPostGraph | None = None
 

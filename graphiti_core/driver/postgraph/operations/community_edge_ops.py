@@ -35,6 +35,7 @@ class PGCommunityEdgeOperations(CommunityEdgeOperations):
         edge: CommunityEdge,
         _tx: Transaction | None = None,
     ) -> None:
+        edge = _as_obj(edge)
         client = executor.client
         from_id = await executor._resolve_vertex_id(
             SOURCE_TABLE,
@@ -169,3 +170,40 @@ def _parse(row) -> CommunityEdge:
             payload.get('created_at'),
         ),
     )
+
+
+_KNOWN_FIELDS = {
+    'uuid', 'group_id', 'name', 'fact', 'fact_embedding', 'episodes',
+    'source_node_uuid', 'target_node_uuid', 'created_at', 'expired_at',
+    'valid_at', 'invalid_at', 'reference_time', 'attributes', 'summary',
+    'name_embedding', 'labels', 'source', 'source_description', 'content',
+    'entity_edges', 'level', 'saga_uuid',
+}
+
+
+def _as_obj(item):
+    """Bulk paths pass model_dump() dicts; save() expects attribute access.
+
+    bulk_utils serialises edges with `edge.model_dump()` because the Cypher
+    drivers UNWIND a list of maps. save() here reads attributes, so the bulk
+    path failed on the first add_episode(). The driver's tests call save()
+    directly and never exercise it.
+    """
+    if not isinstance(item, dict):
+        return item
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    known = {k: v for k, v in item.items() if k in _KNOWN_FIELDS}
+    # bulk_utils flattens custom attributes to top level for the Cypher
+    # drivers, which SET them as map properties. Invert that here.
+    extra = {k: v for k, v in item.items() if k not in _KNOWN_FIELDS}
+    data = dict(known)
+    data['attributes'] = {**(known.get('attributes') or {}), **extra}
+    for key, value in list(data.items()):
+        if isinstance(value, str) and key.endswith(('_at', '_time')):
+            try:
+                data[key] = datetime.fromisoformat(value)
+            except ValueError:
+                pass
+    return SimpleNamespace(**data)

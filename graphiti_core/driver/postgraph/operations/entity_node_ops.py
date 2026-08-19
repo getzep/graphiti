@@ -21,10 +21,11 @@ class PGEntityNodeOperations(EntityNodeOperations):
     async def save(
         self,
         executor: QueryExecutor,
-        node: EntityNode,
+        node: Any,
         _tx: Transaction | None = None,
     ) -> None:
         client = executor.client
+        node = _as_entity_node(node)
         attributes = dict(node.attributes or {})
         labels = list(set(node.labels + ['Entity']))
         payload = {
@@ -54,12 +55,18 @@ class PGEntityNodeOperations(EntityNodeOperations):
     async def save_bulk(
         self,
         executor: QueryExecutor,
-        nodes: list[EntityNode],
+        nodes: list[Any],
         _tx: Transaction | None = None,
         _batch_size: int = 100,
     ) -> None:
+        """Accepts EntityNode objects or the dicts the bulk path supplies.
+
+        bulk_utils flattens `attributes` into top-level keys for every provider
+        except Kuzu, because the Cypher drivers SET them as map properties. This
+        inverts that: anything that is not a known field is an attribute.
+        """
         for node in nodes:
-            await self.save(executor, node)
+            await self.save(executor, _as_entity_node(node))
 
     async def delete(
         self,
@@ -409,3 +416,30 @@ def _parse_vec(value: Any) -> list[float] | None:
             return None
         return [float(x) for x in cleaned.split(',')]
     return list(value)
+
+
+_ENTITY_FIELDS = {
+    'uuid', 'name', 'group_id', 'summary', 'created_at', 'name_embedding', 'labels',
+}
+
+
+def _as_entity_node(node: Any) -> Any:
+    """Normalise a bulk-path dict, restoring the flattened attributes."""
+    if not isinstance(node, dict):
+        return node
+    from types import SimpleNamespace
+
+    data = {k: v for k, v in node.items() if k in _ENTITY_FIELDS}
+    data['attributes'] = {k: v for k, v in node.items() if k not in _ENTITY_FIELDS}
+    data.setdefault('labels', [])
+    data.setdefault('summary', '')
+    data.setdefault('name_embedding', None)
+    created = data.get('created_at')
+    if isinstance(created, str):
+        from datetime import datetime
+
+        try:
+            data['created_at'] = datetime.fromisoformat(created)
+        except ValueError:
+            data['created_at'] = None
+    return SimpleNamespace(**data)

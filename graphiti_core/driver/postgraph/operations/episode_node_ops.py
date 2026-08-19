@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 import logging
 from datetime import datetime
 from typing import Any
@@ -24,14 +25,15 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
     async def save(
         self,
         executor: QueryExecutor,
-        node: EpisodicNode,
+        node: Any,
         _tx: Transaction | None = None,
     ) -> None:
+        node = _as_episodic_node(node)
         client = executor.client
         payload = {
             'uuid': node.uuid,
             'name': node.name,
-            'source': node.source.value,
+            'source': node.source.value if hasattr(node.source, 'value') else node.source,
             'source_description': node.source_description,
             'content': node.content,
             'valid_at': (node.valid_at.isoformat() if node.valid_at else None),
@@ -55,12 +57,21 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
     async def save_bulk(
         self,
         executor: QueryExecutor,
-        nodes: list[EpisodicNode],
+        nodes: list[Any],
         _tx: Transaction | None = None,
         _batch_size: int = 100,
     ) -> None:
+        """Accepts EpisodicNode objects or the dicts the bulk path supplies.
+
+        bulk_utils.add_nodes_and_edges_bulk_tx converts every node with
+        `dict(episode)` before calling this — the Cypher drivers UNWIND a list
+        of maps — and it stringifies `source` on the way. save() expects an
+        object, so the bulk path failed with "'dict' object has no attribute
+        'uuid'" on the first add_episode(). The driver's own tests call save()
+        directly and never see it.
+        """
         for node in nodes:
-            await self.save(executor, node)
+            await self.save(executor, _as_episodic_node(node))
 
     async def delete(
         self,
@@ -314,6 +325,14 @@ class PGEpisodeNodeOperations(EpisodeNodeOperations):
         ref_iso = reference_time.isoformat()
         params: list[Any] = [ref_iso]
 
+        # `source` is annotated `str` but Graphiti's own callers pass the
+        # EpisodeType enum, and both filter branches below json.dumps it — which
+        # raises TypeError on the first add_episode(). The save path already
+        # coerces with `.value`; this makes the read path agree, and accepts
+        # either form so a caller of any vintage works.
+        if isinstance(source, Enum):
+            source = source.value
+
         if saga:
             # Build query joining through has_episode_edges
             # to filter by saga node
@@ -426,3 +445,28 @@ def _row_to_episodic_node(row: dict) -> EpisodicNode:
         source_description=p.get('source_description', ''),
         entity_edges=list(p.get('entity_edges', []) or []),
     )
+
+
+def _as_episodic_node(node: Any) -> Any:
+    """Normalise a bulk-path dict into something save() can read.
+
+    A SimpleNamespace rather than a real EpisodicNode: the dict has already
+    been through `dict(episode)` and had `source` stringified, so re-validating
+    it through the model would reject its own output.
+    """
+    if not isinstance(node, dict):
+        return node
+    from types import SimpleNamespace
+
+    data = dict(node)
+    for key in ('valid_at', 'created_at'):
+        value = data.get(key)
+        if isinstance(value, str):
+            from datetime import datetime
+
+            try:
+                data[key] = datetime.fromisoformat(value)
+            except ValueError:
+                data[key] = None
+    data.setdefault('entity_edges', [])
+    return SimpleNamespace(**data)
