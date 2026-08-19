@@ -26,6 +26,48 @@ INDEX_TO_LABEL_KUZU_MAPPING = {
 
 
 def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
+    if provider == GraphProvider.ARCADEDB:
+        # Corregido (03/07/2026): la version original generaba DDL en sintaxis SQL
+        # de ArcadeDB (CREATE VERTEX TYPE ..., CREATE INDEX ... ON X (prop) NOTUNIQUE)
+        # pero la enviaba por el canal Cypher/Bolt, que la rechaza integramente con
+        # "Syntax error ... mismatched input 'TYPE'/'ON'" -- verificado que las 28
+        # sentencias originales fallaban al 100%. No hace falta declarar tipos de
+        # vertice/arista explicitamente: ArcadeDB los crea de forma implicita al
+        # primer MERGE/CREATE (comportamiento schemaless ya verificado en esta
+        # migracion). Los indices SI son creables via Cypher estandar (ArcadeDB
+        # soporta indices "standard, RANGE y TEXT" via Bolt, solo rechaza FULLTEXT
+        # -- ver get_fulltext_indices), asi que se reescriben con la misma sintaxis
+        # Cypher que ya usa el caso por defecto (Neo4j) mas abajo en este archivo.
+        return [
+            'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
+            'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
+            'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
+            'CREATE INDEX saga_uuid IF NOT EXISTS FOR (n:Saga) ON (n.uuid)',
+            'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
+            'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
+            'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
+            'CREATE INDEX has_episode_uuid IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.uuid)',
+            'CREATE INDEX next_episode_uuid IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.uuid)',
+            'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
+            'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
+            'CREATE INDEX community_group_id IF NOT EXISTS FOR (n:Community) ON (n.group_id)',
+            'CREATE INDEX saga_group_id IF NOT EXISTS FOR (n:Saga) ON (n.group_id)',
+            'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
+            'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
+            'CREATE INDEX has_episode_group_id IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.group_id)',
+            'CREATE INDEX next_episode_group_id IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.group_id)',
+            'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
+            'CREATE INDEX saga_name IF NOT EXISTS FOR (n:Saga) ON (n.name)',
+            'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
+            'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
+            'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
+            'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
+            'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
+            'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
+            'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
+            'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
+        ]
+
     if provider == GraphProvider.FALKORDB:
         return [
             # Entity node
@@ -83,6 +125,17 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
 
 
 def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
+    if provider == GraphProvider.ARCADEDB:
+        # Corregido (03/07/2026): igual que get_range_indices, la sintaxis SQL
+        # 'FULL_TEXT ENGINE LUCENE' enviada por Cypher/Bolt falla siempre (ArcadeDB
+        # solo acepta CREATE INDEX estandar/RANGE/TEXT via Bolt, no FULLTEXT --
+        # verificado repetidamente en esta migracion). graphiti-core ya se usa con
+        # BM25/fulltext desactivado (search_config sin EdgeSearchMethod.bm25 /
+        # NodeSearchMethod.bm25 -- ver parche de compatibilidad en main.py), asi
+        # que no hace falta ningun indice fulltext real; devolver lista vacia,
+        # igual que ya hace el caso KUZU mas abajo en este archivo.
+        return []
+
     if provider == GraphProvider.FALKORDB:
         from typing import cast
 
