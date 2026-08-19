@@ -429,3 +429,46 @@ class TestFalkorDriverIntegration:
 
         except Exception as e:
             pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_clear_data_group_ids_includes_saga_nodes(self):
+        """clear_data(group_ids=...) must delete Saga nodes of those groups.
+
+        Regression test: the label list only covered Entity, Episodic and
+        Community, so Saga nodes survived group-scoped deletion.
+        """
+        pytest.importorskip('falkordb')
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_clear_saga')
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            await driver.execute_query(
+                "CREATE (:Saga {uuid: 's1', name: 'saga', group_id: 'g1', "
+                "created_at: '2024-01-01T00:00:00'})"
+            )
+            await driver.execute_query(
+                "CREATE (:Entity {uuid: 'e1', name: 'x', group_id: 'g1', "
+                "created_at: '2024-01-01T00:00:00'})"
+            )
+            await driver.execute_query(
+                "CREATE (:Saga {uuid: 's2', name: 'other', group_id: 'g2', "
+                "created_at: '2024-01-01T00:00:00'})"
+            )
+
+            await driver.graph_ops.clear_data(driver, group_ids=['g1'])
+
+            records, _, _ = await driver.execute_query('MATCH (n) RETURN n.uuid AS uuid')
+            remaining = sorted(r['uuid'] for r in records)
+            # everything in g1 is gone, including the Saga node; g2 is untouched
+            assert remaining == ['s2']
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()
