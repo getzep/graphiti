@@ -70,7 +70,7 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings, ensure_utc
 
 logger = logging.getLogger(__name__)
 
@@ -360,8 +360,8 @@ class FalkorDriver(GraphDriver):
             return [FalkorDriver.convert_datetimes_to_strings(item) for item in obj]
         elif isinstance(obj, tuple):
             return tuple(FalkorDriver.convert_datetimes_to_strings(item) for item in obj)
-        elif isinstance(obj, datetime):
-            return obj.isoformat()
+        elif isinstance(obj, datetime.datetime):
+            return ensure_utc(obj).isoformat()  # type: ignore[union-attr]
         else:
             return obj
 
