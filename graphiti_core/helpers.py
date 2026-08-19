@@ -100,16 +100,15 @@ def lucene_sanitize(query: str) -> str:
             ':': r'\:',
             '\\': r'\\',
             '/': r'\/',
-            'O': r'\O',
-            'R': r'\R',
-            'N': r'\N',
-            'T': r'\T',
-            'A': r'\A',
-            'D': r'\D',
         }
     )
 
     sanitized = query.translate(escape_map)
+    # Lowercase bare Lucene boolean keywords so they are treated as literal
+    # words rather than operators.  The previous approach of escaping the
+    # individual letters O/R/N/T/A/D corrupted every word containing those
+    # characters (e.g. "Robot" → "\R\ob\ot").
+    sanitized = re.sub(r'\b(AND|OR|NOT)\b', lambda m: m.group(0).lower(), sanitized)
     return sanitized
 
 
