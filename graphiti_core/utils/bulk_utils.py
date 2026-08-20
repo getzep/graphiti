@@ -105,6 +105,7 @@ class RawEpisode(BaseModel):
     source_description: str
     source: EpisodeType
     reference_time: datetime
+    episode_metadata: dict[str, Any] | None = None
 
 
 async def retrieve_previous_episodes_bulk(
@@ -161,6 +162,12 @@ async def add_nodes_and_edges_bulk_tx(
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
+        metadata = episode.pop('episode_metadata', None) or {}
+        if driver.provider == GraphProvider.KUZU:
+            episode['episode_metadata'] = json.dumps(metadata)
+        else:
+            for key, value in metadata.items():
+                episode.setdefault(key, value)
 
     nodes = []
 

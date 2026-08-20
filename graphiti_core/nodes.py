@@ -350,6 +350,15 @@ class EpisodicNode(Node):
             'source': self.source.value,
         }
 
+        if driver.provider == GraphProvider.KUZU:
+            episode_args['episode_metadata'] = json.dumps(self.episode_metadata or {})
+        else:
+            episode_data = dict(episode_args)
+            for key, value in (self.episode_metadata or {}).items():
+                if key not in episode_data:
+                    episode_data[key] = value
+            episode_args['episode_data'] = episode_data
+
         result = await driver.execute_query(
             get_episode_node_save_query(driver.provider), **episode_args
         )
@@ -1044,7 +1053,30 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         name=record['name'],
         source_description=record['source_description'],
         entity_edges=record['entity_edges'],
+        episode_metadata=_parse_episode_metadata(record.get('episode_metadata')),
     )
+
+
+def _parse_episode_metadata(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return json.loads(value) if value else None
+    if isinstance(value, dict):
+        reserved = {
+            'uuid',
+            'name',
+            'group_id',
+            'created_at',
+            'source',
+            'source_description',
+            'content',
+            'valid_at',
+            'entity_edges',
+            'episode_metadata',
+        }
+        return {key: item for key, item in value.items() if key not in reserved}
+    return None
 
 
 def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
