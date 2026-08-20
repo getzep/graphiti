@@ -128,6 +128,14 @@ class GraphDriver(QueryExecutor, ABC):
     async def build_indices_and_constraints(self, delete_existing: bool = False):
         raise NotImplementedError()
 
+    async def wait_for_initialization(self) -> None:
+        """Wait for any index/constraint build scheduled when the driver was created.
+
+        Drivers that bootstrap themselves in the background override this so
+        callers can surface failures instead of losing them on an orphaned task.
+        """
+        return None
+
     def clone(self, database: str) -> GraphDriver:
         """Clone the driver with a different database or graph name."""
         return self

@@ -602,16 +602,21 @@ class Graphiti:
         """
         await self.driver.build_indices_and_constraints(delete_existing)
 
-    def _with_database(self, database: str) -> 'Graphiti':
+    async def _with_database(self, database: str) -> 'Graphiti':
         """Return a shallow copy that uses a database-specific driver.
 
         FalkorDB maps each group ID to a distinct graph. Keeping both the driver
         and its clients container on the copy prevents concurrent requests from
         rebinding state on the shared Graphiti instance.
+
+        Each cloned driver schedules its own index build, so wait for it here:
+        otherwise the group's first write races its indices and a failed build
+        is lost on an orphaned task.
         """
         graphiti = copy(self)
         graphiti.driver = self.driver.clone(database=database)
         graphiti.clients = self.clients.model_copy(update={'driver': graphiti.driver})
+        await graphiti.driver.wait_for_initialization()
         return graphiti
 
     async def _extract_and_resolve_nodes(
@@ -1090,7 +1095,8 @@ class Graphiti:
         else:
             validate_group_id(group_id)
             if group_id != self.driver._database:
-                return await self._with_database(group_id).add_episode(
+                scoped = await self._with_database(group_id)
+                return await scoped.add_episode(
                     name=name,
                     episode_body=episode_body,
                     source_description=source_description,
@@ -1333,7 +1339,8 @@ class Graphiti:
                 else:
                     validate_group_id(group_id)
                     if group_id != self.driver._database:
-                        return await self._with_database(group_id).add_episode_bulk(
+                        scoped = await self._with_database(group_id)
+                        return await scoped.add_episode_bulk(
                             bulk_episodes=bulk_episodes,
                             group_id=group_id,
                             entity_types=entity_types,

@@ -29,10 +29,14 @@ class _FakeDriver:
         self._database = database
         self.provider = provider
         self.clone_calls: list[str] = []
+        self.init_waits = 0
 
     def clone(self, database: str) -> '_FakeDriver':
         self.clone_calls.append(database)
         return _FakeDriver(database, self.provider)
+
+    async def wait_for_initialization(self) -> None:
+        self.init_waits += 1
 
 
 class _Host:
@@ -106,7 +110,8 @@ async def test_non_falkor_single_group_id_is_passthrough():
     assert result == ["q:None:['tenant']"]
 
 
-def test_database_scoped_graphiti_copy_does_not_rebind_shared_driver():
+@pytest.mark.asyncio
+async def test_database_scoped_graphiti_copy_does_not_rebind_shared_driver():
     """Concurrent FalkorDB requests must retain their own graph driver (#1676)."""
     driver = _FakeDriver('default')
     graphiti = Graphiti.__new__(Graphiti)
@@ -114,8 +119,8 @@ def test_database_scoped_graphiti_copy_does_not_rebind_shared_driver():
     graphiti.clients = GraphitiClients.model_construct(driver=driver)
     graphiti.embedder = object()
 
-    group_a = graphiti._with_database('group-a')
-    group_b = graphiti._with_database('group-b')
+    group_a = await graphiti._with_database('group-a')
+    group_b = await graphiti._with_database('group-b')
 
     assert driver.clone_calls == ['group-a', 'group-b']
     assert graphiti.driver is driver
@@ -124,3 +129,7 @@ def test_database_scoped_graphiti_copy_does_not_rebind_shared_driver():
     assert group_b.driver._database == 'group-b'
     assert group_a.clients.driver is group_a.driver
     assert group_b.clients.driver is group_b.driver
+    # Each clone's own index build is awaited, not left on an orphaned task.
+    assert group_a.driver.init_waits == 1
+    assert group_b.driver.init_waits == 1
+    assert driver.init_waits == 0
