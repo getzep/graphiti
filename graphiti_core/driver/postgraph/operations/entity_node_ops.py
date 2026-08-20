@@ -419,7 +419,13 @@ def _parse_vec(value: Any) -> list[float] | None:
 
 
 _ENTITY_FIELDS = {
-    'uuid', 'name', 'group_id', 'summary', 'created_at', 'name_embedding', 'labels',
+    'uuid',
+    'name',
+    'group_id',
+    'summary',
+    'created_at',
+    'name_embedding',
+    'labels',
 }
 
 

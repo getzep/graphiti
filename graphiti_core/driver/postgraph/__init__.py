@@ -9,6 +9,7 @@ the tests took the working order so nothing showed it.
 PEP 562 module __getattr__ defers the import to first attribute access, by
 which point both modules are fully built, so either order works.
 """
+
 from typing import Any
 
 __all__ = ['PostGraphDriver', 'PostGraphDriverSession']

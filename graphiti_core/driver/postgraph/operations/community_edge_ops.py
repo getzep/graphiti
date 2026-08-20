@@ -174,11 +174,29 @@ def _parse(row) -> CommunityEdge:
 
 
 _KNOWN_FIELDS = {
-    'uuid', 'group_id', 'name', 'fact', 'fact_embedding', 'episodes',
-    'source_node_uuid', 'target_node_uuid', 'created_at', 'expired_at',
-    'valid_at', 'invalid_at', 'reference_time', 'attributes', 'summary',
-    'name_embedding', 'labels', 'source', 'source_description', 'content',
-    'entity_edges', 'level', 'saga_uuid',
+    'uuid',
+    'group_id',
+    'name',
+    'fact',
+    'fact_embedding',
+    'episodes',
+    'source_node_uuid',
+    'target_node_uuid',
+    'created_at',
+    'expired_at',
+    'valid_at',
+    'invalid_at',
+    'reference_time',
+    'attributes',
+    'summary',
+    'name_embedding',
+    'labels',
+    'source',
+    'source_description',
+    'content',
+    'entity_edges',
+    'level',
+    'saga_uuid',
 }
 
 

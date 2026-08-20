@@ -83,6 +83,7 @@ embedder = _mock_embedder()
 # Helper: count rows via the driver's SQL interface
 # ---------------------------------------------------------------------------
 
+
 async def pg_node_count(driver, uuids: list[str]) -> int:
     records, _, _ = await driver.execute_query(
         "SELECT count(*) AS count FROM entity_nodes WHERE payload->>'uuid' = ANY($uuids)",
@@ -105,6 +106,7 @@ async def pg_edge_count(driver, uuids: list[str]) -> int:
 # ===========================================================================
 # Entity Node CRUD
 # ===========================================================================
+
 
 class TestEntityNodeCRUD:
     @pytest.mark.asyncio
@@ -133,7 +135,10 @@ class TestEntityNodeCRUD:
         nodes = []
         for name in ('Bob', 'Charlie'):
             n = EntityNode(
-                name=name, group_id=GROUP_ID, labels=[], name_embedding=_embedding(),
+                name=name,
+                group_id=GROUP_ID,
+                labels=[],
+                name_embedding=_embedding(),
             )
             await n.save(pg_driver)
             nodes.append(n)
@@ -156,7 +161,9 @@ class TestEntityNodeCRUD:
 
     @pytest.mark.asyncio
     async def test_delete(self, pg_driver):
-        node = EntityNode(name='ToDelete', group_id=GROUP_ID, labels=[], name_embedding=_embedding())
+        node = EntityNode(
+            name='ToDelete', group_id=GROUP_ID, labels=[], name_embedding=_embedding()
+        )
         await node.save(pg_driver)
         assert await pg_node_count(pg_driver, [node.uuid]) == 1
 
@@ -189,6 +196,7 @@ class TestEntityNodeCRUD:
 # ===========================================================================
 # Episodic Node CRUD
 # ===========================================================================
+
 
 class TestEpisodicNodeCRUD:
     @pytest.mark.asyncio
@@ -238,6 +246,7 @@ class TestEpisodicNodeCRUD:
 # Community Node CRUD
 # ===========================================================================
 
+
 class TestCommunityNodeCRUD:
     @pytest.mark.asyncio
     async def test_save_and_get(self, pg_driver):
@@ -258,6 +267,7 @@ class TestCommunityNodeCRUD:
 # Saga Node CRUD
 # ===========================================================================
 
+
 class TestSagaNodeCRUD:
     @pytest.mark.asyncio
     async def test_save_and_get(self, pg_driver):
@@ -276,6 +286,7 @@ class TestSagaNodeCRUD:
 # ===========================================================================
 # Entity Edge CRUD
 # ===========================================================================
+
 
 class TestEntityEdgeCRUD:
     @pytest.mark.asyncio
@@ -314,8 +325,13 @@ class TestEntityEdgeCRUD:
         await b.save(pg_driver)
 
         edge = EntityEdge(
-            source_node_uuid=a.uuid, target_node_uuid=b.uuid,
-            created_at=now, name='linked', fact='A linked B', episodes=[], group_id=GROUP_ID,
+            source_node_uuid=a.uuid,
+            target_node_uuid=b.uuid,
+            created_at=now,
+            name='linked',
+            fact='A linked B',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         await edge.generate_embedding(embedder)
         await edge.save(pg_driver)
@@ -337,8 +353,13 @@ class TestEntityEdgeCRUD:
         await b.save(pg_driver)
 
         edge = EntityEdge(
-            source_node_uuid=a.uuid, target_node_uuid=b.uuid,
-            created_at=now, name='rel', fact='X rel Y', episodes=[], group_id=GROUP_ID,
+            source_node_uuid=a.uuid,
+            target_node_uuid=b.uuid,
+            created_at=now,
+            name='rel',
+            fact='X rel Y',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         original_emb = await edge.generate_embedding(embedder)
         await edge.save(pg_driver)
@@ -356,8 +377,13 @@ class TestEntityEdgeCRUD:
         await b.save(pg_driver)
 
         edge = EntityEdge(
-            source_node_uuid=a.uuid, target_node_uuid=b.uuid,
-            created_at=now, name='casc', fact='cascade test', episodes=[], group_id=GROUP_ID,
+            source_node_uuid=a.uuid,
+            target_node_uuid=b.uuid,
+            created_at=now,
+            name='casc',
+            fact='cascade test',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         await edge.generate_embedding(embedder)
         await edge.save(pg_driver)
@@ -371,13 +397,19 @@ class TestEntityEdgeCRUD:
 # Episodic Edge CRUD
 # ===========================================================================
 
+
 class TestEpisodicEdgeCRUD:
     @pytest.mark.asyncio
     async def test_save_and_get(self, pg_driver):
         episode = EpisodicNode(
-            name='ep', group_id=GROUP_ID, created_at=now,
-            source=EpisodeType.message, source_description='chat',
-            content='Hello world', valid_at=now, entity_edges=[],
+            name='ep',
+            group_id=GROUP_ID,
+            created_at=now,
+            source=EpisodeType.message,
+            source_description='chat',
+            content='Hello world',
+            valid_at=now,
+            entity_edges=[],
         )
         entity = EntityNode(name='World', group_id=GROUP_ID, labels=[], name_embedding=_embedding())
         await episode.save(pg_driver)
@@ -398,17 +430,24 @@ class TestEpisodicEdgeCRUD:
     @pytest.mark.asyncio
     async def test_get_episode_by_entity(self, pg_driver):
         episode = EpisodicNode(
-            name='mention_ep', group_id=GROUP_ID, created_at=now,
-            source=EpisodeType.text, source_description='doc',
-            content='Mentions Alice', valid_at=now, entity_edges=[],
+            name='mention_ep',
+            group_id=GROUP_ID,
+            created_at=now,
+            source=EpisodeType.text,
+            source_description='doc',
+            content='Mentions Alice',
+            valid_at=now,
+            entity_edges=[],
         )
         alice = EntityNode(name='Alice', group_id=GROUP_ID, labels=[], name_embedding=_embedding())
         await episode.save(pg_driver)
         await alice.save(pg_driver)
 
         mention = EpisodicEdge(
-            source_node_uuid=episode.uuid, target_node_uuid=alice.uuid,
-            created_at=now, group_id=GROUP_ID,
+            source_node_uuid=episode.uuid,
+            target_node_uuid=alice.uuid,
+            created_at=now,
+            group_id=GROUP_ID,
         )
         await mention.save(pg_driver)
 
@@ -421,13 +460,19 @@ class TestEpisodicEdgeCRUD:
 # Community Edge CRUD
 # ===========================================================================
 
+
 class TestCommunityEdgeCRUD:
     @pytest.mark.asyncio
     async def test_save_and_get(self, pg_driver):
         community = CommunityNode(
-            name='C1', group_id=GROUP_ID, summary='comm', name_embedding=_embedding(),
+            name='C1',
+            group_id=GROUP_ID,
+            summary='comm',
+            name_embedding=_embedding(),
         )
-        entity = EntityNode(name='Member', group_id=GROUP_ID, labels=[], name_embedding=_embedding())
+        entity = EntityNode(
+            name='Member', group_id=GROUP_ID, labels=[], name_embedding=_embedding()
+        )
         await community.save(pg_driver)
         await entity.save(pg_driver)
 
@@ -448,6 +493,7 @@ class TestCommunityEdgeCRUD:
 # Search Operations
 # ===========================================================================
 
+
 class TestSearch:
     @pytest.mark.asyncio
     async def test_fulltext_node_search(self, pg_driver):
@@ -461,7 +507,11 @@ class TestSearch:
         await node.save(pg_driver)
 
         results = await pg_driver.search_ops.node_fulltext_search(
-            pg_driver, 'PostgreSQL', SearchFilters(), group_ids=[GROUP_ID], limit=10,
+            pg_driver,
+            'PostgreSQL',
+            SearchFilters(),
+            group_ids=[GROUP_ID],
+            limit=10,
         )
         assert len(results) >= 1
         assert any(r.uuid == node.uuid for r in results)
@@ -474,15 +524,23 @@ class TestSearch:
         await b.save(pg_driver)
 
         edge = EntityEdge(
-            source_node_uuid=a.uuid, target_node_uuid=b.uuid,
-            created_at=now, name='collaborates', fact='FA collaborates with FB on research',
-            episodes=[], group_id=GROUP_ID,
+            source_node_uuid=a.uuid,
+            target_node_uuid=b.uuid,
+            created_at=now,
+            name='collaborates',
+            fact='FA collaborates with FB on research',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         await edge.generate_embedding(embedder)
         await edge.save(pg_driver)
 
         results = await pg_driver.search_ops.edge_fulltext_search(
-            pg_driver, 'collaborates research', SearchFilters(), group_ids=[GROUP_ID], limit=10,
+            pg_driver,
+            'collaborates research',
+            SearchFilters(),
+            group_ids=[GROUP_ID],
+            limit=10,
         )
         assert len(results) >= 1
         assert any(r.uuid == edge.uuid for r in results)
@@ -491,12 +549,20 @@ class TestSearch:
     async def test_similarity_node_search(self, pg_driver):
         emb = _embedding(0.8)
         node = EntityNode(
-            name='SimilarNode', group_id=GROUP_ID, labels=[], name_embedding=emb,
+            name='SimilarNode',
+            group_id=GROUP_ID,
+            labels=[],
+            name_embedding=emb,
         )
         await node.save(pg_driver)
 
         results = await pg_driver.search_ops.node_similarity_search(
-            pg_driver, emb, SearchFilters(), group_ids=[GROUP_ID], limit=10, min_score=0.0,
+            pg_driver,
+            emb,
+            SearchFilters(),
+            group_ids=[GROUP_ID],
+            limit=10,
+            min_score=0.0,
         )
         assert len(results) >= 1
         assert any(r.uuid == node.uuid for r in results)
@@ -509,15 +575,26 @@ class TestSearch:
         await b.save(pg_driver)
 
         edge = EntityEdge(
-            source_node_uuid=a.uuid, target_node_uuid=b.uuid,
-            created_at=now, name='sim_edge', fact='similarity test edge', episodes=[], group_id=GROUP_ID,
+            source_node_uuid=a.uuid,
+            target_node_uuid=b.uuid,
+            created_at=now,
+            name='sim_edge',
+            fact='similarity test edge',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         fact_emb = await edge.generate_embedding(embedder)
         await edge.save(pg_driver)
 
         results = await pg_driver.search_ops.edge_similarity_search(
-            pg_driver, fact_emb, None, None, SearchFilters(),
-            group_ids=[GROUP_ID], limit=10, min_score=0.0,
+            pg_driver,
+            fact_emb,
+            None,
+            None,
+            SearchFilters(),
+            group_ids=[GROUP_ID],
+            limit=10,
+            min_score=0.0,
         )
         assert len(results) >= 1
         assert any(r.uuid == edge.uuid for r in results)
@@ -532,12 +609,22 @@ class TestSearch:
         await c.save(pg_driver)
 
         e1 = EntityEdge(
-            source_node_uuid=a.uuid, target_node_uuid=b.uuid,
-            created_at=now, name='bfs1', fact='a to b', episodes=[], group_id=GROUP_ID,
+            source_node_uuid=a.uuid,
+            target_node_uuid=b.uuid,
+            created_at=now,
+            name='bfs1',
+            fact='a to b',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         e2 = EntityEdge(
-            source_node_uuid=b.uuid, target_node_uuid=c.uuid,
-            created_at=now, name='bfs2', fact='b to c', episodes=[], group_id=GROUP_ID,
+            source_node_uuid=b.uuid,
+            target_node_uuid=c.uuid,
+            created_at=now,
+            name='bfs2',
+            fact='b to c',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         await e1.generate_embedding(embedder)
         await e2.generate_embedding(embedder)
@@ -545,8 +632,12 @@ class TestSearch:
         await e2.save(pg_driver)
 
         results = await pg_driver.search_ops.node_bfs_search(
-            pg_driver, [a.uuid], SearchFilters(), max_depth=2,
-            group_ids=[GROUP_ID], limit=10,
+            pg_driver,
+            [a.uuid],
+            SearchFilters(),
+            max_depth=2,
+            group_ids=[GROUP_ID],
+            limit=10,
         )
         found_names = {r.name for r in results}
         assert 'BFS_B' in found_names
@@ -556,6 +647,7 @@ class TestSearch:
 # ===========================================================================
 # Group ID (realm) Isolation
 # ===========================================================================
+
 
 class TestGroupIdIsolation:
     @pytest.mark.asyncio
@@ -576,31 +668,48 @@ class TestGroupIdIsolation:
     @pytest.mark.asyncio
     async def test_search_isolated_by_group(self, pg_driver):
         n1 = EntityNode(
-            name='IsolatedAlpha', group_id=GROUP_ID, labels=[],
-            name_embedding=_embedding(0.9), summary='alpha search target',
+            name='IsolatedAlpha',
+            group_id=GROUP_ID,
+            labels=[],
+            name_embedding=_embedding(0.9),
+            summary='alpha search target',
         )
         n2 = EntityNode(
-            name='IsolatedAlpha', group_id=GROUP_ID_2, labels=[],
-            name_embedding=_embedding(0.9), summary='alpha search decoy',
+            name='IsolatedAlpha',
+            group_id=GROUP_ID_2,
+            labels=[],
+            name_embedding=_embedding(0.9),
+            summary='alpha search decoy',
         )
         await n1.save(pg_driver)
         await n2.save(pg_driver)
 
         results = await pg_driver.search_ops.node_fulltext_search(
-            pg_driver, 'IsolatedAlpha', SearchFilters(), group_ids=[GROUP_ID], limit=10,
+            pg_driver,
+            'IsolatedAlpha',
+            SearchFilters(),
+            group_ids=[GROUP_ID],
+            limit=10,
         )
         assert all(r.group_id == GROUP_ID for r in results)
 
     @pytest.mark.asyncio
     async def test_bfs_does_not_cross_groups(self, pg_driver):
         a = EntityNode(name='BFS_G1_A', group_id=GROUP_ID, labels=[], name_embedding=_embedding())
-        b = EntityNode(name='BFS_G1_B', group_id=GROUP_ID, labels=[], name_embedding=_embedding(0.6))
+        b = EntityNode(
+            name='BFS_G1_B', group_id=GROUP_ID, labels=[], name_embedding=_embedding(0.6)
+        )
         await a.save(pg_driver)
         await b.save(pg_driver)
 
         e1 = EntityEdge(
-            source_node_uuid=a.uuid, target_node_uuid=b.uuid,
-            created_at=now, name='g1_link', fact='within group', episodes=[], group_id=GROUP_ID,
+            source_node_uuid=a.uuid,
+            target_node_uuid=b.uuid,
+            created_at=now,
+            name='g1_link',
+            fact='within group',
+            episodes=[],
+            group_id=GROUP_ID,
         )
         await e1.generate_embedding(embedder)
         await e1.save(pg_driver)
@@ -611,8 +720,12 @@ class TestGroupIdIsolation:
         # post-graph enforces FK(realm, from_id) so cross-realm edges are
         # structurally impossible — realm isolation is guaranteed by the schema.
         results = await pg_driver.search_ops.node_bfs_search(
-            pg_driver, [a.uuid], SearchFilters(), max_depth=3,
-            group_ids=[GROUP_ID], limit=10,
+            pg_driver,
+            [a.uuid],
+            SearchFilters(),
+            max_depth=3,
+            group_ids=[GROUP_ID],
+            limit=10,
         )
         found_names = {r.name for r in results}
         assert 'BFS_G1_B' in found_names
@@ -635,6 +748,7 @@ class TestGroupIdIsolation:
 # Graph Maintenance
 # ===========================================================================
 
+
 class TestGraphMaintenance:
     @pytest.mark.asyncio
     async def test_community_clustering(self, pg_driver):
@@ -647,16 +761,20 @@ class TestGraphMaintenance:
         for i in range(len(nodes)):
             for j in range(i + 1, len(nodes)):
                 e = EntityEdge(
-                    source_node_uuid=nodes[i].uuid, target_node_uuid=nodes[j].uuid,
-                    created_at=now, name=f'{nodes[i].name}_to_{nodes[j].name}',
+                    source_node_uuid=nodes[i].uuid,
+                    target_node_uuid=nodes[j].uuid,
+                    created_at=now,
+                    name=f'{nodes[i].name}_to_{nodes[j].name}',
                     fact=f'{nodes[i].name} knows {nodes[j].name}',
-                    episodes=[], group_id=GROUP_ID,
+                    episodes=[],
+                    group_id=GROUP_ID,
                 )
                 await e.generate_embedding(embedder)
                 await e.save(pg_driver)
 
         clusters = await pg_driver.graph_ops.get_community_clusters(
-            pg_driver, group_ids=[GROUP_ID],
+            pg_driver,
+            group_ids=[GROUP_ID],
         )
         assert len(clusters) >= 1
         all_uuids = {n.uuid for cluster in clusters for n in cluster}
@@ -666,6 +784,7 @@ class TestGraphMaintenance:
 # ===========================================================================
 # Document Scenario Cross-Check
 # ===========================================================================
+
 
 class TestDocumentScenario:
     """End-to-end scenario: ingest a set of 'documents' as episodes, link
@@ -682,9 +801,14 @@ class TestDocumentScenario:
         episodes = []
         for i, (name, content) in enumerate(docs):
             ep = EpisodicNode(
-                name=name, group_id=GROUP_ID, created_at=now + timedelta(hours=i),
-                source=EpisodeType.text, source_description=f'doc_{i}',
-                content=content, valid_at=now + timedelta(hours=i), entity_edges=[],
+                name=name,
+                group_id=GROUP_ID,
+                created_at=now + timedelta(hours=i),
+                source=EpisodeType.text,
+                source_description=f'doc_{i}',
+                content=content,
+                valid_at=now + timedelta(hours=i),
+                entity_edges=[],
             )
             await ep.save(pg_driver)
             episodes.append(ep)
@@ -706,7 +830,8 @@ class TestDocumentScenario:
                 mention = EpisodicEdge(
                     source_node_uuid=episodes[ep_idx].uuid,
                     target_node_uuid=people[name].uuid,
-                    created_at=now, group_id=GROUP_ID,
+                    created_at=now,
+                    group_id=GROUP_ID,
                 )
                 await mention.save(pg_driver)
 
@@ -720,8 +845,12 @@ class TestDocumentScenario:
             e = EntityEdge(
                 source_node_uuid=people[src].uuid,
                 target_node_uuid=people[tgt].uuid,
-                created_at=now, name=name, fact=fact, episodes=[episodes[0].uuid],
-                group_id=GROUP_ID, valid_at=now,
+                created_at=now,
+                name=name,
+                fact=fact,
+                episodes=[episodes[0].uuid],
+                group_id=GROUP_ID,
+                valid_at=now,
             )
             await e.generate_embedding(embedder)
             await e.save(pg_driver)
@@ -738,14 +867,22 @@ class TestDocumentScenario:
 
         # Cross-check 3: fulltext search finds edges
         results = await pg_driver.search_ops.edge_fulltext_search(
-            pg_driver, 'roadmap', SearchFilters(), group_ids=[GROUP_ID], limit=10,
+            pg_driver,
+            'roadmap',
+            SearchFilters(),
+            group_ids=[GROUP_ID],
+            limit=10,
         )
         assert any('roadmap' in r.fact.lower() for r in results)
 
         # Cross-check 4: BFS from Alice finds Bob and Charlie within 2 hops
         bfs = await pg_driver.search_ops.node_bfs_search(
-            pg_driver, [people['Alice'].uuid], SearchFilters(),
-            max_depth=2, group_ids=[GROUP_ID], limit=10,
+            pg_driver,
+            [people['Alice'].uuid],
+            SearchFilters(),
+            max_depth=2,
+            group_ids=[GROUP_ID],
+            limit=10,
         )
         bfs_names = {n.name for n in bfs}
         assert 'Bob' in bfs_names
@@ -754,14 +891,19 @@ class TestDocumentScenario:
         # Cross-check 5: similarity search finds nodes with similar embeddings
         alice_emb = people['Alice'].name_embedding
         sim = await pg_driver.search_ops.node_similarity_search(
-            pg_driver, alice_emb, SearchFilters(),
-            group_ids=[GROUP_ID], limit=10, min_score=0.0,
+            pg_driver,
+            alice_emb,
+            SearchFilters(),
+            group_ids=[GROUP_ID],
+            limit=10,
+            min_score=0.0,
         )
         assert len(sim) >= 1
 
         # Cross-check 6: episode mentions link back to entities
         alice_episodes = await EpisodicNode.get_by_entity_node_uuid(
-            pg_driver, people['Alice'].uuid,
+            pg_driver,
+            people['Alice'].uuid,
         )
         assert len(alice_episodes) >= 2
 
