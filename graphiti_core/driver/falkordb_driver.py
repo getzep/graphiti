@@ -180,6 +180,7 @@ class FalkorDriver(GraphDriver):
         try:
             loop = asyncio.get_running_loop()
             self._init_task = loop.create_task(self.build_indices_and_constraints())
+            self._init_task.add_done_callback(self._log_init_task_result)
         except RuntimeError:
             pass
 
@@ -342,6 +343,34 @@ class FalkorDriver(GraphDriver):
             cloned = FalkorDriver(falkor_db=self.client, database=database)
 
         return cloned
+
+    def _log_init_task_result(self, task: asyncio.Task) -> None:
+        """Retrieve the background init task's outcome so failures are never silent."""
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.warning(
+                'Failed to build indices and constraints for FalkorDB graph %s: %s',
+                self._database,
+                error,
+            )
+
+    async def wait_for_initialization(self) -> None:
+        """Await the index/constraint build scheduled when this driver was created.
+
+        ``clone`` builds a fresh driver per graph, and each one schedules its own
+        index build. Awaiting here keeps a group's first write from racing its
+        indices and turns a failed build into a logged warning instead of an
+        orphaned "Task exception was never retrieved".
+        """
+        task = self._init_task
+        if task is None:
+            return
+        self._init_task = None
+        # _log_init_task_result reports any failure; gathering here only ensures
+        # the build has finished before the caller issues its first query.
+        await asyncio.gather(task, return_exceptions=True)
 
     async def health_check(self) -> None:
         """Check FalkorDB connectivity by running a simple query."""
