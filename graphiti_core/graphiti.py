@@ -20,7 +20,7 @@ from time import time
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
@@ -118,6 +118,7 @@ class AddEpisodeResults(BaseModel):
     edges: list[EntityEdge]
     communities: list[CommunityNode]
     community_edges: list[CommunityEdge]
+    dropped_attributes: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class AddBulkEpisodeResults(BaseModel):
@@ -127,6 +128,7 @@ class AddBulkEpisodeResults(BaseModel):
     edges: list[EntityEdge]
     communities: list[CommunityNode]
     community_edges: list[CommunityEdge]
+    dropped_attributes: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class AddTripletResults(BaseModel):
@@ -639,16 +641,17 @@ class Graphiti:
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
         custom_extraction_instructions: str | None = None,
-    ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
+    ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge], dict[str, set[str]]]:
         """Extract edges from episode(s) and resolve against existing graph.
 
         Returns
         -------
-        tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]
-            A tuple of (resolved_edges, invalidated_edges, new_edges) where:
+        tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge], dict[str, set[str]]]
+            A tuple of (resolved_edges, invalidated_edges, new_edges, dropped_by_uuid) where:
             - resolved_edges: All edges after resolution
             - invalidated_edges: Edges invalidated by new information
             - new_edges: Only edges that are new to the graph (not duplicates)
+            - dropped_by_uuid: Mapping of edge uuid -> cap-dropped attribute fields
         """
         episodes = episode if isinstance(episode, list) else [episode]
         primary_episode = episodes[0]
@@ -666,7 +669,12 @@ class Graphiti:
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
-        resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
+        (
+            resolved_edges,
+            invalidated_edges,
+            new_edges,
+            dropped_by_uuid,
+        ) = await resolve_extracted_edges(
             self.clients,
             edges,
             primary_episode,
@@ -675,7 +683,7 @@ class Graphiti:
             edge_type_map,
         )
 
-        return resolved_edges, invalidated_edges, new_edges
+        return resolved_edges, invalidated_edges, new_edges, dropped_by_uuid
 
     async def _process_episode_data(
         self,
@@ -821,7 +829,9 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None,
         edge_type_map: dict[tuple[str, str], list[str]],
         episodes: list[EpisodicNode],
-    ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
+    ) -> tuple[
+        list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str], dict[str, set[str]]
+    ]:
         """Resolve nodes and edges against the existing graph."""
         nodes_by_uuid: dict[str, EntityNode] = {
             node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
@@ -872,7 +882,9 @@ class Graphiti:
             nodes_by_episode_unique[episode_uuid] = updated_nodes
 
         # Extract attributes for resolved nodes
-        hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
+        hydrated_nodes_results: list[
+            tuple[list[EntityNode], dict[str, set[str]]]
+        ] = await semaphore_gather(
             *[
                 extract_attributes_from_nodes(
                     self.clients,
@@ -885,7 +897,10 @@ class Graphiti:
             ]
         )
 
-        final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
+        final_hydrated_nodes = [node for result in hydrated_nodes_results for node in result[0]]
+        dropped_by_uuid: dict[str, set[str]] = {}
+        for result in hydrated_nodes_results:
+            dropped_by_uuid.update(result[1])
 
         # Resolve edges with updated pointers
         edges_by_episode_unique: dict[str, list[EntityEdge]] = {}
@@ -920,8 +935,9 @@ class Graphiti:
             invalidated_edges.extend(result[1])
             # result[2] is new_edges - not used in bulk flow since attributes
             # are extracted before edge resolution
+            dropped_by_uuid.update(result[3])
 
-        return final_hydrated_nodes, resolved_edges, invalidated_edges, uuid_map
+        return final_hydrated_nodes, resolved_edges, invalidated_edges, uuid_map, dropped_by_uuid
 
     @handle_multiple_group_ids
     async def retrieve_episodes(
@@ -1141,6 +1157,7 @@ class Graphiti:
                     resolved_edges,
                     invalidated_edges,
                     new_edges,
+                    edge_dropped_by_uuid,
                 ) = await self._extract_and_resolve_edges(
                     episode,
                     extracted_nodes,
@@ -1157,7 +1174,7 @@ class Graphiti:
 
                 # Extract node attributes - only pass new edges for summary generation
                 # to avoid duplicating facts that already exist in the graph
-                hydrated_nodes = await extract_attributes_from_nodes(
+                hydrated_nodes, node_dropped_by_uuid = await extract_attributes_from_nodes(
                     self.clients,
                     nodes,
                     episode,
@@ -1213,6 +1230,14 @@ class Graphiti:
 
                 logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
+                dropped_attributes = {
+                    uuid: sorted(fields)
+                    for uuid, fields in {
+                        **node_dropped_by_uuid,
+                        **edge_dropped_by_uuid,
+                    }.items()
+                }
+
                 return AddEpisodeResults(
                     episode=episode,
                     episodic_edges=episodic_edges,
@@ -1220,6 +1245,7 @@ class Graphiti:
                     edges=entity_edges,
                     communities=communities,
                     community_edges=community_edges,
+                    dropped_attributes=dropped_attributes,
                 )
 
             except Exception as e:
@@ -1384,6 +1410,7 @@ class Graphiti:
                     resolved_edges,
                     invalidated_edges,
                     final_uuid_map,
+                    dropped_by_uuid,
                 ) = await self._resolve_nodes_and_edges_bulk(
                     nodes_by_episode,
                     edges_by_episode,
@@ -1472,6 +1499,10 @@ class Graphiti:
 
                 logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
 
+                dropped_attributes = {
+                    uuid: sorted(fields) for uuid, fields in dropped_by_uuid.items()
+                }
+
                 return AddBulkEpisodeResults(
                     episodes=episodes,
                     episodic_edges=resolved_episodic_edges,
@@ -1479,6 +1510,7 @@ class Graphiti:
                     edges=resolved_edges + invalidated_edges,
                     communities=[],
                     community_edges=[],
+                    dropped_attributes=dropped_attributes,
                 )
 
             except Exception as e:
@@ -1737,7 +1769,7 @@ class Graphiti:
             )
         ).edges
 
-        resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
+        resolved_edge, invalidated_edges, _, _ = await resolve_extracted_edge(
             self.llm_client,
             edge,
             related_edges,

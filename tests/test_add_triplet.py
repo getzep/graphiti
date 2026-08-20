@@ -127,7 +127,7 @@ async def test_add_triplet_merges_attributes(
         patch('graphiti_core.graphiti.resolve_extracted_edge') as mock_resolve_edge,
     ):
         mock_search.return_value = Mock(edges=[])
-        mock_resolve_edge.return_value = (edge, [], [])
+        mock_resolve_edge.return_value = (edge, [], [], set())
 
         await graphiti.add_triplet(user_source, edge, user_target)
 
@@ -203,7 +203,7 @@ async def test_add_triplet_updates_summary(
         patch('graphiti_core.graphiti.resolve_extracted_edge') as mock_resolve_edge,
     ):
         mock_search.return_value = Mock(edges=[])
-        mock_resolve_edge.return_value = (edge, [], [])
+        mock_resolve_edge.return_value = (edge, [], [], set())
 
         await graphiti.add_triplet(user_source, edge, user_target)
 
@@ -274,7 +274,7 @@ async def test_add_triplet_updates_labels(
         patch('graphiti_core.graphiti.resolve_extracted_edge') as mock_resolve_edge,
     ):
         mock_search.return_value = Mock(edges=[])
-        mock_resolve_edge.return_value = (edge, [], [])
+        mock_resolve_edge.return_value = (edge, [], [], set())
 
         await graphiti.add_triplet(user_source, edge, user_target)
 
@@ -331,7 +331,7 @@ async def test_add_triplet_with_new_nodes_no_uuid(
     with patch('graphiti_core.graphiti.search') as mock_search:
         mock_search.return_value = Mock(edges=[])
         with patch('graphiti_core.graphiti.resolve_extracted_edge') as mock_resolve_edge:
-            mock_resolve_edge.return_value = (edge, [], [])
+            mock_resolve_edge.return_value = (edge, [], [], set())
 
             result = await graphiti.add_triplet(user_source, edge, user_target)
 
@@ -416,7 +416,7 @@ async def test_add_triplet_preserves_existing_attributes(
         patch('graphiti_core.graphiti.resolve_extracted_edge') as mock_resolve_edge,
     ):
         mock_search.return_value = Mock(edges=[])
-        mock_resolve_edge.return_value = (edge, [], [])
+        mock_resolve_edge.return_value = (edge, [], [], set())
 
         await graphiti.add_triplet(user_source, edge, user_target)
 
@@ -491,7 +491,7 @@ async def test_add_triplet_empty_attributes_preserved(
         patch('graphiti_core.graphiti.resolve_extracted_edge') as mock_resolve_edge,
     ):
         mock_search.return_value = Mock(edges=[])
-        mock_resolve_edge.return_value = (edge, [], [])
+        mock_resolve_edge.return_value = (edge, [], [], set())
 
         await graphiti.add_triplet(user_source, edge, user_target)
 
@@ -759,7 +759,7 @@ async def test_add_triplet_edge_uuid_with_different_nodes_creates_new_edge(
     ):
         mock_search.return_value = Mock(edges=[])
         # Return the edge as-is (simulating no deduplication)
-        mock_resolve_edge.return_value = (new_edge_with_same_uuid, [], [])
+        mock_resolve_edge.return_value = (new_edge_with_same_uuid, [], [], set())
 
         result = await graphiti.add_triplet(alice, new_edge_with_same_uuid, charlie)
 
@@ -843,7 +843,7 @@ async def test_add_triplet_edge_uuid_with_same_nodes_updates_edge(
         patch('graphiti_core.graphiti.resolve_extracted_edge') as mock_resolve_edge,
     ):
         mock_search.return_value = Mock(edges=[])
-        mock_resolve_edge.return_value = (updated_edge, [], [])
+        mock_resolve_edge.return_value = (updated_edge, [], [], set())
 
         result = await graphiti.add_triplet(alice, updated_edge, bob)
 

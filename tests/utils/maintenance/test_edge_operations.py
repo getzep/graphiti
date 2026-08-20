@@ -136,7 +136,7 @@ async def test_resolve_extracted_edge_exact_fact_short_circuit(
         )
     ]
 
-    resolved_edge, duplicate_edges, invalidated = await resolve_extracted_edge(
+    resolved_edge, duplicate_edges, invalidated, dropped = await resolve_extracted_edge(
         mock_llm_client,
         extracted,
         related_edges,
@@ -144,6 +144,8 @@ async def test_resolve_extracted_edge_exact_fact_short_circuit(
         mock_current_episode,
         edge_type_candidates=None,
     )
+
+    assert dropped == set()
 
     assert resolved_edge is related_edges[0]
     assert resolved_edge.episodes.count(mock_current_episode.uuid) == 1
@@ -154,6 +156,60 @@ async def test_resolve_extracted_edge_exact_fact_short_circuit(
 
 class OccurredAtEdge(BaseModel):
     """Edge model stub for OCCURRED_AT."""
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_surfaces_dropped_attributes(monkeypatch):
+    """Attribute fields dropped by the length cap must be returned in the dropped set."""
+    from pydantic import Field
+
+    from graphiti_core.utils.maintenance import edge_operations as edge_ops
+
+    monkeypatch.setattr(edge_ops, '_extract_edge_timestamps', AsyncMock(return_value=None))
+
+    class _ReviewEdge(BaseModel):
+        review: str | None = Field(default=None, max_length=2000, description='Review text')
+
+    extracted = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='REVIEWED',
+        group_id='group_1',
+        fact='User reviewed product',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Episode content',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(return_value={'review': 'x' * 5000})
+
+    resolved_edge, invalidated, duplicates, dropped = await resolve_extracted_edge(
+        llm_client,
+        extracted,
+        [],
+        [],
+        episode,
+        edge_type_candidates={'REVIEWED': _ReviewEdge},
+    )
+
+    assert resolved_edge is extracted
+    assert invalidated == []
+    assert duplicates == []
+    assert dropped == {'review'}
+    # replace merge mode: cap-dropped field falls back to the prior value (absent here)
+    assert 'review' not in resolved_edge.attributes
 
 
 @pytest.mark.asyncio
@@ -222,7 +278,7 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
     edge_types = {'OCCURRED_AT': OccurredAtEdge}
     edge_type_map = {('Event', 'Entity'): ['OCCURRED_AT']}
 
-    resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
+    resolved_edges, invalidated_edges, new_edges, dropped_by_uuid = await resolve_extracted_edges(
         clients,
         [extracted_edge],
         episode,
@@ -230,6 +286,8 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
         edge_types,
         edge_type_map,
     )
+
+    assert dropped_by_uuid == {}
 
     assert resolved_edges[0].name == 'INTERACTED_WITH'
     assert invalidated_edges == []
@@ -306,7 +364,7 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
 
     related_edges = [related_edge_0, related_edge_1, related_edge_2]
 
-    resolved_edge, invalidated, duplicates = await resolve_extracted_edge(
+    resolved_edge, invalidated, duplicates, _ = await resolve_extracted_edge(
         mock_llm_client,
         extracted_edge,
         related_edges,
@@ -352,7 +410,7 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
     ):
         nonlocal resolve_call_count
         resolve_call_count += 1
-        return extracted_edge, [], []
+        return extracted_edge, [], [], set()
 
     # Mock semaphore_gather to execute awaitable immediately
     async def immediate_gather(*aws, max_coroutines=None):
@@ -433,7 +491,7 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
         valid_at=datetime.now(timezone.utc),
     )
 
-    resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
+    resolved_edges, invalidated_edges, new_edges, _ = await resolve_extracted_edges(
         clients,
         [edge1, edge2, edge3],
         episode,
@@ -755,7 +813,7 @@ async def test_resolve_extracted_edge_overcap_attribute_preserves_prior(monkeypa
         valid_at=datetime.now(timezone.utc),
     )
 
-    resolved, dupes, invalidated = await resolve_extracted_edge(
+    resolved, dupes, invalidated, _ = await resolve_extracted_edge(
         llm_client,
         extracted_edge,
         related_edges=[],
