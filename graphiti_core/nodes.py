@@ -354,6 +354,8 @@ class EpisodicNode(Node):
             episode_args['episode_metadata'] = json.dumps(self.episode_metadata or {})
         else:
             episode_data = dict(episode_args)
+            if driver.provider == GraphProvider.NEPTUNE:
+                episode_data['entity_edges'] = '|'.join(str(value) for value in self.entity_edges)
             for key, value in (self.episode_metadata or {}).items():
                 if key not in episode_data:
                     episode_data[key] = value

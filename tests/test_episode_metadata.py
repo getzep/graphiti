@@ -49,4 +49,3 @@ async def test_episodic_node_save_passes_metadata():
 
     kwargs = driver.execute_query.await_args.kwargs
     assert kwargs['episode_data']['customer_id'] == 'customer-1'
-
