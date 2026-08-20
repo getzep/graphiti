@@ -16,7 +16,6 @@ __all__ = ['PostGraphDriver', 'PostGraphDriverSession']
 
 def __getattr__(name: str) -> Any:
     if name in __all__:
-        from graphiti_core import driver as _d
         mod = __import__('graphiti_core.driver.postgraph_driver', fromlist=[name])
         return getattr(mod, name)
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

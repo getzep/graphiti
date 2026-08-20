@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
 import logging
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from post_graph import Vertex

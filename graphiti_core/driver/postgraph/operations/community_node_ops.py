@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import Any
@@ -323,8 +324,6 @@ def _as_obj(item):
     data['attributes'] = {**(known.get('attributes') or {}), **extra}
     for key, value in list(data.items()):
         if isinstance(value, str) and key.endswith(('_at', '_time')):
-            try:
+            with contextlib.suppress(ValueError):
                 data[key] = datetime.fromisoformat(value)
-            except ValueError:
-                pass
     return SimpleNamespace(**data)
