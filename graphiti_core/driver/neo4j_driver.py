@@ -158,9 +158,11 @@ class Neo4jDriver(GraphDriver):
                 raise
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
-        # Check if database_ is provided in kwargs.
-        # If not populated, set the value to retain backwards compatibility
+        # Preserve Graphiti's params keyword while accepting Neo4j's parameters_ spelling.
         params = kwargs.pop('params', None)
+        neo4j_params = kwargs.pop('parameters_', None)
+        if params is None:
+            params = neo4j_params
         if params is None:
             params = {}
         params.setdefault('database_', self._database)
