@@ -1043,6 +1043,8 @@ class Graphiti:
             query to find the most recent episode. Useful for efficiently adding multiple episodes
             to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
             as this parameter for the next episode.
+        episode_metadata : dict[str, object] | None
+            Optional customer-defined metadata to persist on the episodic node for filtering.
 
         Returns
         -------

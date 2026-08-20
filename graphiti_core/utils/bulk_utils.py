@@ -166,6 +166,8 @@ async def add_nodes_and_edges_bulk_tx(
         if driver.provider == GraphProvider.KUZU:
             episode['episode_metadata'] = json.dumps(metadata)
         else:
+            if driver.provider == GraphProvider.NEPTUNE:
+                episode['entity_edges'] = '|'.join(str(value) for value in episode['entity_edges'])
             for key, value in metadata.items():
                 episode.setdefault(key, value)
 
