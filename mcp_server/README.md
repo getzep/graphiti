@@ -569,7 +569,9 @@ The Graphiti MCP server exposes the following tools:
 - `delete_entity_edge`: Delete an entity edge from the knowledge graph.
 - `delete_episode`: Delete an episode and cascade-delete the entities/facts it solely created.
 - `get_entity_edge`: Get an entity edge by its UUID.
-- `get_episodes`: Get the most recent episodes for a specific group.
+- `get_episodes`: Get the most recent episodes for a specific group. `order_by` selects the clock —
+  `valid_at` (when the described events occurred; the default), `created_at` (when the episode was
+  ingested, for confirming a write landed), or `uuid`.
 - `clear_graph`: Clear all data from the knowledge graph for the given group(s).
 - `get_status`: Get the status of the Graphiti MCP server and database connection.
 
