@@ -257,6 +257,9 @@ class AnthropicClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
+        small_model: str | None = None,
     ) -> tuple[dict[str, typing.Any], int, int]:
         """
         Generate a response from the Anthropic LLM using tool-based approach for all requests.
@@ -278,9 +281,11 @@ class AnthropicClient(LLMClient):
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]]
         user_messages_cast = typing.cast(list[MessageParam], user_messages)
 
+        effective_model: str = model or self.model
+
         # Resolve max_tokens dynamically based on the model's capabilities
         # This allows different models to use their full output capacity
-        max_creation_tokens: int = self._resolve_max_tokens(max_tokens, self.model)
+        max_creation_tokens: int = self._resolve_max_tokens(max_tokens, effective_model)
 
         try:
             # Create the appropriate tool based on whether response_model is provided
@@ -290,7 +295,7 @@ class AnthropicClient(LLMClient):
                 max_tokens=max_creation_tokens,
                 temperature=self.temperature,
                 messages=user_messages_cast,
-                model=self.model,
+                model=effective_model,
                 tools=tools,
                 tool_choice=tool_choice,
             )
@@ -351,6 +356,8 @@ class AnthropicClient(LLMClient):
         prompt_name: str | None = None,
         *,
         attribute_extraction: bool = False,
+        model: str | None = None,
+        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the LLM.
@@ -395,7 +402,12 @@ class AnthropicClient(LLMClient):
             while retry_count <= max_retries:
                 try:
                     response, input_tokens, output_tokens = await self._generate_response(
-                        messages, response_model, max_tokens, model_size
+                        messages,
+                        response_model,
+                        max_tokens,
+                        model_size,
+                        model=model,
+                        small_model=small_model,
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens

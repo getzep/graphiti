@@ -15,18 +15,62 @@ limitations under the License.
 """
 
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+from .prompt_helpers import DO_NOT_ESCAPE_UNICODE
 
 
 class Message(BaseModel):
+    """LLM transport message (role + content). Used by LLMClient.generate_response."""
+
     role: str
     content: str
 
 
-class PromptVersion(Protocol):
-    def __call__(self, context: dict[str, Any]) -> list[Message]: ...
+class SystemMessage(BaseModel):
+    role: Literal['system'] = 'system'
+    content: str
 
 
-PromptFunction = Callable[[dict[str, Any]], list[Message]]
+class UserMessage(BaseModel):
+    role: Literal['user'] = 'user'
+    content: str
+
+
+class ChatPrompt(BaseModel):
+    """Typed system+user prompt returned by all prompt builders."""
+
+    system: SystemMessage
+    user: UserMessage
+
+    def as_messages(self, *, append_unicode_note: bool = True) -> list[Message]:
+        """Render to transport messages.
+
+        When ``append_unicode_note`` is True (default), appends the do-not-escape-unicode
+        note to the system message content so LLM providers preserve non-ASCII characters.
+        """
+        system_content = self.system.content
+        if append_unicode_note:
+            system_content = system_content + DO_NOT_ESCAPE_UNICODE
+        return [
+            Message(role='system', content=system_content),
+            Message(role='user', content=self.user.content),
+        ]
+
+
+class PromptSpec(BaseModel):
+    """Fixed schema registry entry for a production prompt.
+
+    Schemas are not overridable — only text builders may be customized.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    name: str
+    response_model: type[BaseModel] | None = None
+    dynamic_schema: bool = False
+
+
+PromptFunction = Callable[[dict[str, Any]], ChatPrompt]

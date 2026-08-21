@@ -182,6 +182,15 @@ class TestGeminiClientGenerateResponse:
         assert medium_model == gemini_client.model
 
     @pytest.mark.asyncio
+    async def test_get_model_for_size_honors_overrides(self, gemini_client):
+        assert gemini_client._get_model_for_size(ModelSize.medium, model='gemini-2.5-pro') == (
+            'gemini-2.5-pro'
+        )
+        assert gemini_client._get_model_for_size(ModelSize.small, small_model='other') == 'other'
+        assert gemini_client._get_model_for_size(ModelSize.medium) == gemini_client.model
+        assert gemini_client._get_model_for_size(ModelSize.small) == DEFAULT_SMALL_MODEL
+
+    @pytest.mark.asyncio
     async def test_rate_limit_error_handling(self, gemini_client, mock_gemini_client):
         """Test handling of rate limit errors."""
         # Setup mock to raise rate limit error
@@ -439,6 +448,20 @@ class TestGeminiClientGenerateResponse:
         # Verify correct model is used
         call_args = mock_gemini_client.aio.models.generate_content.call_args
         assert call_args[1]['model'] == DEFAULT_SMALL_MODEL
+
+    @pytest.mark.asyncio
+    async def test_generate_response_honors_model_override(self, gemini_client, mock_gemini_client):
+        mock_response = MagicMock()
+        mock_response.text = 'Test response'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        messages = [Message(role='user', content='Test message')]
+        await gemini_client.generate_response(messages, model='gemini-2.5-pro')
+
+        call_args = mock_gemini_client.aio.models.generate_content.call_args
+        assert call_args[1]['model'] == 'gemini-2.5-pro'
 
     @pytest.mark.asyncio
     async def test_gemini_model_max_tokens_mapping(self, mock_gemini_client):

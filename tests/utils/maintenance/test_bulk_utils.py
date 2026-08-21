@@ -6,6 +6,7 @@ import pytest
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.prompts import prompt_library as default_prompt_library
 from graphiti_core.utils import bulk_utils
 from graphiti_core.utils.bulk_utils import extract_nodes_and_edges_bulk
 from graphiti_core.utils.datetime_utils import utc_now
@@ -35,6 +36,7 @@ def _make_clients() -> GraphitiClients:
         embedder=embedder,
         cross_encoder=cross_encoder,
         llm_client=llm_client,
+        prompt_library=default_prompt_library,
     )
 
 
@@ -253,12 +255,13 @@ async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
 
     # Mock resolve_extracted_edge to track comparisons and mark duplicates
     async def mock_resolve_extracted_edge(
-        llm_client,
+        clients,
         extracted_edge,
         related_edges,
         existing_edges,
         episode,
         edge_type_candidates=None,
+        *,
         custom_edge_type_names=None,
     ):
         # Track that this edge was compared against the related_edges
