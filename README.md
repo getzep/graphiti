@@ -599,6 +599,12 @@ graphiti = Graphiti(
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
 
+`LLMConfig` also accepts optional `timeout` (seconds) and `extra_body` settings for
+OpenAI-compatible chat-completions endpoints. Both default to `None`, so existing request
+payloads are unchanged when they are omitted. `extra_body` is passed through unchanged for
+provider-specific options such as vLLM guided decoding; support is server-dependent, and
+some servers (including Ollama) may ignore individual options.
+
 ### Structured output and small models
 
 Graphiti depends on structured (JSON) output for entity/edge extraction and deduplication, and works best with models
