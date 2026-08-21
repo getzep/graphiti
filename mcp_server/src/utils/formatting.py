@@ -8,11 +8,17 @@ from graphiti_core.nodes import EntityNode
 from models.response_types import EdgeResult, NodeResult
 
 
-def to_node_result(node: EntityNode) -> NodeResult:
-    """Build a NodeResult TypedDict from an EntityNode, dropping embeddings."""
+def to_node_result(node: EntityNode, score: float | None = None) -> NodeResult:
+    """Build a NodeResult TypedDict from an EntityNode, dropping embeddings.
+
+    Args:
+        node: The EntityNode to format
+        score: Optional reranker score for this node. Omitted from the result when
+            None, so callers that do not have scores emit the same shape as before.
+    """
     attrs = node.attributes if node.attributes else {}
     attrs = {k: v for k, v in attrs.items() if 'embedding' not in k.lower()}
-    return NodeResult(
+    result = NodeResult(
         uuid=node.uuid,
         name=node.name,
         labels=node.labels if node.labels else [],
@@ -21,6 +27,9 @@ def to_node_result(node: EntityNode) -> NodeResult:
         group_id=node.group_id,
         attributes=attrs,
     )
+    if score is not None:
+        result['score'] = score
+    return result
 
 
 def to_edge_result(edge: EntityEdge) -> EdgeResult:
@@ -61,13 +70,15 @@ def format_node_result(node: EntityNode) -> dict[str, Any]:
     return result
 
 
-def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
+def format_fact_result(edge: EntityEdge, score: float | None = None) -> dict[str, Any]:
     """Format an entity edge into a readable result.
 
     Since EntityEdge is a Pydantic BaseModel, we can use its built-in serialization capabilities.
 
     Args:
         edge: The EntityEdge to format
+        score: Optional reranker score for this edge. Omitted from the result when
+            None, so callers that do not have scores emit the same shape as before.
 
     Returns:
         A dictionary representation of the edge with serialized dates and excluded embeddings
@@ -79,4 +90,16 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
         },
     )
     result.get('attributes', {}).pop('fact_embedding', None)
+    if score is not None:
+        result['score'] = score
     return result
+
+
+def is_invalidated(edge: EntityEdge) -> bool:
+    """Whether this fact has been superseded.
+
+    ``invalid_at`` is when the fact stopped being true in the world; ``expired_at``
+    is when Graphiti recorded that it had been superseded. Either one marks the
+    fact as no longer current, and edges carry them independently.
+    """
+    return edge.invalid_at is not None or edge.expired_at is not None
