@@ -1141,6 +1141,7 @@ dev = [
 ]
 falkordb = [
     { name = "falkordb" },
+    { name = "redis" },
 ]
 falkordblite = [
     { name = "falkordblite", marker = "python_full_version >= '3.12'" },
@@ -1219,7 +1220,8 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "redis", marker = "python_full_version >= '3.12' and extra == 'falkordblite'", specifier = "<9" },
+    { name = "redis", marker = "python_full_version >= '3.12' and extra == 'falkordblite'", specifier = "<8.1" },
+    { name = "redis", marker = "extra == 'falkordb'", specifier = "<8.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
     { name = "sentence-transformers", marker = "extra == 'dev'", specifier = ">=3.2.1" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.2.1" },
