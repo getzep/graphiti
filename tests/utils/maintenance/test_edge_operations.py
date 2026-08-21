@@ -771,3 +771,215 @@ async def test_resolve_extracted_edge_overcap_attribute_preserves_prior(monkeypa
     assert resolved.attributes['is_current'] == 'true'
     assert dupes == []
     assert invalidated == []
+
+
+def _invalidation_edge(source, target, name, fact, valid_at):
+    return EntityEdge(
+        source_node_uuid=source,
+        target_node_uuid=target,
+        name=name,
+        group_id='group_1',
+        fact=fact,
+        episodes=['episode_prior'],
+        created_at=datetime.now(timezone.utc) - timedelta(days=30),
+        valid_at=valid_at,
+        invalid_at=None,
+    )
+
+
+async def _resolve_with_contradiction(candidate, extracted_edge, episode):
+    """Run resolve_extracted_edge with an LLM that flags `candidate` as contradicted."""
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [], 'contradicted_facts': [0]}
+    )
+    return await resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges=[],
+        existing_edges=[candidate],
+        episode=episode,
+        edge_type_candidates=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalidation_same_pair_invalidates(mock_current_episode):
+    """A contradicted edge between the same two entities is invalidated even if renamed."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'service_uuid', 'datastore_uuid', 'USES', 'Service uses datastore', now - timedelta(days=10)
+    )
+    extracted = _invalidation_edge(
+        'service_uuid', 'datastore_uuid', 'MIGRATED_OFF', 'Service migrated off datastore', now
+    )
+
+    resolved, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == [candidate]
+    assert candidate.invalid_at == resolved.valid_at
+
+
+@pytest.mark.asyncio
+async def test_invalidation_same_pair_reversed_direction_invalidates(mock_current_episode):
+    """Extraction direction is unstable; a flipped edge between the same pair still supersedes."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'company_uuid', 'person_uuid', 'EMPLOYS', 'Company employs person', now - timedelta(days=10)
+    )
+    extracted = _invalidation_edge(
+        'person_uuid', 'company_uuid', 'LEFT', 'Person left company', now
+    )
+
+    _, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == [candidate]
+
+
+@pytest.mark.asyncio
+async def test_invalidation_shared_endpoint_same_name_invalidates(mock_current_episode):
+    """One shared endpoint plus the same relation name is a rename/port and may supersede."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'helper_py_uuid',
+        'plugin_uuid',
+        'PART_OF',
+        'helper.py is part of the plugin',
+        now - timedelta(days=10),
+    )
+    extracted = _invalidation_edge(
+        'helper_rb_uuid', 'plugin_uuid', 'PART_OF', 'helper.rb is part of the plugin', now
+    )
+
+    _, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == [candidate]
+
+
+@pytest.mark.asyncio
+async def test_invalidation_shared_endpoint_opposite_position_is_ignored(mock_current_episode):
+    """A shared endpoint in the opposite position is two facts chained through one node."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'service_uuid',
+        'datastore_uuid',
+        'USES',
+        'Service uses datastore',
+        now - timedelta(days=10),
+    )
+    extracted = _invalidation_edge(
+        'datastore_uuid', 'cache_uuid', 'USES', 'Datastore uses cache', now
+    )
+
+    _, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == []
+    assert candidate.invalid_at is None
+
+
+@pytest.mark.asyncio
+async def test_invalidation_shared_endpoint_different_name_is_ignored(mock_current_episode):
+    """A different fact about the same entity must not retire an unrelated edge."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'person_uuid',
+        'company_uuid',
+        'WORKS_AT',
+        'Person works at company',
+        now - timedelta(days=10),
+    )
+    extracted = _invalidation_edge(
+        'person_uuid',
+        'org_account_uuid',
+        'ResponsibleFor',
+        'Person administers the org account',
+        now,
+    )
+
+    _, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == []
+    assert candidate.invalid_at is None
+
+
+@pytest.mark.asyncio
+async def test_invalidation_disjoint_candidate_is_ignored(mock_current_episode):
+    """A candidate sharing no endpoint with the new edge can never be replaced by it."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'person_a_uuid',
+        'company_a_uuid',
+        'WORKS_AT',
+        'Person A works at company A',
+        now - timedelta(days=10),
+    )
+    extracted = _invalidation_edge(
+        'person_b_uuid', 'company_b_uuid', 'WORKS_AT', 'Person B works at company B', now
+    )
+
+    _, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == []
+    assert candidate.invalid_at is None
+
+
+@pytest.mark.asyncio
+async def test_invalidation_non_replaceable_candidate_does_not_expire_new_edge(
+    mock_current_episode,
+):
+    """A later-dated candidate that cannot replace the new edge must not leave it born retired."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'person_uuid',
+        'requirement_uuid',
+        'IMPOSED_REQUIREMENT',
+        'Person imposed a requirement',
+        now + timedelta(days=1),
+    )
+    extracted = _invalidation_edge(
+        'person_uuid', 'company_uuid', 'WORKS_AT', 'Person works at company', now
+    )
+
+    resolved, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert resolved.invalid_at is None
+    assert resolved.expired_at is None
+    assert invalidated == []
+
+
+@pytest.mark.asyncio
+async def test_invalidation_relation_name_matching_folds_case_and_separators(
+    mock_current_episode,
+):
+    """`Uses`, `USES`, and `migrated-off`/`MIGRATED_OFF` count as the same relation name."""
+    now = datetime.now(timezone.utc)
+    candidate = _invalidation_edge(
+        'service_uuid',
+        'old_datastore_uuid',
+        'Uses',
+        'Service uses old datastore',
+        now - timedelta(days=10),
+    )
+    extracted = _invalidation_edge(
+        'service_uuid', 'new_datastore_uuid', 'USES', 'Service uses new datastore', now
+    )
+
+    _, invalidated, _ = await _resolve_with_contradiction(
+        candidate, extracted, mock_current_episode
+    )
+
+    assert invalidated == [candidate]
