@@ -254,6 +254,8 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
 - `USE_AZURE_AD`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
+- `GRAPHITI_MCP_INSTRUCTIONS`: Optional replacement for the instructions sent to MCP clients on connect
+- `GRAPHITI_MCP_INSTRUCTIONS_FILE`: Optional path to read those instructions from, which is usually easier than a multi-paragraph environment variable. Ignored if `GRAPHITI_MCP_INSTRUCTIONS` is set; if the file cannot be read the built-in instructions are used and a warning is logged
 
 You can set these variables in a `.env` file in the project directory.
 
