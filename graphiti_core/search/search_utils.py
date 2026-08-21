@@ -1872,10 +1872,15 @@ async def episode_mentions_reranker(
 
     for uuid in sorted_uuids:
         if uuid not in scores:
-            scores[uuid] = float('inf')
+            # Node has no MENTIONS edges at all - treat as zero mentions so it
+            # ranks last (descending sort below) and is excluded by any
+            # min_score > 0, instead of being (incorrectly) unfilterable.
+            scores[uuid] = 0
 
-    # rerank on shortest distance
-    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+    # rerank by descending mention count - nodes mentioned in the most
+    # episodes rank first, matching the reranker's name and the convention
+    # used by the other count-based rerankers.
+    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid], reverse=True)
 
     return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score], [
         scores[uuid] for uuid in sorted_uuids if scores[uuid] >= min_score
