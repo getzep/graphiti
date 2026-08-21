@@ -255,6 +255,8 @@ class BaseOpenAIClient(LLMClient):
         framing to the system message so the strict "field descriptions are not values"
         instruction reaches the model on this provider's native-structured-output path.
         """
+        messages = self._clone_messages(messages)
+
         self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
