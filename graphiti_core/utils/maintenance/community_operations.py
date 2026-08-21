@@ -18,6 +18,7 @@ from graphiti_core.utils.maintenance.edge_operations import build_community_edge
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
+MAX_LABEL_PROPAGATION_ITERATIONS = 1000
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +96,16 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
     # 1. Start with each node being assigned its own community
     # 2. Each node will take on the community of the plurality of its neighbors
     # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
+    # 4. Continue until no communities change during propagation, or until a
+    #    bounded number of iterations is reached. Synchronous label propagation
+    #    is not guaranteed to converge on symmetric or tie-heavy graphs, where
+    #    the assignment can oscillate indefinitely, so the iteration count is
+    #    capped to guarantee termination.
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
+    converged = False
+    for _ in range(MAX_LABEL_PROPAGATION_ITERATIONS):
         no_change = True
         new_community_map: dict[str, int] = {}
 
@@ -126,9 +132,17 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
                 no_change = False
 
         if no_change:
+            converged = True
             break
 
         community_map = new_community_map
+
+    if not converged:
+        logger.warning(
+            'label_propagation did not converge within %d iterations; '
+            'returning the latest community assignment',
+            MAX_LABEL_PROPAGATION_ITERATIONS,
+        )
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():
