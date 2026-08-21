@@ -26,7 +26,7 @@ from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.eval import EvalAddEpisodeResults
-from tests.test_graphiti_int import NEO4J_URI, NEO4j_PASSWORD, NEO4j_USER
+from tests.helpers_test import NEO4J_PASSWORD, NEO4J_URI, NEO4J_USER
 
 
 async def build_subgraph(
@@ -105,7 +105,7 @@ async def build_graph(
 async def build_baseline_graph(multi_session_count: int, session_length: int):
     # Use gpt-4.1-mini for graph building baseline
     llm_client = OpenAIClient(config=LLMConfig(model='gpt-4.1-mini'))
-    graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
+    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, llm_client=llm_client)
 
     add_episode_results, _ = await build_graph(
         'baseline', multi_session_count, session_length, graphiti
@@ -125,7 +125,7 @@ async def build_baseline_graph(multi_session_count: int, session_length: int):
 async def eval_graph(multi_session_count: int, session_length: int, llm_client=None) -> float:
     if llm_client is None:
         llm_client = OpenAIClient(config=LLMConfig(model='gpt-4.1-mini'))
-    graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
+    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, llm_client=llm_client)
     with open('baseline_graph_results.json') as file:
         baseline_results_raw = json.load(file)
 

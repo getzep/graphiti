@@ -63,6 +63,7 @@ dev = [
     "pytest-xdist>=3.6.1",
     "ruff>=0.7.1",
     "opentelemetry-sdk>=1.20.0",
+    "pandas>=2.2.0",
 ]
 
 [build-system]
