@@ -16,7 +16,7 @@ limitations under the License.
 
 from typing import Any, Protocol, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .models import Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
@@ -51,9 +51,35 @@ class Edge(BaseModel):
         'When processing a single episode, this should be [0].',
     )
 
+    @model_validator(mode='before')
+    @classmethod
+    def _synthesize_missing_fact(cls, data: Any) -> Any:
+        if (
+            isinstance(data, dict)
+            and not data.get('fact')
+            and data.get('source_entity_name')
+            and data.get('target_entity_name')
+            and data.get('relation_type')
+        ):
+            data = {
+                **data,
+                'fact': f'{data["source_entity_name"]} {data["relation_type"]} {data["target_entity_name"]}',
+            }
+        return data
+
 
 class ExtractedEdges(BaseModel):
     edges: list[Edge]
+
+    @model_validator(mode='before')
+    @classmethod
+    def _wrap_bare_array(cls, data: Any) -> Any:
+        # See ExtractedEntities._wrap_bare_array in extract_nodes.py — same non-enforced
+        # json_schema providers, same bare-array symptom, here for edges instead of nodes.
+        # Requires call sites to use `model_validate()` rather than `**data`.
+        if isinstance(data, list):
+            return {'edges': data}
+        return data
 
 
 class EdgeTimestamps(BaseModel):
