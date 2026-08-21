@@ -38,9 +38,21 @@ class EpisodeSearchResponse(TypedDict):
     episodes: list[dict[str, Any]]
 
 
+class IngestionStatusResponse(TypedDict):
+    status: str
+    recent_failure_count: int
+    consecutive_failure_count: int
+    failing_group_count: int
+    last_failure_at: str | None
+    last_failure_group_id: str | None
+    pending_episode_count: int
+    active_worker_count: int
+
+
 class StatusResponse(TypedDict):
     status: str
     message: str
+    ingestion: IngestionStatusResponse
 
 
 class SagaSummaryResponse(TypedDict):
