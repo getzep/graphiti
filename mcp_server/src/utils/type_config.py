@@ -64,6 +64,36 @@ def coerce_group_ids(group_ids: str | list[str] | None) -> list[str] | None:
     return group_ids
 
 
+#: Sentinel a caller passes as ``group_ids`` to read across every partition.
+#: ``validate_group_id`` rejects ``*`` (only ``[a-zA-Z0-9_-]`` is legal), so no
+#: real group can ever collide with it.
+ALL_GROUPS = '*'
+
+
+def resolve_read_group_ids(
+    group_ids: list[str] | None, default_group_id: str | None
+) -> list[str] | None:
+    """Resolve the group scope for a read tool.
+
+    Returns ``None`` to mean "every group", which is what graphiti-core's search
+    path already does with an absent group filter.
+
+    - ``[ALL_GROUPS]`` -> ``None``: the caller explicitly asked for the whole graph.
+    - ``None`` -> the configured default group, or ``None`` if none is configured.
+      Reads stay scoped to the deployment's group unless asked otherwise, so a
+      server configured for one tenant never widens its scope by accident.
+    - anything else passes through.
+
+    ``ALL_GROUPS`` is honored anywhere in the list, so ``['a', '*']`` is the whole
+    graph rather than a group literally named ``*`` (which cannot exist).
+    """
+    if group_ids is not None and ALL_GROUPS in group_ids:
+        return None
+    if group_ids is not None:
+        return group_ids
+    return [default_group_id] if default_group_id else None
+
+
 def _doc_only_model(name: str, description: str) -> type[BaseModel]:
     """Build a documentation-only Pydantic model with no fields.
 
