@@ -52,7 +52,12 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import Transaction
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.embedder.client import EMBEDDING_DIM
+from graphiti_core.graph_queries import (
+    get_fulltext_indices,
+    get_range_indices,
+    get_vector_indices,
+)
 from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
@@ -68,6 +73,8 @@ class Neo4jDriver(GraphDriver):
         user: str | None,
         password: str | None,
         database: str = 'neo4j',
+        embedding_dim: int = EMBEDDING_DIM,
+        use_vector_index: bool = False,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
@@ -75,6 +82,8 @@ class Neo4jDriver(GraphDriver):
             auth=(user or '', password or ''),
         )
         self._database = database
+        self.embedding_dim = embedding_dim
+        self.use_vector_index = use_vector_index
 
         # Instantiate Neo4j operations
         self._entity_node_ops = Neo4jEntityNodeOperations()
@@ -93,7 +102,9 @@ class Neo4jDriver(GraphDriver):
         # Schedule the indices and constraints to be built
         try:
             loop = asyncio.get_running_loop()
-            self._init_task = loop.create_task(self.build_indices_and_constraints())
+            self._init_task = loop.create_task(
+                self.build_indices_and_constraints(build_vector_indices=use_vector_index)
+            )
         except RuntimeError:
             pass
 
@@ -212,7 +223,9 @@ class Neo4jDriver(GraphDriver):
                 return None
             raise
 
-    async def build_indices_and_constraints(self, delete_existing: bool = False):
+    async def build_indices_and_constraints(
+        self, delete_existing: bool = False, build_vector_indices: bool = False
+    ):
         if delete_existing:
             await self.delete_all_indexes()
 
@@ -221,6 +234,11 @@ class Neo4jDriver(GraphDriver):
         fulltext_indices: list[LiteralString] = get_fulltext_indices(self.provider)
 
         index_queries: list[LiteralString] = range_indices + fulltext_indices
+
+        if build_vector_indices:
+            # Opt-in: populating a vector index over an existing large graph is a
+            # one-time expensive background build, so it is not enabled by default.
+            index_queries += get_vector_indices(self.provider, self.embedding_dim)
 
         await semaphore_gather(*[self._execute_index_query(query) for query in index_queries])
 
