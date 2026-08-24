@@ -16,6 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator, Coroutine
 from contextlib import asynccontextmanager, suppress
 from typing import Any
@@ -62,6 +63,37 @@ from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
 
+_TRUTHY = {'1', 'true', 'yes', 'on'}
+
+USE_VECTOR_INDEX_ENV_VAR = 'GRAPHITI_NEO4J_USE_VECTOR_INDEX'
+EMBEDDING_DIM_ENV_VAR = 'GRAPHITI_NEO4J_EMBEDDING_DIM'
+
+
+def _env_use_vector_index() -> bool:
+    """Read the vector-index opt-in from the environment.
+
+    Deployments that build Graphiti indirectly (e.g. the MCP server, which passes
+    uri/user/password to Graphiti and never constructs Neo4jDriver itself) have no
+    way to supply the constructor argument, so expose the same switch as config.
+    """
+    return os.environ.get(USE_VECTOR_INDEX_ENV_VAR, '').strip().lower() in _TRUTHY
+
+
+def _env_embedding_dim() -> int | None:
+    """Read the embedding dimension override, ignoring malformed values."""
+    raw = os.environ.get(EMBEDDING_DIM_ENV_VAR, '').strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning(
+            'Ignoring %s=%r: expected an integer embedding dimension',
+            EMBEDDING_DIM_ENV_VAR,
+            raw,
+        )
+        return None
+
 
 class Neo4jDriver(GraphDriver):
     provider = GraphProvider.NEO4J
@@ -73,8 +105,8 @@ class Neo4jDriver(GraphDriver):
         user: str | None,
         password: str | None,
         database: str = 'neo4j',
-        embedding_dim: int = EMBEDDING_DIM,
-        use_vector_index: bool = False,
+        embedding_dim: int | None = None,
+        use_vector_index: bool | None = None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
@@ -82,6 +114,12 @@ class Neo4jDriver(GraphDriver):
             auth=(user or '', password or ''),
         )
         self._database = database
+        if embedding_dim is None:
+            embedding_dim = _env_embedding_dim()
+        if embedding_dim is None:
+            embedding_dim = EMBEDDING_DIM
+        if use_vector_index is None:
+            use_vector_index = _env_use_vector_index()
         self.embedding_dim = embedding_dim
         self.use_vector_index = use_vector_index
 
