@@ -41,8 +41,8 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
     ) -> None:
         edge_data: dict[str, Any] = {
             'uuid': edge.uuid,
-            'source_uuid': edge.source_node_uuid,
-            'target_uuid': edge.target_node_uuid,
+            'source_node_uuid': edge.source_node_uuid,
+            'target_node_uuid': edge.target_node_uuid,
             'name': edge.name,
             'fact': edge.fact,
             'fact_embedding': edge.fact_embedding,
