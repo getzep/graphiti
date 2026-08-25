@@ -251,5 +251,67 @@ class TestAnthropicClientGenerateResponse:
         assert result['test_field'] == 'correct_value'
 
 
+class TestAnthropicClientTemperature:
+    """Tests for how the temperature parameter is forwarded to the Anthropic API."""
+
+    @staticmethod
+    def _client_with_temperature(temperature):
+        """Build an AnthropicClient with a mocked messages.create returning a tool_use."""
+        config = LLMConfig(
+            api_key='test_api_key',
+            model='claude-haiku-4-5-latest',
+            temperature=temperature,
+            max_tokens=1000,
+        )
+        client = AnthropicClient(config=config, cache=False)
+
+        content_item = MagicMock()
+        content_item.type = 'tool_use'
+        content_item.input = {'test_field': 'test_value'}
+
+        mock_response = MagicMock()
+        mock_response.content = [content_item]
+
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        client.client = mock_client
+        return client, mock_client
+
+    @pytest.mark.asyncio
+    async def test_temperature_omitted_when_unset(self):
+        """An unset temperature must not be sent at all.
+
+        The Anthropic API rejects `"temperature": null` with a 400
+        invalid_request_error, and the SDK serializes an explicit ``None``
+        instead of dropping the key.
+        """
+        client, mock_client = self._client_with_temperature(None)
+
+        await client.generate_response([Message(role='user', content='Test message')])
+
+        kwargs = mock_client.messages.create.call_args.kwargs
+        assert 'temperature' not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_zero_temperature_is_still_sent(self):
+        """A temperature of 0.0 is a meaningful value and must be forwarded."""
+        client, mock_client = self._client_with_temperature(0.0)
+
+        await client.generate_response([Message(role='user', content='Test message')])
+
+        kwargs = mock_client.messages.create.call_args.kwargs
+        assert kwargs['temperature'] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_explicit_temperature_is_forwarded(self):
+        """A regular temperature is forwarded unchanged."""
+        client, mock_client = self._client_with_temperature(0.7)
+
+        await client.generate_response([Message(role='user', content='Test message')])
+
+        kwargs = mock_client.messages.create.call_args.kwargs
+        assert kwargs['temperature'] == 0.7
+
+
 if __name__ == '__main__':
     pytest.main(['-v', 'test_anthropic_client.py'])
