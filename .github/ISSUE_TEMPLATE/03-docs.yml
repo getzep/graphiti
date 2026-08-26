@@ -1,0 +1,45 @@
+name: Documentation
+description: Report incorrect, unclear, or missing documentation
+title: "[Docs] "
+labels:
+  - documentation
+body:
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+  - type: input
+    id: location
+    attributes:
+      label: Documentation location
+      description: Link to the page or provide the repository path.
+      placeholder: https://help.getzep.com/graphiti/... or path/to/file.md
+    validations:
+      required: true
+  - type: dropdown
+    id: problem-type
+    attributes:
+      label: Problem type
+      options:
+        - Incorrect information
+        - Unclear explanation
+        - Missing documentation
+        - Broken example or link
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What needs to change?
+      description: Explain what is wrong, confusing, or missing.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Optional wording, examples, or references that could improve the documentation.

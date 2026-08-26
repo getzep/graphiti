@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/getzep/graphiti/blob/main/.github/intake/decision.schema.json",
+  "title": "Graphiti intake decision",
+  "description": "Contract between a deciding step (classify.py, later reproduce.py) and apply.py. apply.py never executes model text.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "category",
+    "areas",
+    "labels",
+    "comment_id",
+    "duplicate_issue_numbers",
+    "missing_fields"
+  ],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": ["bug", "feature", "documentation", "question", "security", "other"]
+    },
+    "areas": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["area/core", "area/mcp", "area/server", "area/docs"]
+      },
+      "uniqueItems": true,
+      "maxItems": 4
+    },
+    "labels": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 64 },
+      "maxItems": 20
+    },
+    "comment_id": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "enum": [
+            "ask_repro",
+            "point_security",
+            "ask_rfc_fields",
+            "note_duplicate",
+            "pr_needs_rfc",
+            "pr_needs_tests",
+            "pr_needs_rework"
+          ]
+        }
+      ]
+    },
+    "duplicate_issue_numbers": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1 },
+      "maxItems": 5
+    },
+    "missing_fields": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 80 },
+      "maxItems": 10
+    }
+  }
+}

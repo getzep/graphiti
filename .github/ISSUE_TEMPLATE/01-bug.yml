@@ -1,0 +1,79 @@
+name: Bug
+description: Report reproducible behavior that differs from expected Graphiti behavior
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please remove credentials, private data, and other secrets.
+        For security vulnerabilities, stop and use [private reporting](https://github.com/getzep/graphiti/security/advisories/new).
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - graphiti-core
+        - MCP server
+        - REST server
+        - Documentation or examples
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: What were you trying to do, and what happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide a self-contained example or test case that demonstrates the problem.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Include Graphiti version or commit, Python version, operating system, installation method,
+        database backend and version, and relevant LLM, embedding, or reranking provider/model.
+      placeholder: |
+        Graphiti:
+        Python:
+        OS:
+        Installation:
+        Database:
+        Model providers:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or traceback
+      description: Paste the complete relevant output. Remove secrets and private data.
+      render: shell

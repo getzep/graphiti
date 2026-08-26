@@ -1,0 +1,51 @@
+name: Question
+description: Ask for help understanding or using Graphiti
+title: "[Question] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Questions are welcome. Provide enough context for the community to understand your setup.
+        Remove credentials, private data, and other secrets.
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing resources
+      options:
+        - label: I searched the documentation and existing issues before asking.
+          required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - graphiti-core
+        - MCP server
+        - REST server
+        - Documentation or examples
+        - General usage or architecture
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What have you tried?
+      description: Include relevant code, documentation, and errors.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Graphiti version, Python version, database backend, and relevant model providers.
+    validations:
+      required: true

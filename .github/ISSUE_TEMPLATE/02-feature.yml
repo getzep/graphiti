@@ -1,0 +1,71 @@
+name: Feature
+description: Propose new functionality or an improvement to existing behavior
+title: "[Feature] "
+labels:
+  - feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the user problem. Large features use this issue as their design discussion and
+        require maintainer approval before an implementation pull request.
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched existing issues and did not find an existing proposal.
+          required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - graphiti-core
+        - MCP server
+        - REST server
+        - Documentation or examples
+        - Multiple components
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Select large if this adds a driver, provider, API, architecture change, or likely exceeds 500 lines.
+      options:
+        - Small improvement to existing behavior
+        - Large feature requiring design approval
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What are you trying to accomplish, and what is blocking you today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the behavior or capability that would solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed design
+      description: Required for large features. Describe the public API, data flow, and important implementation choices.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Required for large features. Include existing workarounds and why they are insufficient.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Compatibility and operational impact
+      description: Required for large features. Cover breaking changes, migrations, dependencies, performance, and deployment impact.
