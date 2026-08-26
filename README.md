@@ -7,7 +7,7 @@
 <h1 align="center">
 Graphiti
 </h1>
-<h2 align="center">Build Temporal Context Graphs for AI Agents</h2>
+<h2 align="center">A Framework for Building Temporal Knowledge Graphs</h2>
 
 <div align="center">
 
@@ -34,13 +34,9 @@ Graphiti
 
 &nbsp;
 
-> [!TIP]
-> Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful
-> context graph-based memory with temporal awareness.
-
-Graphiti is a framework for building and querying temporal context graphs for AI agents. Unlike static knowledge graphs,
-Graphiti's context graphs track how facts change over time, maintain provenance to source data, and support both
-prescribed and learned ontology — making them purpose-built for agents operating on evolving, real-world data.
+Graphiti is a framework for building temporal knowledge graphs. Unlike static knowledge graphs, Graphiti tracks how
+facts change over time, maintains provenance to source data, and supports both prescribed and learned ontology — making
+it suitable for applications that operate on evolving, real-world data.
 
 Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions,
 structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework
@@ -49,8 +45,8 @@ recomputation, making it suitable for developing interactive, context-aware AI a
 
 Use Graphiti to:
 
-- Build context graphs that evolve with every interaction — tracking what's true now and what was true before.
-- Give agents rich, structured context instead of flat document chunks or raw chat history.
+- Build temporal knowledge graphs that evolve with every interaction — tracking what's true now and what was true before.
+- Represent rich, structured context instead of flat document chunks or raw event streams.
 - Query across time, meaning, and relationships with hybrid retrieval (semantic + keyword + graph traversal).
 
 &nbsp;
@@ -82,31 +78,25 @@ A context graph contains:
 
 ## Graphiti and Zep
 
-Graphiti is the open-source temporal context graph engine at the core of
-[Zep's](https://www.getzep.com) context infrastructure for AI agents. Zep manages context graphs at scale, providing
-governed, low-latency context retrieval and assembly for production agent deployments.
+Graphiti is the open-source framework for building temporal knowledge graphs at the core of
+[Zep's](https://www.getzep.com) context infrastructure. Zep manages context graphs at scale, providing
+governed, low-latency context retrieval and assembly for production deployments.
 
 Under the hood, Zep is powered by a proprietary graph database — the
 [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs
 with low-latency retrieval, so production deployments don't require a separate third-party graph database.
 
-Using Graphiti, we've demonstrated Zep is
-the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
-
-Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956).
-
-We're excited to open-source Graphiti, believing its potential as a context graph engine reaches far beyond memory
-applications.
+Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org/abs/2501.13956).
 
 <p align="center">
-    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
+    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture" width="700px"></a>
 </p>
 
 ## Zep vs Graphiti
 
 | Aspect | Zep | Graphiti |
 |--------|-----|---------|
-| **What they are** | Managed context graph infrastructure for AI agents | Open-source temporal context graph engine |
+| **What they are** | Managed context graph infrastructure | Open-source framework for building temporal knowledge graphs |
 | **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
 | **Graph database** | Proprietary [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs with low-latency retrieval; no third-party graph database vendor required | Bring your own third-party graph database |
 | **User & conversation management** | Built-in users, threads, and message storage | Build your own |
@@ -147,7 +137,7 @@ frequently changing data. Graphiti addresses these challenges by providing:
 
 | Aspect | GraphRAG | Graphiti |
 |--------|----------|---------|
-| **Primary Use** | Static document summarization | Dynamic, evolving context for agents |
+| **Primary Use** | Static document summarization | Dynamic, evolving temporal knowledge graphs |
 | **Data Handling** | Batch-oriented processing | Continuous, incremental updates |
 | **Knowledge Structure** | Entity clusters & community summaries | Temporal context graph — entities, facts with validity windows, episodes, communities |
 | **Retrieval Method** | Sequential LLM summarization | Hybrid semantic, keyword, and graph-based search |
