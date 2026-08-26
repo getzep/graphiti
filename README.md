@@ -34,9 +34,9 @@ Graphiti
 
 &nbsp;
 
-Graphiti is a framework for building temporal knowledge graphs. Unlike static knowledge graphs, Graphiti tracks how
-facts change over time, maintains provenance to source data, and supports both prescribed and learned ontology — making
-it suitable for applications that operate on evolving, real-world data.
+Graphiti is a framework for building and querying temporal context graphs for AI agents. Unlike static knowledge graphs,
+Graphiti's context graphs track how facts change over time, maintain provenance to source data, and support both
+prescribed and learned ontology — making them purpose-built for agents operating on evolving, real-world data.
 
 Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions,
 structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework
