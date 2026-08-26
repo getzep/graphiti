@@ -17,6 +17,8 @@ limitations under the License.
 import logging
 from typing import Any
 
+from neo4j.exceptions import ClientError
+
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
@@ -28,9 +30,12 @@ from graphiti_core.driver.record_parsers import (
 )
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graph_queries import (
+    NEO4J_EDGE_VECTOR_INDEX_NAME,
     get_nodes_query,
     get_relationships_query,
     get_vector_cosine_func_query,
+    get_vector_similarity_query,
+    use_vector_index,
 )
 from graphiti_core.helpers import lucene_sanitize, validate_group_ids
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
@@ -49,6 +54,27 @@ from graphiti_core.search.search_filters import (
 logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 128
+
+_VECTOR_INDEX_LIFECYCLE_CODES = {
+    'Neo.ClientError.Procedure.ProcedureNotFound',
+    'Neo.ClientError.Schema.IndexNotFound',
+}
+_VECTOR_INDEX_LIFECYCLE_MESSAGES = (
+    'no such vector schema index',
+    'is not online',
+    'is offline',
+    'is still populating',
+    'is in populating state',
+    'dimensions, but indexed vectors have',
+    'is not a vector index',
+)
+
+
+def _is_vector_index_lifecycle_error(error: ClientError) -> bool:
+    if getattr(error, 'code', None) in _VECTOR_INDEX_LIFECYCLE_CODES:
+        return True
+    message = str(error).lower()
+    return any(fragment in message for fragment in _VECTOR_INDEX_LIFECYCLE_MESSAGES)
 
 
 def _build_neo4j_fulltext_query(
@@ -300,19 +326,19 @@ class Neo4jSearchOperations(SearchOperations):
             filter_queries.append('e.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
-            if source_node_uuid is not None:
-                filter_params['source_uuid'] = source_node_uuid
-                filter_queries.append('n.uuid = $source_uuid')
+        if source_node_uuid is not None:
+            filter_params['source_uuid'] = source_node_uuid
+            filter_queries.append('n.uuid = $source_uuid')
 
-            if target_node_uuid is not None:
-                filter_params['target_uuid'] = target_node_uuid
-                filter_queries.append('m.uuid = $target_uuid')
+        if target_node_uuid is not None:
+            filter_params['target_uuid'] = target_node_uuid
+            filter_queries.append('m.uuid = $target_uuid')
 
         filter_query = ''
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
-        cypher = (
+        exact_cypher = (
             'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)'
             + filter_query
             + """
@@ -331,14 +357,69 @@ class Neo4jSearchOperations(SearchOperations):
             """
         )
 
-        records, _, _ = await executor.execute_query(
-            cypher,
-            search_vector=search_vector,
-            limit=limit,
-            min_score=min_score,
-            routing_='r',
-            **filter_params,
-        )
+        vector_index_enabled = use_vector_index(executor)
+        if vector_index_enabled:
+            embedding_dim = getattr(executor, 'embedding_dim', None)
+            if embedding_dim is not None and len(search_vector) != embedding_dim:
+                raise ValueError(
+                    f'query embedding dimension {len(search_vector)} does not match '
+                    f'configured index dimension {embedding_dim}'
+                )
+
+        # Neo4j's vector procedure cannot pre-filter. Using it with any public filter
+        # would make a bounded over-fetch heuristic violate the caller's limit contract,
+        # so filtered searches retain the exact pre-filtered cosine path.
+        use_hnsw = vector_index_enabled and not filter_queries
+        if use_hnsw:
+            cypher = (
+                get_vector_similarity_query(
+                    GraphProvider.NEO4J,
+                    NEO4J_EDGE_VECTOR_INDEX_NAME,
+                    'e',
+                    limit,
+                )
+                + """
+                WITH e, startNode(e) AS n, endNode(e) AS m, score
+                WHERE n:Entity AND m:Entity AND score > $min_score
+                RETURN
+                """
+                + get_entity_edge_return_query(GraphProvider.NEO4J)
+                + """
+                ORDER BY score DESC
+                LIMIT $limit
+                """
+            )
+            try:
+                records, _, _ = await executor.execute_query(
+                    cypher,
+                    search_vector=search_vector,
+                    limit=limit,
+                    min_score=min_score,
+                    routing_='r',
+                )
+            except ClientError as error:
+                if not _is_vector_index_lifecycle_error(error):
+                    raise
+                logger.warning(
+                    'Vector index unavailable; falling back to exact cosine search: %s', error
+                )
+                records, _, _ = await executor.execute_query(
+                    exact_cypher,
+                    search_vector=search_vector,
+                    limit=limit,
+                    min_score=min_score,
+                    routing_='r',
+                    **filter_params,
+                )
+        else:
+            records, _, _ = await executor.execute_query(
+                exact_cypher,
+                search_vector=search_vector,
+                limit=limit,
+                min_score=min_score,
+                routing_='r',
+                **filter_params,
+            )
 
         return [entity_edge_from_record(r) for r in records]
 

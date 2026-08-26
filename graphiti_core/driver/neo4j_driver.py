@@ -66,7 +66,6 @@ logger = logging.getLogger(__name__)
 _TRUTHY = {'1', 'true', 'yes', 'on'}
 
 USE_VECTOR_INDEX_ENV_VAR = 'GRAPHITI_NEO4J_USE_VECTOR_INDEX'
-EMBEDDING_DIM_ENV_VAR = 'GRAPHITI_NEO4J_EMBEDDING_DIM'
 
 
 def _env_use_vector_index() -> bool:
@@ -77,22 +76,6 @@ def _env_use_vector_index() -> bool:
     way to supply the constructor argument, so expose the same switch as config.
     """
     return os.environ.get(USE_VECTOR_INDEX_ENV_VAR, '').strip().lower() in _TRUTHY
-
-
-def _env_embedding_dim() -> int | None:
-    """Read the embedding dimension override, ignoring malformed values."""
-    raw = os.environ.get(EMBEDDING_DIM_ENV_VAR, '').strip()
-    if not raw:
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        logger.warning(
-            'Ignoring %s=%r: expected an integer embedding dimension',
-            EMBEDDING_DIM_ENV_VAR,
-            raw,
-        )
-        return None
 
 
 class Neo4jDriver(GraphDriver):
@@ -115,9 +98,13 @@ class Neo4jDriver(GraphDriver):
         )
         self._database = database
         if embedding_dim is None:
-            embedding_dim = _env_embedding_dim()
-        if embedding_dim is None:
             embedding_dim = EMBEDDING_DIM
+        if (
+            not isinstance(embedding_dim, int)
+            or isinstance(embedding_dim, bool)
+            or not 1 <= embedding_dim <= 4096
+        ):
+            raise ValueError('embedding_dim must be an integer between 1 and 4096')
         if use_vector_index is None:
             use_vector_index = _env_use_vector_index()
         self.embedding_dim = embedding_dim
@@ -262,7 +249,7 @@ class Neo4jDriver(GraphDriver):
             raise
 
     async def build_indices_and_constraints(
-        self, delete_existing: bool = False, build_vector_indices: bool = False
+        self, delete_existing: bool = False, build_vector_indices: bool | None = None
     ):
         if delete_existing:
             await self.delete_all_indexes()
@@ -272,6 +259,9 @@ class Neo4jDriver(GraphDriver):
         fulltext_indices: list[LiteralString] = get_fulltext_indices(self.provider)
 
         index_queries: list[LiteralString] = range_indices + fulltext_indices
+
+        if build_vector_indices is None:
+            build_vector_indices = self.use_vector_index
 
         if build_vector_indices:
             # Opt-in: populating a vector index over an existing large graph is a

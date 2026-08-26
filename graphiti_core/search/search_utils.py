@@ -29,11 +29,9 @@ from graphiti_core.driver.driver import (
 )
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.graph_queries import (
-    NEO4J_EDGE_VECTOR_INDEX_NAME,
     get_nodes_query,
     get_relationships_query,
     get_vector_cosine_func_query,
-    get_vector_similarity_query,
     use_vector_index,
 )
 from graphiti_core.helpers import (
@@ -313,6 +311,18 @@ async def edge_similarity_search(
             min_score,
         )
 
+    if use_vector_index(driver) and driver.search_ops is not None:
+        return await driver.search_ops.edge_similarity_search(
+            driver,
+            search_vector,
+            source_node_uuid,
+            target_node_uuid,
+            search_filter,
+            group_ids,
+            limit,
+            min_score,
+        )
+
     match_query = """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
     """
@@ -329,13 +339,13 @@ async def edge_similarity_search(
         filter_queries.append('e.group_id IN $group_ids')
         filter_params['group_ids'] = group_ids
 
-        if source_node_uuid is not None:
-            filter_params['source_uuid'] = source_node_uuid
-            filter_queries.append('n.uuid = $source_uuid')
+    if source_node_uuid is not None:
+        filter_params['source_uuid'] = source_node_uuid
+        filter_queries.append('n.uuid = $source_uuid')
 
-        if target_node_uuid is not None:
-            filter_params['target_uuid'] = target_node_uuid
-            filter_queries.append('m.uuid = $target_uuid')
+    if target_node_uuid is not None:
+        filter_params['target_uuid'] = target_node_uuid
+        filter_queries.append('m.uuid = $target_uuid')
 
     filter_query = ''
     if filter_queries:
@@ -408,59 +418,22 @@ async def edge_similarity_search(
         else:
             return []
     else:
-        vector_index_query = ''
-        if use_vector_index(driver):
-            vector_index_query = get_vector_similarity_query(
-                driver.provider,
-                index_name=NEO4J_EDGE_VECTOR_INDEX_NAME,
-                entity_var='e',
-                limit=limit,
-            )
-
-        if vector_index_query:
-            # HNSW yields (e, score) directly. Endpoints are still bound so filters
-            # and the return shape are unchanged; post-filtering runs over the
-            # over-fetched candidate set.
-            candidate_filters = ['score > $min_score']
-            if filter_queries:
-                candidate_filters.extend(filter_queries)
-
-            query = (
-                vector_index_query
-                + """
-            MATCH (n:Entity)-[e2:RELATES_TO]->(m:Entity)
-            WHERE e2.uuid = e.uuid
-            WITH DISTINCT e, n, m, score
-            WHERE """
-                + ' AND '.join(candidate_filters)
-                + """
-            RETURN
-            """
-                + get_entity_edge_return_query(driver.provider)
-                + """
-            ORDER BY score DESC
-            LIMIT $limit
-            """
-            )
-        else:
-            query = (
-                match_query
-                + filter_query
-                + """
+        query = (
+            match_query
+            + filter_query
+            + """
             WITH DISTINCT e, n, m, """
-                + get_vector_cosine_func_query(
-                    'e.fact_embedding', search_vector_var, driver.provider
-                )
-                + """ AS score
+            + get_vector_cosine_func_query('e.fact_embedding', search_vector_var, driver.provider)
+            + """ AS score
             WHERE score > $min_score
             RETURN
             """
-                + get_entity_edge_return_query(driver.provider)
-                + """
+            + get_entity_edge_return_query(driver.provider)
+            + """
             ORDER BY score DESC
             LIMIT $limit
             """
-            )
+        )
 
         records, _, _ = await driver.execute_query(
             query,

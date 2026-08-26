@@ -182,10 +182,6 @@ NEO4J_VECTOR_INDEX_NAMES = {
 }
 NEO4J_EDGE_VECTOR_INDEX_NAME = 'edge_fact_embedding'
 
-# HNSW cannot pre-filter on group_id or SearchFilters, so the procedure is asked
-# for more candidates than the caller's LIMIT and the surplus absorbs post-filtering.
-VECTOR_INDEX_OVERFETCH_FACTOR = 3
-
 
 def get_vector_indices(provider: GraphProvider, embedding_dim: int) -> list[LiteralString]:
     """Return vector index DDL for the given provider.
@@ -234,10 +230,8 @@ def get_vector_similarity_query(
 
     procedure = 'queryRelationships' if relationship else 'queryNodes'
     yielded = 'relationship' if relationship else 'node'
-    k = limit * VECTOR_INDEX_OVERFETCH_FACTOR
-
     return (
-        f"CALL db.index.vector.{procedure}('{index_name}', {k}, $search_vector) "
+        f"CALL db.index.vector.{procedure}('{index_name}', {limit}, $search_vector) "
         f'YIELD {yielded} AS {entity_var}, score '
     )
 
@@ -249,4 +243,7 @@ def use_vector_index(driver) -> bool:
     deployments keep the exact-recall brute-force path until they opt in and have
     built the indices.
     """
-    return getattr(driver, 'use_vector_index', False)
+    return (
+        getattr(driver, 'provider', None) == GraphProvider.NEO4J
+        and getattr(driver, 'use_vector_index', False) is True
+    )

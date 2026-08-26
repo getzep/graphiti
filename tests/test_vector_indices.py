@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from unittest.mock import AsyncMock
+
+import pytest
+
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.graph_queries import (
@@ -25,6 +29,19 @@ from graphiti_core.graph_queries import (
 
 class TestGetVectorIndices:
     """Vector index DDL emitted for each provider."""
+
+    def test_neo4j_vector_ddl_is_exact_and_stably_named(self):
+        assert get_vector_indices(GraphProvider.NEO4J, embedding_dim=1024) == [
+            'CREATE VECTOR INDEX entity_name_embedding IF NOT EXISTS FOR (n:Entity) '
+            'ON (n.name_embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1024, '
+            "`vector.similarity_function`: 'cosine'}}",
+            'CREATE VECTOR INDEX community_name_embedding IF NOT EXISTS FOR (n:Community) '
+            'ON (n.name_embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1024, '
+            "`vector.similarity_function`: 'cosine'}}",
+            'CREATE VECTOR INDEX edge_fact_embedding IF NOT EXISTS FOR ()-[e:RELATES_TO]-() '
+            'ON (e.fact_embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1024, '
+            "`vector.similarity_function`: 'cosine'}}",
+        ]
 
     def test_neo4j_creates_hnsw_indices_for_all_embedded_properties(self):
         queries = get_vector_indices(GraphProvider.NEO4J, embedding_dim=1024)
@@ -88,8 +105,8 @@ class TestGetVectorSimilarityQuery:
 
         assert 'db.index.vector.queryNodes' in query
 
-    def test_over_fetches_candidates_for_post_filtering(self):
-        """HNSW cannot pre-filter on group_id/SearchFilters, so candidates must be over-fetched."""
+    def test_uses_public_limit_without_claiming_post_filter_guarantees(self):
+        """Filtered searches use exact cosine; this helper is only for unfiltered HNSW."""
         limit = 20
         query = get_vector_similarity_query(
             GraphProvider.NEO4J,
@@ -98,9 +115,7 @@ class TestGetVectorSimilarityQuery:
             limit=limit,
         )
 
-        # The procedure's k must exceed the caller's LIMIT so post-filtering
-        # cannot silently truncate the result set below `limit`.
-        assert str(limit * 3) in query
+        assert f', {limit}, $search_vector' in query
 
     def test_non_neo4j_providers_return_empty(self):
         for provider in (GraphProvider.FALKORDB, GraphProvider.KUZU, GraphProvider.NEPTUNE):
@@ -121,9 +136,17 @@ class TestUseVectorIndex:
 
     def test_respects_driver_opt_in(self):
         class _Driver:
+            provider = GraphProvider.NEO4J
             use_vector_index = True
 
         assert use_vector_index(_Driver()) is True
+
+    def test_non_neo4j_opt_in_does_not_leak(self):
+        class _Driver:
+            provider = GraphProvider.FALKORDB
+            use_vector_index = True
+
+        assert use_vector_index(_Driver()) is False
 
 
 class TestNeo4jDriverVectorIndexWiring:
@@ -132,16 +155,20 @@ class TestNeo4jDriverVectorIndexWiring:
         driver.use_vector_index = False
         assert use_vector_index(driver) is False
 
-    def test_build_indices_skips_vector_ddl_by_default(self):
-        """Default init must not trigger an expensive background index build."""
-        queries = get_vector_indices(GraphProvider.NEO4J, embedding_dim=1024)
-        assert queries, 'sanity: DDL exists when explicitly requested'
-        # The default path in build_indices_and_constraints() appends these only
-        # when build_vector_indices=True; covered by signature default below.
-        import inspect
+    @pytest.mark.asyncio
+    async def test_public_build_uses_driver_vector_opt_in(self):
+        """Graphiti.build_indices_and_constraints() must honor the driver opt-in."""
+        driver = Neo4jDriver.__new__(Neo4jDriver)
+        driver.embedding_dim = 768
+        driver.use_vector_index = True
+        driver._execute_index_query = AsyncMock()
 
-        sig = inspect.signature(Neo4jDriver.build_indices_and_constraints)
-        assert sig.parameters['build_vector_indices'].default is False
+        await driver.build_indices_and_constraints()
+
+        queries = [call.args[0] for call in driver._execute_index_query.await_args_list]
+        assert get_vector_indices(GraphProvider.NEO4J, embedding_dim=768) == [
+            query for query in queries if 'CREATE VECTOR INDEX' in query
+        ]
 
     def test_embedding_dim_is_configurable_not_hardcoded(self):
         import inspect
