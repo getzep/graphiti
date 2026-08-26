@@ -7,11 +7,14 @@ wins, while index dimensions come from the configured embedder rather than a sec
 environment setting that can drift from it.
 """
 
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.graphiti import Graphiti
 
 
 def _make_driver(**kwargs):
@@ -55,10 +58,75 @@ class TestUseVectorIndexEnvVar:
         monkeypatch.setenv('GRAPHITI_NEO4J_EMBEDDING_DIM', '2560')
         assert _make_driver(embedding_dim=1024).embedding_dim == 1024
 
-    @pytest.mark.parametrize('embedding_dim', [0, -1, 4097, 1.5, True])
-    def test_embedding_dim_rejects_values_neo4j_cannot_index(self, embedding_dim):
-        with pytest.raises(ValueError, match='embedding_dim must be an integer between 1 and 4096'):
+    @pytest.mark.parametrize('embedding_dim', [1.5, True, 0, -1])
+    def test_embedding_dim_rejects_invalid_values_without_vector_index(self, embedding_dim):
+        with pytest.raises(ValueError, match='embedding_dim must be a positive integer'):
+            _make_driver(embedding_dim=embedding_dim, use_vector_index=False)
+
+    @pytest.mark.parametrize('embedding_dim', [4097, 8192])
+    @pytest.mark.parametrize('use_vector_index', [False, None])
+    def test_large_embedding_dim_is_accepted_when_vector_index_is_disabled(
+        self, monkeypatch, embedding_dim, use_vector_index
+    ):
+        monkeypatch.setenv('GRAPHITI_NEO4J_USE_VECTOR_INDEX', 'false')
+
+        driver = _make_driver(
+            embedding_dim=embedding_dim,
+            use_vector_index=use_vector_index,
+        )
+
+        assert driver.embedding_dim == embedding_dim
+        assert driver.use_vector_index is False
+
+    def test_large_embedding_dim_is_accepted_with_default_opt_out(self, monkeypatch):
+        monkeypatch.delenv('GRAPHITI_NEO4J_USE_VECTOR_INDEX', raising=False)
+
+        driver = _make_driver(embedding_dim=8192)
+
+        assert driver.embedding_dim == 8192
+        assert driver.use_vector_index is False
+
+    @pytest.mark.parametrize('embedding_dim', [4097, 8192])
+    def test_large_embedding_dim_is_rejected_with_explicit_vector_index(self, embedding_dim):
+        with pytest.raises(ValueError, match='embedding_dim must not exceed 4096'):
+            _make_driver(embedding_dim=embedding_dim, use_vector_index=True)
+
+    @pytest.mark.parametrize('embedding_dim', [4097, 8192])
+    def test_large_embedding_dim_is_rejected_with_environment_vector_index(
+        self, monkeypatch, embedding_dim
+    ):
+        monkeypatch.setenv('GRAPHITI_NEO4J_USE_VECTOR_INDEX', 'true')
+
+        with pytest.raises(ValueError, match='embedding_dim must not exceed 4096'):
             _make_driver(embedding_dim=embedding_dim)
+
+    @pytest.mark.parametrize('use_vector_index', [None, False])
+    def test_graphiti_accepts_large_configured_dimension_without_vector_index(
+        self, monkeypatch, use_vector_index
+    ):
+        monkeypatch.delenv('GRAPHITI_NEO4J_USE_VECTOR_INDEX', raising=False)
+        monkeypatch.setattr('graphiti_core.driver.neo4j_driver.AsyncGraphDatabase.driver', Mock())
+        monkeypatch.setattr(
+            'graphiti_core.graphiti.GraphitiClients', Mock(return_value=SimpleNamespace())
+        )
+        monkeypatch.setattr('graphiti_core.graphiti.NodeNamespace', Mock())
+        monkeypatch.setattr('graphiti_core.graphiti.EdgeNamespace', Mock())
+        embedder = OpenAIEmbedder(
+            config=OpenAIEmbedderConfig(api_key='test-key', embedding_dim=8192)
+        )
+
+        graphiti = Graphiti(
+            uri='bolt://unused',
+            user='neo4j',
+            password='unused',
+            embedder=embedder,
+            llm_client=SimpleNamespace(set_tracer=Mock()),
+            cross_encoder=SimpleNamespace(),
+            use_vector_index=use_vector_index,
+        )
+
+        assert graphiti.driver.embedding_dim == 8192
+        assert graphiti.driver.use_vector_index is False
 
     def test_embedding_dim_ignores_disconnected_malformed_env(self, monkeypatch):
         from graphiti_core.driver.neo4j_driver import EMBEDDING_DIM

@@ -99,14 +99,16 @@ class Neo4jDriver(GraphDriver):
         self._database = database
         if embedding_dim is None:
             embedding_dim = EMBEDDING_DIM
+        if use_vector_index is None:
+            use_vector_index = _env_use_vector_index()
         if (
             not isinstance(embedding_dim, int)
             or isinstance(embedding_dim, bool)
-            or not 1 <= embedding_dim <= 4096
+            or embedding_dim <= 0
         ):
-            raise ValueError('embedding_dim must be an integer between 1 and 4096')
-        if use_vector_index is None:
-            use_vector_index = _env_use_vector_index()
+            raise ValueError('embedding_dim must be a positive integer')
+        if use_vector_index and embedding_dim > 4096:
+            raise ValueError('embedding_dim must not exceed 4096 when vector indexing is enabled')
         self.embedding_dim = embedding_dim
         self.use_vector_index = use_vector_index
 
