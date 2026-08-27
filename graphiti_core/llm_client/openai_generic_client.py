@@ -55,6 +55,8 @@ class OpenAIGenericClient(LLMClient):
         temperature (float): The temperature to use for generating responses.
         max_tokens (int): The maximum number of tokens to generate in a response.
         structured_output_mode (StructuredOutputMode): How structured output is requested.
+        config.timeout (float | None): Optional per-request timeout in seconds.
+        config.extra_body (dict | None): Optional provider-specific request-body fields.
     """
 
     def __init__(
@@ -152,13 +154,21 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model or DEFAULT_MODEL,
-                messages=openai_messages,
-                temperature=self.temperature,
-                max_tokens=max_tokens,
-                response_format=self._build_response_format(response_model),  # type: ignore[arg-type]
-            )
+            request_kwargs: dict[str, Any] = {
+                'model': self.model or DEFAULT_MODEL,
+                'messages': openai_messages,
+                'temperature': self.temperature,
+                'max_tokens': max_tokens,
+                'response_format': self._build_response_format(response_model),
+            }
+            # Omit unset optional fields to preserve the historical request shape and
+            # let the OpenAI SDK choose its own default timeout.
+            if self.config.timeout is not None:
+                request_kwargs['timeout'] = self.config.timeout
+            if self.config.extra_body is not None:
+                request_kwargs['extra_body'] = self.config.extra_body
+
+            response = await self.client.chat.completions.create(**request_kwargs)
             result = response.choices[0].message.content or ''
             # An empty body (refusal, length finish_reason, or a flaky endpoint) would make
             # json.loads raise a cryptic JSONDecodeError; surface a clear error instead.
