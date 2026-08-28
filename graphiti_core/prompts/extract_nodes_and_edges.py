@@ -99,7 +99,10 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 ENTITY RULES:
-1. Extract speakers and named entities explicitly mentioned in CURRENT MESSAGES.
+1. Extract speakers and named entities explicitly or implicitly mentioned in CURRENT MESSAGES.
+   If a pronoun or other resolved reference in a CURRENT MESSAGE refers to an entity from
+   PREVIOUS MESSAGES, that entity counts as implicitly mentioned and MUST be extracted under its
+   disambiguated name.
 2. Entity names must be at most 5 words. Use the most specific form mentioned.
 3. When someone discusses their possession, project, pet, or creation, extract it
    as a SEPARATE possessive entity — not just the person, not just the bare noun:
@@ -138,7 +141,9 @@ ENTITY RULES:
       according to his need", "the enemy of my enemy", "the perpetrator of a
       crime", "genuinely disadvantaged"). They are not retrievable referents.
 7. Each entity appears exactly ONCE. Classify using the ENTITY TYPES provided.
-8. Only extract entities from CURRENT MESSAGES — PREVIOUS MESSAGES are context only.
+8. Only extract entities referenced by CURRENT MESSAGES. PREVIOUS MESSAGES are context only, so
+   exclude entities that the current messages do not refer to. Include a previous entity when a
+   current pronoun or another resolvable reference points to it.
 9. Skip didactic / tutorial scaffolding when the assistant is teaching a topic
    (Unix commands, astronomy, cooking technique, etc.). Tutorial example values
    ("/path/to/source", "file.txt", "<username>") and explanatory primitives are
