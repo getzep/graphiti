@@ -166,6 +166,7 @@ def build_fact_search_filters(
     valid_at_before: str | None = None,
     invalid_at_after: str | None = None,
     invalid_at_before: str | None = None,
+    temporal_mode: str | None = None,
 ) -> SearchFilters | None:
     """Build a ``SearchFilters`` for fact (edge) search.
 
@@ -173,9 +174,19 @@ def build_fact_search_filters(
     ``search_filter=None``.
 
     The ``*_after`` / ``*_before`` arguments are ISO-8601 strings parsed via
-    :func:`parse_reference_time` (UTC-coerced). Raises ``ValueError`` on a bad
-    timestamp.
+    :func:`parse_reference_time` (UTC-coerced). ``temporal_mode='current'``
+    limits results to facts with no invalidation or expiry recorded. Raises
+    ``ValueError`` on a bad timestamp, contradictory filter, or unsupported mode.
     """
+    if temporal_mode not in (None, 'all', 'current'):
+        raise ValueError("temporal_mode must be None, 'all', or 'current'")
+    if temporal_mode == 'current' and (
+        invalid_at_after is not None or invalid_at_before is not None
+    ):
+        raise ValueError(
+            "temporal_mode='current' cannot be combined with invalid_at_after or invalid_at_before"
+        )
+
     valid_after = parse_reference_time(valid_at_after)
     valid_before = parse_reference_time(valid_at_before)
     invalid_after = parse_reference_time(invalid_at_after)
@@ -183,6 +194,14 @@ def build_fact_search_filters(
 
     valid_at = _date_range_or_group(valid_after, valid_before)
     invalid_at = _date_range_or_group(invalid_after, invalid_before)
+
+    if temporal_mode == 'current':
+        return SearchFilters(
+            edge_types=edge_types or None,
+            valid_at=valid_at,
+            invalid_at=[[DateFilter(comparison_operator=ComparisonOperator.is_null)]],
+            expired_at=[[DateFilter(comparison_operator=ComparisonOperator.is_null)]],
+        )
 
     if not edge_types and valid_at is None and invalid_at is None:
         return None

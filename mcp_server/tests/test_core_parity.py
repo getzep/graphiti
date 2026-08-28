@@ -16,7 +16,7 @@ import pytest
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
-from graphiti_core.search.search_filters import ComparisonOperator, SearchFilters
+from graphiti_core.search.search_filters import ComparisonOperator, DateFilter, SearchFilters
 
 # Add the src directory to the path (mirrors the other unit tests)
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
@@ -122,8 +122,41 @@ class TestBuildEdgeTypeMap:
 
 
 class TestBuildFactSearchFilters:
-    def test_none_when_no_criteria(self):
-        assert build_fact_search_filters() is None
+    @pytest.mark.parametrize('temporal_mode', [None, 'all'])
+    def test_none_when_no_criteria(self, temporal_mode):
+        assert build_fact_search_filters(temporal_mode=temporal_mode) is None
+
+    def test_current_mode_filters_invalidated_and_expired_facts(self):
+        sf = build_fact_search_filters(temporal_mode='current')
+        current_filter = [[DateFilter(comparison_operator=ComparisonOperator.is_null)]]
+
+        assert isinstance(sf, SearchFilters)
+        assert sf.invalid_at is not None
+        assert sf.expired_at is not None
+        assert sf.invalid_at == current_filter
+        assert sf.expired_at == current_filter
+        assert sf.invalid_at[0][0].date is None
+        assert sf.expired_at[0][0].date is None
+
+    def test_current_mode_combines_with_edge_types(self):
+        sf = build_fact_search_filters(edge_types=['X'], temporal_mode='current')
+        current_filter = [[DateFilter(comparison_operator=ComparisonOperator.is_null)]]
+
+        assert isinstance(sf, SearchFilters)
+        assert sf.edge_types == ['X']
+        assert sf.invalid_at == current_filter
+        assert sf.expired_at == current_filter
+
+    def test_current_mode_rejects_invalid_at_range(self):
+        with pytest.raises(ValueError, match='cannot be combined'):
+            build_fact_search_filters(
+                invalid_at_after='2026-01-01T00:00:00Z',
+                temporal_mode='current',
+            )
+
+    def test_invalid_temporal_mode_raises_value_error(self):
+        with pytest.raises(ValueError, match='temporal_mode'):
+            build_fact_search_filters(temporal_mode='bogus')
 
     def test_edge_types_only(self):
         sf = build_fact_search_filters(edge_types=['WorksFor'])
