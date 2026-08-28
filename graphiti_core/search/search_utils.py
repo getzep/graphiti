@@ -101,7 +101,7 @@ def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver)
     for f in group_ids_filter_list:
         group_ids_filter += f if not group_ids_filter else f' OR {f}'
 
-    group_ids_filter += ' AND ' if group_ids_filter else ''
+    group_ids_filter = f'({group_ids_filter}) AND ' if group_ids_filter else ''
 
     lucene_query = lucene_sanitize(query)
     # If the lucene query is too long return no query
@@ -1897,7 +1897,6 @@ def maximal_marginal_relevance(
     uuids: list[str] = list(candidate_arrays.keys())
 
     similarity_matrix = np.zeros((len(uuids), len(uuids)))
-
     for i, uuid_1 in enumerate(uuids):
         for j, uuid_2 in enumerate(uuids[:i]):
             u = candidate_arrays[uuid_1]
