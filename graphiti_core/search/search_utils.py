@@ -1897,6 +1897,7 @@ def maximal_marginal_relevance(
     uuids: list[str] = list(candidate_arrays.keys())
 
     similarity_matrix = np.zeros((len(uuids), len(uuids)))
+
     for i, uuid_1 in enumerate(uuids):
         for j, uuid_2 in enumerate(uuids[:i]):
             u = candidate_arrays[uuid_1]
