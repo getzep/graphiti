@@ -1,0 +1,21 @@
+name: Validate #1249
+
+on:
+  push:
+    branches:
+      - validate/1249-group-filter-precedence
+
+jobs:
+  targeted-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Run targeted tests
+        run: |
+          uv sync --all-extras --dev
+          uv run pytest tests/utils/search/test_fulltext_query_group_precedence.py tests/utils/search/test_search_security.py -q
+      - name: Ruff check changed Python files
+        run: |
+          uv run ruff check graphiti_core/search/search_utils.py tests/utils/search/test_fulltext_query_group_precedence.py
+          uv run ruff format --check graphiti_core/search/search_utils.py tests/utils/search/test_fulltext_query_group_precedence.py
