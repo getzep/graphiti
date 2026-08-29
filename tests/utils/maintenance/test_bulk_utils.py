@@ -3,11 +3,11 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
+from graphiti_core import graphiti as graphiti_module
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils import bulk_utils
-from graphiti_core import graphiti as graphiti_module
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.utils.bulk_utils import extract_nodes_and_edges_bulk
 from graphiti_core.utils.datetime_utils import utc_now
