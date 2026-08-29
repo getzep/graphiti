@@ -565,6 +565,8 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
 
     for call in extract_edges_calls:
         assert call['custom_extraction_instructions'] == custom_instructions
+
+
 @pytest.mark.asyncio
 async def test_graphiti_bulk_forwards_combined_extraction(monkeypatch):
     graphiti = Graphiti.__new__(Graphiti)
