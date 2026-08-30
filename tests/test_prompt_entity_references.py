@@ -46,3 +46,22 @@ def test_message_prompt_extracts_pronoun_referenced_previous_entity(
     assert 'counts as implicitly mentioned' in user_prompt
     assert 'must be extracted' in user_prompt
     assert unreferenced_exclusion in user_prompt
+
+
+def test_combined_prompt_allows_disambiguated_previous_entity_name():
+    context = {
+        'entity_types': [{'entity_type_id': 0, 'entity_type_name': 'Entity'}],
+        'previous_episodes': [
+            {'content': "User: This is my friend John. He's a software engineer."}
+        ],
+        'episode_content': 'User: He also has a friend named Mike.',
+        'custom_extraction_instructions': '',
+    }
+
+    user_prompt = ' '.join(extract_nodes_and_edges_message(context)[1].content.lower().split())
+
+    assert (
+        'literal mention from current messages or, for a resolved reference, the disambiguated '
+        'name of the referenced entity from previous messages'
+    ) in user_prompt
+    assert 'entity `name` is a literal mention from current messages, ≤5 words' not in user_prompt

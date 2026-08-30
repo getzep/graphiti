@@ -209,8 +209,9 @@ FACT RULES:
    own/identify with) as source, not an observation noun.
 
 OUTPUT DISCIPLINE:
-- Entity `name` is a literal mention from CURRENT MESSAGES, ≤5 words. NEVER use a full
-  sentence, action item, goal statement, or quoted aspiration as a name.
+- Entity `name` is either a literal mention from CURRENT MESSAGES or, for a resolved reference,
+  the disambiguated name of the referenced entity from PREVIOUS MESSAGES; ≤5 words. NEVER use a
+  full sentence, action item, goal statement, or quoted aspiration as a name.
   BAD: "Establish a firm training/onboarding program",
        "Secure competitive advantage through IP",
        "Decide whether to expand into Europe next quarter".
