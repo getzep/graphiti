@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -152,6 +152,14 @@ class LLMConfig(BaseModel):
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )
     max_tokens: int = Field(default=4096, description='Max tokens')
+    structured_output_mode: Literal['json_schema', 'json_object'] = Field(
+        default='json_schema',
+        description=(
+            'Structured output mode for OpenAIGenericClient: json_schema requests native '
+            'schema enforcement; json_object injects the schema into the prompt for '
+            'OpenAI-compatible providers that do not reliably honor json_schema.'
+        ),
+    )
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)
 
 

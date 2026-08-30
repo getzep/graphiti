@@ -918,3 +918,71 @@ async def test_batch_summaries_calls_llm_for_long_summary():
     # LLM should have been called to condense the long summary
     llm_client.generate_response.assert_awaited_once()
     assert node.summary == 'Condensed summary'
+
+
+@pytest.mark.asyncio
+async def test_extract_attributes_preserves_prior_attributes_when_entity_types_none():
+    """Prior attributes survive when no entity types are supplied.
+
+    Mirrors the invariant `add_triplet` already enforces ("merge rather than replace",
+    see `test_add_triplet_empty_attributes_preserved`): an empty extraction result must
+    not clear attributes a previous typed pass stored on the node.
+    """
+    clients, _ = _make_clients()
+    clients.llm_client.generate_response = AsyncMock(return_value={'summaries': []})
+    clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    node = EntityNode(
+        name='Alice',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        summary='Existing summary',
+        attributes={'age': 30, 'city': 'New York'},
+    )
+
+    results = await extract_attributes_from_nodes(
+        clients,
+        [node],
+        episode=_make_episode(),
+        previous_episodes=[],
+        entity_types=None,
+    )
+
+    assert results[0].attributes == {'age': 30, 'city': 'New York'}
+
+
+@pytest.mark.asyncio
+async def test_extract_attributes_preserves_prior_attributes_when_label_not_in_entity_types():
+    """Prior attributes survive when the node's label is absent from `entity_types`.
+
+    `entity_types.get(...)` resolves to None for any label not in the map, which takes the
+    same no-applicable-type path as `entity_types=None`.
+    """
+    from pydantic import BaseModel
+
+    class Organization(BaseModel):
+        industry: str | None = None
+
+    clients, _ = _make_clients()
+    clients.llm_client.generate_response = AsyncMock(return_value={'summaries': []})
+    clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    node = EntityNode(
+        name='Alice',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        summary='Existing summary',
+        attributes={'age': 30, 'city': 'New York'},
+    )
+
+    results = await extract_attributes_from_nodes(
+        clients,
+        [node],
+        episode=_make_episode(),
+        previous_episodes=[],
+        entity_types={'Organization': Organization},
+    )
+
+    assert results[0].attributes == {'age': 30, 'city': 'New York'}
