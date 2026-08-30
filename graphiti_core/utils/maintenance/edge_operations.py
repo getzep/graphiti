@@ -14,8 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from collections import defaultdict
 import logging
 from datetime import datetime
+import math
 from time import time
 
 from pydantic import BaseModel
@@ -322,6 +324,107 @@ async def extract_edges(
     return edges
 
 
+def _cosine_similarity(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if not norm_a or not norm_b:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+async def _embed_facts(embedder, texts):
+    """Batch-embed if the embedder supports it, else fall back to individual
+    calls gathered concurrently. Never raises -- callers treat a failure here
+    as "couldn't confirm duplication," not as "must be duplicates.\""""
+    import asyncio
+ 
+    try:
+        return await embedder.create_batch(texts)
+    except (NotImplementedError, AttributeError):
+        pass
+    except Exception:
+        logger.warning("create_batch embedding failed, falling back to per-text calls", exc_info=True)
+ 
+    async def _one(t):
+        return await embedder.create(input_data=[t])
+ 
+    return await asyncio.gather(*[_one(t) for t in texts])
+
+
+def _cluster_by_similarity(edges, embeddings, threshold):
+    """Greedy single-link clustering: an edge joins the first existing
+    cluster whose representative (first member) it's similar enough to,
+    else it starts a new cluster. Good enough for the small group sizes
+    (almost always 2, rarely more) this ever runs on."""
+    clusters = []  # list of (representative_embedding, [edge, ...])
+    for edge, emb in zip(edges, embeddings):
+        placed = False
+        for rep_emb, members in clusters:
+            if _cosine_similarity(rep_emb, emb) >= threshold:
+                members.append(edge)
+                placed = True
+                break
+        if not placed:
+            clusters.append((emb, [edge]))
+    return [members for _, members in clusters]
+
+
+async def _collapse_same_relationship_siblings(embedder, extracted_edges, sibling_dedupe_similarity_threshold=0.9):
+    """Group edges by (source, target, relation name); within any group of
+    more than one, use fact-embedding similarity to find real duplicates and
+    collapse each semantic cluster to a single representative (the longest
+    text in that cluster, since once we know they're duplicates the longer
+    phrasing is typically the more complete one). Clusters that turn out to
+    be semantically distinct are left as separate edges, even though they
+    share a relation type and node pair."""
+    
+    groups = defaultdict(list)
+    for edge in extracted_edges:
+        groups[(edge.source_node_uuid, edge.target_node_uuid, edge.name)].append(edge)
+ 
+    collapsed, dropped = [], 0
+    for (src, tgt, rel_name), edges in groups.items():
+        if len(edges) == 1:
+            collapsed.append(edges[0])
+            continue
+ 
+        try:
+            embeddings = await _embed_facts(embedder, [e.fact for e in edges])
+        except Exception:
+            # Can't establish semantic similarity -- don't guess. Keep every
+            # candidate as its own edge rather than risk merging two facts
+            # that only happen to share a relation type and node pair.
+            logger.warning(
+                "embedding failed while dedup-checking %s edges %s->%s; keeping all %d as-is",
+                rel_name, src, tgt, len(edges), exc_info=True,
+            )
+            collapsed.extend(edges)
+            continue
+ 
+        for cluster in _cluster_by_similarity(edges, embeddings, sibling_dedupe_similarity_threshold):
+            if len(cluster) == 1:
+                collapsed.append(cluster[0])
+                continue
+ 
+            cluster.sort(key=lambda e: len(e.fact or ""), reverse=True)
+            keep, redundant = cluster[0], cluster[1:]
+            for e in redundant:
+                for ep in e.episodes:
+                    if ep not in keep.episodes:
+                        keep.episodes.append(ep)
+ 
+            collapsed.append(keep)
+            dropped += len(redundant)
+            logger.info(
+                "collapsed %d semantically-duplicate %s edge(s) %s->%s within one extraction "
+                "batch (similarity >= %.2f), kept: %r",
+                len(redundant), rel_name, src, tgt, sibling_dedupe_similarity_threshold, keep.fact,
+            )
+
+    return collapsed, dropped
+
+
 async def resolve_extracted_edges(
     clients: GraphitiClients,
     extracted_edges: list[EntityEdge],
@@ -344,6 +447,14 @@ async def resolve_extracted_edges(
     # Fast path: deduplicate exact matches within the extracted edges before parallel processing
     seen: dict[tuple[str, str, str], EntityEdge] = {}
     deduplicated_edges: list[EntityEdge] = []
+
+    # intra-batch consolidation immediately before the parallel resolution step. 
+    # This collapses edges of the same relation type between the same node pair within one extraction batch 
+    # before they're ever sent to the (expensive) LLM resolution calls. It shrinks the batch, so it reduces 
+    # LLM calls and written edges rather than adding a cleanup cycle after the fact.
+    extracted_edges, dropped = await _collapse_same_relationship_siblings(clients.embedder, extracted_edges)
+    if dropped:
+        logger.info("episode %s: dropped %d redundant edge(s)", getattr(episode, "uuid", "?"), dropped)
 
     for edge in extracted_edges:
         key = (
