@@ -10,8 +10,12 @@ def _neo4j_driver():
 
 def test_fulltext_query_groups_multiple_group_ids_before_query_clause():
     result = fulltext_query('hello world', ['group1', 'group2', 'group3'], _neo4j_driver())
+    expected = (
+        '(group_id:"group1" OR group_id:"group2" OR group_id:"group3") AND '
+        '(hello world)'
+    )
 
-    assert result == '(group_id:"group1" OR group_id:"group2" OR group_id:"group3") AND (hello world)'
+    assert result == expected
 
 
 def test_fulltext_query_keeps_single_group_filter_semantics():
