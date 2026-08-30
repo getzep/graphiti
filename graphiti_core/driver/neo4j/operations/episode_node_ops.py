@@ -52,6 +52,10 @@ class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
             'valid_at': node.valid_at,
             'source': node.source.value,
         }
+        episode_data = dict(params)
+        for key, value in (node.episode_metadata or {}).items():
+            episode_data.setdefault(key, value)
+        params['episode_data'] = episode_data
         if tx is not None:
             await tx.run(query, **params)
         else:
@@ -71,6 +75,9 @@ class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
             ep = dict(node)
             ep['source'] = str(ep['source'].value)
             ep.pop('labels', None)
+            metadata = ep.pop('episode_metadata', None) or {}
+            for key, value in metadata.items():
+                ep.setdefault(key, value)
             episodes.append(ep)
 
         query = get_episode_node_save_bulk_query(GraphProvider.NEO4J)

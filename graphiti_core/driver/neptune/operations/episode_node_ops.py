@@ -52,6 +52,11 @@ class NeptuneEpisodeNodeOperations(EpisodeNodeOperations):
             'valid_at': node.valid_at,
             'source': node.source.value,
         }
+        episode_data = dict(params)
+        episode_data['entity_edges'] = '|'.join(str(value) for value in node.entity_edges)
+        for key, value in (node.episode_metadata or {}).items():
+            episode_data.setdefault(key, value)
+        params['episode_data'] = episode_data
         if tx is not None:
             await tx.run(query, **params)
         else:
@@ -71,6 +76,10 @@ class NeptuneEpisodeNodeOperations(EpisodeNodeOperations):
             ep = dict(node)
             ep['source'] = str(ep['source'].value)
             ep.pop('labels', None)
+            metadata = ep.pop('episode_metadata', None) or {}
+            ep['entity_edges'] = '|'.join(str(value) for value in ep.get('entity_edges', []))
+            for key, value in metadata.items():
+                ep.setdefault(key, value)
             episodes.append(ep)
 
         query = get_episode_node_save_bulk_query(GraphProvider.NEPTUNE)

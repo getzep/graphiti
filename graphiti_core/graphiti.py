@@ -995,6 +995,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
+        episode_metadata: dict[str, object] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1042,6 +1043,8 @@ class Graphiti:
             query to find the most recent episode. Useful for efficiently adding multiple episodes
             to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
             as this parameter for the next episode.
+        episode_metadata : dict[str, object] | None
+            Optional customer-defined metadata to persist on the episodic node for filtering.
 
         Returns
         -------
@@ -1108,8 +1111,11 @@ class Graphiti:
                         source_description=source_description,
                         created_at=now,
                         valid_at=reference_time,
+                        episode_metadata=episode_metadata,
                     )
                 )
+                if uuid is not None and episode_metadata is not None:
+                    episode.episode_metadata = episode_metadata
 
                 # Create default edge type map
                 edge_type_map_default = (
@@ -1328,6 +1334,7 @@ class Graphiti:
                         group_id=group_id,
                         created_at=now,
                         valid_at=episode.reference_time,
+                        episode_metadata=episode.episode_metadata,
                     )
                     for episode in bulk_episodes
                 ]
