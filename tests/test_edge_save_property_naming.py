@@ -31,6 +31,7 @@ from graphiti_core.driver.falkordb.operations.entity_edge_ops import FalkorEntit
 from graphiti_core.driver.kuzu.operations.entity_edge_ops import KuzuEntityEdgeOperations
 from graphiti_core.driver.neo4j.operations.entity_edge_ops import Neo4jEntityEdgeOperations
 from graphiti_core.driver.neptune.operations.entity_edge_ops import NeptuneEntityEdgeOperations
+from graphiti_core.driver.record_parsers import entity_edge_from_record
 from graphiti_core.edges import EntityEdge
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_save_query
 
@@ -134,6 +135,90 @@ async def test_entity_edge_operations_save_never_sends_bare_source_target_uuid(o
     payload = (
         executor.kwargs if ops_cls is KuzuEntityEdgeOperations else executor.kwargs['edge_data']
     )
+
+    assert 'source_uuid' not in payload
+    assert 'target_uuid' not in payload
+    assert payload['source_node_uuid'] == 'src-uuid'
+    assert payload['target_node_uuid'] == 'tgt-uuid'
+
+
+NON_KUZU_OPERATIONS_CLASSES = [
+    Neo4jEntityEdgeOperations,
+    FalkorEntityEdgeOperations,
+    NeptuneEntityEdgeOperations,
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ops_cls', NON_KUZU_OPERATIONS_CLASSES)
+async def test_entity_edge_operations_save_trusted_endpoints_beat_colliding_attributes(ops_cls):
+    executor = RecordingExecutor()
+    edge = _make_edge()
+    edge.attributes = {'source_node_uuid': 'wrong-src', 'target_node_uuid': 'wrong-tgt'}
+
+    await ops_cls().save(executor, edge)  # type: ignore[arg-type]
+
+    payload = executor.kwargs['edge_data']
+
+    assert payload['source_node_uuid'] == 'src-uuid'
+    assert payload['target_node_uuid'] == 'tgt-uuid'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ops_cls', NON_KUZU_OPERATIONS_CLASSES)
+async def test_entity_edge_operations_save_bulk_trusted_endpoints_beat_colliding_attributes(
+    ops_cls,
+):
+    executor = RecordingExecutor()
+    edge = _make_edge()
+    edge.attributes = {'source_node_uuid': 'wrong-src', 'target_node_uuid': 'wrong-tgt'}
+
+    await ops_cls().save_bulk(executor, [edge])  # type: ignore[arg-type]
+
+    payload = executor.kwargs['entity_edges'][0]
+
+    assert payload['source_node_uuid'] == 'src-uuid'
+    assert payload['target_node_uuid'] == 'tgt-uuid'
+
+
+def _make_legacy_record() -> dict[str, Any]:
+    return {
+        'uuid': 'edge-uuid',
+        'source_node_uuid': 'src-uuid',
+        'target_node_uuid': 'tgt-uuid',
+        'fact': 'src relates to tgt',
+        'fact_embedding': None,
+        'name': 'RELATES_TO',
+        'group_id': 'group-a',
+        'episodes': [],
+        'created_at': datetime.now(timezone.utc),
+        'expired_at': None,
+        'valid_at': None,
+        'invalid_at': None,
+        'reference_time': None,
+        'attributes': {
+            'source_uuid': 'src-uuid',
+            'target_uuid': 'tgt-uuid',
+            'custom_attr': 'value',
+        },
+    }
+
+
+def test_entity_edge_from_record_strips_legacy_source_target_uuid_aliases():
+    edge = entity_edge_from_record(_make_legacy_record())
+
+    assert edge.attributes == {'custom_attr': 'value'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ops_cls', NON_KUZU_OPERATIONS_CLASSES)
+async def test_entity_edge_operations_resave_after_legacy_read_drops_aliases(ops_cls):
+    edge = entity_edge_from_record(_make_legacy_record())
+    executor = RecordingExecutor()
+
+    await ops_cls().save(executor, edge)  # type: ignore[arg-type]
+
+    payload = executor.kwargs['edge_data']
 
     assert 'source_uuid' not in payload
     assert 'target_uuid' not in payload

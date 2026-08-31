@@ -39,21 +39,23 @@ class NeptuneEntityEdgeOperations(EntityEdgeOperations):
         edge: EntityEdge,
         tx: Transaction | None = None,
     ) -> None:
-        edge_data: dict[str, Any] = {
-            'uuid': edge.uuid,
-            'source_node_uuid': edge.source_node_uuid,
-            'target_node_uuid': edge.target_node_uuid,
-            'name': edge.name,
-            'fact': edge.fact,
-            'fact_embedding': edge.fact_embedding,
-            'group_id': edge.group_id,
-            'episodes': edge.episodes,
-            'created_at': edge.created_at,
-            'expired_at': edge.expired_at,
-            'valid_at': edge.valid_at,
-            'invalid_at': edge.invalid_at,
-        }
-        edge_data.update(edge.attributes or {})
+        edge_data: dict[str, Any] = dict(edge.attributes or {})
+        edge_data.update(
+            {
+                'uuid': edge.uuid,
+                'source_node_uuid': edge.source_node_uuid,
+                'target_node_uuid': edge.target_node_uuid,
+                'name': edge.name,
+                'fact': edge.fact,
+                'fact_embedding': edge.fact_embedding,
+                'group_id': edge.group_id,
+                'episodes': edge.episodes,
+                'created_at': edge.created_at,
+                'expired_at': edge.expired_at,
+                'valid_at': edge.valid_at,
+                'invalid_at': edge.invalid_at,
+            }
+        )
 
         query = get_entity_edge_save_query(GraphProvider.NEPTUNE)
         if tx is not None:
@@ -72,21 +74,23 @@ class NeptuneEntityEdgeOperations(EntityEdgeOperations):
     ) -> None:
         prepared: list[dict[str, Any]] = []
         for edge in edges:
-            edge_data: dict[str, Any] = {
-                'uuid': edge.uuid,
-                'source_node_uuid': edge.source_node_uuid,
-                'target_node_uuid': edge.target_node_uuid,
-                'name': edge.name,
-                'fact': edge.fact,
-                'fact_embedding': edge.fact_embedding,
-                'group_id': edge.group_id,
-                'episodes': edge.episodes,
-                'created_at': edge.created_at,
-                'expired_at': edge.expired_at,
-                'valid_at': edge.valid_at,
-                'invalid_at': edge.invalid_at,
-            }
-            edge_data.update(edge.attributes or {})
+            edge_data: dict[str, Any] = dict(edge.attributes or {})
+            edge_data.update(
+                {
+                    'uuid': edge.uuid,
+                    'source_node_uuid': edge.source_node_uuid,
+                    'target_node_uuid': edge.target_node_uuid,
+                    'name': edge.name,
+                    'fact': edge.fact,
+                    'fact_embedding': edge.fact_embedding,
+                    'group_id': edge.group_id,
+                    'episodes': edge.episodes,
+                    'created_at': edge.created_at,
+                    'expired_at': edge.expired_at,
+                    'valid_at': edge.valid_at,
+                    'invalid_at': edge.invalid_at,
+                }
+            )
             prepared.append(edge_data)
 
         query = get_entity_edge_save_bulk_query(GraphProvider.NEPTUNE)
