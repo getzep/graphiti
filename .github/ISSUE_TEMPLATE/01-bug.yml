@@ -7,14 +7,22 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a problem. Please remove credentials, private data, and other secrets.
-        For security vulnerabilities, stop and use [private reporting](https://github.com/getzep/graphiti/security/advisories/new).
+        Thanks for reporting a problem. Please read
+        [Reporting a bug](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#reporting-a-bug)
+        before you file: the fastest fixes start with a reproduction someone else can run.
+        Reports missing a usable reproduction or environment details get labeled `needs-info`
+        and wait until you can add them.
+
+        Please remove credentials, private data, and other secrets. For security vulnerabilities,
+        stop and use [private reporting](https://github.com/getzep/graphiti/security/advisories/new).
   - type: checkboxes
     id: existing-issues
     attributes:
-      label: Existing issues
+      label: Before you file
       options:
         - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I read the [contributing guide](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#reporting-a-bug) and included a minimal reproduction.
           required: true
   - type: dropdown
     id: component
@@ -25,6 +33,7 @@ body:
         - MCP server
         - REST server
         - Documentation or examples
+        - CI, Docker, or release
         - Other
     validations:
       required: true

@@ -17,7 +17,7 @@ jobs:
     if: >-
       !github.event.issue.pull_request &&
       (github.event_name != 'issue_comment' ||
-       (contains(github.event.issue.labels.*.name, 'intake/needs-info') &&
+       (contains(github.event.issue.labels.*.name, 'needs-info') &&
         github.event.comment.user.type != 'Bot'))
     runs-on: ubuntu-latest
     timeout-minutes: 10

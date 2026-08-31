@@ -22,10 +22,16 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["area/core", "area/mcp", "area/server", "area/docs"]
+        "enum": [
+          "scope:core",
+          "scope:mcp",
+          "scope:service",
+          "scope:docs",
+          "scope:ci"
+        ]
       },
       "uniqueItems": true,
-      "maxItems": 4
+      "maxItems": 5
     },
     "labels": {
       "type": "array",

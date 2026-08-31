@@ -4,10 +4,17 @@ title: "[Docs] "
 labels:
   - documentation
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve the docs. See the
+        [contributing guide](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#where-to-start)
+        for how documentation issues are handled. Point us at the exact page or file so we can
+        fix the right thing.
   - type: checkboxes
     id: existing-issues
     attributes:
-      label: Existing issues
+      label: Before you file
       options:
         - label: I searched existing issues and did not find a duplicate.
           required: true

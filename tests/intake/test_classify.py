@@ -180,7 +180,7 @@ def test_anthropic_request_has_no_tools_and_uses_structured_output():
                     'text': json.dumps(
                         {
                             'category': 'bug',
-                            'areas': ['area/core'],
+                            'areas': ['scope:core'],
                             'labels': ['bug'],
                             'comment_id': None,
                             'duplicate_issue_numbers': [],

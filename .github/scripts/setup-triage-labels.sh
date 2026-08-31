@@ -27,34 +27,29 @@ create_label() {
 
 echo "Creating triage labels for $REPO..."
 
-# Type labels
+# Type (GitHub already provides bug, documentation, and question)
 create_label "feature" "a2eeef" "New functionality or an improvement to existing behavior"
 
-# Area labels
-create_label "area/core" "1d76db" "Graphiti core library"
-create_label "area/mcp" "1d76db" "Graphiti MCP server"
-create_label "area/server" "1d76db" "Graphiti REST server"
-create_label "area/docs" "1d76db" "Documentation and examples"
+# Scope — which package the change belongs to (required on new issues and PRs)
+create_label "scope:core" "1d76db" "graphiti_core library, including drivers, LLM, search, and ingest"
+create_label "scope:mcp" "1d76db" "Graphiti MCP server"
+create_label "scope:service" "1d76db" "Graphiti REST server"
+create_label "scope:docs" "1d76db" "Documentation and examples"
+create_label "scope:ci" "1d76db" "GitHub Actions, Docker, CLA, Makefile, and release plumbing"
 
-# Intake and design process
-create_label "intake/needs-info" "fbca04" "Reporter needs to provide information before triage can continue"
+# Not ready for review — automation keys off these
+create_label "needs-info" "fbca04" "Author owes information before review can continue"
+create_label "needs-issue" "fbca04" "Pull request is missing a linked issue"
 create_label "needs-rfc" "e4e669" "Large feature needs design discussion or approval"
 create_label "rfc-approved" "0e8a16" "Maintainers approved the large feature design"
 create_label "needs-tests" "e4e669" "Pull request lacks adequate test coverage"
 create_label "needs-rework" "d876e3" "Contribution needs focused revisions before maintainer review"
+
+# Flags
 create_label "security" "b60205" "Public report may describe a security vulnerability; route it privately"
-
-# Maintainer priority labels
-create_label "triage/high" "d73a4a" "High priority - needs maintainer attention"
-create_label "triage/medium" "fbca04" "Medium priority - worth reviewing"
-create_label "triage/low" "0e8a16" "Low priority - backlog"
-create_label "triage/skip" "e4e669" "Skip - duplicate, stale, or misaligned"
-
-# Existing triage signals
 create_label "duplicate" "cfd3d7" "Duplicate of another issue or pull request"
-create_label "recommend-close" "b60205" "Triage recommends closing"
 
-# enhancement and slop-detected are intentionally left untouched for historical items.
-# New triage uses feature and needs-rework instead.
+# enhancement, slop-detected, area/*, intake/needs-info, and triage/* are left
+# untouched for historical items. New work uses feature, scope:*, and needs-*.
 
 echo "Done. All active triage labels were created or updated."

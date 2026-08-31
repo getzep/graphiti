@@ -41,11 +41,14 @@ ALLOWLIST = frozenset(
         'question',
         'documentation',
         'duplicate',
-        'area/core',
-        'area/mcp',
-        'area/server',
-        'area/docs',
-        'intake/needs-info',
+        'invalid',
+        'scope:core',
+        'scope:mcp',
+        'scope:service',
+        'scope:docs',
+        'scope:ci',
+        'needs-info',
+        'needs-issue',
         'needs-rfc',
         'needs-tests',
         'needs-rework',
@@ -69,6 +72,11 @@ BANNED_LABELS = frozenset(
 LABEL_ALIASES = {
     'enhancement': 'feature',
     'slop-detected': 'needs-rework',
+    'intake/needs-info': 'needs-info',
+    'area/core': 'scope:core',
+    'area/mcp': 'scope:mcp',
+    'area/server': 'scope:service',
+    'area/docs': 'scope:docs',
 }
 TYPE_LABELS = frozenset({'bug', 'feature', 'documentation', 'question', 'security'})
 LABEL_ORDER = (
@@ -77,15 +85,18 @@ LABEL_ORDER = (
     'question',
     'documentation',
     'security',
-    'area/core',
-    'area/mcp',
-    'area/server',
-    'area/docs',
-    'intake/needs-info',
+    'scope:core',
+    'scope:mcp',
+    'scope:service',
+    'scope:docs',
+    'scope:ci',
+    'needs-info',
+    'needs-issue',
     'needs-rfc',
     'needs-tests',
     'needs-rework',
     'duplicate',
+    'invalid',
 )
 MISSING_FIELD_COPY = {
     'reproduction': 'a minimal reproduction script or test case',
@@ -248,8 +259,9 @@ def normalize_labels(
         accepted.add(category)
 
     for area in areas:
-        if area in ALLOWLIST:
-            accepted.add(area)
+        mapped = LABEL_ALIASES.get(area, area)
+        if mapped in ALLOWLIST:
+            accepted.add(mapped)
         else:
             dropped.append(area)
 

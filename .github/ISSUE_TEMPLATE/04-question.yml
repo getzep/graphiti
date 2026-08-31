@@ -7,12 +7,16 @@ body:
   - type: markdown
     attributes:
       value: |
-        Questions are welcome. Provide enough context for the community to understand your setup.
+        Questions are welcome. Provide enough context for the community to understand your setup —
+        the [contributing guide](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#where-to-start)
+        explains what helps us answer quickly. If it turns out to be a bug, we will ask you to
+        open a bug report with a reproduction.
+
         Remove credentials, private data, and other secrets.
   - type: checkboxes
     id: existing-issues
     attributes:
-      label: Existing resources
+      label: Before you ask
       options:
         - label: I searched the documentation and existing issues before asking.
           required: true
@@ -25,6 +29,7 @@ body:
         - MCP server
         - REST server
         - Documentation or examples
+        - CI, Docker, or release
         - General usage or architecture
         - Other
     validations:
