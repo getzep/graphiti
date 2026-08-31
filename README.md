@@ -597,9 +597,14 @@ especially on smaller or local models, so `OpenAIGenericClient` exposes a `struc
 
 - `"json_schema"` (default): requests native structured output via `response_format`. Best on capable models and
   providers that enforce the schema via constrained decoding.
-- `"json_object"`: requests plain-JSON mode and injects the schema into the prompt instead. Use this for
-  providers/models that don't reliably honor `json_schema` — including some local servers that accept the `json_schema`
-  request but don't actually constrain output to it, where `json_object` can be *more* reliable.
+- `"json_object"`: requests plain-JSON mode and injects the schema into the prompt instead. Use this only for
+  providers/models that reject or ignore the `json_schema` `response_format` parameter outright — the schema is not
+  enforced in this mode, and models frequently echo the injected Pydantic schema back verbatim instead of filling it
+  in, which surfaces as `ValidationError: ... Field required ...` with `$defs`/`$ref` in the offending value (e.g.
+  `extracted_entities` missing from `ExtractedEntities`). If you hit that error, check whether `structured_output_mode`
+  was explicitly set to `"json_object"` and switch it back to `"json_schema"` (the default) before assuming the model
+  or provider is at fault — this has resolved the issue across multiple local models on Ollama 0.32+, which supports
+  native `json_schema` constrained decoding via its OpenAI-compatible endpoint.
 
 When using smaller or local models:
 

@@ -183,7 +183,7 @@ llm:
   model: "gpt-oss:120b"  # or your preferred Ollama model
   api_base: "http://localhost:11434/v1"
   api_key: "ollama"  # dummy key required
-  structured_output_mode: "json_object"  # use when json_schema is accepted but not enforced
+  structured_output_mode: "json_schema"  # default; native constrained decoding on Ollama 0.32+
 
 embedder:
   provider: "sentence_transformers"  # recommended for local setup
@@ -198,9 +198,14 @@ Make sure Ollama is running locally with: `ollama serve`
 > that doesn't match the expected schema, which surfaces as ingestion failures. For background and the
 > `structured_output_mode` (`json_schema` vs `json_object`) trade-off, see the core README's
 > [Structured output and small models](../README.md#structured-output-and-small-models) section.
-> If an OpenAI-compatible endpoint accepts `json_schema` but returns objects that miss fields such as
-> `extracted_entities`, set `structured_output_mode: "json_object"` so Graphiti injects the schema into the prompt
-> instead of relying on provider-side schema enforcement.
+>
+> If ingestion fails with `ValidationError: ... extracted_entities Field required ...` and the input value contains
+> `$defs`/`$ref` keys, the model echoed the injected JSON schema back instead of filling it in. This is caused by
+> `structured_output_mode: "json_object"`, which embeds the raw Pydantic schema in the prompt — some models copy it
+> verbatim rather than extracting data. Switch to (or leave unset for the default) `structured_output_mode:
+> "json_schema"`, which uses Ollama's native constrained decoding via `response_format` instead of prompt injection
+> and has been reported to eliminate this error across multiple local models on Ollama 0.32+. Reserve `json_object`
+> for OpenAI-compatible endpoints that reject or ignore the `json_schema` `response_format` parameter outright.
 
 ### Entity Types
 
