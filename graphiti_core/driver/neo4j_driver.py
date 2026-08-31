@@ -88,7 +88,6 @@ class Neo4jDriver(GraphDriver):
         self._next_episode_edge_ops = Neo4jNextEpisodeEdgeOperations()
         self._search_ops = Neo4jSearchOperations()
         self._graph_ops = Neo4jGraphMaintenanceOperations()
-
         self._init_task: asyncio.Task | None = None
         # Schedule the indices and constraints to be built
         try:
