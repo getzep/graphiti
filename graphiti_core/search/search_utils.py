@@ -594,7 +594,9 @@ async def node_fulltext_search(
         yield_query = 'WITH node AS n, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
-        res = driver.run_aoss_query('node_name_and_summary', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
+        res = driver.run_aoss_query(  # pyright: ignore reportAttributeAccessIssue
+            'node_name_and_summary', query, limit=limit, group_ids=group_ids
+        )
         if res['hits']['total']['value'] > 0:
             input_ids = []
             for r in res['hits']['hits']:
@@ -897,7 +899,7 @@ async def episode_fulltext_search(
         filter_params['group_ids'] = group_ids
 
     if driver.provider == GraphProvider.NEPTUNE:
-        res = driver.run_aoss_query('episode_content', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
+        res = driver.run_aoss_query('episode_content', query, limit=limit, group_ids=group_ids)  # pyright: ignore reportAttributeAccessIssue
         if res['hits']['total']['value'] > 0:
             input_ids = []
             for r in res['hits']['hits']:
@@ -908,7 +910,7 @@ async def episode_fulltext_search(
                 """
                 UNWIND $ids as i
                 MATCH (e:Episodic)
-                WHERE e.uuid=i.uuid
+                WHERE e.uuid=i.id
                 """
                 + group_filter_query
                 + """
@@ -994,7 +996,7 @@ async def community_fulltext_search(
         yield_query = 'WITH node AS c, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
-        res = driver.run_aoss_query('community_name', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
+        res = driver.run_aoss_query('community_name', query, limit=limit, group_ids=group_ids)  # pyright: ignore reportAttributeAccessIssue
         if res['hits']['total']['value'] > 0:
             # Calculate Cosine similarity then return the edge ids
             input_ids = []
