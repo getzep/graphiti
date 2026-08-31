@@ -35,7 +35,29 @@
     },
     "labels": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 64 },
+      "items": {
+        "type": "string",
+        "maxLength": 64,
+        "enum": [
+          "bug",
+          "feature",
+          "question",
+          "documentation",
+          "duplicate",
+          "invalid",
+          "scope:core",
+          "scope:mcp",
+          "scope:service",
+          "scope:docs",
+          "scope:ci",
+          "needs-info",
+          "needs-issue",
+          "needs-rfc",
+          "needs-tests",
+          "needs-rework",
+          "security"
+        ]
+      },
       "maxItems": 20
     },
     "comment_id": {

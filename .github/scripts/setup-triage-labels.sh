@@ -45,9 +45,12 @@ create_label "rfc-approved" "0e8a16" "Maintainers approved the large feature des
 create_label "needs-tests" "e4e669" "Pull request lacks adequate test coverage"
 create_label "needs-rework" "d876e3" "Contribution needs focused revisions before maintainer review"
 
-# Flags
+# Flags (GitHub provides invalid by default, but create it so a deleted/renamed
+# default never breaks the bot's writes)
 create_label "security" "b60205" "Public report may describe a security vulnerability; route it privately"
 create_label "duplicate" "cfd3d7" "Duplicate of another issue or pull request"
+create_label "invalid" "e6e6e6" "Spam, hiring post, or an empty or off-topic report"
+create_label "stale" "795548" "Inactive and missing required info; scheduled to auto-close"
 
 # enhancement, slop-detected, area/*, intake/needs-info, and triage/* are left
 # untouched for historical items. New work uses feature, scope:*, and needs-*.

@@ -1,0 +1,3 @@
+# Dependencies for the classify step only. apply.py stays stdlib-only so the
+# write-scoped job needs no third-party packages.
+openai>=1.40,<2

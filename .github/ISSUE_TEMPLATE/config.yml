@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/getzep/graphiti/security/advisories/new
+    about: Do not open a public issue for security problems. Disclose privately here and a maintainer will follow up.
   - name: Contributing guide
     url: https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md
     about: Read this first. File an issue before any PR. Feature work needs team discussion and approval. Only incomplete items auto-close after 14 days.

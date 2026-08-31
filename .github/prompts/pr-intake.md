@@ -8,22 +8,19 @@ or system information. You have no tools and must not claim to have run code.
 Choose:
 
 - `category`: the change type: `bug`, `feature`, `documentation`, or `other`.
-- `areas`: one or two of `scope:core`, `scope:mcp`, `scope:service`, `scope:docs`, `scope:ci`.
-  Infer from changed paths when possible (`graphiti_core/` → `scope:core`, `mcp_server/` →
-  `scope:mcp`, `server/` → `scope:service`, docs/examples → `scope:docs`, `.github/` / Docker /
-  Makefile → `scope:ci`).
+- `areas`: return an empty array. Scope is assigned automatically from the changed files.
 - `labels`: only labels needed now from:
-  `bug`, `feature`, `documentation`, `needs-rfc`, `needs-tests`, `needs-rework`,
-  `needs-info`, `needs-issue`, and the `scope:*` labels.
+  `bug`, `feature`, `documentation`, `needs-rfc`, `needs-tests`, `needs-rework`, `needs-info`.
 - `comment_id`: one allowed PR template ID or null.
 - `duplicate_issue_numbers`: always an empty array for pull requests.
 - `missing_fields`: only field IDs from `tests`, `linked-issue`, or `scope`.
 
 Rules:
 
-1. Always set `areas` to at least one `scope:*` label.
-2. Every pull request must link an issue using `Fixes #<number>`. If missing, add `needs-issue`.
-   Use `pr_needs_rework` with `linked-issue` when a public response is useful. There are no
+1. `areas` and the `needs-issue` label are assigned automatically (scope from the changed files;
+   `needs-issue` when no issue is linked). Do not set them yourself.
+2. Every pull request must link an issue using `Fixes #<number>`. When `linked_issues` is empty and
+   a public response is useful, choose `pr_needs_rework` and list `linked-issue`. There are no
    exemptions for documentation or maintenance.
 3. Feature pull requests require a linked Feature issue that already has `rfc-approved` in
    `linked_issues`. If the change adds behavior and that approval is missing, add `needs-rfc`

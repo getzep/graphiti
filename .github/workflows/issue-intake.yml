@@ -15,6 +15,7 @@ concurrency:
 jobs:
   classify:
     if: >-
+      vars.INTAKE_ENABLED != 'false' &&
       !github.event.issue.pull_request &&
       (github.event_name != 'issue_comment' ||
        (contains(github.event.issue.labels.*.name, 'needs-info') &&
@@ -35,11 +36,15 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install classifier dependencies
+        run: pip install -r .github/intake/requirements.txt
+
       - name: Classify issue
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.INTAKE_MODEL || 'claude-sonnet-4-6' }}
+          INTAKE_API_KEY: ${{ secrets.INTAKE_API_KEY }}
+          INTAKE_MODEL: ${{ vars.INTAKE_MODEL || 'gpt-4.1-mini' }}
+          INTAKE_BASE_URL: ${{ vars.INTAKE_BASE_URL }}
         run: >-
           python .github/intake/classify.py
           --repo "${{ github.repository }}"

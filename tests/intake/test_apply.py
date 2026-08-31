@@ -290,6 +290,33 @@ def test_non_allowlisted_urls_in_substitutions_are_stripped():
     assert 'https://github.com/getzep/graphiti/security/advisories/new' in result.comment
 
 
+def test_label_cap_keeps_all_flags_on_a_pr_spanning_every_scope():
+    # Worst realistic PR: a category, all five path-derived scopes, and every
+    # compliance flag. No process label may be silently truncated away.
+    labels, dropped = apply.normalize_labels(
+        'feature',
+        ['scope:core', 'scope:mcp', 'scope:service', 'scope:docs', 'scope:ci'],
+        ['needs-info', 'needs-issue', 'needs-rfc', 'needs-tests'],
+    )
+
+    assert dropped == ()
+    assert 'needs-tests' in labels
+    assert len(labels) == 10
+
+
+def test_url_host_allowlist_blocks_lookalike_domains():
+    # Lookalike hosts that a naive startswith() check would have accepted.
+    assert apply._rewrite_urls('a https://help.getzep.com.evil.com/x') == 'a '
+    assert apply._rewrite_urls('b https://github.com.evil.com/x') == 'b '
+    assert apply._rewrite_urls('c http://github.com/getzep/graphiti') == 'c '  # non-https
+    # Legitimate links survive.
+    assert (
+        apply._rewrite_urls('d https://github.com/getzep/graphiti/issues/1')
+        == 'd https://github.com/getzep/graphiti/issues/1'
+    )
+    assert apply._rewrite_urls('e https://help.getzep.com/page') == 'e https://help.getzep.com/page'
+
+
 def test_html_in_missing_fields_is_not_rendered():
     result = apply_payload(
         comment_id='ask_repro',
@@ -311,10 +338,14 @@ def test_cli_writes_result_json(tmp_path: Path):
     assert payload['no_op'] is False
 
 
-def test_cli_invalid_json_exits_nonzero(tmp_path: Path):
+def test_cli_invalid_json_is_a_clean_noop(tmp_path: Path):
+    # An invalid or empty decision applies nothing; that is the safe outcome, so
+    # the CLI exits 0 (no red job) while reporting no_op in its output.
     decision_path = tmp_path / 'decision.json'
+    output_path = tmp_path / 'result.json'
     decision_path.write_text('[]')
-    assert apply.main([str(decision_path)]) == 1
+    assert apply.main([str(decision_path), '-o', str(output_path)]) == 0
+    assert json.loads(output_path.read_text())['no_op'] is True
 
 
 @pytest.mark.parametrize(
