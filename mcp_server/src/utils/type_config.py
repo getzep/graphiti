@@ -1,7 +1,7 @@
 """Helpers for translating MCP configuration into graphiti-core arguments.
 
-These functions are intentionally free of any I/O or global state so they can be
-unit-tested without a live database or LLM:
+These functions avoid I/O so they can be unit-tested without a live database or
+LLM:
 
 - ``parse_reference_time`` coerces an ISO-8601 string into a timezone-aware UTC
   ``datetime``.
@@ -19,6 +19,7 @@ from graphiti_core.search.search_filters import (
     DateFilter,
     SearchFilters,
 )
+from graphiti_core.utils.datetime_utils import utc_now
 from pydantic import BaseModel, create_model
 
 from config.schema import EdgeTypeConfig, EdgeTypeMapEntry, EntityTypeConfig
@@ -175,8 +176,9 @@ def build_fact_search_filters(
 
     The ``*_after`` / ``*_before`` arguments are ISO-8601 strings parsed via
     :func:`parse_reference_time` (UTC-coerced). ``temporal_mode='current'``
-    limits results to facts with no invalidation or expiry recorded. Raises
-    ``ValueError`` on a bad timestamp, contradictory filter, or unsupported mode.
+    limits results to facts valid as of the internally captured current UTC time
+    and without transaction-time expiry. Raises ``ValueError`` on a bad timestamp,
+    contradictory filter, or unsupported mode.
     """
     if temporal_mode not in (None, 'all', 'current'):
         raise ValueError("temporal_mode must be None, 'all', or 'current'")
@@ -196,10 +198,27 @@ def build_fact_search_filters(
     invalid_at = _date_range_or_group(invalid_after, invalid_before)
 
     if temporal_mode == 'current':
+        now = utc_now()
+        has_explicit_valid_range = valid_after is not None or valid_before is not None
+        if valid_before is None or valid_before > now:
+            valid_before = now
+        valid_at = _date_range_or_group(valid_after, valid_before)
+        assert valid_at is not None
+        if not has_explicit_valid_range:
+            valid_at.append([DateFilter(comparison_operator=ComparisonOperator.is_null)])
+
         return SearchFilters(
             edge_types=edge_types or None,
             valid_at=valid_at,
-            invalid_at=[[DateFilter(comparison_operator=ComparisonOperator.is_null)]],
+            invalid_at=[
+                [
+                    DateFilter(
+                        date=now,
+                        comparison_operator=ComparisonOperator.greater_than,
+                    )
+                ],
+                [DateFilter(comparison_operator=ComparisonOperator.is_null)],
+            ],
             expired_at=[[DateFilter(comparison_operator=ComparisonOperator.is_null)]],
         )
 

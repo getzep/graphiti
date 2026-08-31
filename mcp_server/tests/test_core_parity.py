@@ -14,9 +14,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 from graphiti_core import Graphiti
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
-from graphiti_core.search.search_filters import ComparisonOperator, DateFilter, SearchFilters
+from graphiti_core.search.search_filters import (
+    ComparisonOperator,
+    SearchFilters,
+    edge_search_filter_query_constructor,
+)
 
 # Add the src directory to the path (mirrors the other unit tests)
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
@@ -29,6 +34,7 @@ from config.schema import (  # noqa: E402
 from models.edge_types import EDGE_TYPES  # noqa: E402
 from models.entity_types import ENTITY_TYPES  # noqa: E402
 from services.queue_service import QueueService  # noqa: E402
+from utils import type_config  # noqa: E402
 from utils.type_config import (  # noqa: E402
     build_edge_type_map,
     build_edge_types,
@@ -128,24 +134,84 @@ class TestBuildFactSearchFilters:
 
     def test_current_mode_filters_invalidated_and_expired_facts(self):
         sf = build_fact_search_filters(temporal_mode='current')
-        current_filter = [[DateFilter(comparison_operator=ComparisonOperator.is_null)]]
 
         assert isinstance(sf, SearchFilters)
+        assert sf.valid_at is not None
         assert sf.invalid_at is not None
         assert sf.expired_at is not None
-        assert sf.invalid_at == current_filter
-        assert sf.expired_at == current_filter
-        assert sf.invalid_at[0][0].date is None
-        assert sf.expired_at[0][0].date is None
+        assert sf.valid_at[0][0].comparison_operator == ComparisonOperator.less_than_equal
+        assert sf.valid_at[1][0].comparison_operator == ComparisonOperator.is_null
+        assert sf.invalid_at[0][0].comparison_operator == ComparisonOperator.greater_than
+        assert sf.invalid_at[1][0].comparison_operator == ComparisonOperator.is_null
+        assert sf.expired_at[0][0].comparison_operator == ComparisonOperator.is_null
+
+    def test_current_mode_uses_as_of_now_interval_semantics(self, monkeypatch):
+        now = datetime(2026, 1, 15, 12, tzinfo=timezone.utc)
+        valid_after = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        future = datetime(2026, 1, 16, 12, tzinfo=timezone.utc)
+        past = datetime(2026, 1, 14, 12, tzinfo=timezone.utc)
+        monkeypatch.setattr(type_config, 'utc_now', lambda: now, raising=False)
+
+        search_filters = build_fact_search_filters(
+            valid_at_after=valid_after.isoformat(),
+            valid_at_before='2027-01-01T00:00:00Z',
+            temporal_mode='current',
+        )
+        assert search_filters is not None
+        filter_queries, filter_params = edge_search_filter_query_constructor(
+            search_filters, GraphProvider.NEO4J
+        )
+
+        valid_params = {
+            value: name for name, value in filter_params.items() if name.startswith('valid_at_')
+        }
+        valid_after_param = valid_params[valid_after]
+        valid_now_param = valid_params[now]
+        invalid_param = next(name for name in filter_params if name.startswith('invalid_at_'))
+        valid_query = next(query for query in filter_queries if 'e.valid_at' in query)
+        invalid_query = next(query for query in filter_queries if 'e.invalid_at' in query)
+        expired_query = next(query for query in filter_queries if 'e.expired_at' in query)
+
+        assert valid_query.count(f'e.valid_at >= ${valid_after_param}') == 1
+        assert valid_query.count(f'e.valid_at <= ${valid_now_param}') == 1
+        # An explicit valid_at range further constrains current-mode results;
+        # unknown valid_at values do not satisfy an explicit date comparison.
+        assert 'e.valid_at IS NULL' not in valid_query
+        assert invalid_query.count(f'e.invalid_at > ${invalid_param}') == 1
+        assert invalid_query.count('e.invalid_at IS NULL') == 1
+        assert expired_query.count('e.expired_at IS NULL') == 1
+        assert filter_params[valid_after_param] == valid_after
+        assert filter_params[valid_now_param] == now
+        assert filter_params[invalid_param] == now
+        assert all(value.tzinfo is timezone.utc for value in filter_params.values())
+
+        def matches_current(
+            valid_at: datetime | None,
+            invalid_at: datetime | None,
+            expired_at: datetime | None = None,
+        ) -> bool:
+            return (
+                (
+                    valid_at is not None
+                    and filter_params[valid_after_param]
+                    <= valid_at
+                    <= filter_params[valid_now_param]
+                )
+                and (invalid_at is None or invalid_at > filter_params[invalid_param])
+                and expired_at is None
+            )
+
+        assert not matches_current(valid_at=future, invalid_at=None)
+        assert matches_current(valid_at=past, invalid_at=future)
+        assert not matches_current(valid_at=None, invalid_at=None)
 
     def test_current_mode_combines_with_edge_types(self):
         sf = build_fact_search_filters(edge_types=['X'], temporal_mode='current')
-        current_filter = [[DateFilter(comparison_operator=ComparisonOperator.is_null)]]
 
         assert isinstance(sf, SearchFilters)
         assert sf.edge_types == ['X']
-        assert sf.invalid_at == current_filter
-        assert sf.expired_at == current_filter
+        assert sf.invalid_at is not None
+        assert sf.expired_at is not None
 
     def test_current_mode_rejects_invalid_at_range(self):
         with pytest.raises(ValueError, match='cannot be combined'):
