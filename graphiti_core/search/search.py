@@ -264,7 +264,7 @@ async def edge_search(
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
 ) -> tuple[list[EntityEdge], list[float]]:
-    if config is None:
+    if config is None or search_filter.edge_uuids == []:
         return [], []
     search_tracer = _resolve_tracer(search_tracer)
 
