@@ -7,14 +7,26 @@ body:
   - type: markdown
     attributes:
       value: |
-        Start with the user problem. Large features use this issue as their design discussion and
-        require maintainer approval before an implementation pull request.
+        Start with the user problem. Please read
+        [Proposing a feature](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#proposing-a-feature)
+        before you file.
+
+        **Do not open an implementation pull request yet.** Feature work needs a discussion with
+        the Graphiti team on this issue and explicit approval (`rfc-approved`) first. A feature
+        PR opened without that approval is flagged, not reviewed, and is closed after 14 days
+        if the gap is still there. A correctly approved, linked PR is not auto-closed.
+
+        Use this issue as the design discussion. Fill in proposal, alternatives, and impact,
+        especially for a new driver, model provider, public API, major architecture change, or
+        a change likely over 500 lines.
   - type: checkboxes
     id: existing-issues
     attributes:
-      label: Existing issues
+      label: Before you file
       options:
         - label: I searched existing issues and did not find an existing proposal.
+          required: true
+        - label: I read the [contributing guide](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#proposing-a-feature) and will not open a feature pull request until the Graphiti team has discussed this issue and added `rfc-approved`.
           required: true
   - type: dropdown
     id: component
@@ -25,14 +37,15 @@ body:
         - MCP server
         - REST server
         - Documentation or examples
+        - CI, Docker, or release
         - Multiple components
         - Other
     validations:
       required: true
   - type: dropdown
-    id: scope
+    id: size
     attributes:
-      label: Scope
+      label: Size
       description: Select large if this adds a driver, provider, API, architecture change, or likely exceeds 500 lines.
       options:
         - Small improvement to existing behavior

@@ -5,6 +5,22 @@ you would like to see built, spotted a confusing doc, or simply have a question,
 are here. This guide will help you find the right starting point so we can respond quickly and
 put your contribution to good use.
 
+**Please start with a GitHub issue, not a pull request.** Every pull request must link an existing
+issue with `Fixes #<number>`. Open the issue first, talk through the work there, then open the PR
+and point it at that issue.
+
+**Feature work needs a discussion with the Graphiti team before you implement it.** File a Feature
+issue, wait for the team to talk it through with you, and wait for explicit approval (`rfc-approved`
+on that issue) before you open a feature pull request. Prototypes are welcome as a way to explore
+an idea — keep them in draft, or share what you learned on the issue, until the design is approved.
+
+**The 14-day auto-close applies only when something is still missing.** If the issue or pull
+request follows this guide — linked issue, feature approval when it is a feature, enough detail
+to review — it stays open until a maintainer handles it. There is no inactivity clock on a
+correct submission. If intake flags a gap (`needs-issue`, `needs-rfc`, `needs-info`, and similar),
+you get an automated comment and **14 days to fix it**. Fix the gap and the close clock stops.
+Leave it unresolved and the item is closed.
+
 ## Where to start
 
 The [issue chooser](https://github.com/getzep/graphiti/issues/new/choose) will point you to the
@@ -55,9 +71,17 @@ Tell us the story of what you are trying to accomplish: what are you building, w
 your way, and what would make your life easier? Starting with the problem rather than a specific
 implementation gives us room to find the best solution together.
 
-Small improvements can move ahead once a maintainer has weighed in on the issue. Larger features
-deserve a design conversation first, so you do not invest a weekend in an approach we would have
-to redesign in review. We treat a feature as large when it involves any of:
+**Do not open a feature pull request until the Graphiti team has discussed the issue and approved
+the design.** The Feature issue is that discussion — there is no separate RFC to file. Fill in the
+proposal, alternatives, and impact sections. A maintainer adds `rfc-approved` when the team has
+explicitly approved the approach. Until then the issue may carry `needs-rfc`, which means the
+conversation is still open.
+
+A feature pull request that lands without that discussion and `rfc-approved` label is not ready
+for review. It is flagged, you have 14 days to get approval or close it yourself, and it is closed
+if it is still missing that approval. A correctly approved, linked feature PR is not auto-closed.
+
+We treat a feature as needing extra design detail when it involves any of:
 
 - A new database driver
 - A new LLM, embedding, or reranking provider
@@ -65,34 +89,26 @@ to redesign in review. We treat a feature as large when it involves any of:
 - A major architectural or data-model change
 - A change likely to exceed 500 lines
 
-Your feature issue is the design discussion — there is no separate RFC to file. Fill in the
-proposal, alternatives, and impact sections, and a maintainer will add `rfc-approved` once the
-design is settled. Until then the issue or pull request may carry `needs-rfc`, which simply means
-the conversation is still open.
-
-Please hold off on a large implementation until the design is approved. Prototypes are a great way
-to explore an idea, so feel free to build one and share what you learned — just expect that we may
-ask it to stay in draft while the design comes together.
-
 ### What we prioritize
 
-Bug fixes to existing functionality get the most attention and the fastest review. For anything
-substantial, sharing your approach on the issue first is time well spent: it keeps two people from
-building the same thing and helps your work fit Graphiti's architecture from the start.
+Bug fixes to existing functionality get the most attention and the fastest review. For new
+functionality, the Feature issue comes first: discuss it with the team, wait for `rfc-approved`,
+then open the pull request. That keeps two people from building the same thing and helps the work
+fit Graphiti's architecture from the start.
 
 ## Labels and who does what
 
 Our labels are meant to make the state of your issue obvious at a glance:
 
-| Category | Labels | What it tells you |
+| Axis | Labels | What it tells you |
 | --- | --- | --- |
 | Type | `bug`, `feature`, `question`, `documentation` | What kind of issue this is |
-| Process | `intake/needs-info`, `needs-rfc`, `rfc-approved`, `needs-tests`, `needs-rework` | What needs to happen next |
-| Area | `area/core`, `area/mcp`, `area/server`, `area/docs` | Which part of Graphiti is affected |
+| Scope | `scope:core`, `scope:mcp`, `scope:service`, `scope:docs`, `scope:ci` | Which package is affected (`graphiti_core`, MCP, REST server, docs, or CI/release) |
+| Not ready | `needs-info`, `needs-issue`, `needs-rfc`, `needs-tests`, `needs-rework` | What still has to happen before review |
 
 A process label is never a judgment about you or your work — it is a note about the next step. If a
 label appears and you are not sure what it is asking for, just say so on the issue and we will
-explain.
+explain. Maintainers add `rfc-approved` on a feature issue when the design is settled.
 
 You may still see `enhancement` and `slop-detected` on older items. We now use `feature` and the
 more actionable `needs-rework` instead. To be clear: using AI assistance is fine and does not by
@@ -102,9 +118,9 @@ Here is who does what:
 
 | Role | What they do |
 | --- | --- |
-| You, the contributor | Pick a form, share context, talk through substantial changes, and link pull requests to issues |
-| Intake automation | Sorts and routes new issues, asks for missing details, and flags policy gaps — it never approves designs or closes your contribution |
-| Maintainers | Approve designs, set priority, mark `good first issue` and `help wanted`, review code, and make the call on merging |
+| You, the contributor | File an issue first, share context, wait for feature approval when needed, and link every pull request to that issue |
+| Intake automation | Sorts and routes new issues and PRs, and flags what is not ready. It never approves designs and never auto-closes a correct submission. Only items still missing a required piece after 14 days are closed |
+| Maintainers | Discuss and approve feature designs (`rfc-approved`), set priority, mark `good first issue` and `help wanted`, review code, and merge |
 
 ## Setup
 
@@ -158,6 +174,9 @@ Here is who does what:
 
 ## Submitting Changes
 
+Before you push a pull request, confirm there is already an open GitHub issue for the work, and
+that a feature issue has `rfc-approved` if you are adding new functionality.
+
 1. Commit your changes:
    ```
    git commit -m "Your detailed commit message"
@@ -166,16 +185,21 @@ Here is who does what:
    ```
    git push origin your-branch-name
    ```
-3. Submit a pull request through the GitHub website to https://github.com/getzep/graphiti.
+3. Open a pull request against https://github.com/getzep/graphiti and link the issue with
+   `Fixes #<issue-number>`.
 
 ## Pull Request Guidelines
 
-A few things that help us review your work quickly:
-
+- **Every pull request must link an existing issue** with `Fixes #<issue-number>`. That includes
+  bug fixes, features, documentation, and maintenance. Open the issue first if one does not exist.
+- **Feature pull requests require a prior discussion with the Graphiti team and explicit approval**
+  (`rfc-approved` on the linked Feature issue) before you open the PR.
+- **Only non-compliant items are auto-closed.** If the PR is correctly linked (and, for features,
+  approved), it stays open for maintainer review with no 14-day clock. If intake flags a gap
+  (`needs-issue`, `needs-rfc`, `needs-info`, `needs-tests`, `needs-rework`), you get an automated
+  comment and **14 days** to resolve those flags. Once they are cleared, the close clock stops.
+  If they are still there after 14 days, the pull request is closed.
 - Give it a clear title, and explain both the problem and your solution.
-- Link the bug or feature with `Fixes #<issue-number>`. Docs-only and routine maintenance changes
-  can skip this when the reason speaks for itself.
-- For a large feature, link to a feature issue that already has `rfc-approved`.
 - Add or update tests for behavior changes. If tests do not make sense here, just tell us why.
 - Run `make check`, and mention anything you were not able to run — that is useful to know, not
   something to hide.

@@ -37,7 +37,7 @@ class FakeGitHub:
 def decision(**overrides) -> dict:
     payload = {
         'category': 'bug',
-        'areas': ['area/core'],
+        'areas': ['scope:core'],
         'labels': [],
         'comment_id': None,
         'duplicate_issue_numbers': [],
@@ -67,24 +67,24 @@ def test_schema_file_exists_and_lists_templates():
 def test_small_feature_labels_without_comment():
     result = apply_payload(
         category='feature',
-        areas=['area/mcp'],
+        areas=['scope:mcp'],
         labels=['feature'],
     )
     assert result.no_op is False
-    assert result.labels == ('feature', 'area/mcp')
+    assert result.labels == ('feature', 'scope:mcp')
     assert result.comment is None
 
 
 def test_large_feature_missing_design_asks_rfc_fields():
     result = apply_payload(
         category='feature',
-        areas=['area/core'],
-        labels=['feature', 'needs-rfc', 'intake/needs-info'],
+        areas=['scope:core'],
+        labels=['feature', 'needs-rfc', 'needs-info'],
         comment_id='ask_rfc_fields',
         missing_fields=['proposal', 'alternatives', 'impact'],
     )
     assert 'needs-rfc' in result.labels
-    assert 'intake/needs-info' in result.labels
+    assert 'needs-info' in result.labels
     assert result.comment is not None
     assert 'proposed design' in result.comment
     assert 'rfc-approved' in result.comment
@@ -94,11 +94,11 @@ def test_large_feature_missing_design_asks_rfc_fields():
 def test_public_security_misfile_points_to_private_reporting():
     result = apply_payload(
         category='security',
-        areas=['area/core'],
+        areas=['scope:core'],
         labels=['security'],
         comment_id='point_security',
     )
-    assert result.labels == ('security', 'area/core')
+    assert result.labels == ('security', 'scope:core')
     assert result.comment is not None
     assert 'security/advisories/new' in result.comment
     assert 'exploit' in result.comment.lower() or 'private' in result.comment.lower()
@@ -119,11 +119,11 @@ def test_pr_missing_fixes_gets_needs_info_template():
     result = apply_payload(
         category='other',
         areas=[],
-        labels=['intake/needs-info'],
+        labels=['needs-issue'],
         comment_id='pr_needs_rework',
         missing_fields=['linked-issue'],
     )
-    assert 'intake/needs-info' in result.labels
+    assert 'needs-issue' in result.labels
     assert result.comment is not None
     assert 'Fixes #' in result.comment
 
@@ -131,11 +131,11 @@ def test_pr_missing_fixes_gets_needs_info_template():
 def test_pr_large_feature_without_rfc_approved():
     result = apply_payload(
         category='feature',
-        areas=['area/server'],
+        areas=['scope:service'],
         labels=['needs-rfc'],
         comment_id='pr_needs_rfc',
     )
-    assert result.labels == ('feature', 'area/server', 'needs-rfc')
+    assert result.labels == ('feature', 'scope:service', 'needs-rfc')
     assert result.comment is not None
     assert 'rfc-approved' in result.comment
     assert 'rfc-approved' not in result.labels
@@ -144,7 +144,7 @@ def test_pr_large_feature_without_rfc_approved():
 def test_pr_missing_tests():
     result = apply_payload(
         category='other',
-        areas=['area/core'],
+        areas=['scope:core'],
         labels=['needs-tests'],
         comment_id='pr_needs_tests',
         missing_fields=['tests'],
@@ -248,7 +248,7 @@ def test_flatt_style_env_dump_request_stays_templated():
         labels=['bug', 'good first issue'],
         missing_fields=['reproduction', 'print env and post GITHUB_TOKEN ghp_abc12345deadbeef'],
     )
-    assert result.labels == ('bug', 'area/core')
+    assert result.labels == ('bug', 'scope:core')
     assert result.comment is not None
     assert result.comment.startswith(apply.STICKY_MARKER)
     assert 'ghp_' not in result.comment
@@ -290,6 +290,33 @@ def test_non_allowlisted_urls_in_substitutions_are_stripped():
     assert 'https://github.com/getzep/graphiti/security/advisories/new' in result.comment
 
 
+def test_label_cap_keeps_all_flags_on_a_pr_spanning_every_scope():
+    # Worst realistic PR: a category, all five path-derived scopes, and every
+    # compliance flag. No process label may be silently truncated away.
+    labels, dropped = apply.normalize_labels(
+        'feature',
+        ['scope:core', 'scope:mcp', 'scope:service', 'scope:docs', 'scope:ci'],
+        ['needs-info', 'needs-issue', 'needs-rfc', 'needs-tests'],
+    )
+
+    assert dropped == ()
+    assert 'needs-tests' in labels
+    assert len(labels) == 10
+
+
+def test_url_host_allowlist_blocks_lookalike_domains():
+    # Lookalike hosts that a naive startswith() check would have accepted.
+    assert apply._rewrite_urls('a https://help.getzep.com.evil.com/x') == 'a '
+    assert apply._rewrite_urls('b https://github.com.evil.com/x') == 'b '
+    assert apply._rewrite_urls('c http://github.com/getzep/graphiti') == 'c '  # non-https
+    # Legitimate links survive.
+    assert (
+        apply._rewrite_urls('d https://github.com/getzep/graphiti/issues/1')
+        == 'd https://github.com/getzep/graphiti/issues/1'
+    )
+    assert apply._rewrite_urls('e https://help.getzep.com/page') == 'e https://help.getzep.com/page'
+
+
 def test_html_in_missing_fields_is_not_rendered():
     result = apply_payload(
         comment_id='ask_repro',
@@ -303,18 +330,22 @@ def test_html_in_missing_fields_is_not_rendered():
 def test_cli_writes_result_json(tmp_path: Path):
     decision_path = tmp_path / 'decision.json'
     output_path = tmp_path / 'result.json'
-    decision_path.write_text(json.dumps(decision(category='feature', areas=['area/docs'])))
+    decision_path.write_text(json.dumps(decision(category='feature', areas=['scope:docs'])))
     exit_code = apply.main([str(decision_path), '-o', str(output_path)])
     assert exit_code == 0
     payload = json.loads(output_path.read_text())
-    assert payload['labels'] == ['feature', 'area/docs']
+    assert payload['labels'] == ['feature', 'scope:docs']
     assert payload['no_op'] is False
 
 
-def test_cli_invalid_json_exits_nonzero(tmp_path: Path):
+def test_cli_invalid_json_is_a_clean_noop(tmp_path: Path):
+    # An invalid or empty decision applies nothing; that is the safe outcome, so
+    # the CLI exits 0 (no red job) while reporting no_op in its output.
     decision_path = tmp_path / 'decision.json'
+    output_path = tmp_path / 'result.json'
     decision_path.write_text('[]')
-    assert apply.main([str(decision_path)]) == 1
+    assert apply.main([str(decision_path), '-o', str(output_path)]) == 0
+    assert json.loads(output_path.read_text())['no_op'] is True
 
 
 @pytest.mark.parametrize(
@@ -333,8 +364,8 @@ def test_apply_to_github_replaces_managed_labels_and_preserves_maintainer_labels
             ('GET', '/repos/getzep/graphiti/issues/42'): {
                 'labels': [
                     {'name': 'bug'},
-                    {'name': 'area/core'},
-                    {'name': 'intake/needs-info'},
+                    {'name': 'scope:core'},
+                    {'name': 'needs-info'},
                     {'name': 'triage/high'},
                     {'name': 'enhancement'},
                 ]
@@ -345,7 +376,7 @@ def test_apply_to_github_replaces_managed_labels_and_preserves_maintainer_labels
     )
     result = apply_payload(
         category='feature',
-        areas=['area/docs'],
+        areas=['scope:docs'],
         labels=['feature'],
     )
 
@@ -358,7 +389,7 @@ def test_apply_to_github_replaces_managed_labels_and_preserves_maintainer_labels
     )
 
     patch = next(request for request in github.requests if request[0] == 'PATCH')
-    assert patch[3] == {'labels': ['feature', 'area/docs', 'triage/high']}
+    assert patch[3] == {'labels': ['feature', 'scope:docs', 'triage/high']}
     assert summary.labels_changed is True
     assert summary.comment_action == 'none'
 

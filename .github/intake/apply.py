@@ -19,7 +19,7 @@ import re
 import sys
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from html import unescape
+from html import escape
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError
@@ -30,28 +30,17 @@ INTAKE_DIR = Path(__file__).resolve().parent
 SCHEMA_PATH = INTAKE_DIR / 'decision.schema.json'
 TEMPLATE_DIR = INTAKE_DIR / 'templates'
 STICKY_MARKER = '<!-- graphiti-intake-bot -->'
-MAX_LABELS = 8
+# Must fit the widest legitimate item: a category, all five path-derived scope:*
+# labels, every needs-* flag, and duplicate — truncating those silently loses
+# signal, while the cap still bounds label spam from a hijacked decision.
+MAX_LABELS = 12
 MAX_COMMENT_CHARS = 4000
 MAX_SUBSTITUTION_CHARS = 80
 
-ALLOWLIST = frozenset(
-    {
-        'bug',
-        'feature',
-        'question',
-        'documentation',
-        'duplicate',
-        'area/core',
-        'area/mcp',
-        'area/server',
-        'area/docs',
-        'intake/needs-info',
-        'needs-rfc',
-        'needs-tests',
-        'needs-rework',
-        'security',
-    }
-)
+# Derived from the decision schema so it is the single source of truth for the
+# label taxonomy; the allowlist can never silently drift from the schema enum.
+_SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
+ALLOWLIST = frozenset(_SCHEMA['properties']['labels']['items']['enum'])
 BANNED_LABELS = frozenset(
     {
         'rfc-approved',
@@ -69,23 +58,31 @@ BANNED_LABELS = frozenset(
 LABEL_ALIASES = {
     'enhancement': 'feature',
     'slop-detected': 'needs-rework',
+    'intake/needs-info': 'needs-info',
+    'area/core': 'scope:core',
+    'area/mcp': 'scope:mcp',
+    'area/server': 'scope:service',
+    'area/docs': 'scope:docs',
 }
-TYPE_LABELS = frozenset({'bug', 'feature', 'documentation', 'question', 'security'})
+TYPE_LABELS = frozenset(_SCHEMA['properties']['category']['enum']) & ALLOWLIST
 LABEL_ORDER = (
     'bug',
     'feature',
     'question',
     'documentation',
     'security',
-    'area/core',
-    'area/mcp',
-    'area/server',
-    'area/docs',
-    'intake/needs-info',
+    'scope:core',
+    'scope:mcp',
+    'scope:service',
+    'scope:docs',
+    'scope:ci',
+    'needs-info',
+    'needs-issue',
     'needs-rfc',
     'needs-tests',
     'needs-rework',
     'duplicate',
+    'invalid',
 )
 MISSING_FIELD_COPY = {
     'reproduction': 'a minimal reproduction script or test case',
@@ -105,12 +102,10 @@ MISSING_FIELD_COPY = {
     'location': 'a docs URL or repository path',
 }
 SECRET_RE = re.compile(r'(?:ghp_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]{8,}|sk-[A-Za-z0-9_-]{8,})')
-HTML_TAG_RE = re.compile(r'<[^>]+>')
 URL_RE = re.compile(r'https?://[^\s)<>]+', re.IGNORECASE)
-ALLOWED_LINK_PREFIXES = (
-    'https://github.com/getzep/graphiti',
-    'https://help.getzep.com',
-)
+# Host allowlist checked against the parsed hostname, never a string prefix — a
+# prefix check lets `https://help.getzep.com.evil.com/...` slip through.
+ALLOWED_LINK_HOSTS = frozenset({'github.com', 'getzep.com'})
 GITHUB_API = 'https://api.github.com'
 MANAGED_LABELS = ALLOWLIST | frozenset(LABEL_ALIASES)
 
@@ -213,25 +208,31 @@ def _redact_secrets(text: str) -> str:
     return SECRET_RE.sub('[redacted]', text)
 
 
-def _strip_html(text: str) -> str:
-    return unescape(HTML_TAG_RE.sub('', text))
+def _neutralize_html(text: str) -> str:
+    # GitHub sanitizes HTML on render; escaping angle brackets (rather than
+    # regex-stripping tags) can't be defeated by nested or malformed markup and
+    # never silently drops surrounding text.
+    return escape(text, quote=False)
+
+
+def _host_allowed(host: str) -> bool:
+    host = host.lower()
+    return any(host == allowed or host.endswith('.' + allowed) for allowed in ALLOWED_LINK_HOSTS)
 
 
 def _rewrite_urls(text: str) -> str:
     def replace(match: re.Match[str]) -> str:
         url = match.group(0).rstrip('.,;:')
         parsed = urlparse(url)
-        if parsed.scheme != 'https':
+        if parsed.scheme != 'https' or not _host_allowed(parsed.hostname or ''):
             return ''
-        if any(url.startswith(prefix) for prefix in ALLOWED_LINK_PREFIXES):
-            return url
-        return ''
+        return url
 
     return URL_RE.sub(replace, text)
 
 
 def sanitize_text(text: str, *, max_chars: int = MAX_SUBSTITUTION_CHARS) -> str:
-    cleaned = _rewrite_urls(_redact_secrets(_strip_html(text)))
+    cleaned = _rewrite_urls(_redact_secrets(_neutralize_html(text)))
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     if len(cleaned) > max_chars:
         cleaned = cleaned[: max_chars - 1].rstrip() + '…'
@@ -248,8 +249,9 @@ def normalize_labels(
         accepted.add(category)
 
     for area in areas:
-        if area in ALLOWLIST:
-            accepted.add(area)
+        mapped = LABEL_ALIASES.get(area, area)
+        if mapped in ALLOWLIST:
+            accepted.add(mapped)
         else:
             dropped.append(area)
 
@@ -515,7 +517,10 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(payload, encoding='utf-8')
     else:
         sys.stdout.write(payload)
-    return 1 if result.no_op else 0
+    # A no-op is the safe, expected outcome when a decision is invalid or empty
+    # (e.g. the maintainer-skip sentinel): the airlock correctly applied nothing.
+    # Exit 0 so it does not show as a failed job. Genuine faults raise instead.
+    return 0
 
 
 if __name__ == '__main__':

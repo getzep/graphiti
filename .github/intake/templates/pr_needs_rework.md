@@ -3,4 +3,7 @@ Thanks for opening this pull request. It needs a focused pass before maintainer 
 
 {{missing_fields}}
 
-Please narrow the scope, link the related issue when there is one, and add tests where behavior changes. Using AI assistance is fine — this note is about the current diff, not the tools you used.
+Please narrow the change if it is unfocused, link the related issue with `Fixes #<number>`
+(required for every pull request), and add tests where behavior changes. These flags start a
+14-day close clock only while they remain. Clear them and the PR stays open for review. Using
+AI assistance is fine — this note is about the current diff, not the tools you used.

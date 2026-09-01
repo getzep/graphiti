@@ -102,6 +102,6 @@ indent-style = "space"
 docstring-code-format = true
 
 [tool.pyright]
-include = ["graphiti_core"]
+include = ["graphiti_core", ".github/intake"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"

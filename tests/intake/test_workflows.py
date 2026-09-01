@@ -23,9 +23,9 @@ def test_intake_workflow_separates_model_and_write_permissions(path: Path):
     assert all(value == 'read' for value in classify['permissions'].values())
     assert 'env' not in classify
     classify_step = next(step for step in classify['steps'] if step['name'].startswith('Classify'))
-    assert 'ANTHROPIC_API_KEY' in classify_step['env']
+    assert 'INTAKE_API_KEY' in classify_step['env']
     assert 'GITHUB_TOKEN' in classify_step['env']
-    assert 'ANTHROPIC_API_KEY' not in str(apply)
+    assert 'INTAKE_API_KEY' not in str(apply)
     assert 'env' not in apply
     write_step = next(step for step in apply['steps'] if step['name'].startswith('Apply'))
     assert set(write_step['env']) == {'GITHUB_TOKEN'}
@@ -49,6 +49,26 @@ def test_intake_workflow_actions_are_pinned_to_full_shas(path: Path):
 
     assert action_uses
     assert all(re.fullmatch(r'[^@]+@[0-9a-f]{40}', action) for action in action_uses)
+
+
+def test_stale_workflow_covers_every_promised_close_clock_label():
+    # CONTRIBUTING.md and templates/pr_needs_rework.md promise a 14-day close
+    # clock for every needs-* flag; the stale workflow must enforce all of them.
+    stale = yaml.load(
+        (REPO_ROOT / '.github' / 'workflows' / 'stale.yml').read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    step = stale['jobs']['stale']['steps'][0]['with']
+
+    assert set(step['any-of-labels'].split(',')) == {
+        'needs-info',
+        'needs-issue',
+        'needs-rfc',
+        'needs-tests',
+        'needs-rework',
+    }
+    assert set(step['exempt-issue-labels'].split(',')) == {'rfc-approved', 'security'}
+    assert set(step['exempt-pr-labels'].split(',')) == {'rfc-approved', 'security'}
 
 
 def test_pr_intake_does_not_use_pull_request_target():
