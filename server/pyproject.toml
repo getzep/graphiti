@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
-    "graphiti-core>=0.28.2",
+    "graphiti-core>=0.29.3",
     "pydantic-settings>=2.4.0",
     "uvicorn>=0.44.0",
     "httpx>=0.28.1",
@@ -27,12 +27,21 @@ dev = [
     "fastapi-cli>=0.0.5",
     # FalkorDB driver, needed by the live end-to-end test (tests/test_live_falkordb_int.py)
     # which exercises the db_backend='falkordb' path. Not a runtime dependency.
-    "graphiti-core[falkordb]>=0.28.2",
+    "graphiti-core[falkordb]>=0.29.3",
     # The exact SDK MiroFish runs. The zep_compat tests parse our responses with
     # zep-cloud's own parser, which is the whole point — pin it to the version
     # MiroFish pins so the contract under test is the real one.
     "zep-cloud==3.25.0",
 ]
+
+# graphiti-core comes from the fork checked out one directory up, NOT from PyPI.
+# The zep_compat layer is written against 0.29.3 fork behaviour: OpenAIGenericClient's
+# `structured_output_mode` kwarg (see zep_compat/runtime.py:build_graphiti) and
+# `group_id`-as-database-name in add_episode. Resolving graphiti-core from the registry
+# installs an older core whose OpenAIGenericClient rejects that kwarg, and every ingested
+# episode fails with a TypeError at batch time.
+[tool.uv.sources]
+graphiti-core = { path = "../", editable = true }
 
 [build-system]
 requires = ["hatchling"]
