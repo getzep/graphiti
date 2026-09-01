@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -21,7 +22,8 @@ async def test_edge_search_skips_all_work_for_empty_edge_uuid_filter(monkeypatch
     fulltext_search = AsyncMock(return_value=[])
     similarity_search = AsyncMock(return_value=[])
     bfs_search = AsyncMock(return_value=[])
-    cross_encoder = SimpleNamespace(rank=AsyncMock(return_value=[]))
+    driver = cast(Any, SimpleNamespace())
+    cross_encoder = cast(Any, SimpleNamespace(rank=AsyncMock(return_value=[])))
 
     monkeypatch.setattr(
         'graphiti_core.search.search.edge_fulltext_search',
@@ -37,7 +39,7 @@ async def test_edge_search_skips_all_work_for_empty_edge_uuid_filter(monkeypatch
     )
 
     edges, scores = await edge_search(
-        driver=SimpleNamespace(),
+        driver=driver,
         cross_encoder=cross_encoder,
         query='known edge',
         query_vector=[0.1, 0.2, 0.3],
@@ -75,12 +77,13 @@ async def test_edge_search_keeps_non_empty_filter_semantics(monkeypatch, edge_uu
         'graphiti_core.search.search.edge_fulltext_search',
         fulltext_search,
     )
-    driver = SimpleNamespace()
+    driver = cast(Any, SimpleNamespace())
+    cross_encoder = cast(Any, SimpleNamespace())
     search_filter = SearchFilters(edge_uuids=edge_uuids)
 
     edges, scores = await edge_search(
         driver=driver,
-        cross_encoder=SimpleNamespace(),
+        cross_encoder=cross_encoder,
         query='known edge',
         query_vector=[0.0],
         group_ids=None,
@@ -119,10 +122,13 @@ async def test_empty_edge_uuid_filter_does_not_skip_node_search(monkeypatch):
         node_fulltext_search,
     )
 
-    clients = SimpleNamespace(
-        driver=SimpleNamespace(),
-        embedder=SimpleNamespace(),
-        cross_encoder=SimpleNamespace(),
+    clients = cast(
+        Any,
+        SimpleNamespace(
+            driver=SimpleNamespace(),
+            embedder=SimpleNamespace(),
+            cross_encoder=SimpleNamespace(),
+        ),
     )
     search_filter = SearchFilters(edge_uuids=[])
 
