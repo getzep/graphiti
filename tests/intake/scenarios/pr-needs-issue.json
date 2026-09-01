@@ -1,0 +1,14 @@
+{
+  "id": "pr-needs-issue",
+  "decision": {
+    "category": "other",
+    "areas": ["scope:docs"],
+    "labels": ["needs-issue"],
+    "comment_id": "pr_needs_rework",
+    "duplicate_issue_numbers": [],
+    "missing_fields": ["linked-issue"]
+  },
+  "expect_labels": ["scope:docs", "needs-issue"],
+  "forbid_labels": ["rfc-approved", "good first issue"],
+  "expect_comment_id": "pr_needs_rework"
+}

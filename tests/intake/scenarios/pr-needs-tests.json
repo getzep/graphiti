@@ -1,0 +1,14 @@
+{
+  "id": "pr-needs-tests",
+  "decision": {
+    "category": "bug",
+    "areas": ["scope:core"],
+    "labels": ["needs-tests"],
+    "comment_id": "pr_needs_tests",
+    "duplicate_issue_numbers": [],
+    "missing_fields": ["tests"]
+  },
+  "expect_labels": ["bug", "scope:core", "needs-tests"],
+  "forbid_labels": ["rfc-approved", "good first issue"],
+  "expect_comment_id": "pr_needs_tests"
+}

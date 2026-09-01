@@ -1,0 +1,14 @@
+{
+  "id": "bug-incomplete-core",
+  "decision": {
+    "category": "bug",
+    "areas": ["scope:core"],
+    "labels": ["bug", "needs-info"],
+    "comment_id": "ask_repro",
+    "duplicate_issue_numbers": [],
+    "missing_fields": ["reproduction"]
+  },
+  "expect_labels": ["bug", "scope:core", "needs-info"],
+  "forbid_labels": ["rfc-approved", "good first issue"],
+  "expect_comment_id": "ask_repro"
+}

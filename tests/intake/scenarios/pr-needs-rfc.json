@@ -1,0 +1,14 @@
+{
+  "id": "pr-needs-rfc",
+  "decision": {
+    "category": "feature",
+    "areas": ["scope:core"],
+    "labels": ["needs-rfc"],
+    "comment_id": "pr_needs_rfc",
+    "duplicate_issue_numbers": [],
+    "missing_fields": []
+  },
+  "expect_labels": ["feature", "scope:core", "needs-rfc"],
+  "forbid_labels": ["rfc-approved", "good first issue"],
+  "expect_comment_id": "pr_needs_rfc"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "security-misfile",
+  "decision": {
+    "category": "security",
+    "areas": ["scope:service"],
+    "labels": ["security"],
+    "comment_id": "point_security",
+    "duplicate_issue_numbers": [],
+    "missing_fields": []
+  },
+  "expect_labels": ["security", "scope:service"],
+  "forbid_labels": ["rfc-approved", "good first issue"],
+  "expect_comment_id": "point_security"
+}

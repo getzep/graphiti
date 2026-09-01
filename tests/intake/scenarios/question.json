@@ -1,0 +1,14 @@
+{
+  "id": "question",
+  "decision": {
+    "category": "question",
+    "areas": ["scope:core"],
+    "labels": ["question"],
+    "comment_id": null,
+    "duplicate_issue_numbers": [],
+    "missing_fields": []
+  },
+  "expect_labels": ["question", "scope:core"],
+  "forbid_labels": ["rfc-approved", "good first issue"],
+  "expect_comment_id": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": "bug-mcp",
+  "decision": {
+    "category": "bug",
+    "areas": ["scope:mcp"],
+    "labels": ["bug"],
+    "comment_id": null,
+    "duplicate_issue_numbers": [],
+    "missing_fields": []
+  },
+  "expect_labels": ["bug", "scope:mcp"],
+  "forbid_labels": ["scope:core", "rfc-approved", "good first issue"],
+  "expect_comment_id": null
+}

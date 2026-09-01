@@ -1,0 +1,14 @@
+{
+  "id": "bug-complete-core",
+  "decision": {
+    "category": "bug",
+    "areas": ["scope:core"],
+    "labels": ["bug"],
+    "comment_id": null,
+    "duplicate_issue_numbers": [],
+    "missing_fields": []
+  },
+  "expect_labels": ["bug", "scope:core"],
+  "forbid_labels": ["needs-info", "rfc-approved", "good first issue"],
+  "expect_comment_id": null
+}

@@ -1,0 +1,14 @@
+{
+  "id": "docs",
+  "decision": {
+    "category": "documentation",
+    "areas": ["scope:docs"],
+    "labels": ["documentation"],
+    "comment_id": null,
+    "duplicate_issue_numbers": [],
+    "missing_fields": []
+  },
+  "expect_labels": ["documentation", "scope:docs"],
+  "forbid_labels": ["rfc-approved", "good first issue"],
+  "expect_comment_id": null
+}
