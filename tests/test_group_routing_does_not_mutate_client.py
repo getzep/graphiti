@@ -13,7 +13,7 @@ use ``spec=`` mocks, so they need no live database.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,6 +22,7 @@ from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.nodes import EpisodeType, EpisodicNode, SagaNode
 
 DEFAULT_DB = 'default_db'
 
@@ -162,3 +163,149 @@ async def test_add_episode_without_a_group_id_does_not_clone():
     base.clone.assert_not_called()
     assert graphiti.driver is base
     assert graphiti.clients.driver is base
+
+
+# ---------------------------------------------------------------------------
+# Routing must reach the *persistence* boundary, not just the early reads.
+#
+# The first version of this fix routed the reads in ``add_episode`` but still
+# handed ``self.driver`` to ``add_nodes_and_edges_bulk`` and to every saga
+# write, so one operation could dedupe in ``group-a`` and persist in the base
+# database. These tests observe the driver each write actually receives.
+# ---------------------------------------------------------------------------
+
+
+def _episode(group_id: str = 'group-a') -> EpisodicNode:
+    return EpisodicNode(
+        name='ep',
+        group_id=group_id,
+        labels=[],
+        source=EpisodeType.message,
+        content='body',
+        source_description='desc',
+        created_at=datetime.now(timezone.utc),
+        valid_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_episode_data_persists_through_the_routed_driver():
+    """The regression the review caught: the final save must use the routed driver."""
+    graphiti, _base, child = _make_graphiti()
+
+    with patch('graphiti_core.graphiti.add_nodes_and_edges_bulk', new_callable=AsyncMock) as save:
+        await graphiti._process_episode_data(
+            _episode(), [], [], datetime.now(timezone.utc), 'group-a', driver=child
+        )
+
+    save.assert_awaited_once()
+    assert save.await_args.args[0] is child
+
+
+@pytest.mark.asyncio
+async def test_process_episode_data_defaults_to_the_shared_driver():
+    """Control group: with no routing, the behaviour is exactly what it was."""
+    graphiti, base, _child = _make_graphiti()
+
+    with patch('graphiti_core.graphiti.add_nodes_and_edges_bulk', new_callable=AsyncMock) as save:
+        await graphiti._process_episode_data(
+            _episode(), [], [], datetime.now(timezone.utc), 'group-a'
+        )
+
+    assert save.await_args.args[0] is base
+
+
+@pytest.mark.asyncio
+async def test_process_episode_data_routes_every_saga_write():
+    """Saga lookup, NEXT_EPISODE, HAS_EPISODE and the saga node itself."""
+    graphiti, base, child = _make_graphiti()
+
+    saga_node = MagicMock(spec=SagaNode)
+    saga_node.uuid = 'saga-uuid'
+    saga_node.first_episode_uuid = None
+    saga_node.save = AsyncMock()
+
+    edge = MagicMock()
+    edge.save = AsyncMock()
+
+    with (
+        patch('graphiti_core.graphiti.add_nodes_and_edges_bulk', new_callable=AsyncMock),
+        patch.object(
+            Graphiti, '_get_or_create_saga', new_callable=AsyncMock, return_value=saga_node
+        ) as get_saga,
+        patch.object(
+            Graphiti,
+            '_saga_get_previous_episode_uuid',
+            new_callable=AsyncMock,
+            return_value='previous-uuid',
+        ) as get_previous,
+        patch('graphiti_core.graphiti.NextEpisodeEdge', return_value=edge),
+        patch('graphiti_core.graphiti.HasEpisodeEdge', return_value=edge),
+    ):
+        await graphiti._process_episode_data(
+            _episode(),
+            [],
+            [],
+            datetime.now(timezone.utc),
+            'group-a',
+            saga='my-saga',
+            driver=child,
+        )
+
+    assert get_saga.await_args.kwargs['driver'] is child
+    assert get_previous.await_args.kwargs['driver'] is child
+    # NEXT_EPISODE and HAS_EPISODE both save, and neither may touch the base graph.
+    assert edge.save.await_count == 2
+    assert all(call.args[0] is child for call in edge.save.await_args_list)
+    assert saga_node.save.await_args.args[0] is child
+    assert not base.execute_query.called
+
+
+@pytest.mark.asyncio
+async def test_extract_and_resolve_edges_uses_the_routed_clients():
+    """Edge extraction and resolution read the graph; they must read the routed one."""
+    graphiti, _base, child = _make_graphiti()
+    routed_clients = graphiti._clients_for_driver(child)
+
+    with (
+        patch(
+            'graphiti_core.graphiti.extract_edges', new_callable=AsyncMock, return_value=[]
+        ) as extract,
+        patch(
+            'graphiti_core.graphiti.resolve_extracted_edges',
+            new_callable=AsyncMock,
+            return_value=([], [], []),
+        ) as resolve,
+    ):
+        await graphiti._extract_and_resolve_edges(
+            _episode(), [], [], {}, 'group-a', None, [], {}, clients=routed_clients
+        )
+
+    assert extract.await_args.args[0] is routed_clients
+    assert resolve.await_args.args[0] is routed_clients
+    assert graphiti.clients.driver is _base
+
+
+@pytest.mark.asyncio
+async def test_extract_and_dedupe_nodes_bulk_uses_the_routed_clients():
+    graphiti, _base, child = _make_graphiti()
+    routed_clients = graphiti._clients_for_driver(child)
+
+    with (
+        patch(
+            'graphiti_core.graphiti.extract_nodes_and_edges_bulk',
+            new_callable=AsyncMock,
+            return_value=([], []),
+        ) as extract,
+        patch(
+            'graphiti_core.graphiti.dedupe_nodes_bulk',
+            new_callable=AsyncMock,
+            return_value=({}, {}),
+        ) as dedupe,
+    ):
+        await graphiti._extract_and_dedupe_nodes_bulk(
+            [], {}, None, None, None, clients=routed_clients
+        )
+
+    assert extract.await_args.args[0] is routed_clients
+    assert dedupe.await_args.args[0] is routed_clients
