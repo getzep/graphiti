@@ -429,3 +429,53 @@ class TestFalkorDriverIntegration:
 
         except Exception as e:
             pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_bulk_save_does_not_persist_labels_property(self):
+        """Bulk-saved entities must get real labels, not a stray 'labels' property.
+
+        Regression test: the FALKORDB bulk save query ran `SET n = node` with the
+        labels list still in the map, persisting it as a node property (the
+        single-node save does not), and issued one query per label.
+        """
+        pytest.importorskip('falkordb')
+
+        from graphiti_core.models.nodes.node_db_queries import get_entity_node_save_bulk_query
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_bulk_labels')
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            node = {
+                'uuid': 'bulk-1',
+                'name': 'BulkGuy',
+                'group_id': 'g1',
+                'summary': 's',
+                'created_at': '2024-01-01T00:00:00',
+                'labels': ['Entity', 'Person'],
+                'name_embedding': [0.1, 0.2, 0.3, 0.4],
+            }
+            queries = get_entity_node_save_bulk_query(GraphProvider.FALKORDB, [node])
+
+            # one query per node, not one per label
+            assert len(queries) == 1
+
+            for query, params in queries:
+                await driver.execute_query(query, **params)
+
+            records, _, _ = await driver.execute_query(
+                "MATCH (n:Entity {uuid: 'bulk-1'}) RETURN labels(n) AS labels, n.labels AS prop"
+            )
+            assert len(records) == 1
+            assert set(records[0]['labels']) == {'Entity', 'Person'}
+            assert records[0]['prop'] is None
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()
