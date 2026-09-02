@@ -679,6 +679,11 @@ async def node_similarity_search(
             driver, search_vector, search_filter, group_ids, limit, min_score
         )
 
+    if use_vector_index(driver) and driver.search_ops is not None:
+        return await driver.search_ops.node_similarity_search(
+            driver, search_vector, search_filter, group_ids, limit, min_score
+        )
+
     filter_queries, filter_params = node_search_filter_query_constructor(
         search_filter, driver.provider
     )

@@ -21,6 +21,7 @@ import pytest
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.graph_queries import (
+    VECTOR_INDEX_OVERFETCH_FACTOR,
     get_vector_indices,
     get_vector_similarity_query,
     use_vector_index,
@@ -105,17 +106,26 @@ class TestGetVectorSimilarityQuery:
 
         assert 'db.index.vector.queryNodes' in query
 
-    def test_uses_public_limit_without_claiming_post_filter_guarantees(self):
-        """Filtered searches use exact cosine; this helper is only for unfiltered HNSW."""
-        limit = 20
+    def test_candidate_window_defaults_to_limit(self):
         query = get_vector_similarity_query(
-            GraphProvider.NEO4J,
-            index_name='edge_fact_embedding',
-            entity_var='e',
-            limit=limit,
+            GraphProvider.NEO4J, index_name='edge_fact_embedding', entity_var='e', limit=20
         )
 
-        assert f', {limit}, $search_vector' in query
+        assert ', 20, $search_vector' in query
+
+    def test_explicit_candidate_window_widens_procedure_k_only(self):
+        """Filtered callers over-fetch; k changes, the caller's limit does not."""
+        query = get_vector_similarity_query(
+            GraphProvider.NEO4J,
+            index_name='entity_name_embedding',
+            entity_var='n',
+            limit=10,
+            relationship=False,
+            candidates=10 * VECTOR_INDEX_OVERFETCH_FACTOR,
+        )
+
+        assert f', {10 * VECTOR_INDEX_OVERFETCH_FACTOR}, $search_vector' in query
+        assert 'YIELD node AS n' in query
 
     def test_non_neo4j_providers_return_empty(self):
         for provider in (GraphProvider.FALKORDB, GraphProvider.KUZU, GraphProvider.NEPTUNE):

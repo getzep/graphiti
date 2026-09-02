@@ -180,7 +180,17 @@ NEO4J_VECTOR_INDEX_NAMES = {
     'entity_name_embedding': ('Entity', 'name_embedding'),
     'community_name_embedding': ('Community', 'name_embedding'),
 }
+NEO4J_ENTITY_VECTOR_INDEX_NAME = 'entity_name_embedding'
 NEO4J_EDGE_VECTOR_INDEX_NAME = 'edge_fact_embedding'
+
+# Neo4j's vector procedures cannot pre-filter on group_id / SearchFilters. When a
+# filter is present the procedure is asked for ``limit * VECTOR_INDEX_OVERFETCH_FACTOR``
+# candidates and the filter runs over that set. ``group_id`` is a partition key
+# (one group usually owns most of the graph), so the over-fetched window almost
+# always contains ``limit`` in-group hits; when it does not, the search returns
+# fewer rows, exactly as the exact path does when fewer than ``limit`` rows clear
+# ``min_score``. ``LIMIT`` is an upper bound in both paths.
+VECTOR_INDEX_OVERFETCH_FACTOR = 4
 
 
 def get_vector_indices(provider: GraphProvider, embedding_dim: int) -> list[LiteralString]:
@@ -219,8 +229,12 @@ def get_vector_similarity_query(
     entity_var: str,
     limit: int,
     relationship: bool = True,
+    candidates: int | None = None,
 ) -> str:
     """Return a Cypher fragment that yields (entity, score) from a vector index.
+
+    ``candidates`` is the k handed to the procedure. It defaults to ``limit``;
+    filtered callers pass a wider window so post-filtering has room to work.
 
     Returns an empty string for providers without vector index support, letting
     callers fall back to the brute-force cosine path.
@@ -230,8 +244,9 @@ def get_vector_similarity_query(
 
     procedure = 'queryRelationships' if relationship else 'queryNodes'
     yielded = 'relationship' if relationship else 'node'
+    k = limit if candidates is None else candidates
     return (
-        f"CALL db.index.vector.{procedure}('{index_name}', {limit}, $search_vector) "
+        f"CALL db.index.vector.{procedure}('{index_name}', {k}, $search_vector) "
         f'YIELD {yielded} AS {entity_var}, score '
     )
 
