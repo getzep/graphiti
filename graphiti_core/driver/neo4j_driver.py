@@ -16,6 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator, Coroutine
 from contextlib import asynccontextmanager, suppress
 from typing import Any
@@ -52,10 +53,29 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import Transaction
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.embedder.client import EMBEDDING_DIM
+from graphiti_core.graph_queries import (
+    get_fulltext_indices,
+    get_range_indices,
+    get_vector_indices,
+)
 from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
+
+_TRUTHY = {'1', 'true', 'yes', 'on'}
+
+USE_VECTOR_INDEX_ENV_VAR = 'GRAPHITI_NEO4J_USE_VECTOR_INDEX'
+
+
+def _env_use_vector_index() -> bool:
+    """Read the vector-index opt-in from the environment.
+
+    Deployments that build Graphiti indirectly (e.g. the MCP server, which passes
+    uri/user/password to Graphiti and never constructs Neo4jDriver itself) have no
+    way to supply the constructor argument, so expose the same switch as config.
+    """
+    return os.environ.get(USE_VECTOR_INDEX_ENV_VAR, '').strip().lower() in _TRUTHY
 
 
 class Neo4jDriver(GraphDriver):
@@ -68,6 +88,8 @@ class Neo4jDriver(GraphDriver):
         user: str | None,
         password: str | None,
         database: str = 'neo4j',
+        embedding_dim: int | None = None,
+        use_vector_index: bool | None = None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
@@ -75,6 +97,20 @@ class Neo4jDriver(GraphDriver):
             auth=(user or '', password or ''),
         )
         self._database = database
+        if embedding_dim is None:
+            embedding_dim = EMBEDDING_DIM
+        if use_vector_index is None:
+            use_vector_index = _env_use_vector_index()
+        if (
+            not isinstance(embedding_dim, int)
+            or isinstance(embedding_dim, bool)
+            or embedding_dim <= 0
+        ):
+            raise ValueError('embedding_dim must be a positive integer')
+        if use_vector_index and embedding_dim > 4096:
+            raise ValueError('embedding_dim must not exceed 4096 when vector indexing is enabled')
+        self.embedding_dim = embedding_dim
+        self.use_vector_index = use_vector_index
 
         # Instantiate Neo4j operations
         self._entity_node_ops = Neo4jEntityNodeOperations()
@@ -93,7 +129,9 @@ class Neo4jDriver(GraphDriver):
         # Schedule the indices and constraints to be built
         try:
             loop = asyncio.get_running_loop()
-            self._init_task = loop.create_task(self.build_indices_and_constraints())
+            self._init_task = loop.create_task(
+                self.build_indices_and_constraints(build_vector_indices=use_vector_index)
+            )
         except RuntimeError:
             pass
 
@@ -212,7 +250,9 @@ class Neo4jDriver(GraphDriver):
                 return None
             raise
 
-    async def build_indices_and_constraints(self, delete_existing: bool = False):
+    async def build_indices_and_constraints(
+        self, delete_existing: bool = False, build_vector_indices: bool | None = None
+    ):
         if delete_existing:
             await self.delete_all_indexes()
 
@@ -221,6 +261,14 @@ class Neo4jDriver(GraphDriver):
         fulltext_indices: list[LiteralString] = get_fulltext_indices(self.provider)
 
         index_queries: list[LiteralString] = range_indices + fulltext_indices
+
+        if build_vector_indices is None:
+            build_vector_indices = self.use_vector_index
+
+        if build_vector_indices:
+            # Opt-in: populating a vector index over an existing large graph is a
+            # one-time expensive background build, so it is not enabled by default.
+            index_queries += get_vector_indices(self.provider, self.embedding_dim)
 
         await semaphore_gather(*[self._execute_index_query(query) for query in index_queries])
 

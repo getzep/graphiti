@@ -173,3 +173,91 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
+
+
+# Neo4j vector index names, keyed by the embedded property they cover.
+NEO4J_VECTOR_INDEX_NAMES = {
+    'entity_name_embedding': ('Entity', 'name_embedding'),
+    'community_name_embedding': ('Community', 'name_embedding'),
+}
+NEO4J_ENTITY_VECTOR_INDEX_NAME = 'entity_name_embedding'
+NEO4J_EDGE_VECTOR_INDEX_NAME = 'edge_fact_embedding'
+
+# Neo4j's vector procedures cannot pre-filter on group_id / SearchFilters. When a
+# filter is present the procedure is asked for ``limit * VECTOR_INDEX_OVERFETCH_FACTOR``
+# candidates and the filter runs over that set. The candidate window is a bounded
+# fast path rather than an exact guarantee: callers rerun the exact cosine query
+# when post-filtering produces fewer than ``limit`` rows, preserving the old row
+# count/recall contract while keeping the common case off the full scan.
+VECTOR_INDEX_OVERFETCH_FACTOR = 4
+
+
+def get_vector_indices(provider: GraphProvider, embedding_dim: int) -> list[LiteralString]:
+    """Return vector index DDL for the given provider.
+
+    Only Neo4j is supported today. FalkorDB HNSW support is proposed separately
+    in getzep/graphiti#1335; Kuzu and Neptune have no equivalent procedure here.
+    """
+    if provider != GraphProvider.NEO4J:
+        return []
+
+    from typing import cast
+
+    options = (
+        f'OPTIONS {{indexConfig: {{'
+        f'`vector.dimensions`: {embedding_dim}, '
+        f"`vector.similarity_function`: 'cosine'"
+        f'}}}}'
+    )
+
+    queries = [
+        f'CREATE VECTOR INDEX {name} IF NOT EXISTS FOR (n:{label}) ON (n.{prop}) {options}'
+        for name, (label, prop) in NEO4J_VECTOR_INDEX_NAMES.items()
+    ]
+    queries.append(
+        f'CREATE VECTOR INDEX {NEO4J_EDGE_VECTOR_INDEX_NAME} IF NOT EXISTS '
+        f'FOR ()-[e:RELATES_TO]-() ON (e.fact_embedding) {options}'
+    )
+
+    return cast(list[LiteralString], queries)
+
+
+def get_vector_similarity_query(
+    provider: GraphProvider,
+    index_name: str,
+    entity_var: str,
+    limit: int,
+    relationship: bool = True,
+    candidates: int | None = None,
+) -> str:
+    """Return a Cypher fragment that yields (entity, score) from a vector index.
+
+    ``candidates`` is the k handed to the procedure. It defaults to ``limit``;
+    filtered callers pass a wider window so post-filtering has room to work.
+
+    Returns an empty string for providers without vector index support, letting
+    callers fall back to the brute-force cosine path.
+    """
+    if provider != GraphProvider.NEO4J:
+        return ''
+
+    procedure = 'queryRelationships' if relationship else 'queryNodes'
+    yielded = 'relationship' if relationship else 'node'
+    k = limit if candidates is None else candidates
+    return (
+        f"CALL db.index.vector.{procedure}('{index_name}', {k}, $search_vector) "
+        f'YIELD {yielded} AS {entity_var}, score '
+    )
+
+
+def use_vector_index(driver) -> bool:
+    """Whether similarity search should route through a vector index.
+
+    Enabled per-driver via ``Neo4jDriver(..., use_vector_index=True)`` so existing
+    deployments keep the exact-recall brute-force path until they opt in and have
+    built the indices.
+    """
+    return (
+        getattr(driver, 'provider', None) == GraphProvider.NEO4J
+        and getattr(driver, 'use_vector_index', False) is True
+    )

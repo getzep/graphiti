@@ -32,6 +32,7 @@ from graphiti_core.graph_queries import (
     get_nodes_query,
     get_relationships_query,
     get_vector_cosine_func_query,
+    use_vector_index,
 )
 from graphiti_core.helpers import (
     lucene_sanitize,
@@ -310,6 +311,18 @@ async def edge_similarity_search(
             min_score,
         )
 
+    if use_vector_index(driver) and driver.search_ops is not None:
+        return await driver.search_ops.edge_similarity_search(
+            driver,
+            search_vector,
+            source_node_uuid,
+            target_node_uuid,
+            search_filter,
+            group_ids,
+            limit,
+            min_score,
+        )
+
     match_query = """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
     """
@@ -326,13 +339,13 @@ async def edge_similarity_search(
         filter_queries.append('e.group_id IN $group_ids')
         filter_params['group_ids'] = group_ids
 
-        if source_node_uuid is not None:
-            filter_params['source_uuid'] = source_node_uuid
-            filter_queries.append('n.uuid = $source_uuid')
+    if source_node_uuid is not None:
+        filter_params['source_uuid'] = source_node_uuid
+        filter_queries.append('n.uuid = $source_uuid')
 
-        if target_node_uuid is not None:
-            filter_params['target_uuid'] = target_node_uuid
-            filter_queries.append('m.uuid = $target_uuid')
+    if target_node_uuid is not None:
+        filter_params['target_uuid'] = target_node_uuid
+        filter_queries.append('m.uuid = $target_uuid')
 
     filter_query = ''
     if filter_queries:
@@ -663,6 +676,11 @@ async def node_similarity_search(
 ) -> list[EntityNode]:
     if driver.search_interface:
         return await driver.search_interface.node_similarity_search(
+            driver, search_vector, search_filter, group_ids, limit, min_score
+        )
+
+    if use_vector_index(driver) and driver.search_ops is not None:
+        return await driver.search_ops.node_similarity_search(
             driver, search_vector, search_filter, group_ids, limit, min_score
         )
 
