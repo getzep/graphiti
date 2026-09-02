@@ -185,11 +185,10 @@ NEO4J_EDGE_VECTOR_INDEX_NAME = 'edge_fact_embedding'
 
 # Neo4j's vector procedures cannot pre-filter on group_id / SearchFilters. When a
 # filter is present the procedure is asked for ``limit * VECTOR_INDEX_OVERFETCH_FACTOR``
-# candidates and the filter runs over that set. ``group_id`` is a partition key
-# (one group usually owns most of the graph), so the over-fetched window almost
-# always contains ``limit`` in-group hits; when it does not, the search returns
-# fewer rows, exactly as the exact path does when fewer than ``limit`` rows clear
-# ``min_score``. ``LIMIT`` is an upper bound in both paths.
+# candidates and the filter runs over that set. The candidate window is a bounded
+# fast path rather than an exact guarantee: callers rerun the exact cosine query
+# when post-filtering produces fewer than ``limit`` rows, preserving the old row
+# count/recall contract while keeping the common case off the full scan.
 VECTOR_INDEX_OVERFETCH_FACTOR = 4
 
 
