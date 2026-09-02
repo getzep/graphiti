@@ -60,8 +60,12 @@ from graphiti_core.search.search_filters import (
     node_search_filter_query_constructor,
 )
 
-NEO4J_NODE_VECTOR_INDEX = os.environ.get('GRAPHITI_NEO4J_NODE_VECTOR_INDEX', 'entity_name_embedding_vec')
-NEO4J_EDGE_VECTOR_INDEX = os.environ.get('GRAPHITI_NEO4J_EDGE_VECTOR_INDEX', 'relates_to_fact_embedding_vec')
+NEO4J_NODE_VECTOR_INDEX = os.environ.get(
+    'GRAPHITI_NEO4J_NODE_VECTOR_INDEX', 'entity_name_embedding_vec'
+)
+NEO4J_EDGE_VECTOR_INDEX = os.environ.get(
+    'GRAPHITI_NEO4J_EDGE_VECTOR_INDEX', 'relates_to_fact_embedding_vec'
+)
 NEO4J_VECTOR_OVERFETCH = int(os.environ.get('GRAPHITI_NEO4J_VECTOR_OVERFETCH', '4'))
 
 logger = logging.getLogger(__name__)
