@@ -594,20 +594,28 @@ async def node_fulltext_search(
         yield_query = 'WITH node AS n, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
-        res = driver.run_aoss_query('node_name_and_summary', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
+        res = driver.run_aoss_query(  # pyright: ignore reportAttributeAccessIssue
+            'node_name_and_summary', query, limit=limit, group_ids=group_ids
+        )
         if res['hits']['total']['value'] > 0:
             input_ids = []
             for r in res['hits']['hits']:
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
             # Match the edge ides and return the values
+            neptune_group_filter = (
+                '\n                AND n.group_id IN $group_ids' if group_ids is not None else ''
+            )
             query = (
                 """
                                 UNWIND $ids as i
                                 MATCH (n:Entity)
                                 WHERE n.uuid=i.id
-                                RETURN
                                 """
+                + neptune_group_filter
+                + """
+                RETURN
+                """
                 + get_entity_node_return_query(driver.provider)
                 + """
                 ORDER BY i.score DESC
@@ -891,17 +899,21 @@ async def episode_fulltext_search(
         filter_params['group_ids'] = group_ids
 
     if driver.provider == GraphProvider.NEPTUNE:
-        res = driver.run_aoss_query('episode_content', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
+        res = driver.run_aoss_query('episode_content', query, limit=limit, group_ids=group_ids)  # pyright: ignore reportAttributeAccessIssue
         if res['hits']['total']['value'] > 0:
             input_ids = []
             for r in res['hits']['hits']:
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
             # Match the edge ides and return the values
-            query = """
+            query = (
+                """
                 UNWIND $ids as i
                 MATCH (e:Episodic)
-                WHERE e.uuid=i.uuid
+                WHERE e.uuid=i.id
+                """
+                + group_filter_query
+                + """
             RETURN
                     e.content AS content,
                     e.created_at AS created_at,
@@ -915,6 +927,7 @@ async def episode_fulltext_search(
                 ORDER BY i.score DESC
                 LIMIT $limit
             """
+            )
             records, _, _ = await driver.execute_query(
                 query,
                 ids=input_ids,
@@ -983,7 +996,7 @@ async def community_fulltext_search(
         yield_query = 'WITH node AS c, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
-        res = driver.run_aoss_query('community_name', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
+        res = driver.run_aoss_query('community_name', query, limit=limit, group_ids=group_ids)  # pyright: ignore reportAttributeAccessIssue
         if res['hits']['total']['value'] > 0:
             # Calculate Cosine similarity then return the edge ids
             input_ids = []
@@ -991,10 +1004,19 @@ async def community_fulltext_search(
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
             # Match the edge ides and return the values
-            query = """
+            # Note: this MATCH binds the `comm` alias, not `c` -- group_filter_query above
+            # is written for the non-Neptune branch's `c` alias and must not be reused here.
+            neptune_group_filter = (
+                '\n                AND comm.group_id IN $group_ids' if group_ids is not None else ''
+            )
+            query = (
+                """
                 UNWIND $ids as i
                 MATCH (comm:Community)
                 WHERE comm.uuid=i.id
+                """
+                + neptune_group_filter
+                + """
                 RETURN
                     comm.uuid AS uuid,
                     comm.group_id AS group_id,
@@ -1005,6 +1027,7 @@ async def community_fulltext_search(
                 ORDER BY i.score DESC
                 LIMIT $limit
             """
+            )
             records, _, _ = await driver.execute_query(
                 query,
                 ids=input_ids,
