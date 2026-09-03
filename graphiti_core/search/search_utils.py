@@ -204,6 +204,17 @@ async def edge_fulltext_search(
     YIELD relationship AS rel, score
     MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
     """
+    if driver.provider == GraphProvider.FALKORDB:
+        # FalkorDB plans the MATCH above as a full :Entity label scan for EVERY row the
+        # fulltext index yields, so the cost is O(hits x entities). The relationship the
+        # index already returned knows its own endpoints, so read them directly. The label
+        # predicate keeps the result set identical to the pattern's.
+        match_query = """
+        YIELD relationship AS rel, score
+        WITH rel AS e, score, startNode(rel) AS n, endNode(rel) AS m
+        WHERE n:Entity AND m:Entity
+        WITH e, score, n, m
+        """
     if driver.provider == GraphProvider.KUZU:
         match_query = """
         YIELD node, score
