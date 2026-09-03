@@ -28,7 +28,11 @@ from numpy._typing import NDArray
 from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationError
+from graphiti_core.errors import (
+    GroupIdValidationError,
+    NodeLabelValidationError,
+    PropertyNameValidationError,
+)
 
 load_dotenv()
 
@@ -182,6 +186,20 @@ def validate_node_labels(node_labels: list[str] | None) -> bool:
     ]
     if invalid_labels:
         raise NodeLabelValidationError(invalid_labels)
+
+    return True
+
+
+def validate_property_name(property_name: str) -> bool:
+    """Validate that a property name is safe to interpolate into Cypher expressions.
+
+    Property keys cannot be parameterized in Cypher, so filter property names are
+    interpolated directly into the query and must be constrained to a safe identifier
+    pattern to prevent query injection.
+    """
+
+    if not SAFE_CYPHER_IDENTIFIER_PATTERN.match(property_name or ''):
+        raise PropertyNameValidationError(property_name)
 
     return True
 

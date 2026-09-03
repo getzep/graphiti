@@ -32,7 +32,7 @@ from graphiti_core.driver.driver import (
 )
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date, validate_node_labels
+from graphiti_core.helpers import parse_db_date, validate_group_id, validate_node_labels
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     COMMUNITY_NODE_RETURN_NEPTUNE,
@@ -104,6 +104,12 @@ class Node(BaseModel, ABC):
     def validate_labels(cls, value: list[str]) -> list[str]:
         validate_node_labels(value)
         return value
+
+    def _validate_for_write(self) -> None:
+        # Validate group_id at the persistence boundary only. Hydration from the DB must
+        # stay tolerant of any stored value, so validation lives here (called by every
+        # concrete save()) rather than on the model where it would also fire on reads.
+        validate_group_id(self.group_id)
 
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
@@ -332,6 +338,8 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
+        self._validate_for_write()
+
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.episodic_node_save(self, driver)
@@ -544,6 +552,8 @@ class EntityNode(Node):
         self.name_embedding = records[0]['name_embedding']
 
     async def save(self, driver: GraphDriver):
+        self._validate_for_write()
+
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.node_save(self, driver)
@@ -689,6 +699,8 @@ class CommunityNode(Node):
     summary: str = Field(description='region summary of member nodes', default_factory=str)
 
     async def save(self, driver: GraphDriver):
+        self._validate_for_write()
+
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.community_node_save(self, driver)
@@ -876,6 +888,8 @@ class SagaNode(Node):
     last_summarized_episode_valid_at: datetime | None = None
 
     async def save(self, driver: GraphDriver):
+        self._validate_for_write()
+
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.saga_node_save(self, driver)
