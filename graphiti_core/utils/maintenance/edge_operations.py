@@ -30,10 +30,8 @@ from graphiti_core.edges import (
 )
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
-from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
-from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate
 from graphiti_core.prompts.extract_edges import Edge as ExtractedEdge
 from graphiti_core.prompts.extract_edges import EdgeTimestamps, ExtractedEdges
@@ -139,7 +137,6 @@ async def extract_edges(
     start = time()
 
     extract_edges_max_tokens = 16384
-    llm_client = clients.llm_client
 
     # Build mapping from edge type name to list of valid signatures
     edge_type_signatures_map: dict[str, list[tuple[str, str]]] = {}
@@ -199,12 +196,11 @@ async def extract_edges(
         + episode_attribution,
     }
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_edges.edge(context),
-        response_model=ExtractedEdges,
+    llm_response = await clients.complete_prompt(
+        'extract_edges.edge',
+        context,
         max_tokens=extract_edges_max_tokens,
         group_id=group_id or primary_episode.group_id,
-        prompt_name='extract_edges.edge',
     )
     all_edges_data = ExtractedEdges(**llm_response).edges
 
@@ -358,7 +354,6 @@ async def resolve_extracted_edges(
     extracted_edges = deduplicated_edges
 
     driver = clients.driver
-    llm_client = clients.llm_client
     embedder = clients.embedder
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
@@ -490,7 +485,7 @@ async def resolve_extracted_edges(
         await semaphore_gather(
             *[
                 resolve_extracted_edge(
-                    llm_client,
+                    clients,
                     extracted_edge,
                     related_edges,
                     existing_edges,
@@ -574,7 +569,7 @@ def resolve_edge_contradictions(
 
 
 async def _extract_edge_timestamps(
-    llm_client: LLMClient,
+    clients,
     edge: EntityEdge,
     episode: EpisodicNode | None,
 ) -> None:
@@ -595,11 +590,10 @@ async def _extract_edge_timestamps(
         'reference_time': episode.valid_at.isoformat(),
     }
     try:
-        llm_response = await llm_client.generate_response(
-            prompt_library.extract_edges.extract_timestamps(context),
-            response_model=EdgeTimestamps,
+        llm_response = await clients.complete_prompt(
+            'extract_edges.extract_timestamps',
+            context,
             model_size=ModelSize.small,
-            prompt_name='extract_edges.extract_timestamps',
         )
         timestamps = EdgeTimestamps(**llm_response)
         if timestamps.valid_at:
@@ -621,7 +615,7 @@ async def _extract_edge_timestamps(
 
 
 async def resolve_extracted_edge(
-    llm_client: LLMClient,
+    clients,
     extracted_edge: EntityEdge,
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
@@ -644,6 +638,8 @@ async def resolve_extracted_edge(
         Episode providing content context when extracting edge attributes.
     edge_type_candidates : dict[str, type[BaseModel]] | None
         Custom edge types permitted for the current source/target signature.
+    prompt_library : PromptLibrary
+        Prompt library used for dedupe, attribute, and timestamp prompts.
 
     Returns
     -------
@@ -659,11 +655,11 @@ async def resolve_extracted_edge(
                 'reference_time': episode.valid_at if episode is not None else None,
                 'existing_attributes': extracted_edge.attributes,
             }
-            edge_attributes_response = await llm_client.generate_response(
-                prompt_library.extract_edges.extract_attributes(edge_attributes_context),
+            edge_attributes_response = await clients.complete_prompt(
+                'extract_edges.extract_attributes',
+                edge_attributes_context,
                 response_model=edge_model,  # type: ignore
                 model_size=ModelSize.small,
-                prompt_name='extract_edges.extract_attributes',
                 attribute_extraction=True,
             )
             merged, _ = apply_capped_attributes(
@@ -677,7 +673,7 @@ async def resolve_extracted_edge(
             )
             extracted_edge.attributes = merged
 
-        await _extract_edge_timestamps(llm_client, extracted_edge, episode)
+        await _extract_edge_timestamps(clients, extracted_edge, episode)
 
         return extracted_edge, [], []
 
@@ -723,11 +719,10 @@ async def resolve_extracted_edge(
             else '',
         )
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_edges.resolve_edge(context),
-        response_model=EdgeDuplicate,
+    llm_response = await clients.complete_prompt(
+        'dedupe_edges.resolve_edge',
+        context,
         model_size=ModelSize.small,
-        prompt_name='dedupe_edges.resolve_edge',
     )
     response_object = EdgeDuplicate(**llm_response)
     duplicate_facts = response_object.duplicate_facts
@@ -785,11 +780,11 @@ async def resolve_extracted_edge(
             'existing_attributes': resolved_edge.attributes,
         }
 
-        edge_attributes_response = await llm_client.generate_response(
-            prompt_library.extract_edges.extract_attributes(edge_attributes_context),
+        edge_attributes_response = await clients.complete_prompt(
+            'extract_edges.extract_attributes',
+            edge_attributes_context,
             response_model=edge_model,  # type: ignore
             model_size=ModelSize.small,
-            prompt_name='extract_edges.extract_attributes',
             attribute_extraction=True,
         )
 
@@ -810,7 +805,7 @@ async def resolve_extracted_edge(
 
     # Extract timestamps for new edges (duplicated edges retain their existing timestamps)
     if resolved_edge.uuid == extracted_edge.uuid:
-        await _extract_edge_timestamps(llm_client, resolved_edge, episode)
+        await _extract_edge_timestamps(clients, resolved_edge, episode)
 
     end = time()
     logger.debug(

@@ -24,7 +24,6 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodicNode
-from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.extract_edges import BatchEdgeTimestamps
 from graphiti_core.prompts.extract_nodes_and_edges import CombinedExtraction
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
@@ -83,7 +82,6 @@ async def extract_nodes_and_edges(
     primary_episode = episodes[0]
 
     start = time()
-    llm_client = clients.llm_client
 
     # Build entity types context
     entity_types_context = _build_entity_types_context(entity_types)
@@ -125,11 +123,10 @@ async def extract_nodes_and_edges(
     }
 
     # Single LLM call for combined extraction
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes_and_edges.extract_message(context),
-        response_model=CombinedExtraction,
+    llm_response = await clients.complete_prompt(
+        'extract_nodes_and_edges.extract_message',
+        context,
         group_id=primary_episode.group_id,
-        prompt_name='extract_nodes_and_edges.extract_message',
     )
     response_object = CombinedExtraction(**llm_response)
 
@@ -242,11 +239,10 @@ async def extract_nodes_and_edges(
             for edge in extracted_edges
         ]
         try:
-            ts_response = await llm_client.generate_response(
-                prompt_library.extract_edges.extract_timestamps_batch({'facts': facts_with_ref}),
-                response_model=BatchEdgeTimestamps,
+            ts_response = await clients.complete_prompt(
+                'extract_edges.extract_timestamps_batch',
+                {'facts': facts_with_ref},
                 model_size=ModelSize.small,
-                prompt_name='extract_edges.extract_timestamps_batch',
             )
             batch_timestamps = BatchEdgeTimestamps(**ts_response)
             if len(batch_timestamps.timestamps) != len(extracted_edges):

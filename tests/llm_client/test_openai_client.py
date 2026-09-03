@@ -78,6 +78,35 @@ def test_default_model_for_size_is_gpt_5_5():
     assert client._get_model_for_size(ModelSize.medium) == 'gpt-5.5'
 
 
+def test_get_model_for_size_honors_overrides():
+    from graphiti_core.llm_client.config import ModelSize
+
+    client = OpenAIClient(
+        config=LLMConfig(model='gpt-4.1', small_model='gpt-4.1-nano'),
+        client=DummyOpenAIClient(),
+    )
+    assert client._get_model_for_size(ModelSize.medium, model='gpt-5.5') == 'gpt-5.5'
+    assert client._get_model_for_size(ModelSize.small, small_model='other') == 'other'
+    assert client._get_model_for_size(ModelSize.medium) == 'gpt-4.1'
+    assert client._get_model_for_size(ModelSize.small) == 'gpt-4.1-nano'
+
+
+@pytest.mark.asyncio
+async def test_generate_response_honors_model_override():
+    from graphiti_core.prompts.models import Message
+
+    dummy = DummyOpenAIClient()
+    client = OpenAIClient(config=LLMConfig(model='gpt-4.1'), client=dummy)
+    messages = [
+        Message(role='system', content='sys'),
+        Message(role='user', content='hi'),
+    ]
+    await client.generate_response(
+        messages, response_model=DummyResponseModel, model='gpt-4.1-nano'
+    )
+    assert dummy.responses.parse_calls[0]['model'] == 'gpt-4.1-nano'
+
+
 @pytest.mark.asyncio
 async def test_gpt_5_5_structured_completion_sends_none_effort_and_no_temperature():
     dummy = DummyOpenAIClient()

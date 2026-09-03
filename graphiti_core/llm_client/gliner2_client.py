@@ -226,8 +226,12 @@ class GLiNER2Client(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
+        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
-        model = self._get_model_for_size(model_size)
+        # String model ids cannot select a GLiNER2 weight bound at init; ignore them.
+        gliner_model = self._get_model_for_size(model_size)
         text = self._extract_text_from_messages(messages)
 
         if not text:
@@ -236,7 +240,7 @@ class GLiNER2Client(LLMClient):
 
         try:
             t0 = perf_counter()
-            result = await self._handle_entity_extraction(model, text, messages)
+            result = await self._handle_entity_extraction(gliner_model, text, messages)
             latency_ms = (perf_counter() - t0) * 1000
             self.extraction_latencies.append(latency_ms)
             logger.info('GLiNER2 entity extraction: %.1f ms', latency_ms)
@@ -260,6 +264,8 @@ class GLiNER2Client(LLMClient):
         prompt_name: str | None = None,
         *,
         attribute_extraction: bool = False,
+        model: str | None = None,
+        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         # Delegate non-extraction operations to the wrapped LLM client.
         if not self._is_gliner2_operation(response_model):
@@ -271,6 +277,8 @@ class GLiNER2Client(LLMClient):
                 group_id=group_id,
                 prompt_name=prompt_name,
                 attribute_extraction=attribute_extraction,
+                model=model,
+                small_model=small_model,
             )
 
         if max_tokens is None:

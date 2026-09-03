@@ -609,6 +609,87 @@ When using smaller or local models:
 - Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
   servers and some providers have limited concurrency.
 
+## Configurable Prompts
+
+Graphiti lets you override LLM prompt builders per client instance. Override callables must return
+``ChatPrompt`` (system + user). Response schemas are fixed and not overridable:
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.prompts import ChatPrompt, SystemMessage, UserMessage, create_prompt_library
+
+def custom_extract_message(context: dict) -> ChatPrompt:
+    return ChatPrompt(
+        system=SystemMessage(content='Extract entities for my domain.'),
+        user=UserMessage(content=str(context.get('episode_content', ''))),
+    )
+
+prompt_library = create_prompt_library({
+    'extract_nodes': {
+        'extract_message': custom_extract_message,
+    },
+})
+
+graphiti = Graphiti(..., prompt_library=prompt_library)
+```
+
+Unspecified prompts keep the built-in defaults. Returning ``list[Message]`` from an override raises
+``TypeError`` — migrate with ``return ChatPrompt(system=..., user=...)``. Unicode handling is applied
+via ``ChatPrompt.as_messages()``.
+
+For per-prompt model routing on a **single provider transport**, pass an opt-in
+``llm_runtime``. Do not pass ``llm_client`` or ``prompt_library`` together with
+``llm_runtime``. Response schemas stay fixed; only prompt text and which
+``LLMModel`` runs a prompt are configurable:
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import OpenAIClient, LLMModel, LLMPromptOverrides, LLMRuntime, PromptRoutes
+from graphiti_core.prompts import ChatPrompt, SystemMessage, UserMessage
+
+def custom_extract_message(context: dict) -> ChatPrompt:
+    return ChatPrompt(
+        system=SystemMessage(content='Extract entities for my domain.'),
+        user=UserMessage(content=str(context.get('episode_content', ''))),
+    )
+
+main = LLMModel(id='gpt-4.1')
+nano = LLMModel(
+    id='gpt-4.1-nano',
+    prompt_overrides=LLMPromptOverrides(
+        extract_nodes=LLMPromptOverrides.ExtractNodes(
+            extract_attributes=custom_extract_message,
+        ),
+    ),
+)
+
+runtime = LLMRuntime(
+    OpenAIClient(),
+    model=main,
+    routes=PromptRoutes(
+        extract_nodes=PromptRoutes.ExtractNodes(extract_attributes=nano),
+        extract_edges=PromptRoutes.ExtractEdges(extract_attributes=nano),
+    ),
+    prompt_overrides=LLMPromptOverrides(
+        extract_nodes=LLMPromptOverrides.ExtractNodes(
+            extract_message=custom_extract_message,
+        ),
+    ),
+)
+
+graphiti = Graphiti(..., llm_runtime=runtime)
+```
+
+``ModelSize.small`` call sites still work on the runtime path. Set ``LLMModel.small_id``
+explicitly, or omit it on the default model to keep the transport's ``small_model``.
+Routed models without ``small_id`` use their own ``id`` for small-model calls.
+
+v1 is multi-model on one client that selects models via the ``model`` /
+``small_model`` kwargs on ``generate_response`` (OpenAI, Anthropic, Gemini,
+Groq, ...). The transport is never cloned or mutated. Routing a Claude id
+through an OpenAI client is unsupported, as is per-prompt routing on providers
+that bind a model object at init (for example GLiNER2). See ``spec/llm-runtime.md``.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
