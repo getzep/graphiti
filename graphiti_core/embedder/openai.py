@@ -54,13 +54,15 @@ class OpenAIEmbedder(EmbedderClient):
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
+        # Vertex-backed embedding models reject encoding_format=base64, which the
+        # OpenAI SDK sends by default. Ask for floats explicitly.
         result = await self.client.embeddings.create(
-            input=input_data, model=self.config.embedding_model
+            input=input_data, model=self.config.embedding_model, encoding_format='float'
         )
         return result.data[0].embedding[: self.config.embedding_dim]
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
         result = await self.client.embeddings.create(
-            input=input_data_list, model=self.config.embedding_model
+            input=input_data_list, model=self.config.embedding_model, encoding_format='float'
         )
         return [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
