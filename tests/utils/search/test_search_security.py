@@ -102,6 +102,23 @@ def test_falkordb_fulltext_query_returns_empty_on_punctuation_only():
     assert result == ''
 
 
+@pytest.mark.parametrize(
+    ('query', 'expected'),
+    [
+        (
+            'sessions/<enc-cwd>/<ISO-ts>_<uuid>.jsonl',
+            '(@group_id:"group1") (sessions | enc | cwd | ISO | ts | uuid | jsonl)',
+        ),
+        ('a_b', '(@group_id:"group1") (a_b)'),
+    ],
+)
+def test_falkordb_fulltext_query_drops_standalone_punctuation_tokens(query: str, expected: str):
+    """Standalone punctuation tokens should not produce invalid RediSearch queries."""
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    assert _build_falkor_fulltext_query(query, ['group1']) == expected
+
+
 def test_falkordb_driver_build_fulltext_query_strips_backticks():
     """FalkorDriver.build_fulltext_query should also strip backticks."""
     from graphiti_core.driver.falkordb_driver import FalkorDriver
