@@ -21,19 +21,57 @@ services:
         condition: service_healthy
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
+      - MODEL_NAME=${MODEL_NAME:-nvidia/nemotron-3-super-120b-a12b:free}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-nvidia/nemotron-3-embed-1b:free}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-2048}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openrouter}
       - NEO4J_URI=bolt://neo4j:${NEO4J_PORT:-7687}
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
       - PORT=8000
       - db_backend=neo4j
+
+  # Ollama profile: runs the API server pointing to local Ollama on the host
+  # Usage: docker compose --profile ollama --env-file .env.ollama up graph-ollama neo4j
+  graph-ollama:
+    build:
+      context: .
+    profiles: ["ollama"]
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    extra_hosts:
+      # Allows the container to reach Ollama running natively on the Mac host
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OPENAI_API_KEY=ollama
+      - OPENAI_BASE_URL=http://host.docker.internal:11434/v1
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:7b}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-nomic-embed-text}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-768}
+      - LLM_PROVIDER=ollama
+      - NEO4J_URI=bolt://neo4j:${NEO4J_PORT:-7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+      - PORT=8000
+      - db_backend=neo4j
+
   neo4j:
     image: neo4j:5.26.2
-    profiles: [""]
+    profiles: ["", "ollama"]
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:${NEO4J_PORT:-7474} || exit 1",
+          "wget -qO- http://localhost:7474 || exit 1",
         ]
       interval: 1s
       timeout: 10s
@@ -41,7 +79,7 @@ services:
       start_period: 3s
     ports:
       - "7474:7474" # HTTP
-      - "${NEO4J_PORT:-7687}:${NEO4J_PORT:-7687}" # Bolt
+      - "${NEO4J_PORT:-7687}:7687" # Bolt
     volumes:
       - neo4j_data:/data
     environment:
@@ -90,3 +128,4 @@ services:
 volumes:
   neo4j_data:
   falkordb_data:
+
