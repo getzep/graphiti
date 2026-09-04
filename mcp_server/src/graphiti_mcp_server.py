@@ -516,6 +516,9 @@ async def search_nodes(
         entity_types: Optional list of entity type names (node labels) to filter by
         center_node_uuid: Optional UUID of a node to center the search around. Results
             closer to this node in the graph are ranked higher.
+
+    Each node carries a 'score', and the response reports the 'ranker' that
+    produced it; scores are only comparable within the same ranker.
     """
     global graphiti_service
 
@@ -551,6 +554,10 @@ async def search_nodes(
         node_config = (
             NODE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else NODE_HYBRID_SEARCH_RRF
         )
+        # Report which reranker ordered the results: the reranker is deployment
+        # config, so a bare score is meaningless without it (score semantics
+        # differ between rankers).
+        ranker = node_config.node_config.reranker.name if node_config.node_config else 'unknown'
         results = await client.search_(
             query=query,
             config=node_config,
@@ -563,12 +570,16 @@ async def search_nodes(
         nodes = results.nodes[:max_nodes] if results.nodes else []
 
         if not nodes:
-            return NodeSearchResponse(message='No relevant nodes found', nodes=[])
+            return NodeSearchResponse(message='No relevant nodes found', nodes=[], ranker=ranker)
 
         # Format the results (embeddings stripped by to_node_result)
         node_results = [to_node_result(node) for node in nodes]
+        for node_result, score in zip(node_results, results.node_reranker_scores, strict=False):
+            node_result['score'] = score
 
-        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
+        return NodeSearchResponse(
+            message='Nodes retrieved successfully', nodes=node_results, ranker=ranker
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching nodes: {error_msg}')
@@ -601,6 +612,12 @@ async def search_memory_facts(
         valid_at_before: Optional ISO-8601 upper bound on a fact's valid_at
         invalid_at_after: Optional ISO-8601 lower bound on a fact's invalid_at
         invalid_at_before: Optional ISO-8601 upper bound on a fact's invalid_at
+
+    Each fact carries a 'score', and the response reports the 'ranker' that
+    produced it; scores are only comparable within the same ranker. The
+    response also reports 'invalidated_count'/'invalidated_uuids' — how many
+    of the returned facts have been invalidated or superseded — so a caller
+    can tell "no fact was ever recorded" from "a fact existed and expired".
     """
     global graphiti_service
 
@@ -636,19 +653,64 @@ async def search_memory_facts(
             else []
         )
 
-        relevant_edges = await client.search(
-            group_ids=effective_group_ids,
+        # Mirror Graphiti.search's recipe selection, but call search_ directly so
+        # the response can carry the reranker scores that client.search discards.
+        # Copy the recipe before setting the limit: the recipes are shared
+        # module-level objects, and mutating them is a race between concurrent
+        # searches.
+        from graphiti_core.search.search_config_recipes import (
+            EDGE_HYBRID_SEARCH_NODE_DISTANCE,
+            EDGE_HYBRID_SEARCH_RRF,
+        )
+
+        edge_config = (
+            EDGE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else EDGE_HYBRID_SEARCH_RRF
+        ).model_copy(deep=True)
+        edge_config.limit = max_facts
+        # Report which reranker ordered the results: the reranker is deployment
+        # config, so a bare score is meaningless without it.
+        ranker = edge_config.edge_config.reranker.name if edge_config.edge_config else 'unknown'
+
+        results = await client.search_(
             query=query,
-            num_results=max_facts,
+            config=edge_config,
+            group_ids=effective_group_ids,
             center_node_uuid=center_node_uuid,
             search_filter=search_filter,
         )
+        relevant_edges = results.edges
 
         if not relevant_edges:
-            return FactSearchResponse(message='No relevant facts found', facts=[])
+            return FactSearchResponse(
+                message='No relevant facts found',
+                facts=[],
+                ranker=ranker,
+                invalidated_count=0,
+                invalidated_uuids=[],
+            )
 
-        facts = [format_fact_result(edge) for edge in relevant_edges]
-        return FactSearchResponse(message='Facts retrieved successfully', facts=facts)
+        # Surface which of the returned facts have expired (invalidated or
+        # superseded), so a caller can tell "no fact was ever recorded" from
+        # "a fact existed and every version of it has been superseded" without
+        # any default filtering (graphiti is bi-temporal by design).
+        facts: list[dict[str, Any]] = []
+        invalidated_uuids: list[str] = []
+        scores = results.edge_reranker_scores
+        for i, edge in enumerate(relevant_edges):
+            fact = format_fact_result(edge)
+            if i < len(scores):
+                fact['score'] = scores[i]
+            if edge.invalid_at is not None or edge.expired_at is not None:
+                invalidated_uuids.append(edge.uuid)
+            facts.append(fact)
+
+        return FactSearchResponse(
+            message='Facts retrieved successfully',
+            facts=facts,
+            ranker=ranker,
+            invalidated_count=len(invalidated_uuids),
+            invalidated_uuids=invalidated_uuids,
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching facts: {error_msg}')
