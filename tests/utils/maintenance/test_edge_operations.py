@@ -156,6 +156,10 @@ class OccurredAtEdge(BaseModel):
     """Edge model stub for OCCURRED_AT."""
 
 
+class MakesEdge(BaseModel):
+    """Edge model stub for MAKES."""
+
+
 @pytest.mark.asyncio
 async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
     from graphiti_core.utils.maintenance import edge_operations as edge_ops
@@ -234,6 +238,102 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
     assert resolved_edges[0].name == 'INTERACTED_WITH'
     assert invalidated_edges == []
     assert new_edges == resolved_edges  # No duplicates, so all edges are new
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reuse_existing', [False, True])
+async def test_resolve_extracted_edges_resets_registered_name_for_disallowed_signature(
+    monkeypatch, reuse_existing
+):
+    from graphiti_core.utils.maintenance import edge_operations as edge_ops
+
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+    get_between_nodes = AsyncMock(return_value=[])
+    monkeypatch.setattr(EntityEdge, 'get_between_nodes', get_between_nodes)
+
+    async def immediate_gather(*aws, max_coroutines=None):
+        return [await aw for aw in aws]
+
+    monkeypatch.setattr(edge_ops, 'semaphore_gather', immediate_gather)
+    search = AsyncMock(return_value=SearchResults())
+    monkeypatch.setattr(edge_ops, 'search', search)
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={
+            'duplicate_facts': [],
+            'contradicted_facts': [],
+        }
+    )
+    clients = SimpleNamespace(
+        driver=MagicMock(),
+        llm_client=llm_client,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+    )
+
+    source_node = EntityNode(
+        uuid='source_uuid',
+        name='Product Node',
+        group_id='group_1',
+        labels=['Product'],
+    )
+    target_node = EntityNode(
+        uuid='target_uuid',
+        name='Company Node',
+        group_id='group_1',
+        labels=['Company'],
+    )
+    extracted_edge = EntityEdge(
+        source_node_uuid=source_node.uuid,
+        target_node_uuid=target_node.uuid,
+        name='MAKES',
+        group_id='group_1',
+        fact='Product is made by company',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    if reuse_existing:
+        get_between_nodes.return_value = [
+            EntityEdge(
+                source_node_uuid=source_node.uuid,
+                target_node_uuid=target_node.uuid,
+                name='MAKES',
+                group_id='group_1',
+                fact=extracted_edge.fact,
+                attributes={'legacy': 'value'},
+                episodes=[],
+                created_at=datetime.now(timezone.utc),
+                valid_at=None,
+                invalid_at=None,
+            )
+        ]
+        search.return_value = SearchResults(edges=get_between_nodes.return_value)
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Episode content',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
+        clients,
+        [extracted_edge],
+        episode,
+        [source_node, target_node],
+        {'MAKES': MakesEdge},
+        {('Company', 'Product'): ['MAKES']},
+    )
+
+    assert resolved_edges[0].name == 'RELATES_TO'
+    assert resolved_edges[0].attributes == {}
+    assert invalidated_edges == []
+    assert new_edges == ([] if reuse_existing else resolved_edges)
 
 
 @pytest.mark.asyncio
