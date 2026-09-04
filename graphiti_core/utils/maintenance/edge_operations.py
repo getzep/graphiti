@@ -366,7 +366,8 @@ async def resolve_extracted_edges(
         *[
             EntityEdge.get_between_nodes(driver, edge.source_node_uuid, edge.target_node_uuid)
             for edge in extracted_edges
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # Merge override edges (e.g. from the recent Redis dedup cache) into
@@ -399,7 +400,8 @@ async def resolve_extracted_edges(
                 search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
             )
             for extracted_edge, valid_edges in zip(extracted_edges, valid_edges_list, strict=True)
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     related_edges_lists: list[list[EntityEdge]] = [result.edges for result in related_edges_results]
@@ -414,7 +416,8 @@ async def resolve_extracted_edges(
                 search_filter=SearchFilters(),
             )
             for extracted_edge in extracted_edges
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # Remove duplicates: if an edge appears in both duplicate candidates and invalidation candidates,
@@ -504,7 +507,8 @@ async def resolve_extracted_edges(
                     edge_types_lst,
                     strict=True,
                 )
-            ]
+            ],
+            max_coroutines=getattr(clients, 'max_coroutines', None),
         )
     )
 
@@ -530,6 +534,7 @@ async def resolve_extracted_edges(
     await semaphore_gather(
         create_entity_edge_embeddings(embedder, resolved_edges),
         create_entity_edge_embeddings(embedder, invalidated_edges),
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     return resolved_edges, invalidated_edges, new_edges
