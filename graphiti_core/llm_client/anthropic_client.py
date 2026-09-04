@@ -371,6 +371,8 @@ class AnthropicClient(LLMClient):
             RefusalError: If the LLM refuses to respond.
             Exception: If an error occurs during the generation process.
         """
+        messages = self._clone_messages(messages)
+
         self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens

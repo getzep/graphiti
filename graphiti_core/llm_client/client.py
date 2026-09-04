@@ -95,6 +95,9 @@ class LLMClient(ABC):
         """Set the tracer for this LLM client."""
         self.tracer = tracer
 
+    def _clone_messages(self, messages: list[Message]) -> list[Message]:
+        return [message.model_copy(deep=True) for message in messages]
+
     def _clean_input(self, input: str) -> str:
         """Clean input string of invalid unicode and control characters.
 
@@ -205,6 +208,8 @@ class LLMClient(ABC):
         *,
         attribute_extraction: bool = False,
     ) -> dict[str, typing.Any]:
+        messages = self._clone_messages(messages)
+
         if max_tokens is None:
             max_tokens = self.max_tokens
 
