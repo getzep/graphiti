@@ -24,8 +24,62 @@ INDEX_TO_LABEL_KUZU_MAPPING = {
     'edge_name_and_fact': 'RelatesToNode_',
 }
 
+# ArcadeDB addresses a full-text index by "Type[prop1,prop2]" rather than by a logical
+# name, so the index name is derived from the type and the exact property list it was
+# created on. These MUST stay in step with ARCADEDB_FULLTEXT_DDL below.
+ARCADEDB_FULLTEXT_INDEX_PROPERTIES: dict[str, tuple[str, tuple[str, ...]]] = {
+    'node_name_and_summary': ('Entity', ('name', 'summary', 'group_id')),
+    'community_name': ('Community', ('name', 'group_id')),
+    'episode_content': ('Episodic', ('content', 'source', 'source_description', 'group_id')),
+    'edge_name_and_fact': ('RELATES_TO', ('name', 'fact', 'group_id')),
+}
+
+
+def get_arcadedb_fulltext_index_name(name: str) -> str:
+    """Return the ArcadeDB "Type[prop,...]" identifier for a graphiti index name."""
+    type_name, properties = ARCADEDB_FULLTEXT_INDEX_PROPERTIES[name]
+    return f'{type_name}[{",".join(properties)}]'
+
 
 def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
+    if provider == GraphProvider.ARCADEDB:
+        # These are emitted over the Bolt/Cypher channel, so they must be Cypher --
+        # ArcadeDB's own SQL DDL (CREATE VERTEX TYPE ..., CREATE INDEX ... NOTUNIQUE)
+        # is rejected there with "mismatched input 'TYPE'/'ON'". Vertex and edge types
+        # do not need to be declared up front: ArcadeDB creates them implicitly on the
+        # first MERGE/CREATE. Standard, RANGE and TEXT indexes are all creatable via
+        # Cypher; only FULLTEXT is rejected (see get_fulltext_indices), so these reuse
+        # the same Cypher syntax as the default Neo4j case below.
+        return [
+            'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
+            'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
+            'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
+            'CREATE INDEX saga_uuid IF NOT EXISTS FOR (n:Saga) ON (n.uuid)',
+            'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
+            'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
+            'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
+            'CREATE INDEX has_episode_uuid IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.uuid)',
+            'CREATE INDEX next_episode_uuid IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.uuid)',
+            'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
+            'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
+            'CREATE INDEX community_group_id IF NOT EXISTS FOR (n:Community) ON (n.group_id)',
+            'CREATE INDEX saga_group_id IF NOT EXISTS FOR (n:Saga) ON (n.group_id)',
+            'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
+            'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
+            'CREATE INDEX has_episode_group_id IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.group_id)',
+            'CREATE INDEX next_episode_group_id IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.group_id)',
+            'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
+            'CREATE INDEX saga_name IF NOT EXISTS FOR (n:Saga) ON (n.name)',
+            'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
+            'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
+            'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
+            'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
+            'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
+            'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
+            'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
+            'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
+        ]
+
     if provider == GraphProvider.FALKORDB:
         return [
             # Entity node
@@ -83,6 +137,39 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
 
 
 def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
+    if provider == GraphProvider.ARCADEDB:
+        # NOTE: unlike every other provider, these are ArcadeDB *SQL* statements, not
+        # Cypher. The Bolt/Cypher channel rejects full-text DDL outright ("Only
+        # standard, RANGE and TEXT index types are supported"), and `CREATE TEXT INDEX`
+        # builds a non-BM25 index that db.index.fulltext.queryNodes() will not accept.
+        # ArcadeDBDriver therefore runs these over the HTTP/SQL endpoint; see
+        # ArcadeDBDriver._create_fulltext_indices().
+        #
+        # Property lists must match ARCADEDB_FULLTEXT_INDEX_PROPERTIES above: ArcadeDB
+        # names the resulting index after the type and properties it covers.
+        return [
+            'CREATE VERTEX TYPE Entity IF NOT EXISTS',
+            'CREATE PROPERTY Entity.name IF NOT EXISTS STRING',
+            'CREATE PROPERTY Entity.summary IF NOT EXISTS STRING',
+            'CREATE PROPERTY Entity.group_id IF NOT EXISTS STRING',
+            'CREATE INDEX IF NOT EXISTS ON Entity (name, summary, group_id) FULL_TEXT ENGINE LUCENE',
+            'CREATE VERTEX TYPE Community IF NOT EXISTS',
+            'CREATE PROPERTY Community.name IF NOT EXISTS STRING',
+            'CREATE PROPERTY Community.group_id IF NOT EXISTS STRING',
+            'CREATE INDEX IF NOT EXISTS ON Community (name, group_id) FULL_TEXT ENGINE LUCENE',
+            'CREATE VERTEX TYPE Episodic IF NOT EXISTS',
+            'CREATE PROPERTY Episodic.content IF NOT EXISTS STRING',
+            'CREATE PROPERTY Episodic.source IF NOT EXISTS STRING',
+            'CREATE PROPERTY Episodic.source_description IF NOT EXISTS STRING',
+            'CREATE PROPERTY Episodic.group_id IF NOT EXISTS STRING',
+            'CREATE INDEX IF NOT EXISTS ON Episodic (content, source, source_description, group_id) FULL_TEXT ENGINE LUCENE',
+            'CREATE EDGE TYPE RELATES_TO IF NOT EXISTS',
+            'CREATE PROPERTY RELATES_TO.name IF NOT EXISTS STRING',
+            'CREATE PROPERTY RELATES_TO.fact IF NOT EXISTS STRING',
+            'CREATE PROPERTY RELATES_TO.group_id IF NOT EXISTS STRING',
+            'CREATE INDEX IF NOT EXISTS ON RELATES_TO (name, fact, group_id) FULL_TEXT ENGINE LUCENE',
+        ]
+
     if provider == GraphProvider.FALKORDB:
         from typing import cast
 
@@ -149,6 +236,13 @@ def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) 
         label = INDEX_TO_LABEL_KUZU_MAPPING[name]
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', {query}, TOP := $limit)"
 
+    if provider == GraphProvider.ARCADEDB:
+        # ArcadeDB's procedure takes exactly 2 arguments; Neo4j's {limit: $limit}
+        # config map is a hard error. Callers already append ORDER BY score DESC
+        # LIMIT $limit, so dropping it is safe.
+        index_name = get_arcadedb_fulltext_index_name(name)
+        return f"CALL db.index.fulltext.queryNodes('{index_name}', {query})"
+
     return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
 
@@ -171,5 +265,10 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
     if provider == GraphProvider.KUZU:
         label = INDEX_TO_LABEL_KUZU_MAPPING[name]
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
+
+    if provider == GraphProvider.ARCADEDB:
+        # See the note in get_nodes_query: 2 arguments, no config map.
+        index_name = get_arcadedb_fulltext_index_name(name)
+        return f"CALL db.index.fulltext.queryRelationships('{index_name}', $query)"
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
