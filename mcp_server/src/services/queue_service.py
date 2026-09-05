@@ -20,6 +20,9 @@ class QueueService:
         self._queue_workers: dict[str, bool] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
+        # Graphiti.add_episode rebinds the shared client's driver to group_id.
+        # Per-group workers must not overlap that mutation across tenant graphs.
+        self._write_lock: asyncio.Lock | None = None
 
     async def add_episode_task(
         self, group_id: str, process_func: Callable[[], Awaitable[None]]
@@ -96,6 +99,7 @@ class QueueService:
             graphiti_client: The graphiti client instance to use for processing episodes
         """
         self._graphiti_client = graphiti_client
+        self._write_lock = asyncio.Lock()
         logger.info('Queue service initialized with graphiti client')
 
     async def add_episode(
@@ -154,25 +158,28 @@ class QueueService:
             try:
                 logger.info(f'Processing episode {uuid} for group {group_id}')
 
-                # Process the episode using the graphiti client
-                await self._graphiti_client.add_episode(
-                    name=name,
-                    episode_body=content,
-                    source_description=source_description,
-                    source=episode_type,
-                    group_id=group_id,
-                    reference_time=reference_time or datetime.now(timezone.utc),
-                    entity_types=entity_types,
-                    edge_types=edge_types,
-                    edge_type_map=edge_type_map,
-                    excluded_entity_types=excluded_entity_types,
-                    previous_episode_uuids=previous_episode_uuids,
-                    custom_extraction_instructions=custom_extraction_instructions,
-                    update_communities=update_communities,
-                    saga=saga,
-                    saga_previous_episode_uuid=saga_previous_episode_uuid,
-                    uuid=uuid,
-                )
+                # Serialize across all group workers. Graphiti.add_episode
+                # rebinds the shared driver's graph for the duration of a write.
+                assert self._write_lock is not None
+                async with self._write_lock:
+                    await self._graphiti_client.add_episode(
+                        name=name,
+                        episode_body=content,
+                        source_description=source_description,
+                        source=episode_type,
+                        group_id=group_id,
+                        reference_time=reference_time or datetime.now(timezone.utc),
+                        entity_types=entity_types,
+                        edge_types=edge_types,
+                        edge_type_map=edge_type_map,
+                        excluded_entity_types=excluded_entity_types,
+                        previous_episode_uuids=previous_episode_uuids,
+                        custom_extraction_instructions=custom_extraction_instructions,
+                        update_communities=update_communities,
+                        saga=saga,
+                        saga_previous_episode_uuid=saga_previous_episode_uuid,
+                        uuid=uuid,
+                    )
 
                 logger.info(f'Successfully processed episode {uuid} for group {group_id}')
 
