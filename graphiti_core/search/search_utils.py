@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import os
 from collections import defaultdict
 from time import time
 from typing import Any
@@ -58,6 +59,14 @@ from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
 )
+
+NEO4J_NODE_VECTOR_INDEX = os.environ.get(
+    'GRAPHITI_NEO4J_NODE_VECTOR_INDEX', 'entity_name_embedding_vec'
+)
+NEO4J_EDGE_VECTOR_INDEX = os.environ.get(
+    'GRAPHITI_NEO4J_EDGE_VECTOR_INDEX', 'relates_to_fact_embedding_vec'
+)
+NEO4J_VECTOR_OVERFETCH = int(os.environ.get('GRAPHITI_NEO4J_VECTOR_OVERFETCH', '4'))
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +414,47 @@ async def edge_similarity_search(
         else:
             return []
     else:
+        if driver.provider == GraphProvider.NEO4J:
+            try:
+                query = (
+                    """
+                    CALL db.index.vector.queryRelationships($index_name, $knn_limit, $search_vector)
+                    YIELD relationship AS r, score
+                    WITH r, score
+                    MATCH (n)-[r]->(m)
+                    WITH r AS e, n, m, score
+                    WHERE score > $min_score
+                    """
+                    + (' AND ' + (' AND '.join(filter_queries)) if filter_queries else '')
+                    + """
+                    RETURN
+                    """
+                    + get_entity_edge_return_query(driver.provider)
+                    + """
+                    ORDER BY score DESC
+                    LIMIT $limit
+                    """
+                )
+
+                # Neo4j vector index and cosine function scores share the same [0, 1] scale.
+                records, _, _ = await driver.execute_query(
+                    query,
+                    index_name=NEO4J_EDGE_VECTOR_INDEX,
+                    knn_limit=max(limit * NEO4J_VECTOR_OVERFETCH, 64),
+                    search_vector=search_vector,
+                    limit=limit,
+                    min_score=min_score,
+                    routing_='r',
+                    **filter_params,
+                )
+            except Exception:
+                logger.warning(
+                    'Neo4j edge vector index search failed; falling back to cosine scan',
+                    exc_info=True,
+                )
+            else:
+                return [get_entity_edge_from_record(record, driver.provider) for record in records]
+
         query = (
             match_query
             + filter_query
@@ -738,6 +788,44 @@ async def node_similarity_search(
         else:
             return []
     else:
+        if driver.provider == GraphProvider.NEO4J:
+            try:
+                query = (
+                    """
+                    CALL db.index.vector.queryNodes($index_name, $knn_limit, $search_vector)
+                    YIELD node AS n, score
+                    WHERE score > $min_score
+                    """
+                    + (' AND ' + (' AND '.join(filter_queries)) if filter_queries else '')
+                    + """
+                    RETURN
+                    """
+                    + get_entity_node_return_query(driver.provider)
+                    + """
+                    ORDER BY score DESC
+                    LIMIT $limit
+                    """
+                )
+
+                # Neo4j vector index and cosine function scores share the same [0, 1] scale.
+                records, _, _ = await driver.execute_query(
+                    query,
+                    index_name=NEO4J_NODE_VECTOR_INDEX,
+                    knn_limit=max(limit * NEO4J_VECTOR_OVERFETCH, 64),
+                    search_vector=search_vector,
+                    limit=limit,
+                    min_score=min_score,
+                    routing_='r',
+                    **filter_params,
+                )
+            except Exception:
+                logger.warning(
+                    'Neo4j node vector index search failed; falling back to cosine scan',
+                    exc_info=True,
+                )
+            else:
+                return [get_entity_node_from_record(record, driver.provider) for record in records]
+
         query = (
             """
                                                                                                                                     MATCH (n:Entity)
