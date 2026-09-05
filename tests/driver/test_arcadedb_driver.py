@@ -40,7 +40,7 @@ class TestArcadeDBDriver:
         with patch('graphiti_core.driver.arcadedb_driver.AsyncGraphDatabase') as mock_agd:
             mock_agd.driver.return_value = MagicMock()
             self.driver = ArcadeDBDriver(
-                uri='bolt://localhost:2480',
+                uri='bolt://localhost:7687',
                 user='root',
                 password='test',
                 database='graphiti',
@@ -59,14 +59,14 @@ class TestArcadeDBDriver:
         with patch('graphiti_core.driver.arcadedb_driver.AsyncGraphDatabase') as mock_agd:
             mock_agd.driver.return_value = MagicMock()
             driver = ArcadeDBDriver(
-                uri='bolt://custom-host:2480',
+                uri='bolt://custom-host:7687',
                 user='admin',
                 password='secret',
                 database='mydb',
             )
             assert driver.provider == GraphProvider.ARCADEDB
             mock_agd.driver.assert_called_once_with(
-                uri='bolt://custom-host:2480',
+                uri='bolt://custom-host:7687',
                 auth=('admin', 'secret'),
             )
             assert driver._database == 'mydb'
@@ -77,12 +77,12 @@ class TestArcadeDBDriver:
         with patch('graphiti_core.driver.arcadedb_driver.AsyncGraphDatabase') as mock_agd:
             mock_agd.driver.return_value = MagicMock()
             ArcadeDBDriver(
-                uri='bolt://localhost:2480',
+                uri='bolt://localhost:7687',
                 user=None,
                 password=None,
             )
             mock_agd.driver.assert_called_once_with(
-                uri='bolt://localhost:2480',
+                uri='bolt://localhost:7687',
                 auth=('', ''),
             )
 
@@ -92,7 +92,7 @@ class TestArcadeDBDriver:
         with patch('graphiti_core.driver.arcadedb_driver.AsyncGraphDatabase') as mock_agd:
             mock_agd.driver.return_value = MagicMock()
             driver = ArcadeDBDriver(
-                uri='bolt://localhost:2480',
+                uri='bolt://localhost:7687',
                 user='root',
                 password='test',
             )
@@ -287,15 +287,66 @@ class TestArcadeDBDriver:
             assert 'FOR (' in query or 'FOR ()-' in query
 
     @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
-    def test_fulltext_indices_empty_for_arcadedb(self):
-        """ArcadeDB does not support FULLTEXT indexes via the Bolt/Cypher
-        channel regardless of syntax (verified). graphiti-core already runs
-        without BM25/fulltext search enabled, so no fulltext index DDL should
-        be generated at all -- avoids doomed-to-fail statements."""
+    def test_fulltext_indices_are_sql_for_arcadedb(self):
+        """ArcadeDB rejects full-text DDL on the Bolt/Cypher channel ("Only standard,
+        RANGE and TEXT index types are supported"), so these are ArcadeDB SQL
+        statements that the driver runs over the HTTP API instead."""
         from graphiti_core.driver.driver import GraphProvider
         from graphiti_core.graph_queries import get_fulltext_indices
 
-        assert get_fulltext_indices(GraphProvider.ARCADEDB) == []
+        statements = get_fulltext_indices(GraphProvider.ARCADEDB)
+        assert statements, 'ArcadeDB 26.9.1 supports BM25 full-text indexes'
+
+        index_statements = [s for s in statements if s.startswith('CREATE INDEX')]
+        assert len(index_statements) == 4
+        for statement in index_statements:
+            assert 'FULL_TEXT ENGINE LUCENE' in statement
+            # SQL DDL, never Cypher.
+            assert 'FOR (' not in statement
+
+    @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
+    def test_fulltext_index_names_match_ddl(self):
+        """The Type[prop,...] identifier used at query time must match the property
+        list the index was actually created on, or the procedure call fails."""
+        from graphiti_core.driver.driver import GraphProvider
+        from graphiti_core.graph_queries import (
+            ARCADEDB_FULLTEXT_INDEX_PROPERTIES,
+            get_arcadedb_fulltext_index_name,
+            get_fulltext_indices,
+        )
+
+        statements = get_fulltext_indices(GraphProvider.ARCADEDB)
+        for name in ARCADEDB_FULLTEXT_INDEX_PROPERTIES:
+            index_name = get_arcadedb_fulltext_index_name(name)
+            type_name, properties = ARCADEDB_FULLTEXT_INDEX_PROPERTIES[name]
+            expected_ddl = (
+                f'CREATE INDEX IF NOT EXISTS ON {type_name} '
+                f'({", ".join(properties)}) FULL_TEXT ENGINE LUCENE'
+            )
+            assert expected_ddl in statements, f'no DDL creating {index_name}'
+
+    @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
+    def test_fulltext_query_uses_two_arguments(self):
+        """ArcadeDB's procedure takes 2 arguments; Neo4j's {limit: ...} config map
+        is a hard error."""
+        from graphiti_core.driver.driver import GraphProvider
+        from graphiti_core.graph_queries import get_nodes_query, get_relationships_query
+
+        nodes_query = get_nodes_query(
+            'node_name_and_summary', '$query', limit=10, provider=GraphProvider.ARCADEDB
+        )
+        assert nodes_query == (
+            "CALL db.index.fulltext.queryNodes('Entity[name,summary,group_id]', $query)"
+        )
+        assert 'limit' not in nodes_query
+
+        edges_query = get_relationships_query(
+            'edge_name_and_fact', limit=10, provider=GraphProvider.ARCADEDB
+        )
+        assert edges_query == (
+            "CALL db.index.fulltext.queryRelationships('RELATES_TO[name,fact,group_id]', $query)"
+        )
+        assert 'limit' not in edges_query
 
     @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
     def test_operations_properties(self):
@@ -323,7 +374,7 @@ class TestArcadeDBTransaction:
         with patch('graphiti_core.driver.arcadedb_driver.AsyncGraphDatabase') as mock_agd:
             mock_agd.driver.return_value = MagicMock()
             driver = ArcadeDBDriver(
-                uri='bolt://localhost:2480',
+                uri='bolt://localhost:7687',
                 user='root',
                 password='test',
             )
@@ -348,7 +399,7 @@ class TestArcadeDBTransaction:
         with patch('graphiti_core.driver.arcadedb_driver.AsyncGraphDatabase') as mock_agd:
             mock_agd.driver.return_value = MagicMock()
             driver = ArcadeDBDriver(
-                uri='bolt://localhost:2480',
+                uri='bolt://localhost:7687',
                 user='root',
                 password='test',
             )
@@ -376,7 +427,7 @@ class TestArcadeDBDriverIntegration:
     @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
     async def test_basic_integration_with_real_arcadedb(self):
         """Basic integration test with real ArcadeDB instance."""
-        arcadedb_uri = os.getenv('ARCADEDB_URI', 'bolt://localhost:2480')
+        arcadedb_uri = os.getenv('ARCADEDB_URI', 'bolt://localhost:7687')
         arcadedb_user = os.getenv('ARCADEDB_USER', 'root')
         arcadedb_password = os.getenv('ARCADEDB_PASSWORD', 'playwithdata')
 

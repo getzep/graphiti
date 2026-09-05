@@ -209,6 +209,14 @@ async def edge_fulltext_search(
         YIELD node, score
         MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: node.uuid})-[:RELATES_TO]->(m:Entity)
         """
+    elif driver.provider == GraphProvider.ARCADEDB:
+        # ArcadeDB needs an explicit WITH between CALL ... YIELD and MATCH; without
+        # that barrier the MATCH silently returns no rows.
+        match_query = """
+        YIELD relationship AS rel, score
+        WITH rel, score
+        MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+        """
 
     filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider

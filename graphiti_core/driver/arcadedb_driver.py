@@ -18,7 +18,9 @@ import logging
 from collections.abc import AsyncIterator, Coroutine
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 from neo4j import AsyncGraphDatabase, EagerResult
 from typing_extensions import LiteralString
 
@@ -64,14 +66,22 @@ logger = logging.getLogger(__name__)
 class ArcadeDBDriver(GraphDriver):
     """Graph driver for ArcadeDB using the Neo4j Bolt wire protocol.
 
-    ArcadeDB 26.2.1+ ships the Bolt protocol, allowing standard Neo4j async
-    drivers to connect directly. This driver reuses the ``neo4j`` Python
-    async driver for transport while adapting queries for ArcadeDB's
+    ArcadeDB ships the Bolt protocol as a server plugin, allowing standard
+    Neo4j async drivers to connect directly. This driver reuses the ``neo4j``
+    Python async driver for transport while adapting queries for ArcadeDB's
     OpenCypher and SQL dialect.
+
+    Tested against ArcadeDB 26.9.1. The Bolt plugin must be enlisted at server
+    startup and listens on port 7687 by default::
+
+        -Darcadedb.server.plugins=Bolt:com.arcadedb.bolt.BoltProtocolPlugin
     """
 
     provider = GraphProvider.ARCADEDB
     default_group_id: str = ''
+
+    #: ArcadeDB's HTTP/SQL endpoint listens on this port by default.
+    DEFAULT_HTTP_PORT = 2480
 
     def __init__(
         self,
@@ -79,13 +89,31 @@ class ArcadeDBDriver(GraphDriver):
         user: str | None,
         password: str | None,
         database: str = 'graphiti',
+        http_uri: str | None = None,
     ):
+        """Connect to ArcadeDB over Bolt.
+
+        Args:
+            uri: Bolt URI, e.g. ``bolt://localhost:7687``.
+            user: Username.
+            password: Password.
+            database: Database name.
+            http_uri: Base URI of ArcadeDB's HTTP API, e.g. ``http://localhost:2480``.
+                Only used to create full-text indexes, which the Bolt/Cypher channel
+                cannot express. Defaults to the Bolt host on port 2480. Pass this
+                explicitly if the HTTP API is on a different host or port; if it is
+                unreachable, full-text indexes are skipped with a warning and
+                full-text search will return no results.
+        """
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
             auth=(user or '', password or ''),
         )
         self._database = database
+        self._user = user or ''
+        self._password = password or ''
+        self._http_uri = http_uri or self._default_http_uri(uri)
 
         # Instantiate ArcadeDB operations
         self._entity_node_ops = ArcadeDBEntityNodeOperations()
@@ -192,20 +220,66 @@ class ArcadeDBDriver(GraphDriver):
 
         return _noop()
 
+    @classmethod
+    def _default_http_uri(cls, bolt_uri: str) -> str:
+        """Derive the HTTP API base URI from the Bolt URI, swapping in the HTTP port."""
+        parsed = urlparse(bolt_uri)
+        host = parsed.hostname or 'localhost'
+        scheme = (
+            'https' if parsed.scheme in ('bolt+s', 'bolt+ssc', 'neo4j+s', 'neo4j+ssc') else 'http'
+        )
+        return f'{scheme}://{host}:{cls.DEFAULT_HTTP_PORT}'
+
+    async def _execute_sql(self, client: httpx.AsyncClient, statement: str) -> None:
+        """Run a single ArcadeDB SQL statement over the HTTP API.
+
+        Full-text DDL has no Cypher equivalent, so it cannot go over Bolt.
+        """
+        response = await client.post(
+            f'{self._http_uri}/api/v1/command/{self._database}',
+            json={'language': 'sql', 'command': statement},
+            auth=(self._user, self._password),
+            timeout=30.0,
+        )
+        response.raise_for_status()
+
+    async def _create_fulltext_indices(self) -> None:
+        """Create the BM25 full-text indexes over HTTP/SQL.
+
+        Best-effort: if the HTTP API is unreachable the rest of the driver still works,
+        but full-text search will return nothing, so failure is logged at warning level.
+        """
+        statements = get_fulltext_indices(self.provider)
+        if not statements:
+            return
+
+        async with httpx.AsyncClient() as client:
+            for statement in statements:
+                try:
+                    await self._execute_sql(client, statement)
+                except httpx.HTTPError as e:
+                    logger.warning(
+                        f'Could not create ArcadeDB full-text index via the HTTP API at '
+                        f'{self._http_uri} ({e}). Full-text search will return no results. '
+                        f'Pass http_uri= if the HTTP API is not on port '
+                        f'{self.DEFAULT_HTTP_PORT}. Failed statement: {statement}'
+                    )
+                    return
+
     async def build_indices_and_constraints(self, delete_existing: bool = False):
         if delete_existing:
             await self.delete_all_indexes()
 
         range_indices: list[LiteralString] = get_range_indices(self.provider)
-        fulltext_indices: list[LiteralString] = get_fulltext_indices(self.provider)
-        index_queries: list[LiteralString] = range_indices + fulltext_indices
 
-        for query in index_queries:
+        for query in range_indices:
             try:
                 await self.execute_query(query)
             except Exception as e:
                 # Index may already exist
                 logger.debug(f'Index creation skipped (may already exist): {e}')
+
+        await self._create_fulltext_indices()
 
     async def health_check(self) -> None:
         """Check ArcadeDB connectivity via the Bolt driver."""

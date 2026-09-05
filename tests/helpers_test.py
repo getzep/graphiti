@@ -90,10 +90,12 @@ AOSS_HOST = os.getenv('AOSS_HOST', None)
 
 KUZU_DB = os.getenv('KUZU_DB', ':memory:')
 
-ARCADEDB_URI = os.getenv('ARCADEDB_URI', 'bolt://localhost:2480')
+ARCADEDB_URI = os.getenv('ARCADEDB_URI', 'bolt://localhost:7687')
 ARCADEDB_USER = os.getenv('ARCADEDB_USER', 'root')
 ARCADEDB_PASSWORD = os.getenv('ARCADEDB_PASSWORD', 'playwithdata')
 ARCADEDB_DATABASE = os.getenv('ARCADEDB_DATABASE', 'graphiti')
+# Only used to create full-text indexes, which ArcadeDB's Cypher channel cannot express.
+ARCADEDB_HTTP_URI = os.getenv('ARCADEDB_HTTP_URI') or None
 
 group_id = 'graphiti_test_group'
 group_id_2 = 'graphiti_test_group_2'
@@ -130,6 +132,7 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             user=ARCADEDB_USER,
             password=ARCADEDB_PASSWORD,
             database=ARCADEDB_DATABASE,
+            http_uri=ARCADEDB_HTTP_URI,
         )
     else:
         raise ValueError(f'Driver {provider} not available')

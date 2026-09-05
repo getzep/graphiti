@@ -156,7 +156,7 @@ particularly suitable for applications requiring real-time interaction and preci
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / ArcadeDB 26.2.1 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
+- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / ArcadeDB 26.9.1 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
   OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
@@ -444,17 +444,37 @@ from graphiti_core import Graphiti
 from graphiti_core.driver.arcadedb_driver import ArcadeDBDriver
 
 # Create an ArcadeDB driver
-# ArcadeDB 26.2.1+ ships the Bolt protocol on port 2480
+# ArcadeDB 26.9.1 is the tested version. The Bolt protocol ships as a server plugin
+# that must be enlisted at startup and listens on port 7687 by default:
+#   -Darcadedb.server.plugins=Bolt:com.arcadedb.bolt.BoltProtocolPlugin
 driver = ArcadeDBDriver(
-    uri="bolt://localhost:2480",
+    uri="bolt://localhost:7687",
     user="root",
     password="playwithdata",
-    database="graphiti"  # Optional, defaults to 'graphiti'
+    database="graphiti",  # Optional, defaults to 'graphiti'
+    # Optional. Only used to create the BM25 full-text indexes, which ArcadeDB's
+    # Cypher channel cannot express. Defaults to the Bolt host on port 2480.
+    http_uri="http://localhost:2480",
 )
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
 ```
+
+Starting the server with Bolt enabled:
+
+```bash
+docker run -d -p 2480:2480 -p 7687:7687 \
+  -e JAVA_OPTS="-Darcadedb.server.rootPassword=playwithdata \
+    -Darcadedb.server.plugins=Bolt:com.arcadedb.bolt.BoltProtocolPlugin" \
+  arcadedata/arcadedb:26.9.1
+```
+
+Full-text (BM25) search uses ArcadeDB's Neo4j-compatible `db.index.fulltext.*` procedures,
+available since 26.9.1. Creating those indexes requires ArcadeDB SQL, which the Bolt/Cypher
+channel rejects, so `build_indices_and_constraints()` creates them over the HTTP API. If the
+HTTP API is unreachable, index creation is skipped with a warning and full-text search
+returns no results; everything else keeps working.
 
 ## Graph Driver Architecture
 

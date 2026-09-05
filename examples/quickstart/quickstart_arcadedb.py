@@ -47,10 +47,12 @@ load_dotenv()
 
 # ArcadeDB connection parameters
 # Make sure ArcadeDB is running — see https://docs.arcadedb.com/
-# ArcadeDB 26.2.1+ ships the Bolt protocol on port 2480 by default.
+# Tested against ArcadeDB 26.9.1. Bolt ships as a server plugin that must be enlisted
+# at startup; it listens on port 7687 by default:
+#   -Darcadedb.server.plugins=Bolt:com.arcadedb.bolt.BoltProtocolPlugin
 # Set the environment variables to match your ArcadeDB instance.
 
-arcadedb_uri = os.environ.get('ARCADEDB_URI', 'bolt://localhost:2480')
+arcadedb_uri = os.environ.get('ARCADEDB_URI', 'bolt://localhost:7687')
 arcadedb_user = os.environ.get('ARCADEDB_USER', 'root')
 arcadedb_password = os.environ.get('ARCADEDB_PASSWORD', 'playwithdata')
 arcadedb_database = os.environ.get('ARCADEDB_DATABASE', 'graphiti')

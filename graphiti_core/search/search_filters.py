@@ -93,8 +93,13 @@ def node_search_filter_query_constructor(
     if filters.node_labels is not None:
         # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
-        if provider in (GraphProvider.KUZU, GraphProvider.ARCADEDB):
+        if provider == GraphProvider.KUZU:
             node_label_filter = 'list_has_all(n.labels, $labels)'
+            filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.ARCADEDB:
+            # ArcadeDB stores labels as a list property but has no `list_has_all()`;
+            # `all(... IN ...)` is the portable OpenCypher equivalent.
+            node_label_filter = 'all(label IN $labels WHERE label IN n.labels)'
             filter_params['labels'] = filters.node_labels
         else:
             node_labels = '|'.join(filters.node_labels)
@@ -136,9 +141,16 @@ def edge_search_filter_query_constructor(
     if filters.node_labels is not None:
         # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
-        if provider in (GraphProvider.KUZU, GraphProvider.ARCADEDB):
+        if provider == GraphProvider.KUZU:
             node_label_filter = (
                 'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
+            )
+            filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.ARCADEDB:
+            # See the note in node_search_filter_query_constructor.
+            node_label_filter = (
+                'all(label IN $labels WHERE label IN n.labels) '
+                'AND all(label IN $labels WHERE label IN m.labels)'
             )
             filter_params['labels'] = filters.node_labels
         else:
