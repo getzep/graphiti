@@ -96,16 +96,32 @@ async def retrieve_episodes(
         except NotImplementedError:
             pass
 
+    # FalkorDB can return rows for a direct `WHERE e.valid_at <= $reference_time` comparison
+    # even when the predicate evaluates to false, so project the comparison into a boolean
+    # and filter on that. Other providers keep the direct predicate so index usage is unchanged.
+    valid_at_filter: LiteralString = (
+        """
+        WITH e, e.valid_at <= $reference_time AS valid_at_ok
+        WHERE valid_at_ok
+        """
+        if driver.provider == GraphProvider.FALKORDB
+        else """
+        WHERE e.valid_at <= $reference_time
+        """
+    )
+
     # If saga is provided, retrieve episodes from that saga only
     if saga is not None:
         group_id = group_ids[0] if group_ids else None
-        source_filter = 'AND e.source = $source' if source is not None else ''
+        source_filter = '\nAND e.source = $source' if source is not None else ''
 
         records, _, _ = await driver.execute_query(
-            f"""
-            MATCH (s:Saga {{name: $saga_name, group_id: $group_id}})-[:HAS_EPISODE]->(e:Episodic)
-            WHERE e.valid_at <= $reference_time
-            {source_filter}
+            """
+            MATCH (s:Saga {name: $saga_name, group_id: $group_id})-[:HAS_EPISODE]->(e:Episodic)
+            """
+            + valid_at_filter
+            + source_filter
+            + """
             RETURN
             """
             + (
@@ -139,9 +155,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                                    MATCH (e:Episodic)
-                                    WHERE e.valid_at <= $reference_time
-                                    """
+        MATCH (e:Episodic)
+        """
+        + valid_at_filter
         + query_filter
         + """
         RETURN
