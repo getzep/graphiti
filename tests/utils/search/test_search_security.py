@@ -110,10 +110,11 @@ def test_falkordb_fulltext_query_returns_empty_on_punctuation_only():
             '(@group_id:"group1") (sessions | enc | cwd | ISO | ts | uuid | jsonl)',
         ),
         ('a_b', '(@group_id:"group1") (a_b)'),
+        ('foo __ bar', '(@group_id:"group1") (foo | bar)'),
     ],
 )
 def test_falkordb_fulltext_query_drops_standalone_punctuation_tokens(query: str, expected: str):
-    """Standalone punctuation tokens should not produce invalid RediSearch queries."""
+    """Tokens without alphanumeric characters should not enter RediSearch queries."""
     from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
 
     assert _build_falkor_fulltext_query(query, ['group1']) == expected
