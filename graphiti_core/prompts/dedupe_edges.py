@@ -22,6 +22,13 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class EdgeDuplicate(BaseModel):
+    reasoning: str = Field(
+        default='',
+        description=(
+            'Briefly reason about duplicates and contradictions before the final arrays. '
+            'For every selected fact, cite its continuous idx number.'
+        ),
+    )
     duplicate_facts: list[int] = Field(
         ...,
         description='List of idx values of duplicate facts (only from EXISTING FACTS range). Empty list if none.',
@@ -81,6 +88,11 @@ EXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.
    - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).
    - Return all contradicted idx values in contradicted_facts.
    - If no contradictions, return an empty list for contradicted_facts.
+
+Before returning the arrays, explain your decision in a short reasoning field. '
+For every duplicate or contradiction, explicitly cite its idx number in the reasoning '
+(for example, "idx 2 is contradicted because the value changed"). Then return the '
+duplicate_facts and contradicted_facts arrays using those same idx values.
 
 <EXAMPLE>
 EXISTING FACT: idx=0, "Alice joined Acme Corp in 2020"
