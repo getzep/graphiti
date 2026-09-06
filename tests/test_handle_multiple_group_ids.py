@@ -27,10 +27,19 @@ class _FakeDriver:
         self._database = database
         self.provider = provider
         self.clone_calls: list[str] = []
+        self.init_calls: list[str] = []
 
     def clone(self, database: str) -> '_FakeDriver':
         self.clone_calls.append(database)
-        return _FakeDriver(database, self.provider)
+        cloned = _FakeDriver(database, self.provider)
+        # Share call tracking with clones, mirroring FalkorDriver's shared
+        # _initialized_databases set.
+        cloned.clone_calls = self.clone_calls
+        cloned.init_calls = self.init_calls
+        return cloned
+
+    async def ensure_database_initialized(self) -> None:
+        self.init_calls.append(self._database)
 
 
 class _Host:
