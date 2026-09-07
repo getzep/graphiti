@@ -36,11 +36,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
-        with:
-          version: "latest"
-
       - name: Extract version
         id: version
         run: |
@@ -54,7 +49,7 @@ jobs:
 
             if [ -z "$VERSION" ]; then
               # Fallback: check pyproject.toml version
-              VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+              VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
               echo "Version from pyproject.toml: $VERSION"
             else
               echo "Version from git tag: $VERSION"
@@ -144,9 +139,15 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
+            SOCKET_FIREWALL_ENABLED=true
+            SOCKET_SCAN_ID=${{ github.run_id }}-${{ github.run_attempt }}
             GRAPHITI_VERSION=${{ steps.version.outputs.version }}
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
             VCS_REF=${{ github.sha }}
+          # Socket Firewall API key as a BuildKit secret (not a build-arg/ENV)
+          # so it is never baked into an image layer.
+          secrets: |
+            socket_api_key=${{ secrets.SOCKET_API_KEY }}
 
       - name: Summary
         if: steps.version.outputs.skip != 'true'

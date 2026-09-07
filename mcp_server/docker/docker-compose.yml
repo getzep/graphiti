@@ -22,7 +22,6 @@ services:
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
-      - PATH=/root/.local/bin:${PATH}
     volumes:
       - falkordb_data:/var/lib/falkordb/data
       - mcp_logs:/var/log/graphiti

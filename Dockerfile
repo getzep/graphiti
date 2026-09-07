@@ -27,6 +27,21 @@ ADD https://astral.sh/uv/install.sh /uv-installer.sh
 RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.local/bin:$PATH"
 
+# Install Socket Firewall (sfw) for dependency fetches when SOCKET_API_KEY is
+# provided as a BuildKit secret. Community builds without the secret fall back
+# to direct installs (see the RUN --mount below).
+ARG TARGETARCH
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) SFW_ARCH=x86_64 ;; \
+      arm64) SFW_ARCH=arm64 ;; \
+      *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
+      "https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-${SFW_ARCH}" \
+      -o /usr/local/bin/sfw; \
+    chmod +x /usr/local/bin/sfw
+
 # Configure uv for runtime
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -43,20 +58,46 @@ COPY ./server/graph_service ./graph_service
 # Install server dependencies (without graphiti-core from lockfile)
 # Then install graphiti-core from PyPI at the desired version
 # This prevents the stale lockfile from pinning an old graphiti-core version
+# When socket_api_key is mounted (official releases), route through sfw;
+# otherwise install directly so public docker builds keep working.
+#
+# sfw can only inspect packages that are actually downloaded, so an enforced
+# build must defeat both caches or a newly flagged package would ship unscanned:
+# SOCKET_SCAN_ID (unique per release run) invalidates this layer, and
+# UV_NO_CACHE stops uv serving wheels from the cache mount below.
 ARG INSTALL_FALKORDB=false
+ARG SOCKET_FIREWALL_ENABLED=false
+ARG SOCKET_SCAN_ID=
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev && \
+    --mount=type=secret,id=socket_api_key \
+    set -eu; \
+    export SFW_TELEMETRY_DISABLED=true; \
+    export SFW_CUSTOM_REGISTRIES="wrap:storage.googleapis.com,wrap:classic.yarnpkg.com,wrap:files.pythonhosted.org"; \
+    if [ "$SOCKET_FIREWALL_ENABLED" = "true" ]; then \
+      if [ ! -s /run/secrets/socket_api_key ]; then \
+        echo "ERROR: SOCKET_FIREWALL_ENABLED=true but socket_api_key is missing" >&2; \
+        exit 1; \
+      fi; \
+      export SOCKET_API_KEY="$(cat /run/secrets/socket_api_key)"; \
+      export UV_NO_CACHE=1; \
+      echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID})"; \
+      UV_CMD="sfw uv"; \
+    else \
+      echo "socket_api_key absent; installing without Socket Firewall"; \
+      UV_CMD="uv"; \
+    fi; \
+    $UV_CMD sync --frozen --no-dev; \
     if [ -n "$GRAPHITI_VERSION" ]; then \
         if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
+            $UV_CMD pip install --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
         else \
-            uv pip install --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
+            $UV_CMD pip install --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
         fi; \
     else \
         if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --upgrade "graphiti-core[falkordb]"; \
+            $UV_CMD pip install --upgrade "graphiti-core[falkordb]"; \
         else \
-            uv pip install --upgrade graphiti-core; \
+            $UV_CMD pip install --upgrade graphiti-core; \
         fi; \
     fi
 

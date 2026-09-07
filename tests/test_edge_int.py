@@ -240,6 +240,15 @@ async def test_entity_edge(graph_driver, mock_embedder):
     assert retrieved[0].created_at == now
     assert retrieved[0].group_id == group_id
 
+    # Get edge by node uuid from the target side — direction must be preserved
+    # (regression test: previously the queried node was always bound to `n`,
+    # flipping source/target when the queried node was the relationship target).
+    retrieved = await EntityEdge.get_by_node_uuid(graph_driver, bob_node.uuid)
+    assert len(retrieved) == 1
+    assert retrieved[0].uuid == entity_edge.uuid
+    assert retrieved[0].source_node_uuid == alice_node.uuid
+    assert retrieved[0].target_node_uuid == bob_node.uuid
+
     # Get fact embedding
     await entity_edge.load_fact_embedding(graph_driver)
     assert np.allclose(entity_edge.fact_embedding, edge_embedding)
