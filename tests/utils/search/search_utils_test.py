@@ -161,3 +161,49 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         mock_similarity_search.assert_called_with(
             mock_driver, [0.1, 0.2, 0.3], SearchFilters(), ['1'], 4
         )
+
+
+@pytest.mark.asyncio
+async def test_episode_mentions_reranker_orders_by_descending_mentions():
+    """Nodes mentioned in more episodes must rank higher (regression for #1342)."""
+    from unittest.mock import AsyncMock
+
+    from graphiti_core.search.search_utils import episode_mentions_reranker
+
+    mock_driver = AsyncMock()
+    mock_driver.search_interface = None
+    mock_driver.execute_query.return_value = (
+        [{'uuid': 'few', 'score': 1}, {'uuid': 'many', 'score': 5}],
+        None,
+        None,
+    )
+
+    ranked, scores = await episode_mentions_reranker(
+        mock_driver, node_uuids=[['few', 'many'], ['many', 'few']]
+    )
+
+    assert ranked == ['many', 'few']
+    assert scores == [5, 1]
+
+
+@pytest.mark.asyncio
+async def test_episode_mentions_reranker_unmentioned_nodes_rank_last():
+    """A node with no MENTIONS rows scores 0 and ranks last, not first (regression for #1342)."""
+    from unittest.mock import AsyncMock
+
+    from graphiti_core.search.search_utils import episode_mentions_reranker
+
+    mock_driver = AsyncMock()
+    mock_driver.search_interface = None
+    mock_driver.execute_query.return_value = (
+        [{'uuid': 'mentioned', 'score': 3}],
+        None,
+        None,
+    )
+
+    ranked, _ = await episode_mentions_reranker(
+        mock_driver, node_uuids=[['mentioned', 'unmentioned']]
+    )
+
+    assert ranked[0] == 'mentioned'
+    assert ranked[-1] == 'unmentioned'
