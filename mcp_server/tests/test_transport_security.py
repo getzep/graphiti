@@ -4,10 +4,8 @@ Covers the _build_transport_security helper and its behavior when driven
 through the real MCP SDK TransportSecurityMiddleware (DNS rebinding protection).
 """
 
-import pytest
 from mcp.server.transport_security import (
     TransportSecurityMiddleware,
-    TransportSecuritySettings,
 )
 from starlette.requests import Request
 

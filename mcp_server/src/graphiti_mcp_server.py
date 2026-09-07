@@ -203,6 +203,7 @@ When searching, use specific queries and consider filtering by group_id, type, o
 server requires a configured database and valid API keys for language-model operations.
 """
 
+
 # Configure transport security for DNS rebinding protection.
 # FastMCP auto-enables this with a localhost-only allowlist when constructed with the
 # default 127.0.0.1 host. When MCP_HOSTNAMES is set (comma-separated), add each entry to
@@ -214,8 +215,7 @@ def _build_transport_security(raw: str) -> TransportSecuritySettings | None:
         return None  # fall back to FastMCP localhost-only defaults
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[f'{h}:*' for h in hostnames]
-        + ['127.0.0.1:*', 'localhost:*', '[::1]:*'],
+        allowed_hosts=[f'{h}:*' for h in hostnames] + ['127.0.0.1:*', 'localhost:*', '[::1]:*'],
     )
 
 
