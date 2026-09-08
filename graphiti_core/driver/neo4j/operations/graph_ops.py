@@ -145,17 +145,6 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
 
         return community_clusters
 
-    async def remove_communities(
-        self,
-        executor: QueryExecutor,
-    ) -> None:
-        await executor.execute_query(
-            """
-            MATCH (c:Community)
-            DETACH DELETE c
-            """
-        )
-
     async def determine_entity_community(
         self,
         executor: QueryExecutor,

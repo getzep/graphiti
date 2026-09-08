@@ -241,19 +241,34 @@ async def build_communities(
     return community_nodes, community_edges
 
 
-async def remove_communities(driver: GraphDriver):
+async def remove_communities(driver: GraphDriver, group_ids: list[str] | None = None):
     if driver.graph_operations_interface:
         try:
-            return await driver.graph_operations_interface.remove_communities(driver)
+            return await driver.graph_operations_interface.remove_communities(
+                driver, group_ids=group_ids
+            )
         except NotImplementedError:
             pass
 
-    await driver.execute_query(
-        """
-        MATCH (c:Community)
-        DETACH DELETE c
-        """
-    )
+    if driver.graph_ops:
+        return await driver.graph_ops.remove_communities(driver, group_ids=group_ids)
+
+    if group_ids:
+        await driver.execute_query(
+            """
+            MATCH (c:Community)
+            WHERE c.group_id IN $group_ids
+            DETACH DELETE c
+            """,
+            group_ids=group_ids,
+        )
+    else:
+        await driver.execute_query(
+            """
+            MATCH (c:Community)
+            DETACH DELETE c
+            """
+        )
 
 
 async def determine_entity_community(

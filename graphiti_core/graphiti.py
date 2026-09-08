@@ -1500,8 +1500,8 @@ class Graphiti:
         if driver is None:
             driver = self.clients.driver
 
-        # Clear existing communities
-        await remove_communities(driver)
+        # Clear existing communities (scoped: only the groups being rebuilt)
+        await remove_communities(driver, group_ids=group_ids)
 
         community_nodes, community_edges = await build_communities(
             driver, self.llm_client, group_ids
