@@ -1385,6 +1385,136 @@
       "created_at": "2026-08-16T17:33:31Z",
       "repoId": 840056306,
       "pullRequestNo": 1773
+    },
+    {
+      "name": "crajah",
+      "email": "chandan.rajah@gmail.com",
+      "accountType": "personal",
+      "id": 4264111,
+      "comment_id": 5328828298,
+      "created_at": "2026-08-18T13:26:08Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1777
+    },
+    {
+      "name": "Ftgn-dpA",
+      "email": "ftgn_dpa@outlook.com",
+      "accountType": "personal",
+      "id": 68517894,
+      "comment_id": 5354692905,
+      "created_at": "2026-08-20T10:31:41Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1786
+    },
+    {
+      "name": "choi138",
+      "email": "kidjustinchoi@gmail.com",
+      "accountType": "personal",
+      "id": 84369321,
+      "comment_id": 5446950362,
+      "created_at": "2026-08-28T00:43:46Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1804
+    },
+    {
+      "name": "linhongyu510",
+      "email": "linhongyu510@users.noreply.github.com",
+      "accountType": "personal",
+      "id": 204567536,
+      "comment_id": 5452888209,
+      "created_at": "2026-08-28T13:07:16Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1807
+    },
+    {
+      "name": "linhongyu510",
+      "email": "linhongyu510@gmail.com",
+      "accountType": "personal",
+      "id": 204567536,
+      "comment_id": 5452919602,
+      "created_at": "2026-08-28T13:10:13Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1807
+    },
+    {
+      "name": "mikemikimike",
+      "email": "13286568797@163.com",
+      "accountType": "personal",
+      "id": 186855910,
+      "comment_id": 5460758103,
+      "created_at": "2026-08-29T06:14:13Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1808
+    },
+    {
+      "name": "SolanCheung",
+      "email": "formsg@163.com",
+      "accountType": "personal",
+      "id": 78773536,
+      "comment_id": 5451063831,
+      "created_at": "2026-08-28T09:50:52Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1806
+    },
+    {
+      "name": "alekc",
+      "email": "alexander@chernov.it",
+      "accountType": "personal",
+      "id": 302807,
+      "comment_id": 5521776122,
+      "created_at": "2026-09-03T06:52:37Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1828
+    },
+    {
+      "name": "g33kroid",
+      "email": "mina.abkarino@hotmail.com",
+      "accountType": "personal",
+      "id": 16447622,
+      "comment_id": 5524363688,
+      "created_at": "2026-09-03T10:32:46Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1829
+    },
+    {
+      "name": "simpleqt",
+      "email": "simpleqt@users.noreply.github.com",
+      "accountType": "personal",
+      "id": 89645338,
+      "comment_id": 5544424030,
+      "created_at": "2026-09-04T17:52:34Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1835
+    },
+    {
+      "name": "cnYui",
+      "email": "xiaobianfuai@gmail.com",
+      "accountType": "personal",
+      "id": 132864240,
+      "comment_id": 4655089821,
+      "created_at": "2026-06-09T01:20:06Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1568
+    },
+    {
+      "name": "cnYui",
+      "email": "xiaobianfuai@gmail.com",
+      "accountType": "personal",
+      "id": 132864240,
+      "comment_id": 5559203820,
+      "created_at": "2026-09-06T12:26:31Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1568
+    },
+    {
+      "name": "JohnPark4One",
+      "email": "johnheart4one@gmail.com",
+      "accountType": "personal",
+      "id": 28248258,
+      "comment_id": 5585841776,
+      "created_at": "2026-09-08T13:24:01Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1845
     }
   ]
 }
