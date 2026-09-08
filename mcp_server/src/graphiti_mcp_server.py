@@ -254,16 +254,27 @@ class GraphitiService:
                         cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
-                else:
-                    # For Neo4j (default), use the original approach
-                    self.client = Graphiti(
+                elif self.config.database.provider.lower() == 'neo4j':
+                    # For neo4j, create a Neo4jDriver instance directly
+                    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
+                    neo4j_driver = Neo4jDriver(
                         uri=db_config['uri'],
                         user=db_config['user'],
                         password=db_config['password'],
+                        database=db_config['database'],
+                    )
+
+                    self.client = Graphiti(
+                        graph_driver=neo4j_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
                         cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
+                    )
+                else:
+                    raise ValueError(
+                        f'Unsupported database provider: {self.config.database.provider}'
                     )
             except Exception as db_error:
                 # Check for connection errors
