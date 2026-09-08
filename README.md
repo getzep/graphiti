@@ -7,7 +7,7 @@
 <h1 align="center">
 Graphiti
 </h1>
-<h2 align="center">Build Temporal Context Graphs for AI Agents</h2>
+<h2 align="center">A Framework for Building Temporal Knowledge Graphs</h2>
 
 <div align="center">
 
@@ -16,7 +16,6 @@ Graphiti
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/getzep/graphiti)](https://github.com/getzep/graphiti/stargazers)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.com/invite/W8Kw6bsgXQ)
 [![arXiv](https://img.shields.io/badge/arXiv-2501.13956-b31b1b.svg?style=flat)](https://arxiv.org/abs/2501.13956)
 [![Release](https://img.shields.io/github/v/release/getzep/graphiti?style=flat&label=Release&color=limegreen)](https://github.com/getzep/graphiti/releases)
 
@@ -35,10 +34,6 @@ Graphiti
 
 &nbsp;
 
-> [!TIP]
-> Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful
-> context graph-based memory with temporal awareness.
-
 Graphiti is a framework for building and querying temporal context graphs for AI agents. Unlike static knowledge graphs,
 Graphiti's context graphs track how facts change over time, maintain provenance to source data, and support both
 prescribed and learned ontology — making them purpose-built for agents operating on evolving, real-world data.
@@ -50,8 +45,8 @@ recomputation, making it suitable for developing interactive, context-aware AI a
 
 Use Graphiti to:
 
-- Build context graphs that evolve with every interaction — tracking what's true now and what was true before.
-- Give agents rich, structured context instead of flat document chunks or raw chat history.
+- Build temporal knowledge graphs that evolve with every interaction — tracking what's true now and what was true before.
+- Represent rich, structured context instead of flat document chunks or raw event streams.
 - Query across time, meaning, and relationships with hybrid retrieval (semantic + keyword + graph traversal).
 
 &nbsp;
@@ -83,31 +78,25 @@ A context graph contains:
 
 ## Graphiti and Zep
 
-Graphiti is the open-source temporal context graph engine at the core of
-[Zep's](https://www.getzep.com) context infrastructure for AI agents. Zep manages context graphs at scale, providing
-governed, low-latency context retrieval and assembly for production agent deployments.
+Graphiti is the open-source framework for building temporal knowledge graphs at the core of
+[Zep's](https://www.getzep.com) context infrastructure. Zep manages context graphs at scale, providing
+governed, low-latency context retrieval and assembly for production deployments.
 
 Under the hood, Zep is powered by a proprietary graph database — the
 [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs
 with low-latency retrieval, so production deployments don't require a separate third-party graph database.
 
-Using Graphiti, we've demonstrated Zep is
-the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
-
-Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956).
-
-We're excited to open-source Graphiti, believing its potential as a context graph engine reaches far beyond memory
-applications.
+Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org/abs/2501.13956).
 
 <p align="center">
-    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
+    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture" width="700px"></a>
 </p>
 
 ## Zep vs Graphiti
 
 | Aspect | Zep | Graphiti |
 |--------|-----|---------|
-| **What they are** | Managed context graph infrastructure for AI agents | Open-source temporal context graph engine |
+| **What they are** | Managed context graph infrastructure | Open-source framework for building temporal knowledge graphs |
 | **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
 | **Graph database** | Proprietary [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs with low-latency retrieval; no third-party graph database vendor required | Bring your own third-party graph database |
 | **User & conversation management** | Built-in users, threads, and message storage | Build your own |
@@ -148,7 +137,7 @@ frequently changing data. Graphiti addresses these challenges by providing:
 
 | Aspect | GraphRAG | Graphiti |
 |--------|----------|---------|
-| **Primary Use** | Static document summarization | Dynamic, evolving context for agents |
+| **Primary Use** | Static document summarization | Dynamic, evolving temporal knowledge graphs |
 | **Data Handling** | Batch-oriented processing | Continuous, incremental updates |
 | **Knowledge Structure** | Entity clusters & community summaries | Temporal context graph — entities, facts with validity windows, episodes, communities |
 | **Retrieval Method** | Sequential LLM summarization | Hybrid semantic, keyword, and graph-based search |
@@ -714,9 +703,9 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 ## Contributing
 
 We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
-answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
+helping others on GitHub. For detailed guidelines on code contributions, please refer
 to [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
+Open a [GitHub issue](https://github.com/getzep/graphiti/issues) to ask questions, report bugs, or discuss Graphiti.
