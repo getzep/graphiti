@@ -398,18 +398,9 @@ class NeptuneSearchOperations(SearchOperations):
             + filter_query
             + """
             RETURN DISTINCT
-                e.uuid AS uuid,
-                e.group_id AS group_id,
-                startNode(e).uuid AS source_node_uuid,
-                endNode(e).uuid AS target_node_uuid,
-                e.created_at AS created_at,
-                e.name AS name,
-                e.fact AS fact,
-                split(e.episodes, ',') AS episodes,
-                e.expired_at AS expired_at,
-                e.valid_at AS valid_at,
-                e.invalid_at AS invalid_at,
-                properties(e) AS attributes
+            """
+            + get_entity_edge_return_query(GraphProvider.NEPTUNE)
+            + """
             LIMIT $limit
             """
         )
