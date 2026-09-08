@@ -64,6 +64,9 @@ logger = logging.getLogger(__name__)
 RELEVANT_SCHEMA_LIMIT = 10
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
+# Standard RRF smoothing constant (Cormack et al. 2009). A small value such as 1
+# makes a single list's rank-1 outweigh agreement across lists.
+DEFAULT_RRF_RANK_CONST = 60
 MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 128
 
@@ -1762,7 +1765,7 @@ async def get_edge_invalidation_candidates(
 
 # takes in a list of rankings of uuids
 def rrf(
-    results: list[list[str]], rank_const=1, min_score: float = 0
+    results: list[list[str]], rank_const: int = DEFAULT_RRF_RANK_CONST, min_score: float = 0
 ) -> tuple[list[str], list[float]]:
     scores: dict[str, float] = defaultdict(float)
     for result in results:
