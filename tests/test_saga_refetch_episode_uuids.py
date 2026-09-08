@@ -39,7 +39,7 @@ async def test_get_or_create_saga_refetch_preserves_episode_uuids():
                 'uuid': 'saga-1',
                 'name': 'my-saga',
                 'group_id': 'g1',
-                'created_at': '2026-08-13T00:00:00Z',
+                'created_at': '2026-08-13T00:00:00+00:00',
                 'first_episode_uuid': 'ep-1',
                 'last_episode_uuid': 'ep-2',
             }
