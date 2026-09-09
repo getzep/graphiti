@@ -173,6 +173,8 @@ reranker:
   # "auto" infers from the LLM, then embedder, then falls back to local BGE.
   # Or select "openai", "azure_openai", "gemini", or "bge" explicitly.
   provider: "auto"
+  # Optional API-backed reranker model override. Omit to use the client's default.
+  model: null
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
@@ -181,8 +183,8 @@ database:
 An explicit API-backed reranker reuses credentials from the matching `llm.providers` or
 `embedder.providers` entry, even when that provider is not selected for the LLM or embedder. For
 example, `reranker.provider: "gemini"` uses the configured Gemini API key. Set
-`RERANKER_PROVIDER` when using the shipped `config.yaml`, or `RERANKER__PROVIDER` with direct
-environment-based configuration.
+`RERANKER_PROVIDER` and, optionally, `RERANKER_MODEL` when using the shipped `config.yaml`.
+For direct environment-based configuration, use `RERANKER__PROVIDER` and `RERANKER__MODEL`.
 
 ### Using Ollama for Local LLM
 

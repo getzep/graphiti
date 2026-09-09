@@ -431,6 +431,7 @@ class CrossEncoderFactory:
         logger = logging.getLogger(__name__)
 
         provider = reranker_config.provider if reranker_config is not None else 'auto'
+        model = reranker_config.model if reranker_config is not None else None
         if provider != 'auto':
             if provider == 'bge':
                 return CrossEncoderFactory._local_reranker(logger)
@@ -438,7 +439,7 @@ class CrossEncoderFactory:
             for source, config in (('LLM', llm_config), ('embedder', embedder_config)):
                 explicit_config = config.model_copy(update={'provider': provider})
                 reranker = CrossEncoderFactory._reranker_for_provider(
-                    source, explicit_config, logger
+                    source, explicit_config, logger, model
                 )
                 if reranker is not None:
                     return reranker
@@ -450,7 +451,7 @@ class CrossEncoderFactory:
 
         # Try the LLM provider first, then the embedder, before falling back to a local model.
         for source, config in (('LLM', llm_config), ('embedder', embedder_config)):
-            reranker = CrossEncoderFactory._reranker_for_provider(source, config, logger)
+            reranker = CrossEncoderFactory._reranker_for_provider(source, config, logger, model)
             if reranker is not None:
                 return reranker
 
@@ -479,7 +480,10 @@ class CrossEncoderFactory:
 
     @staticmethod
     def _reranker_for_provider(
-        source: str, config: LLMConfig | EmbedderConfig, logger
+        source: str,
+        config: LLMConfig | EmbedderConfig,
+        logger,
+        model: str | None = None,
     ) -> CrossEncoderClient | None:
         """Return a reranker for this provider, or None if it has no native one."""
         provider = config.provider.lower()
@@ -497,6 +501,7 @@ class CrossEncoderFactory:
                     config=GraphitiLLMConfig(
                         api_key=config.providers.openai.api_key,
                         base_url=config.providers.openai.api_url,
+                        model=model,
                     )
                 )
 
@@ -517,7 +522,8 @@ class CrossEncoderFactory:
 
                 logger.info(f'Using OpenAIRerankerClient (Azure) from {source} provider')
                 return OpenAIRerankerClient(
-                    client=AsyncOpenAI(base_url=base_url, api_key=azure_config.api_key)
+                    config=GraphitiLLMConfig(model=model),
+                    client=AsyncOpenAI(base_url=base_url, api_key=azure_config.api_key),
                 )
 
             case 'gemini':
@@ -529,7 +535,10 @@ class CrossEncoderFactory:
 
                 logger.info(f'Using GeminiRerankerClient from {source} provider')
                 return GeminiRerankerClient(
-                    config=GraphitiLLMConfig(api_key=config.providers.gemini.api_key)
+                    config=GraphitiLLMConfig(
+                        api_key=config.providers.gemini.api_key,
+                        model=model,
+                    )
                 )
 
             case _:

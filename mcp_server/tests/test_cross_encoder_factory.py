@@ -60,9 +60,12 @@ class TestCrossEncoderFactory:
         assert isinstance(CrossEncoderFactory.create(llm, embedder), GeminiRerankerClient)
 
     def test_graphiti_config_accepts_explicit_reranker_provider(self):
-        config = GraphitiConfig(reranker={'provider': 'gemini'})
+        config = GraphitiConfig(reranker={'provider': 'gemini', 'model': 'gemini-2.5-flash'})
 
-        assert config.model_dump().get('reranker') == {'provider': 'gemini'}
+        assert config.model_dump().get('reranker') == {
+            'provider': 'gemini',
+            'model': 'gemini-2.5-flash',
+        }
 
     def test_explicit_gemini_reranker_overrides_provider_inference(self):
         llm = LLMConfig(
@@ -80,6 +83,47 @@ class TestCrossEncoderFactory:
         reranker = CrossEncoderFactory.create(llm, embedder, RerankerConfig(provider='gemini'))
 
         assert isinstance(reranker, GeminiRerankerClient)
+
+    def test_explicit_reranker_model_is_passed_to_provider_client(self):
+        llm = LLMConfig(
+            provider='openai',
+            providers=LLMProvidersConfig(
+                openai=OpenAIProviderConfig(api_key='openai-key'),
+                gemini=GeminiProviderConfig(api_key='gemini-key'),
+            ),
+        )
+        embedder = EmbedderConfig(
+            provider='openai',
+            providers=EmbedderProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+
+        reranker = CrossEncoderFactory.create(
+            llm,
+            embedder,
+            RerankerConfig(provider='gemini', model='gemini-2.5-flash'),
+        )
+
+        assert isinstance(reranker, GeminiRerankerClient)
+        assert reranker.config.model == 'gemini-2.5-flash'
+
+    def test_reranker_model_applies_when_provider_is_inferred(self):
+        llm = LLMConfig(
+            provider='openai',
+            providers=LLMProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+        embedder = EmbedderConfig(
+            provider='openai',
+            providers=EmbedderProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+
+        reranker = CrossEncoderFactory.create(
+            llm,
+            embedder,
+            RerankerConfig(model='gpt-4.1-mini'),
+        )
+
+        assert isinstance(reranker, OpenAIRerankerClient)
+        assert reranker.config.model == 'gpt-4.1-mini'
 
     def test_missing_local_reranker_dependency_is_actionable(self, monkeypatch, caplog):
         llm = LLMConfig(
