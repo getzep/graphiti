@@ -204,6 +204,17 @@ async def edge_fulltext_search(
     YIELD relationship AS rel, score
     MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
     """
+    if driver.provider == GraphProvider.FALKORDB:
+        # FalkorDB plans the MATCH above as a full :Entity label scan for EVERY row the
+        # fulltext index yields, so the cost is O(hits x entities). The relationship the
+        # index already returned knows its own endpoints, so read them directly. The label
+        # predicate keeps the result set identical to the pattern's.
+        match_query = """
+        YIELD relationship AS rel, score
+        WITH rel AS e, score, startNode(rel) AS n, endNode(rel) AS m
+        WHERE n:Entity AND m:Entity
+        WITH e, score, n, m
+        """
     if driver.provider == GraphProvider.KUZU:
         match_query = """
         YIELD node, score
@@ -1872,10 +1883,15 @@ async def episode_mentions_reranker(
 
     for uuid in sorted_uuids:
         if uuid not in scores:
-            scores[uuid] = float('inf')
+            # Node has no MENTIONS edges at all - treat as zero mentions so it
+            # ranks last (descending sort below) and is excluded by any
+            # min_score > 0, instead of being (incorrectly) unfilterable.
+            scores[uuid] = 0
 
-    # rerank on shortest distance
-    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+    # rerank by descending mention count - nodes mentioned in the most
+    # episodes rank first, matching the reranker's name and the convention
+    # used by the other count-based rerankers.
+    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid], reverse=True)
 
     return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score], [
         scores[uuid] for uuid in sorted_uuids if scores[uuid] >= min_score
