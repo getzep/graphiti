@@ -187,6 +187,10 @@ class RerankerConfig(BaseModel):
     provider: Literal['auto', 'openai', 'azure_openai', 'gemini', 'bge'] = Field(
         default='auto', description='Reranker provider'
     )
+    model: str | None = Field(
+        default=None,
+        description='Optional model override for API-backed rerankers',
+    )
 
 
 class Neo4jProviderConfig(BaseModel):
