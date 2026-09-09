@@ -342,7 +342,9 @@ async def resolve_extracted_edges(
         - new_edges: Only edges that are new to the graph (not duplicates of existing edges)
     """
     # Fast path: deduplicate exact matches within the extracted edges before parallel processing
-    seen: dict[tuple[str, str, str], EntityEdge] = {}
+    seen: dict[
+        tuple[str, str, str, datetime | None, datetime | None, datetime | None], EntityEdge
+    ] = {}
     deduplicated_edges: list[EntityEdge] = []
 
     for edge in extracted_edges:
@@ -350,6 +352,12 @@ async def resolve_extracted_edges(
             edge.source_node_uuid,
             edge.target_node_uuid,
             _normalize_string_exact(edge.fact),
+            ensure_utc(edge.valid_at),
+            ensure_utc(edge.invalid_at),
+            # Unresolved dates still depend on the source episode's clock.
+            ensure_utc(edge.reference_time)
+            if edge.valid_at is None and edge.invalid_at is None
+            else None,
         )
         if key not in seen:
             seen[key] = edge
@@ -587,12 +595,13 @@ async def _extract_edge_timestamps(
     if edge.valid_at is not None or edge.invalid_at is not None:
         return
 
-    if episode is None or episode.valid_at is None:
+    reference_time = edge.reference_time or (episode.valid_at if episode is not None else None)
+    if reference_time is None:
         return
 
     context = {
         'fact': edge.fact,
-        'reference_time': episode.valid_at.isoformat(),
+        'reference_time': reference_time.isoformat(),
     }
     try:
         llm_response = await llm_client.generate_response(
@@ -618,6 +627,23 @@ async def _extract_edge_timestamps(
                 logger.debug(f'Error parsing invalid_at: {timestamps.invalid_at}')
     except Exception:
         logger.warning('Failed to extract timestamps for edge %s', edge.uuid, exc_info=True)
+
+
+def _can_share_temporal_identity(left: EntityEdge, right: EntityEdge) -> bool:
+    """Reject duplicate identities for separate or unplaceable bounded intervals.
+
+    Facts occupy half-open valid-time intervals. Equal wording does not make
+    two occurrences separated by a known end the same occurrence. An unknown
+    start cannot establish overlap with an ended fact. Overlapping and wholly
+    undated facts retain the existing semantic duplicate-detection behavior.
+    """
+    left_start, left_end = ensure_utc(left.valid_at), ensure_utc(left.invalid_at)
+    right_start, right_end = ensure_utc(right.valid_at), ensure_utc(right.invalid_at)
+    if (left_start, left_end) == (right_start, right_end):
+        return True
+    if left_end is not None and (right_start is None or left_end <= right_start):
+        return False
+    return not (right_end is not None and (left_start is None or right_end <= left_start))
 
 
 async def resolve_extracted_edge(
@@ -648,7 +674,7 @@ async def resolve_extracted_edge(
     Returns
     -------
     tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]
-        The resolved edge, any duplicates, and edges to invalidate.
+        The resolved edge, edges to invalidate, and any duplicates.
     """
     if len(related_edges) == 0 and len(existing_edges) == 0:
         # Still extract custom attributes and timestamps even when no dedup needed
@@ -679,7 +705,21 @@ async def resolve_extracted_edge(
 
         await _extract_edge_timestamps(llm_client, extracted_edge, episode)
 
+        if extracted_edge.invalid_at is not None and extracted_edge.expired_at is None:
+            extracted_edge.expired_at = utc_now()
+
         return extracted_edge, [], []
+
+    # Resolve missing dates before deciding whether an ended occurrence can be
+    # reused. Keep the undated/open-interval fast path free of extra model calls.
+    timestamps_extracted = False
+    if (
+        extracted_edge.valid_at is None
+        and extracted_edge.invalid_at is None
+        and any(edge.invalid_at is not None for edge in related_edges)
+    ):
+        await _extract_edge_timestamps(llm_client, extracted_edge, episode)
+        timestamps_extracted = True
 
     # Fast path: if the fact text and endpoints already exist verbatim, reuse the matching edge.
     normalized_fact = _normalize_string_exact(extracted_edge.fact)
@@ -688,6 +728,7 @@ async def resolve_extracted_edge(
             edge.source_node_uuid == extracted_edge.source_node_uuid
             and edge.target_node_uuid == extracted_edge.target_node_uuid
             and _normalize_string_exact(edge.fact) == normalized_fact
+            and _can_share_temporal_identity(edge, extracted_edge)
         ):
             resolved = edge
             if episode is not None and episode.uuid not in resolved.episodes:
@@ -741,7 +782,12 @@ async def resolve_extracted_edge(
             len(related_edges) - 1,
         )
 
-    duplicate_fact_ids: list[int] = [i for i in duplicate_facts if 0 <= i < len(related_edges)]
+    duplicate_fact_ids: list[int] = [
+        i
+        for i in duplicate_facts
+        if 0 <= i < len(related_edges)
+        and _can_share_temporal_identity(related_edges[i], extracted_edge)
+    ]
 
     resolved_edge = extracted_edge
     for duplicate_fact_id in duplicate_fact_ids:
@@ -809,7 +855,7 @@ async def resolve_extracted_edge(
         resolved_edge.attributes = {}
 
     # Extract timestamps for new edges (duplicated edges retain their existing timestamps)
-    if resolved_edge.uuid == extracted_edge.uuid:
+    if resolved_edge.uuid == extracted_edge.uuid and not timestamps_extracted:
         await _extract_edge_timestamps(llm_client, resolved_edge, episode)
 
     end = time()
@@ -822,21 +868,25 @@ async def resolve_extracted_edge(
     if resolved_edge.invalid_at and not resolved_edge.expired_at:
         resolved_edge.expired_at = now
 
-    # Determine if the new_edge needs to be expired
-    if resolved_edge.expired_at is None:
-        invalidation_candidates.sort(key=lambda c: (c.valid_at is None, ensure_utc(c.valid_at)))
-        for candidate in invalidation_candidates:
-            candidate_valid_at_utc = ensure_utc(candidate.valid_at)
-            resolved_edge_valid_at_utc = ensure_utc(resolved_edge.valid_at)
-            if (
-                candidate_valid_at_utc is not None
-                and resolved_edge_valid_at_utc is not None
-                and candidate_valid_at_utc > resolved_edge_valid_at_utc
-            ):
-                # Expire new edge since we have information about more recent events
-                resolved_edge.invalid_at = candidate.valid_at
-                resolved_edge.expired_at = now
-                break
+    # Event-time bounds can be tightened even if this fact was already expired
+    # in transaction time. Never extend an existing validity interval.
+    invalidation_candidates.sort(key=lambda c: (c.valid_at is None, ensure_utc(c.valid_at)))
+    for candidate in invalidation_candidates:
+        candidate_valid_at_utc = ensure_utc(candidate.valid_at)
+        resolved_edge_valid_at_utc = ensure_utc(resolved_edge.valid_at)
+        resolved_edge_invalid_at_utc = ensure_utc(resolved_edge.invalid_at)
+        if (
+            candidate_valid_at_utc is not None
+            and resolved_edge_valid_at_utc is not None
+            and candidate_valid_at_utc > resolved_edge_valid_at_utc
+            and (
+                resolved_edge_invalid_at_utc is None
+                or candidate_valid_at_utc < resolved_edge_invalid_at_utc
+            )
+        ):
+            resolved_edge.invalid_at = candidate.valid_at
+            resolved_edge.expired_at = resolved_edge.expired_at or now
+            break
 
     # Determine which contradictory edges need to be expired
     invalidated_edges: list[EntityEdge] = resolve_edge_contradictions(
