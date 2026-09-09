@@ -4,19 +4,19 @@ Graph service is a fast api server implementing the [graphiti](https://github.co
 
 ## Container Releases
 
-The FastAPI server container is automatically built and published to Docker Hub when a new `graphiti-core` version is released to PyPI.
+The FastAPI server container is automatically built and published to Docker Hub when a `v*.*.*` tag is pushed (the same tags that publish `graphiti-core` to PyPI).
 
 **Image:** `zepai/graphiti`
 
 **Available tags:**
 - `latest` - Latest stable release
-- `0.22.1` - Specific version (matches graphiti-core version)
+- `0.30.2` - Specific version (matches graphiti-core version)
 
 **Platforms:** linux/amd64, linux/arm64
 
 The automated release workflow:
-1. Triggers when `graphiti-core` PyPI release completes
-2. Waits for PyPI package availability
+1. Triggers on `v*.*.*` tag pushes (and can be run manually via `workflow_dispatch`)
+2. Waits for that `graphiti-core` version to be available on PyPI
 3. Builds multi-platform Docker image
 4. Tags with version number and `latest`
 5. Pushes to Docker Hub
