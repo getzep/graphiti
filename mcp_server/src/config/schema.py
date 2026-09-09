@@ -273,6 +273,12 @@ class GraphitiAppConfig(BaseModel):
     group_id: str = Field(default='main', description='Group ID')
     episode_id_prefix: str | None = Field(default='', description='Episode ID prefix')
     user_id: str = Field(default='mcp_user', description='User ID')
+    fact_reranker: Literal['rrf', 'cross_encoder'] = Field(
+        default='rrf', description='Reranking strategy used by search_memory_facts'
+    )
+    node_reranker: Literal['rrf', 'cross_encoder'] = Field(
+        default='rrf', description='Reranking strategy used by search_nodes'
+    )
     entity_types: list[EntityTypeConfig] = Field(default_factory=list)
     edge_types: list[EdgeTypeConfig] = Field(default_factory=list)
     edge_type_map: list[EdgeTypeMapEntry] = Field(default_factory=list)

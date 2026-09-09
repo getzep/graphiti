@@ -101,6 +101,10 @@ graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}
   episode_id_prefix: ${EPISODE_ID_PREFIX:}
   user_id: ${USER_ID:mcp_user}
+  # Search recipe used by search_memory_facts and search_nodes.
+  # cross_encoder activates the reranker configured above; rrf avoids reranker API calls.
+  fact_reranker: ${FACT_RERANKER:rrf}
+  node_reranker: ${NODE_RERANKER:rrf}
   entity_types:
     - name: "Preference"
       description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"
