@@ -636,6 +636,9 @@ async def test_extract_edges_drops_self_edges(monkeypatch):
     assert edges[0].target_node_uuid == 'bob_uuid'
     assert edges[0].name == 'CONGRATULATED'
 
+    # Do not hard-cap max_tokens; the LLM client resolves the model budget.
+    assert 'max_tokens' not in mock_llm.generate_response.await_args.kwargs
+
 
 @pytest.mark.asyncio
 async def test_extract_edges_keeps_valid_edges_with_same_name_different_nodes(monkeypatch):
