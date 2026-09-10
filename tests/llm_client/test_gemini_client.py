@@ -98,6 +98,40 @@ class TestGeminiClientInitialization:
             client = GeminiClient(thinking_config=thinking_config)
             assert client.thinking_config == thinking_config
 
+    @patch('google.genai.Client')
+    def test_init_defaults_thinking_budget_zero_for_gemini_2_5(self, mock_client):
+        """Unset thinking_config on gemini-2.5-* disables thinking (budget=0)."""
+        from google.genai import types
+
+        for model in ('gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'):
+            config = LLMConfig(api_key='test_api_key', model=model)
+            client = GeminiClient(config=config, cache=False)
+
+            assert client.thinking_config is not None, model
+            assert isinstance(client.thinking_config, types.ThinkingConfig)
+            assert client.thinking_config.thinking_budget == 0, model
+
+    @patch('google.genai.Client')
+    def test_init_does_not_default_thinking_config_for_non_2_5_models(self, mock_client):
+        """Non-2.5 models keep thinking_config unset when the caller omits it."""
+        for model in ('gemini-2.0-flash', 'gemini-3-flash-preview', 'gemini-1.5-pro', None):
+            config = LLMConfig(api_key='test_api_key', model=model)
+            client = GeminiClient(config=config, cache=False)
+
+            assert client.thinking_config is None, model
+
+    @patch('google.genai.Client')
+    def test_init_explicit_thinking_config_wins_for_gemini_2_5(self, mock_client):
+        """An explicit thinking_config is preserved, including enabling thinking."""
+        from google.genai import types
+
+        thinking_config = types.ThinkingConfig(thinking_budget=1024)
+        config = LLMConfig(api_key='test_api_key', model='gemini-2.5-flash')
+        client = GeminiClient(config=config, cache=False, thinking_config=thinking_config)
+
+        assert client.thinking_config is thinking_config
+        assert client.thinking_config.thinking_budget == 1024
+
 
 class TestGeminiClientGenerateResponse:
     """Tests for GeminiClient generate_response method."""
@@ -383,6 +417,32 @@ class TestGeminiClientGenerateResponse:
         config = call_args[1]['config']
         # Explicit parameter should override everything else
         assert config.max_output_tokens == 500
+
+    @pytest.mark.asyncio
+    async def test_generate_defaults_thinking_budget_for_gemini_2_5_small_model(
+        self, mock_gemini_client
+    ):
+        """Resolved gemini-2.5-* models get thinking_budget=0 even if the ctor model is not 2.5."""
+        config = LLMConfig(api_key='test_api_key', model='gemini-3-flash-preview')
+        client = GeminiClient(config=config, cache=False, client=mock_gemini_client)
+        assert client.thinking_config is None
+
+        mock_response = MagicMock()
+        mock_response.text = 'Test response'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        await client.generate_response(
+            [Message(role='user', content='Test message')],
+            model_size=ModelSize.small,
+        )
+
+        call_args = mock_gemini_client.aio.models.generate_content.call_args
+        gen_config = call_args[1]['config']
+        assert call_args[1]['model'] == DEFAULT_SMALL_MODEL
+        assert gen_config.thinking_config is not None
+        assert gen_config.thinking_config.thinking_budget == 0
 
     @pytest.mark.asyncio
     async def test_max_tokens_precedence_fallback(self, mock_gemini_client):

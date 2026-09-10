@@ -69,6 +69,28 @@ GEMINI_MODEL_MAX_TOKENS = {
 DEFAULT_GEMINI_MAX_TOKENS = 8192
 
 
+def _is_gemini_2_5_model(model: str | None) -> bool:
+    """Return True for Gemini 2.5 models, which enable thinking when unset."""
+    return bool(model) and 'gemini-2.5-' in model
+
+
+def _resolve_thinking_config(
+    thinking_config: types.ThinkingConfig | None, model: str | None
+) -> types.ThinkingConfig | None:
+    """Resolve thinking_config, defaulting gemini-2.5-* to thinking off.
+
+    Gemini 2.5 treats ``thinking_config=None`` as thinking ON, and thinking
+    tokens share the output budget with the structured JSON answer. When the
+    caller does not pass a config, disable thinking so extraction is not
+    truncated mid-object. An explicit ``thinking_config`` always wins.
+    """
+    if thinking_config is not None:
+        return thinking_config
+    if _is_gemini_2_5_model(model):
+        return types.ThinkingConfig(thinking_budget=0)
+    return None
+
+
 class GeminiClient(LLMClient):
     """
     GeminiClient is a client class for interacting with Google's Gemini language models.
@@ -107,7 +129,9 @@ class GeminiClient(LLMClient):
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, temperature, and max tokens.
             cache (bool): Whether to use caching for responses. Defaults to False.
             thinking_config (types.ThinkingConfig | None): Optional thinking configuration for models that support it.
-                Only use with models that support thinking (gemini-2.5+). Defaults to None.
+                For gemini-2.5-* models, None defaults to ThinkingConfig(thinking_budget=0) so
+                thinking does not consume the structured-output budget. Pass an explicit
+                ThinkingConfig to enable thinking. Other models leave thinking_config unset.
             client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
         """
         if config is None:
@@ -123,7 +147,7 @@ class GeminiClient(LLMClient):
             self.client = client
 
         self.max_tokens = max_tokens
-        self.thinking_config = thinking_config
+        self.thinking_config = _resolve_thinking_config(thinking_config, self.model)
 
     def _check_safety_blocks(self, response) -> None:
         """Check if response was blocked for safety reasons and raise appropriate exceptions."""
@@ -289,14 +313,15 @@ class GeminiClient(LLMClient):
             # Resolve max_tokens using precedence rules (see _resolve_max_tokens for details)
             resolved_max_tokens = self._resolve_max_tokens(max_tokens, model)
 
-            # Create generation config
+            # Create generation config. Re-resolve so a gemini-2.5-* small model
+            # still gets thinking off when the constructor model was not 2.5.
             generation_config = types.GenerateContentConfig(
                 temperature=self.temperature,
                 max_output_tokens=resolved_max_tokens,
                 response_mime_type='application/json' if response_model else None,
                 response_schema=response_model if response_model else None,
                 system_instruction=system_prompt,
-                thinking_config=self.thinking_config,
+                thinking_config=_resolve_thinking_config(self.thinking_config, model),
             )
 
             # Generate content using the simple string approach
