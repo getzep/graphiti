@@ -365,7 +365,9 @@ class TestGeminiClientGenerateResponse:
         assert mock_gemini_client.aio.models.generate_content.call_count == GeminiClient.MAX_RETRIES
 
     @pytest.mark.asyncio
-    async def test_generic_error_preserves_original_message(self, gemini_client, mock_gemini_client):
+    async def test_generic_error_preserves_original_message(
+        self, gemini_client, mock_gemini_client
+    ):
         """Non-rate-limit errors must keep the original message when re-raised."""
         mock_gemini_client.aio.models.generate_content.side_effect = Exception(
             'Unterminated string starting at: line 1 column 43665'
