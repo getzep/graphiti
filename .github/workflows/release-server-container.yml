@@ -1,14 +1,12 @@
 name: Release Server Container
 
 on:
-  workflow_run:
-    workflows: ["Release to PyPI"]
-    types: [completed]
-    branches: [main]
+  push:
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Graphiti core version to build (e.g., 0.22.1)'
+        description: 'Graphiti core version to build (e.g., 0.30.2)'
         required: false
 
 env:
@@ -18,7 +16,6 @@ env:
 jobs:
   build-and-push:
     runs-on: depot-ubuntu-24.04-small
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: write
       id-token: write
@@ -28,8 +25,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ github.ref }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -42,23 +38,22 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
             echo "Using manual input version: $VERSION"
-          else
-            # When triggered by workflow_run, get the tag that triggered the PyPI release
-            # The PyPI workflow is triggered by tags matching v*.*.*
-            VERSION=$(git tag --points-at HEAD | grep '^v[0-9]' | head -1 | sed 's/^v//')
-
-            if [ -z "$VERSION" ]; then
-              # Fallback: check pyproject.toml version
-              VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-              echo "Version from pyproject.toml: $VERSION"
-            else
-              echo "Version from git tag: $VERSION"
-            fi
-
-            if [ -z "$VERSION" ]; then
-              echo "Could not determine version"
+          elif [ "${{ github.event_name }}" == "push" ]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            PROJECT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+            if [ "$VERSION" != "$PROJECT_VERSION" ]; then
+              echo "Tag version v$VERSION does not match pyproject.toml version $PROJECT_VERSION"
               exit 1
             fi
+            echo "Version from git tag: $VERSION"
+          else
+            VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+            echo "Version from pyproject.toml: $VERSION"
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "Could not determine version"
+            exit 1
           fi
 
           # Validate it's a stable release - catch all Python pre-release patterns
