@@ -1296,7 +1296,9 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+    { name = "starlette" },
     { name = "typing-extensions" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -1336,7 +1338,9 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=3.2.1" },
+    { name = "starlette", specifier = ">=0.37.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
+    { name = "uvicorn", specifier = ">=0.34.3" },
     { name = "voyageai", marker = "extra == 'providers'", specifier = ">=0.3.7" },
 ]
 provides-extras = ["azure", "providers"]
