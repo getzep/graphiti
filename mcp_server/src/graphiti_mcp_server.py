@@ -1070,13 +1070,27 @@ async def clear_graph(
 @mcp.tool()
 async def get_status() -> StatusResponse:
     """Get the status of the Graphiti MCP server and database connection."""
-    global graphiti_service
+    global graphiti_service, queue_service
 
-    if graphiti_service is None:
-        return StatusResponse(status='error', message='Graphiti service not initialized')
+    if graphiti_service is None or queue_service is None:
+        return StatusResponse(
+            status='error',
+            message='Graphiti service not initialized',
+            ingestion={
+                'status': 'unavailable',
+                'recent_failure_count': 0,
+                'consecutive_failure_count': 0,
+                'failing_group_count': 0,
+                'last_failure_at': None,
+                'last_failure_group_id': None,
+                'pending_episode_count': 0,
+                'active_worker_count': 0,
+            },
+        )
 
     try:
         client = await graphiti_service.get_client()
+        ingestion_status = queue_service.get_ingestion_status()
 
         # Test database connection with a simple query
         async with client.driver.session() as session:
@@ -1087,9 +1101,20 @@ async def get_status() -> StatusResponse:
 
         # Use the provider from the service's config, not the global
         provider_name = graphiti_service.config.database.provider
+        if ingestion_status['status'] == 'degraded':
+            return StatusResponse(
+                status='degraded',
+                message=(
+                    f'Graphiti MCP server is connected to {provider_name} database, '
+                    'but ingestion workers have terminal failures'
+                ),
+                ingestion=ingestion_status,
+            )
+
         return StatusResponse(
             status='ok',
             message=f'Graphiti MCP server is running and connected to {provider_name} database',
+            ingestion=ingestion_status,
         )
     except Exception as e:
         error_msg = str(e)
@@ -1097,6 +1122,7 @@ async def get_status() -> StatusResponse:
         return StatusResponse(
             status='error',
             message=f'Graphiti MCP server is running but database connection failed: {error_msg}',
+            ingestion=queue_service.get_ingestion_status(),
         )
 
 
