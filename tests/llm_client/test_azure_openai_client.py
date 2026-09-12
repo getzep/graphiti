@@ -124,3 +124,55 @@ async def test_reasoning_fields_forwarded_for_supported_models():
 
     create_args = dummy_client.chat.completions.create_calls[0]
     assert 'temperature' not in create_args
+
+
+def test_handle_structured_response_returns_token_triple_for_parsed_chat_completion():
+    """``_handle_structured_response`` must return ``(dict, input_tokens, output_tokens)``
+    to match ``BaseOpenAIClient._generate_response``'s unpack site (#1298). The
+    ``beta.chat.completions.parse`` path exposes ``prompt_tokens``/``completion_tokens``.
+    """
+    client = AzureOpenAILLMClient.__new__(AzureOpenAILLMClient)
+
+    class ParsedModel:
+        @staticmethod
+        def model_dump():
+            return {'foo': 'bar'}
+
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(parsed=ParsedModel()))],
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=20),
+    )
+
+    parsed, input_tokens, output_tokens = client._handle_structured_response(response)
+    assert parsed == {'foo': 'bar'}
+    assert input_tokens == 10
+    assert output_tokens == 20
+
+
+def test_handle_structured_response_returns_token_triple_for_responses_parse():
+    """The reasoning-model path (``responses.parse``) exposes token usage as
+    ``input_tokens``/``output_tokens`` and must also return the 3-tuple (#1298)."""
+    client = AzureOpenAILLMClient.__new__(AzureOpenAILLMClient)
+
+    response = SimpleNamespace(
+        output_text='{"foo": "bar"}',
+        usage=SimpleNamespace(input_tokens=15, output_tokens=25),
+    )
+
+    parsed, input_tokens, output_tokens = client._handle_structured_response(response)
+    assert parsed == {'foo': 'bar'}
+    assert input_tokens == 15
+    assert output_tokens == 25
+
+
+def test_handle_structured_response_tolerates_missing_usage():
+    """When the upstream body omits ``usage`` (some empty/error responses do),
+    token counts fall back to 0 instead of raising."""
+    client = AzureOpenAILLMClient.__new__(AzureOpenAILLMClient)
+
+    response = SimpleNamespace(output_text='{"foo": "bar"}')
+
+    parsed, input_tokens, output_tokens = client._handle_structured_response(response)
+    assert parsed == {'foo': 'bar'}
+    assert input_tokens == 0
+    assert output_tokens == 0
