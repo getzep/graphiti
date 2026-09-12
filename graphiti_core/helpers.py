@@ -100,16 +100,17 @@ def lucene_sanitize(query: str) -> str:
             ':': r'\:',
             '\\': r'\\',
             '/': r'\/',
-            'O': r'\O',
-            'R': r'\R',
-            'N': r'\N',
-            'T': r'\T',
-            'A': r'\A',
-            'D': r'\D',
         }
     )
 
     sanitized = query.translate(escape_map)
+
+    # Escape the Lucene boolean operators (AND, OR, NOT) as whole words only.
+    # Previously these were approximated by escaping the individual uppercase
+    # letters O/R/N/T/A/D, which corrupted any query containing those letters
+    # (e.g. "NORD stream" -> "\N\O\R\D stream") and broke BM25 matching (#1302).
+    sanitized = re.sub(r'\b(AND|OR|NOT)\b', r'\\\1', sanitized)
+
     return sanitized
 
 
