@@ -570,6 +570,11 @@ class EntityNode(Node):
             for k, v in (self.attributes or {}).items():
                 if k not in entity_data:
                     entity_data[k] = v
+            if driver.provider == GraphProvider.ARCADEDB:
+                # ArcadeDB has no dynamic labels: the save query is a plain
+                # `SET n = $entity_data`, so labels have to travel as a property
+                # or they are silently dropped on write.
+                entity_data['labels'] = list(set(self.labels + ['Entity']))
             labels = ':'.join(self.labels + ['Entity'])
 
             result = await driver.execute_query(

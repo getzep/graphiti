@@ -30,6 +30,7 @@ groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.62.0"]
 # Deprecated: the upstream Kuzu project is unmaintained; this extra will be removed in a future release.
 kuzu = ["kuzu>=0.11.3"]
+arcadedb = []  # Uses the neo4j driver (already a core dependency) via Bolt protocol
 falkordb = ["falkordb>=1.1.2,<2.0.0"]
 # redis<9 pin: redis-py 8.x breaks falkordblite's embedded server startup
 falkordblite = ["falkordblite>=0.5.0; python_version>='3.12'", "redis<9; python_version>='3.12'"]
