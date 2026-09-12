@@ -16,13 +16,28 @@ limitations under the License.
 
 from typing import Any, Protocol, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 
 from .models import Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
+
+# Providers that accept response_format=json_schema without enforcing it as real
+# constrained decoding (e.g. Ollama Cloud) free-form the entity name field under a
+# different key each call (`entity`, `entity_text`, `entity_node`, ...) instead of the
+# schema's `name` — genuinely non-deterministic, not a fixed rename, so an enumerable
+# alias list doesn't converge. Instead: whatever field isn't one of the schema's other
+# known fields is the name, whatever it's called. Same providers also volunteer extra
+# type-metadata keys (`entity_type_name`, ...) alongside the misnamed name field — exclude
+# any key that mentions "type", not just the schema's own `entity_type_id`, so it doesn't
+# tie with the real name field and make the candidate set ambiguous.
+_ENTITY_NON_NAME_FIELDS = frozenset({'entity_type_id', 'episode_indices'})
+
+
+def _is_entity_type_metadata_key(key: str) -> bool:
+    return key in _ENTITY_NON_NAME_FIELDS or 'type' in key.lower()
 
 
 class ExtractedEntity(BaseModel):
@@ -37,9 +52,46 @@ class ExtractedEntity(BaseModel):
         'When processing a single episode, this should be [0].',
     )
 
+    @model_validator(mode='before')
+    @classmethod
+    def _normalize_provider_payload(cls, data: Any) -> Any:
+        # Same non-enforced-schema providers sometimes emit a list of bare entity-name
+        # strings instead of a list of {name: ...} objects.
+        if isinstance(data, str):
+            data = {'name': data}
+        if not isinstance(data, dict):
+            return data
+
+        if 'name' not in data:
+            candidates = [
+                key
+                for key, value in data.items()
+                if not _is_entity_type_metadata_key(key) and isinstance(value, str)
+            ]
+            if len(candidates) == 1:
+                data = {**data, 'name': data[candidates[0]]}
+
+        entity_type_id = data.get('entity_type_id')
+        if entity_type_id is None or isinstance(entity_type_id, str):
+            data = {**data, 'entity_type_id': 0}
+
+        return data
+
 
 class ExtractedEntities(BaseModel):
     extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
+
+    @model_validator(mode='before')
+    @classmethod
+    def _wrap_bare_array(cls, data: Any) -> Any:
+        # Providers that accept response_format=json_schema without enforcing it as real
+        # constrained decoding sometimes free-form a bare `[...]` of entities instead of
+        # `{extracted_entities: [...]}`. Requires call sites to construct this model via
+        # `model_validate()` rather than `**data`, since unpacking a list with `**` fails
+        # at the Python level before this validator ever runs.
+        if isinstance(data, list):
+            return {'extracted_entities': data}
+        return data
 
 
 class EntitySummary(BaseModel):

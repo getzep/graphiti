@@ -214,10 +214,17 @@ class LLMClient(ABC):
 
         if response_model is not None:
             serialized_model = json.dumps(response_model.model_json_schema())
-            messages[
-                -1
-            ].content += (
-                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
+            # "in the following format" is ambiguous: some models (observed on
+            # google/gemini-2.5-flash-lite, deepseek/deepseek-v4-flash, openai/gpt-4.1-nano
+            # via OpenRouter) read it as "copy this structure" and echo the JSON Schema
+            # itself back — nesting the real answer under a "properties" key instead of
+            # returning a flat instance. Spell out that this is a schema to satisfy, not an
+            # example to reproduce.
+            messages[-1].content += (
+                '\n\nRespond with a single JSON object that is a valid INSTANCE of the '
+                'JSON Schema below — i.e. fill in real values for each property. Do not '
+                'reproduce schema keywords such as "properties", "type", "title", or '
+                f'"$defs" in your answer.\n\nJSON Schema:\n{serialized_model}'
             )
 
         # Add multilingual extraction instructions
