@@ -172,10 +172,51 @@ When searching, use specific queries and consider filtering by group_id, type, o
 server requires a configured database and valid API keys for language-model operations.
 """
 
+
+def resolve_server_instructions() -> str:
+    """Return the instructions advertised to MCP clients on connect.
+
+    Deployments often need to describe their own conventions here — which
+    group_ids exist, how to route facts between them, when to search before
+    answering. The built-in text cannot know any of that, so without an
+    override the only way to supply it is to edit this module, which means
+    maintaining a patched image.
+
+    Resolution order (first match wins):
+
+    1. ``GRAPHITI_MCP_INSTRUCTIONS`` — the instructions themselves.
+    2. ``GRAPHITI_MCP_INSTRUCTIONS_FILE`` — a path to read them from, which is
+       easier for the multi-paragraph text this field usually holds.
+    3. The built-in default below.
+
+    Environment rather than ``config.yaml`` because the FastMCP instance is
+    constructed at import time, before the configuration file is loaded.
+    """
+    inline = os.environ.get('GRAPHITI_MCP_INSTRUCTIONS')
+    if inline:
+        return inline
+
+    path = os.environ.get('GRAPHITI_MCP_INSTRUCTIONS_FILE')
+    if path:
+        try:
+            return Path(path).read_text(encoding='utf-8')
+        except OSError as e:
+            # Fall back rather than refusing to start: bad instructions are a
+            # much smaller problem than an unreachable memory server.
+            logger.warning(
+                'Could not read GRAPHITI_MCP_INSTRUCTIONS_FILE %s (%s); '
+                'using the built-in instructions',
+                path,
+                e,
+            )
+
+    return GRAPHITI_MCP_INSTRUCTIONS
+
+
 # MCP server instance
 mcp = FastMCP(
     'Graphiti Agent Memory',
-    instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    instructions=resolve_server_instructions(),
 )
 
 # Global services
