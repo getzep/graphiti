@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 class ErrorResponse(TypedDict):
@@ -21,16 +21,25 @@ class NodeResult(TypedDict):
     summary: str | None
     group_id: str
     attributes: dict[str, Any]
+    score: NotRequired[float]
 
 
 class NodeSearchResponse(TypedDict):
     message: str
     nodes: list[NodeResult]
+    # Which reranker produced this ordering. Deployment-visible on purpose: scores
+    # from different rerankers are not comparable, so a client that thresholds on
+    # `score` needs to know which ranker it is thresholding.
+    ranker: str
 
 
 class FactSearchResponse(TypedDict):
     message: str
     facts: list[dict[str, Any]]
+    ranker: str
+    # How many invalidated facts were dropped from the returned window. Always
+    # present; 0 when `exclude_invalidated` is False, since nothing was dropped.
+    suppressed_invalidated: int
 
 
 class EpisodeSearchResponse(TypedDict):
