@@ -83,6 +83,43 @@ def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
     return mapping.get(op, op.value)
 
 
+def property_filter_query_constructor(
+    filters: SearchFilters,
+    alias: str,
+) -> tuple[list[str], dict[str, Any]]:
+    """Compile SearchFilters.property_filters into predicates on `alias`.
+
+    Values are bound as parameters, never interpolated. Parameter names are
+    positional (prop_filter_0, ...) rather than derived from the property name,
+    so filtering the same property twice — a range, for example — keeps both
+    values instead of the second silently overwriting the first.
+    """
+    filter_queries: list[str] = []
+    filter_params: dict[str, Any] = {}
+
+    if not filters.property_filters:
+        return filter_queries, filter_params
+
+    for i, property_filter in enumerate(filters.property_filters):
+        param_name = f'prop_filter_{i}'
+        filter_queries.append(
+            date_filter_query_constructor(
+                f'{alias}.{property_filter.property_name}',
+                f'${param_name}',
+                property_filter.comparison_operator,
+            )
+        )
+        # IS NULL / IS NOT NULL take no right-hand operand, so binding one
+        # would be an unused parameter at best and a syntax error at worst.
+        if property_filter.comparison_operator not in (
+            ComparisonOperator.is_null,
+            ComparisonOperator.is_not_null,
+        ):
+            filter_params[param_name] = property_filter.property_value
+
+    return filter_queries, filter_params
+
+
 def node_search_filter_query_constructor(
     filters: SearchFilters,
     provider: GraphProvider,
@@ -100,6 +137,10 @@ def node_search_filter_query_constructor(
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels
         filter_queries.append(node_label_filter)
+
+    property_queries, property_params = property_filter_query_constructor(filters, 'n')
+    filter_queries.extend(property_queries)
+    filter_params.update(property_params)
 
     return filter_queries, filter_params
 
@@ -269,5 +310,9 @@ def edge_search_filter_query_constructor(
                 expired_at_filter += ' OR '
 
         filter_queries.append(expired_at_filter)
+
+    property_queries, property_params = property_filter_query_constructor(filters, 'e')
+    filter_queries.extend(property_queries)
+    filter_params.update(property_params)
 
     return filter_queries, filter_params
