@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from time import time
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -49,6 +49,8 @@ from graphiti_core.models.nodes.node_db_queries import (
 from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
+
+EpisodeOrderBy = Literal['valid_at', 'created_at', 'uuid']
 
 
 class EpisodeType(Enum):
@@ -457,6 +459,77 @@ class EpisodicNode(Node):
             + limit_query,
             group_ids=group_ids,
             uuid=uuid_cursor,
+            limit=limit,
+            routing_='r',
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
+
+        return episodes
+
+    @classmethod
+    async def get_recent_by_group_ids(
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        order_by: EpisodeOrderBy = 'valid_at',
+    ):
+        """Retrieve a group's episodes ordered by recency.
+
+        ``get_by_group_ids`` orders by uuid because it backs keyset pagination, and a
+        keyset cursor has to sort on the same unique column it filters. Callers that
+        want the *most recent* episodes want a time ordering instead, which is what
+        this method provides:
+
+        - ``valid_at`` — when the events the episode describes occurred (event time).
+        - ``created_at`` — when the episode was ingested (ingest time). Use this to
+          confirm a just-written episode landed; note that backfilled content sorts
+          by when it was added, not by when it happened.
+        - ``uuid`` — the ``get_by_group_ids`` ordering, kept as an escape hatch.
+
+        uuid breaks ties, so the ordering is total and stable across calls even when
+        several episodes share a timestamp.
+        """
+        order_clause: LiteralString
+        match order_by:
+            case 'valid_at':
+                order_clause = '\nORDER BY valid_at DESC, uuid DESC\n'
+            case 'created_at':
+                order_clause = '\nORDER BY created_at DESC, uuid DESC\n'
+            case 'uuid':
+                order_clause = '\nORDER BY uuid DESC\n'
+            case _:
+                raise ValueError(
+                    f'Invalid order_by {order_by!r}; expected valid_at, created_at, or uuid'
+                )
+
+        if driver.graph_operations_interface:
+            try:
+                return (
+                    await driver.graph_operations_interface.episodic_node_get_recent_by_group_ids(
+                        cls, driver, group_ids, limit, order_by
+                    )
+                )
+            except NotImplementedError:
+                pass
+
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
+
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (e:Episodic)
+            WHERE e.group_id IN $group_ids
+            RETURN DISTINCT
+            """
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            )
+            + order_clause
+            + limit_query,
+            group_ids=group_ids,
             limit=limit,
             routing_='r',
         )

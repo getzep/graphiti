@@ -197,6 +197,21 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve episodic nodes by group IDs with optional pagination."""
         raise NotImplementedError
 
+    async def episodic_node_get_recent_by_group_ids(
+        self,
+        _cls: Any,
+        driver: Any,
+        group_ids: list[str],
+        limit: int | None = None,
+        order_by: str = 'valid_at',
+    ) -> list[Any]:
+        """Retrieve episodic nodes by group IDs, ordered by recency rather than uuid.
+
+        ``order_by`` is one of ``valid_at`` (event time), ``created_at`` (ingest time),
+        or ``uuid``; ties break on uuid so the ordering is total.
+        """
+        raise NotImplementedError
+
     async def retrieve_episodes(
         self,
         driver: Any,
