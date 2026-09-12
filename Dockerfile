@@ -68,33 +68,34 @@ COPY ./server/graph_service ./graph_service
 ARG INSTALL_FALKORDB=false
 ARG SOCKET_FIREWALL_ENABLED=false
 ARG SOCKET_SCAN_ID=
+ARG GRAPHITI_VERSION=
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=secret,id=socket_api_key \
     set -eu; \
     export SFW_TELEMETRY_DISABLED=true; \
     export SFW_CUSTOM_REGISTRIES="wrap:storage.googleapis.com,wrap:classic.yarnpkg.com,wrap:files.pythonhosted.org"; \
-    if [ "$SOCKET_FIREWALL_ENABLED" = "true" ]; then \
+    if [ "${SOCKET_FIREWALL_ENABLED:-false}" = "true" ]; then \
       if [ ! -s /run/secrets/socket_api_key ]; then \
         echo "ERROR: SOCKET_FIREWALL_ENABLED=true but socket_api_key is missing" >&2; \
         exit 1; \
       fi; \
       export SOCKET_API_KEY="$(cat /run/secrets/socket_api_key)"; \
       export UV_NO_CACHE=1; \
-      echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID})"; \
+      echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID:-})"; \
       UV_CMD="sfw uv"; \
     else \
       echo "socket_api_key absent; installing without Socket Firewall"; \
       UV_CMD="uv"; \
     fi; \
     $UV_CMD sync --frozen --no-dev; \
-    if [ -n "$GRAPHITI_VERSION" ]; then \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            $UV_CMD pip install --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
+    if [ -n "${GRAPHITI_VERSION:-}" ]; then \
+        if [ "${INSTALL_FALKORDB:-false}" = "true" ]; then \
+            $UV_CMD pip install --upgrade "graphiti-core[falkordb]==${GRAPHITI_VERSION}"; \
         else \
-            $UV_CMD pip install --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
+            $UV_CMD pip install --upgrade "graphiti-core==${GRAPHITI_VERSION}"; \
         fi; \
     else \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
+        if [ "${INSTALL_FALKORDB:-false}" = "true" ]; then \
             $UV_CMD pip install --upgrade "graphiti-core[falkordb]"; \
         else \
             $UV_CMD pip install --upgrade graphiti-core; \

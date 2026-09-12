@@ -1,0 +1,48 @@
+# Graphiti MCP Server Configuration for Ollama (local LLM) + Neo4j
+# Ollama exposes an OpenAI-compatible /v1 endpoint, so this reuses the "openai"
+# provider pointed at a local Ollama instance instead of the OpenAI API.
+# This configuration is optimized for running with docker-compose-neo4j.yml,
+# or against a Neo4j instance started separately (see docker-compose.yml --profile ollama).
+
+server:
+  transport: "http"  # HTTP transport (SSE is deprecated)
+  host: "127.0.0.1"
+  port: 8002
+
+llm:
+  provider: "openai"  # Ollama's OpenAI-compatible endpoint
+  model: ${MODEL_NAME:qwen2.5:7b}
+  max_tokens: 4096
+  structured_output_mode: ${LLM_STRUCTURED_OUTPUT_MODE:json_schema}
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY:ollama}
+      api_url: ${OPENAI_API_URL:http://localhost:11434/v1}
+
+embedder:
+  provider: "openai"
+  model: ${EMBEDDER_MODEL:nomic-embed-text}
+  dimensions: 768
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY:ollama}
+      api_url: ${OPENAI_API_URL:http://localhost:11434/v1}
+
+database:
+  provider: "neo4j"
+
+  providers:
+    neo4j:
+      # Use environment variable if set, otherwise use Docker service hostname
+      uri: ${NEO4J_URI:bolt://localhost:7687}
+      username: ${NEO4J_USER:neo4j}
+      password: ${NEO4J_PASSWORD:password}
+      database: ${NEO4J_DATABASE:neo4j}
+      use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
+
+graphiti:
+  group_id: ${GRAPHITI_GROUP_ID:mcp_ollama_test}
+  episode_id_prefix: ${EPISODE_ID_PREFIX:}
+  user_id: ${USER_ID:mcp_user}
