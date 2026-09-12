@@ -202,21 +202,13 @@ class GraphitiService:
     async def initialize(self) -> None:
         """Initialize the Graphiti client with factory-created components."""
         try:
-            # Create clients using factories
-            llm_client = None
-            embedder_client = None
-
-            # Create LLM client based on configured provider
-            try:
-                llm_client = LLMClientFactory.create(self.config.llm)
-            except Exception as e:
-                logger.warning(f'Failed to create LLM client: {e}')
-
-            # Create embedder client based on configured provider
-            try:
-                embedder_client = EmbedderFactory.create(self.config.embedder)
-            except Exception as e:
-                logger.warning(f'Failed to create embedder client: {e}')
+            # Create clients using factories. LLM and embedder construction errors
+            # must remain fatal, same as the cross-encoder below: Graphiti.__init__()
+            # silently substitutes an unconfigured default (OpenAIClient() /
+            # OpenAIEmbedder()) for any client left as None, which would bypass this
+            # server's configured provider entirely rather than fail loudly.
+            llm_client = LLMClientFactory.create(self.config.llm)
+            embedder_client = EmbedderFactory.create(self.config.embedder)
 
             # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
             # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
@@ -321,18 +313,10 @@ class GraphitiService:
 
             logger.info('Successfully initialized Graphiti client')
 
-            # Log configuration details
-            if llm_client:
-                logger.info(
-                    f'Using LLM provider: {self.config.llm.provider} / {self.config.llm.model}'
-                )
-            else:
-                logger.info('No LLM client configured - entity extraction will be limited')
-
-            if embedder_client:
-                logger.info(f'Using Embedder provider: {self.config.embedder.provider}')
-            else:
-                logger.info('No Embedder client configured - search will be limited')
+            # Log configuration details. llm_client and embedder_client are always
+            # set by this point: construction failures above are fatal, not swallowed.
+            logger.info(f'Using LLM provider: {self.config.llm.provider} / {self.config.llm.model}')
+            logger.info(f'Using Embedder provider: {self.config.embedder.provider}')
 
             if self.entity_types:
                 entity_type_names = list(self.entity_types.keys())
