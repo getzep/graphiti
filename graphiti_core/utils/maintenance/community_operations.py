@@ -51,31 +51,44 @@ async def get_community_clusters(
         group_ids = group_id_values[0]['group_ids'] if group_id_values else []
 
     for group_id in group_ids:
-        projection: dict[str, list[Neighbor]] = {}
+        # Build the neighbor projection in ONE Cypher round-trip instead
+        # of one per entity. On larger graphs over a network database
+        # (e.g., Aura at ~20k entities), the per-entity loop is dominated
+        # by round-trip latency × N and becomes the wall-time bottleneck
+        # of build_communities. See issue for measured numbers.
         nodes = await EntityNode.get_by_group_ids(driver, [group_id])
-        for node in nodes:
-            match_query = """
-                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
-            """
-            if driver.provider == GraphProvider.KUZU:
-                match_query = """
-                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
-                """
-            records, _, _ = await driver.execute_query(
-                match_query
-                + """
-                WITH count(e) AS count, m.uuid AS uuid
-                RETURN
-                    uuid,
-                    count
-                """,
-                uuid=node.uuid,
-                group_id=group_id,
-            )
 
-            projection[node.uuid] = [
-                Neighbor(node_uuid=record['uuid'], edge_count=record['count']) for record in records
-            ]
+        aggregate_query = """
+            MATCH (n:Entity {group_id: $group_id})-[e:RELATES_TO]-(m:Entity {group_id: $group_id})
+            RETURN
+                n.uuid AS src_uuid,
+                m.uuid AS tgt_uuid,
+                count(e) AS edge_count
+        """
+        if driver.provider == GraphProvider.KUZU:
+            aggregate_query = """
+                MATCH (n:Entity {group_id: $group_id})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m:Entity {group_id: $group_id})
+                RETURN
+                    n.uuid AS src_uuid,
+                    m.uuid AS tgt_uuid,
+                    count(e) AS edge_count
+            """
+
+        edge_records, _, _ = await driver.execute_query(
+            aggregate_query,
+            group_id=group_id,
+        )
+
+        # Seed every node's neighbor list so isolated nodes (no RELATES_TO
+        # edges) still appear in the projection — preserves the previous
+        # caller contract exactly.
+        projection: dict[str, list[Neighbor]] = {node.uuid: [] for node in nodes}
+        for record in edge_records:
+            src = record['src_uuid']
+            if src in projection:
+                projection[src].append(
+                    Neighbor(node_uuid=record['tgt_uuid'], edge_count=record['edge_count'])
+                )
 
         cluster_uuids = label_propagation(projection)
 
