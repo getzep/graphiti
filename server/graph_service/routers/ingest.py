@@ -2,10 +2,11 @@ import asyncio
 from contextlib import asynccontextmanager
 from functools import partial
 
-from fastapi import APIRouter, FastAPI, status
+from fastapi import APIRouter, Depends, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
+from graph_service.auth import require_api_key
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
@@ -45,7 +46,7 @@ async def lifespan(_: FastAPI):
     await async_worker.stop()
 
 
-router = APIRouter(lifespan=lifespan)
+router = APIRouter(dependencies=[Depends(require_api_key)], lifespan=lifespan)
 
 
 @router.post('/messages', status_code=status.HTTP_202_ACCEPTED)
