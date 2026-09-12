@@ -1114,13 +1114,13 @@ async def initialize_server() -> ServerConfig:
         description='Run the Graphiti MCP server with YAML configuration support'
     )
 
-    # Configuration file argument
-    # Default to config/config.yaml relative to the mcp_server directory
-    default_config = Path(__file__).parent.parent / 'config' / 'config.yaml'
+    # Configuration file argument.
+    # default=None: only set CONFIG_PATH when the user EXPLICITLY passes --config,
+    # otherwise the CONFIG_PATH env var must be preserved (env var *or* CLI flag).
     parser.add_argument(
         '--config',
         type=Path,
-        default=default_config,
+        default=None,
         help='Path to YAML configuration file (default: config/config.yaml)',
     )
 
@@ -1184,8 +1184,10 @@ async def initialize_server() -> ServerConfig:
 
     args = parser.parse_args()
 
-    # Set config path in environment for the settings to pick up
-    if args.config:
+    # Set config path in environment for the settings to pick up.
+    # Only when the user EXPLICITLY passed --config; otherwise the legitimate
+    # CONFIG_PATH env var must be preserved (env var *or* CLI flag, independent).
+    if args.config is not None:
         os.environ['CONFIG_PATH'] = str(args.config)
 
     # Load configuration with environment variables and YAML
