@@ -51,40 +51,41 @@ async def get_community_clusters(
         group_ids = group_id_values[0]['group_ids'] if group_id_values else []
 
     for group_id in group_ids:
-        projection: dict[str, list[Neighbor]] = {}
         nodes = await EntityNode.get_by_group_ids(driver, [group_id])
-        for node in nodes:
+        projection: dict[str, list[Neighbor]] = {node.uuid: [] for node in nodes}
+
+        match_query = """
+            MATCH (n:Entity {group_id: $group_id})-[e:RELATES_TO]-(m:Entity {group_id: $group_id})
+        """
+        if driver.provider == GraphProvider.KUZU:
             match_query = """
-                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
+                MATCH (n:Entity {group_id: $group_id})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m:Entity {group_id: $group_id})
             """
-            if driver.provider == GraphProvider.KUZU:
-                match_query = """
-                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
-                """
-            records, _, _ = await driver.execute_query(
-                match_query
-                + """
-                WITH count(e) AS count, m.uuid AS uuid
-                RETURN
-                    uuid,
-                    count
-                """,
-                uuid=node.uuid,
-                group_id=group_id,
-            )
 
-            projection[node.uuid] = [
-                Neighbor(node_uuid=record['uuid'], edge_count=record['count']) for record in records
-            ]
+        records, _, _ = await driver.execute_query(
+            match_query
+            + """
+            WITH n.uuid AS source_uuid, m.uuid AS target_uuid, count(e) AS edge_count
+            RETURN
+                source_uuid,
+                target_uuid,
+                edge_count
+            """,
+            group_id=group_id,
+        )
 
-        cluster_uuids = label_propagation(projection)
-
-        community_clusters.extend(
-            list(
-                await semaphore_gather(
-                    *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
+        for record in records:
+            projection[record['source_uuid']].append(
+                Neighbor(
+                    node_uuid=record['target_uuid'],
+                    edge_count=record['edge_count'],
                 )
             )
+
+        cluster_uuids = label_propagation(projection)
+        nodes_by_uuid = {node.uuid: node for node in nodes}
+        community_clusters.extend(
+            [[nodes_by_uuid[node_uuid] for node_uuid in cluster] for cluster in cluster_uuids]
         )
 
     return community_clusters
