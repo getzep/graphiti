@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+import re
 from collections.abc import Coroutine
 from typing import Any
 
@@ -58,6 +59,10 @@ from graphiti_core.driver.operations.search_ops import SearchOperations
 
 logger = logging.getLogger(__name__)
 DEFAULT_SIZE = 10
+PARAM_PATTERN = re.compile(r'\$([A-Za-z_][A-Za-z0-9_]*)')
+NEPTUNE_AOSS_INDEX_ALIASES = {
+    'communities': 'community_name',
+}
 
 aoss_indices = [
     {
@@ -280,14 +285,27 @@ class NeptuneDriver(GraphDriver):
     async def execute_query(
         self, cypher_query_, **kwargs: Any
     ) -> tuple[list[dict[str, Any]], None, None]:
-        params = dict(kwargs)
+        params = self._normalize_query_params(cypher_query_, kwargs)
         if isinstance(cypher_query_, list):
             result: list[dict[str, Any]] = []
             for q in cypher_query_:
-                result, _, _ = self._run_query(q[0], q[1])
+                result, _, _ = self._run_query(
+                    q[0], self._normalize_query_params(q[0], {'params': q[1]})
+                )
             return result, None, None
         else:
             return self._run_query(cypher_query_, params)
+
+    def _normalize_query_params(self, cypher_query_: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
+        query_kwargs = dict(kwargs)
+        params = dict(query_kwargs.pop('params', {}) or {})
+        params.update(query_kwargs)
+        referenced_params = set(PARAM_PATTERN.findall(str(cypher_query_)))
+        return {
+            name: value
+            for name, value in params.items()
+            if value is not None and name in referenced_params
+        }
 
     def _run_query(self, cypher_query_, params):
         cypher_query_ = str(self._sanitize_parameters(cypher_query_, params))
@@ -349,11 +367,12 @@ class NeptuneDriver(GraphDriver):
         return {}
 
     def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        index_name = NEPTUNE_AOSS_INDEX_ALIASES.get(name.lower(), name.lower())
         for index in aoss_indices:
-            if name.lower() == index['index_name']:
+            if index_name == index['index_name']:
                 to_index = []
                 for d in data:
-                    item = {'_index': name, '_id': d['uuid']}
+                    item = {'_index': index['index_name'], '_id': d['uuid']}
                     for p in index['body']['mappings']['properties']:
                         if p in d:
                             item[p] = d[p]
