@@ -586,6 +586,7 @@ async def search_memory_facts(
     valid_at_before: str | None = None,
     invalid_at_after: str | None = None,
     invalid_at_before: str | None = None,
+    temporal_mode: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
     """Search the graph memory for relevant facts (entity edges).
 
@@ -601,6 +602,11 @@ async def search_memory_facts(
         valid_at_before: Optional ISO-8601 upper bound on a fact's valid_at
         invalid_at_after: Optional ISO-8601 lower bound on a fact's invalid_at
         invalid_at_before: Optional ISO-8601 upper bound on a fact's invalid_at
+        temporal_mode: "current" returns facts whose valid_at is at or before now
+            (or unknown when no explicit valid_at bounds are supplied), whose invalid_at
+            is after now (or unset), and whose expired_at is unset; explicit valid_at
+            bounds further restrict this interval; "all" (or omitted) returns the full
+            temporal history
     """
     global graphiti_service
 
@@ -620,6 +626,7 @@ async def search_memory_facts(
                 valid_at_before=valid_at_before,
                 invalid_at_after=invalid_at_after,
                 invalid_at_before=invalid_at_before,
+                temporal_mode=temporal_mode,
             )
         except ValueError as e:
             return ErrorResponse(error=f'Invalid date filter: {e}')
