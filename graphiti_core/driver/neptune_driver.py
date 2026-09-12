@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import asyncio
+import copy
 import datetime
 import logging
 from collections.abc import Coroutine
@@ -139,7 +140,14 @@ aoss_indices = [
 class NeptuneDriver(GraphDriver):
     provider: GraphProvider = GraphProvider.NEPTUNE
 
-    def __init__(self, host: str, aoss_host: str, port: int = 8182, aoss_port: int = 443):
+    def __init__(
+        self,
+        host: str,
+        aoss_host: str,
+        port: int = 8182,
+        aoss_port: int = 443,
+        database: str = '',
+    ):
         """This initializes a NeptuneDriver for use with Neptune as a backend
 
         Args:
@@ -147,7 +155,11 @@ class NeptuneDriver(GraphDriver):
             aoss_host (str): The OpenSearch host value
             port (int, optional): The Neptune Database port, ignored for Neptune Analytics. Defaults to 8182.
             aoss_port (int, optional): The OpenSearch port. Defaults to 443.
+            database (str, optional): The default group/database name. Defaults to ''.
         """
+        super().__init__()
+        self._database = database
+
         if not host:
             raise ValueError('You must provide an endpoint to create a NeptuneDriver')
 
@@ -181,7 +193,9 @@ class NeptuneDriver(GraphDriver):
             pool_maxsize=20,
         )
 
-        # Instantiate Neptune operations
+        self._init_operations()
+
+    def _init_operations(self) -> None:
         self._entity_node_ops = NeptuneEntityNodeOperations()
         self._episode_node_ops = NeptuneEpisodeNodeOperations()
         self._community_node_ops = NeptuneCommunityNodeOperations(driver=self)
@@ -280,14 +294,21 @@ class NeptuneDriver(GraphDriver):
     async def execute_query(
         self, cypher_query_, **kwargs: Any
     ) -> tuple[list[dict[str, Any]], None, None]:
-        params = dict(kwargs)
+        params = self._normalize_query_params(kwargs)
         if isinstance(cypher_query_, list):
             result: list[dict[str, Any]] = []
             for q in cypher_query_:
-                result, _, _ = self._run_query(q[0], q[1])
+                result, _, _ = self._run_query(q[0], self._normalize_query_params({'params': q[1]}))
             return result, None, None
         else:
             return self._run_query(cypher_query_, params)
+
+    def _normalize_query_params(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        query_kwargs = dict(kwargs)
+        params = dict(query_kwargs.pop('params', {}) or {})
+        params.update(query_kwargs)
+        params.pop('routing_', None)
+        return params
 
     def _run_query(self, cypher_query_, params):
         cypher_query_ = str(self._sanitize_parameters(cypher_query_, params))
@@ -303,6 +324,15 @@ class NeptuneDriver(GraphDriver):
 
     def session(self, database: str | None = None) -> GraphDriverSession:
         return NeptuneDriverSession(driver=self)
+
+    def clone(self, database: str) -> GraphDriver:
+        if database == self._database:
+            return self
+
+        cloned = copy.copy(self)
+        cloned._database = database
+        cloned._init_operations()
+        return cloned
 
     async def close(self) -> None:
         return self.client.client.close()
@@ -353,7 +383,7 @@ class NeptuneDriver(GraphDriver):
             if name.lower() == index['index_name']:
                 to_index = []
                 for d in data:
-                    item = {'_index': name, '_id': d['uuid']}
+                    item = {'_index': name}
                     for p in index['body']['mappings']['properties']:
                         if p in d:
                             item[p] = d[p]
