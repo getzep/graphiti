@@ -146,14 +146,30 @@ class OpenTelemetryTracer(Tracer):
 
     @contextmanager
     def start_span(self, name: str) -> Generator[OpenTelemetrySpan | NoOpSpan, None, None]:
-        """Start a new OpenTelemetry span with the configured prefix."""
+        """Start a new OpenTelemetry span with the configured prefix.
+
+        Only span *creation* is guarded. If the tracer fails to start a span we
+        degrade to a no-op span so the wrapped operation still runs. Exceptions
+        raised by the operation *inside* the span must propagate untouched — they
+        are recorded/ended by ``start_as_current_span`` and re-raised to the caller.
+
+        Catching those in-body exceptions here (i.e. wrapping the ``yield`` in a
+        ``try/except`` that yields again) is a bug: when contextlib throws the
+        in-body exception into this generator at the yield point, the second
+        ``yield NoOpSpan()`` makes the generator yield twice, so contextlib raises
+        ``RuntimeError("generator didn't stop after throw()")`` — masking the real
+        error and breaking every operation that raises inside a span.
+        """
+        full_name = f'{self._span_prefix}.{name}'
         try:
-            full_name = f'{self._span_prefix}.{name}'
-            with self._tracer.start_as_current_span(full_name) as span:
-                yield OpenTelemetrySpan(span)
+            span_cm = self._tracer.start_as_current_span(full_name)
         except Exception:
-            # If tracing fails, yield a no-op span to prevent breaking the operation
+            # Span *creation* failed — run the operation without tracing.
             yield NoOpSpan()
+            return
+        # Span created: yield outside the except so in-body exceptions propagate.
+        with span_cm as span:
+            yield OpenTelemetrySpan(span)
 
 
 def create_tracer(otel_tracer: Any | None = None, span_prefix: str = 'graphiti') -> Tracer:
