@@ -95,7 +95,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             request_kwargs = {
                 'model': model,
                 'messages': messages,
-                'max_tokens': max_tokens,
+                'max_completion_tokens': max_tokens,
                 'response_format': response_model,  # Structured output
             }
 
@@ -118,7 +118,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         request_kwargs = {
             'model': model,
             'messages': messages,
-            'max_tokens': max_tokens,
+            'max_completion_tokens': max_tokens,
             'response_format': {'type': 'json_object'},
         }
 
@@ -128,19 +128,25 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
 
         return await self.client.chat.completions.create(**request_kwargs)
 
-    def _handle_structured_response(self, response: Any) -> dict[str, Any]:
+    def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing for both reasoning and non-reasoning models.
 
         For reasoning models (responses.parse): uses response.output_text
         For regular models (beta.chat.completions.parse): uses response.choices[0].message.parsed
+
+        Returns:
+            tuple: (parsed_response, input_tokens, output_tokens)
         """
         # Check if this is a ParsedChatCompletion (from beta.chat.completions.parse)
         if hasattr(response, 'choices') and response.choices:
+            input_tokens, output_tokens = self._extract_token_usage(
+                response, 'prompt_tokens', 'completion_tokens'
+            )
             # Standard ParsedChatCompletion format
             message = response.choices[0].message
             if hasattr(message, 'parsed') and message.parsed:
                 # The parsed object is already a Pydantic model, convert to dict
-                return message.parsed.model_dump()
+                return message.parsed.model_dump(), input_tokens, output_tokens
             elif hasattr(message, 'refusal') and message.refusal:
                 from graphiti_core.llm_client.errors import RefusalError
 
@@ -148,10 +154,13 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             else:
                 raise Exception(f'Invalid response from LLM: {response.model_dump()}')
         elif hasattr(response, 'output_text'):
+            input_tokens, output_tokens = self._extract_token_usage(
+                response, 'input_tokens', 'output_tokens'
+            )
             # Reasoning model response format (responses.parse)
             response_object = response.output_text
             if response_object:
-                return json.loads(response_object)
+                return json.loads(response_object), input_tokens, output_tokens
             elif hasattr(response, 'refusal') and response.refusal:
                 from graphiti_core.llm_client.errors import RefusalError
 
@@ -160,6 +169,17 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
                 raise Exception(f'Invalid response from LLM: {response.model_dump()}')
         else:
             raise Exception(f'Unknown response format: {type(response)}')
+
+    @staticmethod
+    def _extract_token_usage(response: Any, input_field: str, output_field: str) -> tuple[int, int]:
+        """Best-effort token usage extraction; missing usage reports zero."""
+        usage = getattr(response, 'usage', None)
+        if not usage:
+            return 0, 0
+        return (
+            getattr(usage, input_field, 0) or 0,
+            getattr(usage, output_field, 0) or 0,
+        )
 
     @staticmethod
     def _supports_reasoning_features(model: str) -> bool:
