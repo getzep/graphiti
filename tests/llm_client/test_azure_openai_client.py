@@ -124,3 +124,52 @@ async def test_reasoning_fields_forwarded_for_supported_models():
 
     create_args = dummy_client.chat.completions.create_calls[0]
     assert 'temperature' not in create_args
+
+
+# ---------------------------------------------------------------------------
+# _handle_structured_response tests
+# ---------------------------------------------------------------------------
+
+_client = AzureOpenAILLMClient(azure_client=DummyAzureClient(), config=LLMConfig())
+
+
+def _ns(**kw):
+    return SimpleNamespace(**kw)
+
+
+def test_handle_structured_response_choices_format():
+    parsed = DummyResponseModel(foo='bar')
+    resp = _ns(
+        choices=[_ns(message=_ns(parsed=parsed))],
+        usage=_ns(prompt_tokens=10, completion_tokens=20),
+    )
+    data, inp, out = _client._handle_structured_response(resp)
+    assert (data, inp, out) == ({'foo': 'bar'}, 10, 20)
+
+
+def test_handle_structured_response_output_text_format():
+    resp = _ns(output_text='{"foo": "baz"}', usage=_ns(input_tokens=5, output_tokens=15))
+    data, inp, out = _client._handle_structured_response(resp)
+    assert (data, inp, out) == ({'foo': 'baz'}, 5, 15)
+
+
+def test_handle_structured_response_no_usage():
+    resp = _ns(output_text='{"a": 1}')
+    data, inp, out = _client._handle_structured_response(resp)
+    assert (data, inp, out) == ({'a': 1}, 0, 0)
+
+
+def test_handle_structured_response_refusal_raises():
+    from graphiti_core.llm_client.errors import RefusalError
+
+    with pytest.raises(RefusalError):
+        _client._handle_structured_response(
+            _ns(choices=[_ns(message=_ns(parsed=None, refusal='no'))], usage=None)
+        )
+    with pytest.raises(RefusalError):
+        _client._handle_structured_response(_ns(output_text=None, refusal='no', usage=None))
+
+
+def test_handle_structured_response_unknown_format_raises():
+    with pytest.raises(Exception, match='Unknown response format'):
+        _client._handle_structured_response(_ns(some_field='x'))
