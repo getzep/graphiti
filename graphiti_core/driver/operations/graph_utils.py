@@ -14,9 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 from collections import defaultdict
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+# Floor for the iteration budget, so tiny graphs still get room to converge.
+MIN_LABEL_PROPAGATION_ITERATIONS = 10
 
 
 class Neighbor(BaseModel):
@@ -25,9 +31,31 @@ class Neighbor(BaseModel):
 
 
 def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
+    """Label-propagation community detection.
+
+    The loop is bounded: label propagation is not guaranteed to converge, and on
+    balanced graph shapes the assignments can oscillate indefinitely. One
+    relabelling pass per node is a generous budget — a run that has not settled
+    by then is oscillating, not converging slowly — so on reaching the cap we
+    log a warning and return the partition reached so far. That is a legitimate
+    result for a heuristic algorithm; spinning forever is not.
+    """
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
+    max_iterations = max(len(projection), MIN_LABEL_PROPAGATION_ITERATIONS)
+    iteration = 0
+
     while True:
+        iteration += 1
+        if iteration > max_iterations:
+            logger.warning(
+                'label_propagation did not converge within %d iterations over %d nodes; '
+                'returning the current partition',
+                max_iterations,
+                len(projection),
+            )
+            break
+
         no_change = True
         new_community_map: dict[str, int] = {}
 
