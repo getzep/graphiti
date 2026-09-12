@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationError
+from graphiti_core.utils.datetime_utils import ensure_utc
 
 load_dotenv()
 
@@ -57,7 +58,10 @@ CHUNK_DENSITY_THRESHOLD = float(os.getenv('CHUNK_DENSITY_THRESHOLD', 0.15))
 
 def parse_db_date(input_date: neo4j_time.DateTime | str | None) -> datetime | None:
     if isinstance(input_date, neo4j_time.DateTime):
-        return input_date.to_native()
+        native = input_date.to_native()
+        # Neo4j may hydrate offset UTC as a named zone. Re-saving that value
+        # changes Cypher equality/order at an otherwise identical instant.
+        return ensure_utc(native) if native.tzinfo is not None else native
 
     if isinstance(input_date, str):
         return datetime.fromisoformat(input_date)
