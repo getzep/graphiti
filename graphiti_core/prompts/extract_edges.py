@@ -53,7 +53,7 @@ class Edge(BaseModel):
 
 
 class ExtractedEdges(BaseModel):
-    edges: list[Edge]
+    edges: list[Edge] = Field(default_factory=list)
 
 
 class EdgeTimestamps(BaseModel):
