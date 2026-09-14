@@ -43,7 +43,7 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
             await executor.execute_query('MATCH (n) DETACH DELETE n')
         else:
             # FalkorDB: iterate labels individually
-            for label in ['Entity', 'Episodic', 'Community']:
+            for label in ['Entity', 'Episodic', 'Community', 'Saga']:
                 await executor.execute_query(
                     f"""
                     MATCH (n:{label})
