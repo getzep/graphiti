@@ -24,7 +24,12 @@ import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.driver import (
+    COMMUNITY_INDEX_NAME,
+    GraphDriver,
+    GraphDriverSession,
+    GraphProvider,
+)
 from graphiti_core.driver.neptune.operations.community_edge_ops import (
     NeptuneCommunityEdgeOperations,
 )
@@ -78,7 +83,7 @@ aoss_indices = [
         },
     },
     {
-        'index_name': 'community_name',
+        'index_name': COMMUNITY_INDEX_NAME,
         'body': {
             'mappings': {
                 'properties': {
