@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     falkordb_database: str | None = Field(None)
     db_backend: str = Field('neo4j')
 
+    api_key: str | None = Field(None)
+
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
 
