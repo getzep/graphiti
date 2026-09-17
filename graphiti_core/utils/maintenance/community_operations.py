@@ -90,52 +90,74 @@ async def get_community_clusters(
     return community_clusters
 
 
-def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
-    # Implement the label propagation community detection algorithm.
-    # 1. Start with each node being assigned its own community
-    # 2. Each node will take on the community of the plurality of its neighbors
-    # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
+def label_propagation(
+    projection: dict[str, list[Neighbor]], max_iterations: int = 100
+) -> list[list[str]]:
+    """Cluster nodes via the asynchronous label propagation algorithm.
 
-    community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
+    Each node iteratively adopts the most-weighted community label among
+    its neighbours. Updates are applied in place (asynchronous LPA), so
+    later nodes within the same iteration see earlier nodes' fresh
+    labels. This avoids the oscillation that synchronous LPA exhibits on
+    bipartite or weight-symmetric graphs, where reading from a snapshot
+    and writing to a parallel map can flip-flop between two states
+    indefinitely.
 
-    while True:
+    Async LPA still has no proof of convergence on adversarial inputs;
+    ``max_iterations`` is the hard guarantee of termination. A warning
+    is logged if the cap is reached, so callers can detect when the
+    returned clustering may not be a fixed point.
+
+    On a tie of total weight, the current community wins if it is among
+    the tied candidates (self-stickiness — avoids gratuitous label churn
+    on stable graphs and approximates the previous tiebreak semantics);
+    otherwise the smallest community ID among the tied candidates wins,
+    so two runs over the same input produce the same clustering.
+    """
+    community_map: dict[str, int] = {uuid: i for i, uuid in enumerate(projection.keys())}
+
+    converged = False
+    for _ in range(max_iterations):
         no_change = True
-        new_community_map: dict[str, int] = {}
 
         for uuid, neighbors in projection.items():
-            curr_community = community_map[uuid]
-
             community_candidates: dict[int, int] = defaultdict(int)
             for neighbor in neighbors:
                 community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
-            community_lst = [
-                (count, community) for community, count in community_candidates.items()
-            ]
 
-            community_lst.sort(reverse=True)
-            candidate_rank, community_candidate = community_lst[0] if community_lst else (0, -1)
-            if community_candidate != -1 and candidate_rank > 1:
-                new_community = community_candidate
+            if not community_candidates:
+                # A node with no neighbours has no candidate community to
+                # adopt; leave it in its initial singleton community.
+                continue
+
+            max_weight = max(community_candidates.values())
+            curr_community = community_map[uuid]
+            if community_candidates.get(curr_community, 0) == max_weight:
+                new_community = curr_community
             else:
-                new_community = max(community_candidate, curr_community)
-
-            new_community_map[uuid] = new_community
+                new_community = min(c for c, w in community_candidates.items() if w == max_weight)
 
             if new_community != curr_community:
+                community_map[uuid] = new_community
                 no_change = False
 
         if no_change:
+            converged = True
             break
 
-        community_map = new_community_map
+    if not converged:
+        logger.warning(
+            'label_propagation: max_iterations=%d reached without convergence; '
+            'returning partial clustering. The input graph may have an unusually '
+            'adversarial topology.',
+            max_iterations,
+        )
 
-    community_cluster_map = defaultdict(list)
+    community_cluster_map: dict[int, list[str]] = defaultdict(list)
     for uuid, community in community_map.items():
         community_cluster_map[community].append(uuid)
 
-    clusters = [cluster for cluster in community_cluster_map.values()]
-    return clusters
+    return list(community_cluster_map.values())
 
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
