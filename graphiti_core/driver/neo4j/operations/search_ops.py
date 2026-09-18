@@ -17,6 +17,8 @@ limitations under the License.
 import logging
 from typing import Any
 
+from neo4j.exceptions import ClientError
+
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
@@ -28,9 +30,14 @@ from graphiti_core.driver.record_parsers import (
 )
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graph_queries import (
+    NEO4J_EDGE_VECTOR_INDEX_NAME,
+    NEO4J_ENTITY_VECTOR_INDEX_NAME,
+    VECTOR_INDEX_OVERFETCH_FACTOR,
     get_nodes_query,
     get_relationships_query,
     get_vector_cosine_func_query,
+    get_vector_similarity_query,
+    use_vector_index,
 )
 from graphiti_core.helpers import lucene_sanitize, validate_group_ids
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
@@ -49,6 +56,27 @@ from graphiti_core.search.search_filters import (
 logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 128
+
+_VECTOR_INDEX_LIFECYCLE_CODES = {
+    'Neo.ClientError.Procedure.ProcedureNotFound',
+    'Neo.ClientError.Schema.IndexNotFound',
+}
+_VECTOR_INDEX_LIFECYCLE_MESSAGES = (
+    'no such vector schema index',
+    'is not online',
+    'is offline',
+    'is still populating',
+    'is in populating state',
+    'dimensions, but indexed vectors have',
+    'is not a vector index',
+)
+
+
+def _is_vector_index_lifecycle_error(error: ClientError) -> bool:
+    if getattr(error, 'code', None) in _VECTOR_INDEX_LIFECYCLE_CODES:
+        return True
+    message = str(error).lower()
+    return any(fragment in message for fragment in _VECTOR_INDEX_LIFECYCLE_MESSAGES)
 
 
 def _build_neo4j_fulltext_query(
@@ -74,6 +102,43 @@ def _build_neo4j_fulltext_query(
 
 
 class Neo4jSearchOperations(SearchOperations):
+    # --- Vector index helpers ---
+
+    @staticmethod
+    def _check_vector_dimension(executor: QueryExecutor, search_vector: list[float]) -> None:
+        embedding_dim = getattr(executor, 'embedding_dim', None)
+        if embedding_dim is not None and len(search_vector) != embedding_dim:
+            raise ValueError(
+                f'query embedding dimension {len(search_vector)} does not match '
+                f'configured index dimension {embedding_dim}'
+            )
+
+    @staticmethod
+    async def _execute_with_exact_fallback(
+        executor: QueryExecutor,
+        vector_cypher: str,
+        exact_cypher: str,
+        vector_params: dict[str, Any],
+        exact_params: dict[str, Any],
+    ) -> tuple[list[Any], bool]:
+        """Run the vector-index query; on a known lifecycle failure re-run exact.
+
+        The boolean reports whether the exact query was already used. Programmer
+        errors and unrecognised ClientErrors propagate unchanged so the fallback
+        cannot hide a broken query.
+        """
+        try:
+            records, _, _ = await executor.execute_query(vector_cypher, **vector_params)
+        except ClientError as error:
+            if not _is_vector_index_lifecycle_error(error):
+                raise
+            logger.warning(
+                'Vector index unavailable; falling back to exact cosine search: %s', error
+            )
+            records, _, _ = await executor.execute_query(exact_cypher, **exact_params)
+            return records, True
+        return records, False
+
     # --- Node search ---
 
     async def node_fulltext_search(
@@ -146,7 +211,7 @@ class Neo4jSearchOperations(SearchOperations):
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
-        cypher = (
+        exact_cypher = (
             'MATCH (n:Entity)'
             + filter_query
             + """
@@ -164,15 +229,54 @@ class Neo4jSearchOperations(SearchOperations):
             LIMIT $limit
             """
         )
-
-        records, _, _ = await executor.execute_query(
-            cypher,
+        exact_params: dict[str, Any] = dict(
             search_vector=search_vector,
             limit=limit,
             min_score=min_score,
             routing_='r',
             **filter_params,
         )
+
+        if not use_vector_index(executor):
+            records, _, _ = await executor.execute_query(exact_cypher, **exact_params)
+            return [entity_node_from_record(r) for r in records]
+
+        self._check_vector_dimension(executor, search_vector)
+
+        # The procedure cannot pre-filter; ask for a wider window and filter after.
+        candidates = limit * VECTOR_INDEX_OVERFETCH_FACTOR if filter_queries else limit
+        vector_cypher = (
+            get_vector_similarity_query(
+                GraphProvider.NEO4J,
+                NEO4J_ENTITY_VECTOR_INDEX_NAME,
+                'n',
+                limit,
+                relationship=False,
+                candidates=candidates,
+            )
+            + """
+            WITH n, score
+            WHERE """
+            + ' AND '.join(['score > $min_score', *filter_queries])
+            + """
+            RETURN
+            """
+            + get_entity_node_return_query(GraphProvider.NEO4J)
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+
+        records, exact_used = await self._execute_with_exact_fallback(
+            executor, vector_cypher, exact_cypher, exact_params, exact_params
+        )
+
+        # ANN post-filtering cannot prove that the candidate window contained all
+        # matching rows. Preserve the old row-count contract when the window is too
+        # sparse; do not issue a second exact query if lifecycle fallback already did.
+        if filter_queries and not exact_used and len(records) < limit:
+            records, _, _ = await executor.execute_query(exact_cypher, **exact_params)
 
         return [entity_node_from_record(r) for r in records]
 
@@ -300,19 +404,19 @@ class Neo4jSearchOperations(SearchOperations):
             filter_queries.append('e.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
-            if source_node_uuid is not None:
-                filter_params['source_uuid'] = source_node_uuid
-                filter_queries.append('n.uuid = $source_uuid')
+        if source_node_uuid is not None:
+            filter_params['source_uuid'] = source_node_uuid
+            filter_queries.append('n.uuid = $source_uuid')
 
-            if target_node_uuid is not None:
-                filter_params['target_uuid'] = target_node_uuid
-                filter_queries.append('m.uuid = $target_uuid')
+        if target_node_uuid is not None:
+            filter_params['target_uuid'] = target_node_uuid
+            filter_queries.append('m.uuid = $target_uuid')
 
         filter_query = ''
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
-        cypher = (
+        exact_cypher = (
             'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)'
             + filter_query
             + """
@@ -331,14 +435,55 @@ class Neo4jSearchOperations(SearchOperations):
             """
         )
 
-        records, _, _ = await executor.execute_query(
-            cypher,
+        exact_params: dict[str, Any] = dict(
             search_vector=search_vector,
             limit=limit,
             min_score=min_score,
             routing_='r',
             **filter_params,
         )
+
+        if not use_vector_index(executor):
+            records, _, _ = await executor.execute_query(exact_cypher, **exact_params)
+            return [entity_edge_from_record(r) for r in records]
+
+        self._check_vector_dimension(executor, search_vector)
+
+        # The procedure cannot pre-filter; ask for a wider window and filter after.
+        # Endpoint binding (n / m) is re-established from the yielded relationship so
+        # the source/target UUID filters and the return shape are unchanged.
+        candidates = limit * VECTOR_INDEX_OVERFETCH_FACTOR if filter_queries else limit
+        vector_cypher = (
+            get_vector_similarity_query(
+                GraphProvider.NEO4J,
+                NEO4J_EDGE_VECTOR_INDEX_NAME,
+                'e',
+                limit,
+                candidates=candidates,
+            )
+            + """
+            WITH e, startNode(e) AS n, endNode(e) AS m, score
+            WHERE """
+            + ' AND '.join(['n:Entity', 'm:Entity', 'score > $min_score', *filter_queries])
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(GraphProvider.NEO4J)
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+
+        records, exact_used = await self._execute_with_exact_fallback(
+            executor, vector_cypher, exact_cypher, exact_params, exact_params
+        )
+
+        # ANN post-filtering cannot prove that the candidate window contained all
+        # matching rows. Preserve the old row-count contract when the window is too
+        # sparse; do not issue a second exact query if lifecycle fallback already did.
+        if filter_queries and not exact_used and len(records) < limit:
+            records, _, _ = await executor.execute_query(exact_cypher, **exact_params)
 
         return [entity_edge_from_record(r) for r in records]
 
