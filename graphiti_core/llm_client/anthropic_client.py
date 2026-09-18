@@ -285,15 +285,21 @@ class AnthropicClient(LLMClient):
         try:
             # Create the appropriate tool based on whether response_model is provided
             tools, tool_choice = self._create_tool(response_model)
-            result = await self.client.messages.create(
-                system=system_message.content,
-                max_tokens=max_creation_tokens,
-                temperature=self.temperature,
-                messages=user_messages_cast,
-                model=self.model,
-                tools=tools,
-                tool_choice=tool_choice,
-            )
+            create_kwargs: dict[str, typing.Any] = {
+                'system': system_message.content,
+                'max_tokens': max_creation_tokens,
+                'messages': user_messages_cast,
+                'model': self.model,
+                'tools': tools,
+                'tool_choice': tool_choice,
+            }
+            # Omit temperature entirely when it is unset — don't even send None.
+            # The Anthropic SDK serializes an explicit None as `"temperature": null`,
+            # which the API rejects with a 400 invalid_request_error.
+            if self.temperature is not None:
+                create_kwargs['temperature'] = self.temperature
+
+            result = await self.client.messages.create(**create_kwargs)
 
             # Extract token usage from the response
             input_tokens = 0
