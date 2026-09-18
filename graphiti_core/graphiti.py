@@ -817,6 +817,7 @@ class Graphiti:
         entity_types: dict[str, type[BaseModel]] | None,
         excluded_entity_types: list[str] | None,
         custom_extraction_instructions: str | None = None,
+        use_combined_extraction: bool = False,
         clients: GraphitiClients | None = None,
     ) -> tuple[
         dict[str, list[EntityNode]],
@@ -834,6 +835,7 @@ class Graphiti:
             entity_types=entity_types,
             excluded_entity_types=excluded_entity_types,
             custom_extraction_instructions=custom_extraction_instructions,
+            use_combined_extraction=use_combined_extraction,
         )
 
         # Dedupe extracted nodes in memory
@@ -1297,6 +1299,7 @@ class Graphiti:
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
+        use_combined_extraction: bool = False,
     ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
@@ -1322,6 +1325,9 @@ class Graphiti:
             Optional. Custom extraction instructions string to be included in the
             extract entities and extract edges prompts. This allows for additional
             instructions or context to guide the extraction process.
+        use_combined_extraction : bool
+            Optional. Whether to use a single combined extraction call for nodes and
+            edges instead of the legacy separate extraction calls.
         saga : str | SagaNode | None
             Optional. Either a saga name (str) or a SagaNode object to associate all episodes with.
             If a string is provided and a saga with this name already exists in the group, the episodes
@@ -1412,6 +1418,7 @@ class Graphiti:
                     entity_types,
                     excluded_entity_types,
                     custom_extraction_instructions,
+                    use_combined_extraction,
                     clients=clients,
                 )
 
