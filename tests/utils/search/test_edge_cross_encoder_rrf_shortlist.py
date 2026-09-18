@@ -121,3 +121,40 @@ async def test_smoke_alice_works_at_zep_reaches_cross_encoder(monkeypatch):
     assert edges[0].fact == 'Alice works at Zep'
     assert len(edges) == limit
     assert len(scores) == limit
+
+
+@pytest.mark.asyncio
+async def test_cross_encoder_min_score_is_applied_after_reranking(monkeypatch):
+    """Cross-encoder thresholds should not filter candidates in RRF score space."""
+    first = _edge('edge-1', 'lexical first')
+    second = _edge('edge-2', 'semantic answer')
+    ranked_passages: list[str] = []
+
+    async def fake_fulltext(*args, **kwargs):
+        return [first, second]
+
+    class RecordingCrossEncoder:
+        async def rank(self, query: str, passages: list[str]):
+            ranked_passages.extend(passages)
+            return [(second.fact, 0.99), (first.fact, 0.81)]
+
+    monkeypatch.setattr('graphiti_core.search.search.edge_fulltext_search', fake_fulltext)
+
+    edges, scores = await edge_search(
+        driver=SimpleNamespace(),
+        cross_encoder=RecordingCrossEncoder(),
+        query='semantic answer',
+        query_vector=[0.1, 0.2, 0.3],
+        group_ids=None,
+        config=EdgeSearchConfig(
+            search_methods=[EdgeSearchMethod.bm25],
+            reranker=EdgeReranker.cross_encoder,
+        ),
+        search_filter=SearchFilters(),
+        limit=2,
+        reranker_min_score=0.8,
+    )
+
+    assert ranked_passages == [first.fact, second.fact]
+    assert [edge.uuid for edge in edges] == [second.uuid, first.uuid]
+    assert scores == [0.99, 0.81]
