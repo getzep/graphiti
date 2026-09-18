@@ -458,6 +458,7 @@ async def resolve_extracted_edges(
     # `edge_types_lst` stores the subset of custom edge definitions whose
     # node signature matches each extracted edge.
     edge_types_lst: list[dict[str, type[BaseModel]]] = []
+    invalid_registered_edge_types: list[bool] = []
     for extracted_edge in extracted_edges:
         source_node = uuid_entity_map.get(extracted_edge.source_node_uuid)
         target_node = uuid_entity_map.get(extracted_edge.target_node_uuid)
@@ -482,6 +483,14 @@ async def resolve_extracted_edges(
                     continue
 
                 extracted_edge_types[type_name] = type_model
+
+        # A registered custom type is only valid for its configured endpoint signatures.
+        # Keep unregistered names untouched, but fall back to the generic relationship when
+        # extraction assigned a registered type to a disallowed node pair. The final resolved
+        # edge is normalized below as resolution may reuse an existing edge.
+        invalid_registered_edge_types.append(
+            extracted_edge.name in edge_types and extracted_edge.name not in extracted_edge_types
+        )
 
         edge_types_lst.append(extracted_edge_types)
 
@@ -511,10 +520,16 @@ async def resolve_extracted_edges(
     resolved_edges: list[EntityEdge] = []
     invalidated_edges: list[EntityEdge] = []
     new_edges: list[EntityEdge] = []
-    for extracted_edge, result in zip(extracted_edges, results, strict=True):
+    for extracted_edge, result, invalid_registered_edge_type in zip(
+        extracted_edges, results, invalid_registered_edge_types, strict=True
+    ):
         resolved_edge = result[0]
         invalidated_edge_chunk = result[1]
         # result[2] is duplicate_edges list
+
+        if invalid_registered_edge_type:
+            resolved_edge.name = 'RELATES_TO'
+            resolved_edge.attributes = {}
 
         resolved_edges.append(resolved_edge)
         invalidated_edges.extend(invalidated_edge_chunk)
