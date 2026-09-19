@@ -111,9 +111,12 @@ NEVER extract any of the following:
 - Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or
   distinguishing detail (e.g., NEVER extract "supplies" from "I picked up some supplies")
 
-Your task is to extract **entity nodes** that are **explicitly** mentioned in the CURRENT MESSAGE.
+Your task is to extract **entity nodes** that are **explicitly or implicitly** mentioned in the
+CURRENT MESSAGE.
 Pronoun references such as he/she/they or this/that/those should be disambiguated to the names of the
-reference entities. Only extract distinct entities from the CURRENT MESSAGE.
+reference entities. If a pronoun or other resolved reference in the CURRENT MESSAGE refers to an
+entity from PREVIOUS MESSAGES, that entity counts as implicitly mentioned and MUST be extracted.
+Only extract distinct entities referenced by the CURRENT MESSAGE.
 
 <ENTITY TYPES>
 {context['entity_types']}
@@ -131,7 +134,8 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE.
    - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.
 
 2. **Entity Identification**:
-   - Extract named entities and specific, concrete things that are **explicitly** mentioned in the CURRENT MESSAGE.
+   - Extract named entities and specific, concrete things that are **explicitly or implicitly**
+     mentioned in the CURRENT MESSAGE.
    - Only extract entities that are specific enough to be uniquely identifiable. Ask: "Could this have its own Wikipedia article or database entry, OR is it specific enough to distinguish from other items of the same category within this conversation?"
    - For objects, possessions, and physical items, extract when they are specific enough
      to distinguish from other items of the same category. SHOULD be extracted:
@@ -145,7 +149,9 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE.
    - When a speaker or named person refers to a relative, pet, or associate using a bare term
      (e.g., "my dad", "his cat"), extract the entity qualified with the possessor's name
      (e.g., "Nisha's dad", "Jordan's cat"). Do NOT extract the bare term alone.
-   - **Exclude** entities mentioned only in the PREVIOUS MESSAGES (they are for context only).
+   - **Exclude** entities mentioned only in the PREVIOUS MESSAGES when the CURRENT MESSAGE does not
+     refer to them. If the CURRENT MESSAGE refers to a previous entity with a pronoun or another
+     resolvable reference, include that entity under its disambiguated name.
 
 3. **Entity Classification**:
    - Use the descriptions in ENTITY TYPES to classify each extracted entity.
