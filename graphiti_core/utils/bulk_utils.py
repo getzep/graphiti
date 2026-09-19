@@ -31,7 +31,11 @@ from graphiti_core.driver.driver import (
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import normalize_l2, semaphore_gather
+from graphiti_core.helpers import (
+    merge_attributes_into_properties,
+    normalize_l2,
+    semaphore_gather,
+)
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
     get_episodic_edge_save_bulk_query,
@@ -182,9 +186,7 @@ async def add_nodes_and_edges_bulk_tx(
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes)
         else:
-            for k, v in (node.attributes or {}).items():
-                if k not in entity_data:
-                    entity_data[k] = v
+            merge_attributes_into_properties(entity_data, node.attributes)
 
         nodes.append(entity_data)
 
@@ -216,9 +218,7 @@ async def add_nodes_and_edges_bulk_tx(
             # Attributes may contain stale string versions of typed fields
             # (e.g. reference_time as ISO string) that would replace the
             # datetime values set above.
-            for k, v in (edge.attributes or {}).items():
-                if k not in edge_data:
-                    edge_data[k] = v
+            merge_attributes_into_properties(edge_data, edge.attributes)
 
         edges.append(edge_data)
 

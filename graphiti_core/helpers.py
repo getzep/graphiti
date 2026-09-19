@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import asyncio
+import json
 import os
 import re
 from collections.abc import Coroutine
@@ -29,6 +30,7 @@ from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationError
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 load_dotenv()
 
@@ -218,3 +220,39 @@ def validate_excluded_entity_types(
         )
 
     return True
+
+
+def merge_attributes_into_properties(
+    payload: dict[str, Any],
+    attributes: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge ``attributes`` into a save payload for property-graph providers.
+
+    Neo4j, FalkorDB and Neptune store each attribute as its own property, and a
+    property value must be a primitive or an array of primitives. A nested value
+    therefore aborts the whole write with a driver-level type error:
+    ``Property values can only be of primitive types or arrays thereof``.
+
+    Two real inputs produce a nested value, and neither should be able to fail an
+    ingestion run: a legitimately nested extraction, and an LLM that echoed a
+    JSON Schema field definition instead of filling it in. Both are preserved
+    here by JSON-encoding only the offending values, which keeps the data
+    readable and queryable as text rather than dropping it.
+
+    Keys already present in ``payload`` are never overwritten, because attributes
+    may carry stale string copies of typed fields such as ``reference_time``.
+    """
+    for key, value in (attributes or {}).items():
+        if key in payload:
+            continue
+        payload[key] = _as_storable_property(value)
+    return payload
+
+
+def _as_storable_property(value: Any) -> Any:
+    """Return ``value`` if a property graph can store it, else a JSON encoding."""
+    if isinstance(value, dict):
+        return json.dumps(convert_datetimes_to_strings(value), ensure_ascii=False)
+    if isinstance(value, list) and any(isinstance(item, (dict, list)) for item in value):
+        return json.dumps(convert_datetimes_to_strings(value), ensure_ascii=False)
+    return value
