@@ -728,7 +728,7 @@ async def episode_search(
                     rrf_result_uuids, episode_scores = rrf(
                         search_result_uuids, min_score=reranker_min_score
                     )
-                rrf_results = [episode_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
+                rrf_results = [episode_uuid_map[uuid] for uuid in rrf_result_uuids][: 2 * limit]
 
                 content_to_uuid_map = {episode.content: episode.uuid for episode in rrf_results}
 
