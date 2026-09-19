@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 class ErrorResponse(TypedDict):
@@ -21,16 +21,30 @@ class NodeResult(TypedDict):
     summary: str | None
     group_id: str
     attributes: dict[str, Any]
+    # Reranker score for this node; only present on search results. Score
+    # semantics depend on the ranker reported in the enclosing response.
+    score: NotRequired[float]
 
 
 class NodeSearchResponse(TypedDict):
     message: str
     nodes: list[NodeResult]
+    # Which reranker ordered these results (e.g. 'rrf', 'node_distance').
+    # The reranker is deployment config, so per-result scores are only
+    # comparable against the same ranker value.
+    ranker: str
 
 
 class FactSearchResponse(TypedDict):
     message: str
     facts: list[dict[str, Any]]
+    # Which reranker ordered these results (e.g. 'rrf', 'node_distance').
+    ranker: str
+    # How many of the returned facts have been invalidated or superseded
+    # (invalid_at/expired_at set). Lets a caller distinguish "no fact was
+    # ever recorded" from "facts existed but expired" without any filtering.
+    invalidated_count: int
+    invalidated_uuids: list[str]
 
 
 class EpisodeSearchResponse(TypedDict):
