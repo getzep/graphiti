@@ -275,34 +275,39 @@ Do NOT extract: "photo" (generic media noun), "event" (generic event noun), "gov
     ]
 
 
-def extract_text(context: dict[str, Any]) -> list[Message]:
+def extract_text(context):
     sys_prompt = (
-        'You are an entity extraction specialist for unstructured text. '
-        'NEVER extract abstract concepts, feelings, or generic words.'
+        'You are an entity extraction specialist for unstructured text, including first-person '
+        'personal narrative. Extract concrete, uniquely identifiable entities — including '
+        'specific activities, skills, roles, traits, and emotional states — only when explicitly '
+        'and directly attributed to a named person. Exclude vague, unattributed scene-setting '
+        'language, but keep concrete statements about a specific person\'s actions, habits, or character.'
     )
 
     user_prompt = f"""
-NEVER extract:
-- Pronouns (you, me, he, she, they, it, them, him, her, we, us, this, that, those)
-- Abstract concepts (joy, balance, growth, resilience, passion, motivation)
-- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,
-  tickets, supplies, clothes, keys, gear)
-- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,
-  image, video, post, story)
-- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,
-  class, workshop, competition)
-- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,
-  team, office)
-- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself
-- Sentence fragments or clauses as entity names
-- Bare relational or kinship terms (dad, mom, sister, brother, spouse, friend, boss, pet, dog,
-  cat) unless qualified with a possessor (e.g., "Nisha's dad" is acceptable, "dad" alone is not)
-- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or
-  distinguishing detail (e.g., NEVER extract "supplies" from "I picked up some supplies")
+Extract only entities **explicitly mentioned** in the TEXT below, classified using the ENTITY TYPES provided.
 
-Extract entities from the TEXT that are **explicitly mentioned**.
-For each entity, classify it using the ENTITY TYPES above.
-Only extract entities specific enough to be uniquely identifiable — ask: "Could this have its own Wikipedia article or database entry?"
+Test: could this be its own Wikipedia/database entry, OR is it a concrete fact stated about a named person? If neither, skip it. If in doubt, skip it.
+
+NEVER extract:
+- Pronouns
+- Generic/vague nouns (day, life, work, stuff, tickets, gear) or unattributed abstractions ("life is full of surprises")
+- Generic media/event/institutional nouns unless uniquely named in the text itself (photo, event, class, team, government)
+- Bare kinship/relational terms for someone OTHER than the named subject (dad, boss, friend) unless qualified with a possessor ("Nisha's dad")
+- Bare nouns whose meaning depends on surrounding context rather than the entity name alone
+- Sentence fragments/clauses as entity names
+- Dates, times, years
+- One-off narrative actions/events (presented, walked in, tracked) — not recurring or defining
+
+ALWAYS extract, even without a proper noun, when explicitly and specifically stated about a named person:
+- Named recurring activity, hobby, skill, or practice → Concept (include gerunds, e.g. "meditating daily")
+- Trait, value, belief, or emotional/physical state attributed to them → Attribute
+- A role or relationship the person holds themselves (e.g. "an engineer", "married") → Role/Attribute, even without qualifiers
+
+Other rules:
+- Use full, specific, unabbreviated names; prefer the most specific form present in the text (not a generalized version)
+- Qualify a bare reference to someone's relative/pet/associate with the possessor's name — unless it's the named subject's own role
+- Only extract a phrase if it would stay meaningful and identifiable read in isolation later
 
 <ENTITY TYPES>
 {context['entity_types']}
@@ -312,35 +317,11 @@ Only extract entities specific enough to be uniquely identifiable — ask: "Coul
 {context['episode_content']}
 </TEXT>
 
-Guidelines:
-1. Extract named entities and specific, concrete things.
-2. Do not create nodes for relationships or actions.
-3. Do not create nodes for temporal information like dates, times or years.
-4. Be explicit in node names, using full names and avoiding abbreviations.
-5. Always use the most specific form from the text (e.g., "road cycling" not "cycling",
-   "wool coat" not "coat"). Include qualifying context when it's clear from the text.
-6. When the text refers to a person's relative, pet, or associate by a bare term, qualify the
-   entity with the possessor's name (e.g., "Dr. Osei's colleague" not "colleague").
-7. If a phrase would not be meaningful and distinguishable when read alone later, do NOT extract it.
-8. When in doubt, do NOT extract.
-
 {context['custom_extraction_instructions']}
-
-<EXAMPLE>
-Text: "Dr. Amara Osei presented her migraine study results at the AAN conference. The study tracked 340 patients using a new CGRP combination protocol."
-Good extractions: "Dr. Amara Osei" (Person), "AAN" (Organization), "migraine study" (Topic), "CGRP combination protocol" (Object)
-Do NOT extract: "results" (generic noun), "340" (number), "patients" (generic noun), "conference" (generic without a specific name)
-</EXAMPLE>
-
-<EXAMPLE>
-Text: "Alex shared a pic after the event and said scoring the last basket felt incredible."
-Good extractions: "Alex" (Person)
-Do NOT extract: "pic" (generic media noun), "event" (generic event noun), "basket" (ambiguous bare noun)
-</EXAMPLE>
-"""
+    """
     return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
+        Message(role="system", content=sys_prompt),
+        Message(role="user", content=user_prompt),
     ]
 
 
