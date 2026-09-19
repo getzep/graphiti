@@ -563,3 +563,71 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
 
     for call in extract_edges_calls:
         assert call['custom_extraction_instructions'] == custom_instructions
+
+
+def _identical_edge(episode: EpisodicNode, fact: str = 'Alice works at Acme') -> EntityEdge:
+    return EntityEdge(
+        name='WORKS_AT',
+        fact=fact,
+        group_id='group',
+        source_node_uuid='alice-uuid',
+        target_node_uuid='acme-uuid',
+        created_at=utc_now(),
+        episodes=[episode.uuid],
+    )
+
+
+async def _run_bulk_dedupe_through_real_resolver(monkeypatch, edges_per_episode):
+    """Drive dedupe_edges_bulk through the REAL resolve_extracted_edge so the
+    exact-fact fast path (which returns the matched candidate as `resolved`
+    with an EMPTY duplicates list) is exercised, not a mock of it (#1872)."""
+    clients = _make_clients()
+    clients.llm_client.generate_response = AsyncMock(
+        side_effect=AssertionError('exact-fact duplicates must not reach the LLM')
+    )
+
+    async def mock_create_embeddings(embedder, edges):
+        for edge in edges:
+            edge.fact_embedding = [1.0, 0.0]
+
+    monkeypatch.setattr(bulk_utils, 'create_entity_edge_embeddings', mock_create_embeddings)
+
+    episodes = [_make_episode(str(i)) for i in range(len(edges_per_episode))]
+    extracted = [
+        [_identical_edge(episode) for _ in range(count)]
+        for episode, count in zip(episodes, edges_per_episode, strict=True)
+    ]
+    episode_tuples = [(episode, []) for episode in episodes]
+
+    result = await bulk_utils.dedupe_edges_bulk(clients, extracted, episode_tuples, [], {}, {})
+    return episodes, extracted, result
+
+
+@pytest.mark.asyncio
+async def test_dedupe_edges_bulk_collapses_identical_facts_across_episodes(monkeypatch):
+    """Two episodes in one batch yielding the same fact between the same nodes
+    end up sharing ONE edge that records both episodes (#1872). Before the fix
+    the fast path's empty duplicates list hid the match from compress_uuid_map
+    and both edges survived as distinct uuids."""
+    episodes, extracted, result = await _run_bulk_dedupe_through_real_resolver(monkeypatch, [1, 1])
+
+    surviving = {edge.uuid for edges in result.values() for edge in edges}
+    assert len(surviving) == 1, surviving
+    survivor = result[episodes[0].uuid][0]
+    assert result[episodes[1].uuid][0] is survivor
+    assert set(survivor.episodes) == {episodes[0].uuid, episodes[1].uuid}
+
+
+@pytest.mark.asyncio
+async def test_dedupe_edges_bulk_survivor_carries_every_episode(monkeypatch):
+    """With three identical edges the fast path appends each episode to the
+    first matching candidate only, so provenance is spread unevenly across
+    the group; the surviving edge must still end up with all three episodes."""
+    episodes, extracted, result = await _run_bulk_dedupe_through_real_resolver(
+        monkeypatch, [1, 1, 1]
+    )
+
+    surviving = {edge.uuid for edges in result.values() for edge in edges}
+    assert len(surviving) == 1, surviving
+    survivor = next(iter(result.values()))[0]
+    assert set(survivor.episodes) == {episode.uuid for episode in episodes}
