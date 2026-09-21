@@ -1,0 +1,59 @@
+name: Pull request intake
+
+# pull_request_target runs this workflow file and the scripts from the base
+# branch with a token that can label fork pull requests. That is safe only
+# because no job checks out or executes pull request code: the job checks out
+# `base.sha`, and the intake scripts read the pull request through the API.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions: {}
+
+concurrency:
+  group: pr-intake-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  intake:
+    # Never check out the pull request head in this job: it runs with
+    # base-branch trust and a write-capable token.
+    if: vars.INTAKE_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Check out trusted intake code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          # Run the base-branch scripts, never the PR's version of them, so the
+          # step is genuinely "trusted code" regardless of PR contents.
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Decide pull request triage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python .github/intake/decide.py
+          --repo "${{ github.repository }}"
+          --number "${{ github.event.pull_request.number }}"
+          --kind pull_request
+          --output intake-decision.json
+
+      - name: Apply allowlisted labels and sticky comment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python .github/intake/apply.py intake-decision.json
+          --repo "${{ github.repository }}"
+          --number "${{ github.event.pull_request.number }}"
+          --write
