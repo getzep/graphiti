@@ -1,64 +1,126 @@
 # Contributing to Graphiti
 
-We're thrilled you're interested in contributing to Graphiti! As firm believers in the power of open source collaboration, we're committed to building not just a tool, but a vibrant community where developers of all experience levels can make meaningful contributions.
+Welcome, and thank you for your interest in Graphiti! Whether you have found a bug, have an idea
+you would like to see built, spotted a confusing doc, or simply have a question, we are glad you
+are here. This guide will help you find the right starting point so we can respond quickly and
+put your contribution to good use.
 
-When I first joined this project, I was overwhelmed trying to figure out where to start. Someone eventually pointed me to a random "good first issue," but I later discovered there were multiple ways I could have contributed that would have better matched my skills and interests.
+**Please start with a GitHub issue, not a pull request.** Every pull request must link an existing
+issue with `Fixes #<number>`. Open the issue first, talk through the work there, then open the PR
+and point it at that issue.
 
-We've restructured our contribution paths to solve this problem:
+**Feature work needs a discussion with the Graphiti team before you implement it.** File a Feature
+issue, wait for the team to talk it through with you, and wait for explicit approval (`rfc-approved`
+on that issue) before you open a feature pull request. Prototypes are welcome as a way to explore
+an idea — keep them in draft, or share what you learned on the issue, until the design is approved.
 
-# Four Ways to Get Involved
+**The 14-day auto-close applies only when something is still missing.** If the issue or pull
+request follows this guide — linked issue, feature approval when it is a feature, enough detail
+to review — it stays open until a maintainer handles it. There is no inactivity clock on a
+correct submission. If intake flags a gap (`needs-issue`, `needs-rfc`, `needs-info`, and similar),
+you get an automated comment and **14 days to fix it**. Fix the gap and the close clock stops.
+Leave it unresolved and the item is closed.
 
-### Pick Up Existing Issues
+## Where to start
 
-Our developers regularly tag issues with "help wanted" and "good first issue." These are pre-vetted tasks with clear scope and someone ready to help you if you get stuck.
+The [issue chooser](https://github.com/getzep/graphiti/issues/new/choose) will point you to the
+right form:
 
-### Create Your Own Tickets
+- **Bug:** Something behaves differently than the docs or your reasonable expectations suggest.
+- **Feature:** You would like new functionality, or an improvement to how something works today.
+- **Documentation:** Something is incorrect, unclear, or missing from our docs or examples.
+- **Question:** You would like help understanding or using Graphiti. Share the versions you are
+  on and what you have already tried, and we can get to a useful answer sooner.
+- **Security vulnerability:** Please do **not** open a public issue. Report it privately using
+  the steps in [SECURITY.md](SECURITY.md) so we can fix it before it is widely known.
 
-See something that needs fixing? Have an idea for an improvement? You don't need permission to identify problems. The people closest to the pain are often best positioned to describe the solution.
+Not sure which one fits? Pick your best guess and file it — a maintainer will happily re-route it.
+We would much rather hear from you than have you wonder whether it was worth reporting.
 
-For **feature requests**, tell us the story of what you're trying to accomplish. What are you working on? What's getting in your way? What would make your life easier? Submit these through our [GitHub issue tracker](https://github.com/getzep/graphiti/issues) with a "Feature Request" label.
+Looking for other ways to help? All of these are genuinely valuable:
 
-For **bug reports**, we need enough context to reproduce the problem. Use the [GitHub issue tracker](https://github.com/getzep/graphiti/issues) and include:
+- Pick up an issue tagged [`help wanted`](https://github.com/getzep/graphiti/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22)
+  or [`good first issue`](https://github.com/getzep/graphiti/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22).
+  These are pre-vetted and scoped, and someone is around to help if you get stuck.
+- Share how you use Graphiti by adding to [`examples/`](https://github.com/getzep/graphiti/tree/main/examples).
+  Good examples help more people than you might expect.
+- Answer questions and help troubleshoot in GitHub Issues. The knowledge you share today saves
+  someone hours tomorrow.
 
-- A clear title that summarizes the specific problem
-- What you were trying to do when you encountered the bug
-- What you expected to happen
-- What actually happened
-- A code sample or test case that demonstrates the issue
+### Reporting a bug
 
-### Share Your Use Cases
+The fastest fixes start with a report someone else can reproduce. The more of the following you
+can share, the sooner we can help:
 
-Sometimes the most valuable contribution isn't code. If you're using our project in an interesting way, add it to the [examples](https://github.com/getzep/graphiti/tree/main/examples) folder. This helps others discover new possibilities and counts as a meaningful contribution. We regularly feature compelling examples in our blog posts and videos - your work might be showcased to the broader community!
+- A minimal, self-contained code sample or test case
+- What you expected to happen, and what actually happened
+- The complete error or traceback, if there was one
+- Your Graphiti and Python versions, operating system, and how you installed
+- Which part is affected: core library, MCP server, REST server, or documentation
+- Your database backend and version
+- Your LLM, embedding, or reranking provider and model, when they are involved
 
-### Help Others on GitHub
+If you cannot fill in everything, file what you have — we will ask about anything else we need.
 
-Join the conversation on [GitHub Issues](https://github.com/getzep/graphiti/issues) and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
+One request: please scrub API keys, credentials, and private data before posting. Once it is in a
+public issue, it is public.
 
-## What happens next?
+### Proposing a feature
 
-### Contribution Priorities
+Tell us the story of what you are trying to accomplish: what are you building, what is getting in
+your way, and what would make your life easier? Starting with the problem rather than a specific
+implementation gives us room to find the best solution together.
 
-We prioritize **bug fixes to existing functionality**. If you've found a bug, please submit a fix — these PRs get the most attention and fastest review.
+**Do not open a feature pull request until the Graphiti team has discussed the issue and approved
+the design.** The Feature issue is that discussion — there is no separate RFC to file. Fill in the
+proposal, alternatives, and impact sections. A maintainer adds `rfc-approved` when the team has
+explicitly approved the approach. Until then the issue may carry `needs-rfc`, which means the
+conversation is still open.
 
-### RFC Required for New Features and Integrations
+A feature pull request that lands without that discussion and `rfc-approved` label is not ready
+for review. It is flagged, you have 14 days to get approval or close it yourself, and it is closed
+if it is still missing that approval. A correctly approved, linked feature PR is not auto-closed.
 
-**All new features and integrations require an RFC** (a GitHub issue discussing the technical design and justification) **before submitting a PR.** This includes:
+We treat a feature as needing extra design detail when it involves any of:
 
-- New database drivers
-- New LLM provider clients
-- New embedding provider clients
-- New API endpoints or capabilities
-- Any major architectural change
+- A new database driver
+- A new LLM, embedding, or reranking provider
+- A new API endpoint or public capability
+- A major architectural or data-model change
+- A change likely to exceed 500 lines
 
-Additionally, any PR over 500 LOC requires an RFC regardless of type.
+### What we prioritize
 
-PRs submitted without a linked RFC issue will be tagged with `needs-rfc` and will not be reviewed until the RFC is approved. Please open the issue first, discuss the design, and then submit your PR referencing it.
+Bug fixes to existing functionality get the most attention and the fastest review. For new
+functionality, the Feature issue comes first: discuss it with the team, wait for `rfc-approved`,
+then open the pull request. That keeps two people from building the same thing and helps the work
+fit Graphiti's architecture from the start.
 
-Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
+## Labels and who does what
 
-1. Share your approach in the [issue discussion](https://github.com/getzep/graphiti/issues) before diving deep into code. This helps ensure your solution adheres to the architecture of Graphiti from the start and saves you from potential rework.
+Our labels are meant to make the state of your issue obvious at a glance:
 
-2. Fork the repo, make your changes in a branch, and submit a PR. We've included more detailed technical instructions below; be open to feedback during review.
+| Axis | Labels | What it tells you |
+| --- | --- | --- |
+| Type | `bug`, `feature`, `question`, `documentation` | What kind of issue this is |
+| Scope | `scope:core`, `scope:mcp`, `scope:service`, `scope:docs`, `scope:ci` | Which package is affected (`graphiti_core`, MCP, REST server, docs, or CI/release) |
+| Not ready | `needs-info`, `needs-issue`, `needs-rfc`, `needs-tests`, `needs-rework` | What still has to happen before review |
+
+A process label is never a judgment about you or your work — it is a note about the next step. If a
+label appears and you are not sure what it is asking for, just say so on the issue and we will
+explain. Maintainers add `rfc-approved` on a feature issue when the design is settled.
+
+You may still see `enhancement` and `slop-detected` on older items. We now use `feature` and the
+more actionable `needs-rework` instead. To be clear: using AI assistance is fine and does not by
+itself mean a contribution needs rework.
+
+Here is who does what:
+
+| Role | What they do |
+| --- | --- |
+| You, the contributor | File an issue first, share context, wait for feature approval when needed, and link every pull request to that issue |
+| Intake automation | Sorts and routes new issues and PRs, and flags what is not ready. It never approves designs and never auto-closes a correct submission. Only items still missing a required piece after 14 days are closed |
+| Maintainers | Discuss and approve feature designs (`rfc-approved`), set priority, mark `good first issue` and `help wanted`, review code, and merge |
 
 ## Setup
 
@@ -112,6 +174,9 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
 
 ## Submitting Changes
 
+Before you push a pull request, confirm there is already an open GitHub issue for the work, and
+that a feature issue has `rfc-approved` if you are adding new functionality.
+
 1. Commit your changes:
    ```
    git commit -m "Your detailed commit message"
@@ -120,14 +185,27 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
    ```
    git push origin your-branch-name
    ```
-3. Submit a pull request through the GitHub website to https://github.com/getzep/graphiti.
+3. Open a pull request against https://github.com/getzep/graphiti and link the issue with
+   `Fixes #<issue-number>`.
 
 ## Pull Request Guidelines
 
-- Provide a clear title and description of your changes.
-- Include any relevant issue numbers in the PR description.
-- Ensure all tests pass and there are no linting errors.
-- Update documentation if you're changing functionality.
+- **Every pull request must link an existing issue** with `Fixes #<issue-number>`. That includes
+  bug fixes, features, documentation, and maintenance. Open the issue first if one does not exist.
+- **Feature pull requests require a prior discussion with the Graphiti team and explicit approval**
+  (`rfc-approved` on the linked Feature issue) before you open the PR.
+- **Only non-compliant items are auto-closed.** If the PR is correctly linked (and, for features,
+  approved), it stays open for maintainer review with no 14-day clock. If intake flags a gap
+  (`needs-issue`, `needs-rfc`, `needs-info`, `needs-tests`, `needs-rework`), you get an automated
+  comment and **14 days** to resolve those flags. Once they are cleared, the close clock stops.
+  If they are still there after 14 days, the pull request is closed.
+- Give it a clear title, and explain both the problem and your solution.
+- Add or update tests for behavior changes. If tests do not make sense here, just tell us why.
+- Run `make check`, and mention anything you were not able to run — that is useful to know, not
+  something to hide.
+- Update the docs when behavior or public interfaces change.
+- Keep credentials, API keys, and customer data out of commits.
+- Sign the Contributor License Agreement when the bot prompts you.
 
 ## Code Style and Quality
 
