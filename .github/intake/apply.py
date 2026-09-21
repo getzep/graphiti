@@ -36,6 +36,9 @@ STICKY_MARKER = '<!-- graphiti-intake-bot -->'
 MAX_LABELS = 12
 MAX_COMMENT_CHARS = 4000
 MAX_SUBSTITUTION_CHARS = 80
+# Upper bound on comment pages scanned for the sticky marker; the loop also
+# stops on the first short page, so this only bounds pathological threads.
+MAX_COMMENT_PAGES = 50
 
 # Derived from the decision schema so it is the single source of truth for the
 # label taxonomy; the allowlist can never silently drift from the schema enum.
@@ -171,9 +174,11 @@ def _validate_decision(data: Any, schema: dict[str, Any]) -> dict[str, Any] | No
     duplicates = data['duplicate_issue_numbers']
     missing = data['missing_fields']
 
-    if category not in categories:
+    if not isinstance(category, str) or category not in categories:
         return None
     if not isinstance(areas, list) or len(areas) > max_areas:
+        return None
+    if any(not isinstance(area, str) for area in areas):
         return None
     if any(area not in area_enum for area in areas):
         return None
@@ -182,6 +187,8 @@ def _validate_decision(data: Any, schema: dict[str, Any]) -> dict[str, Any] | No
     if not isinstance(labels, list) or len(labels) > max_labels:
         return None
     if any(not isinstance(label, str) or len(label) > max_label_len for label in labels):
+        return None
+    if comment_id is not None and not isinstance(comment_id, str):
         return None
     if comment_id is not None and comment_id not in comment_ids:
         return None
@@ -437,8 +444,18 @@ def apply_to_github(
     if labels_changed:
         request_json('PATCH', issue_path, github_token, {'labels': desired})
 
-    comments_path = f'{issue_path}/comments?per_page=100'
-    sticky_ids = _bot_sticky_comments(request_json('GET', comments_path, github_token, None))
+    sticky_ids: list[int] = []
+    for page in range(1, MAX_COMMENT_PAGES + 1):
+        comments_payload = request_json(
+            'GET',
+            f'{issue_path}/comments?per_page=100&page={page}',
+            github_token,
+            None,
+        )
+        ids = _bot_sticky_comments(comments_payload)
+        sticky_ids.extend(ids)
+        if not isinstance(comments_payload, list) or len(comments_payload) < 100:
+            break
     comment_action = 'none'
     if result.comment is not None:
         if sticky_ids:

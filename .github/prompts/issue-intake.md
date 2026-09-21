@@ -29,8 +29,9 @@ Rules:
    minimal reproduction. If important information is missing, add `needs-info`, choose
    `ask_repro`, and list only the missing field IDs.
 3. Features adding a driver, model provider, public API, major architecture/data-model change,
-   or likely more than 500 lines are large. Add `needs-rfc`. If proposal, alternatives, or impact
-   are missing, also add `needs-info`, choose `ask_rfc_fields`, and list those fields.
+   or likely more than 500 lines are large. Add `needs-rfc` unless the issue already has
+   `rfc-approved`. If proposal, alternatives, or impact are missing, also add `needs-info`, choose
+   `ask_rfc_fields`, and list those fields.
 4. A suspected vulnerability gets `security` and `point_security`. Do not summarize exploit
    details and do not request public reproduction.
 5. Use `note_duplicate` and `duplicate` only when the supplied data explicitly identifies an

@@ -156,7 +156,7 @@ def test_fetch_pr_collects_files_and_linked_issue_labels():
                 'deletions': 20,
                 'changed_files': 8,
             },
-            '/repos/getzep/graphiti/pulls/17/files?per_page=100': [
+            '/repos/getzep/graphiti/pulls/17/files?per_page=100&page=1': [
                 {'filename': 'graphiti_core/driver/example_driver.py', 'status': 'added'},
                 {'filename': 'tests/driver/test_example_driver.py', 'status': 'added'},
             ],
@@ -196,7 +196,7 @@ def test_fetch_pr_finds_linked_issue_beyond_body_truncation():
                 'user': {'login': 'contributor'},
                 'labels': [],
             },
-            '/repos/getzep/graphiti/pulls/17/files?per_page=100': [
+            '/repos/getzep/graphiti/pulls/17/files?per_page=100&page=1': [
                 {'filename': 'graphiti_core/nodes.py', 'status': 'modified'},
             ],
             '/repos/getzep/graphiti/issues/17/comments?per_page=10&page=1': [],
@@ -216,6 +216,142 @@ def test_fetch_pr_finds_linked_issue_beyond_body_truncation():
     # the linked-issue fact must still be found, or needs-issue is wrongly applied.
     assert len(item.body) == classify.MAX_BODY_CHARS
     assert item.linked_issues == ({'number': 42, 'labels': []},)
+
+
+def test_fetch_pr_paginates_files_past_the_first_page():
+    files_page_1 = [{'filename': 'graphiti_core/x.py', 'status': 'modified'} for _ in range(100)]
+    files_page_2 = [
+        {'filename': 'tests/test_x.py', 'status': 'added'},
+        {'filename': 'mcp_server/y.py', 'status': 'added'},
+        *[{'filename': f'graphiti_core/f{i}.py', 'status': 'added'} for i in range(28)],
+    ]
+    github = FakeGitHub(
+        {
+            '/repos/getzep/graphiti/pulls/17': {
+                'number': 17,
+                'title': 'Wide change',
+                'body': 'No linked issue here',
+                'user': {'login': 'contributor'},
+                'labels': [],
+            },
+            '/repos/getzep/graphiti/pulls/17/files?per_page=100&page=1': files_page_1,
+            '/repos/getzep/graphiti/pulls/17/files?per_page=100&page=2': files_page_2,
+            '/repos/getzep/graphiti/issues/17/comments?per_page=10&page=1': [],
+        }
+    )
+
+    item = classify.fetch_intake_item(
+        repo='getzep/graphiti',
+        number=17,
+        kind='pull_request',
+        github_token='read-token',
+        get_json=github,
+    )
+
+    assert len(item.files) == 130
+    # A scope only visible on a later page must still be derived.
+    assert 'scope:mcp' in classify.derive_pr_scopes(item.files)
+    files_requests = [path for path, _ in github.requests if '/files?' in path]
+    assert len(files_requests) == 2
+    assert files_requests[1].endswith('page=2')
+
+
+def test_fetch_pr_skips_linked_issue_that_does_not_exist():
+    responses = {
+        '/repos/getzep/graphiti/pulls/17': {
+            'number': 17,
+            'title': 'Fix a thing',
+            'body': 'Fixes #42000',
+            'user': {'login': 'contributor'},
+            'labels': [],
+        },
+        '/repos/getzep/graphiti/pulls/17/files?per_page=100&page=1': [
+            {'filename': 'graphiti_core/nodes.py', 'status': 'modified'},
+        ],
+        '/repos/getzep/graphiti/issues/17/comments?per_page=10&page=1': [],
+    }
+
+    def get_json(path: str, token: str) -> object:
+        if path == '/repos/getzep/graphiti/issues/42000':
+            raise classify.GitHubNotFoundError('HTTP 404')
+        return responses[path]
+
+    item = classify.fetch_intake_item(
+        repo='getzep/graphiti',
+        number=17,
+        kind='pull_request',
+        github_token='read-token',
+        get_json=get_json,
+    )
+
+    # A deleted or never-existing issue cannot satisfy the linked-issue
+    # requirement, so needs-issue still applies.
+    assert item.linked_issues == ()
+    decision = {'labels': []}
+    classify.apply_pr_facts(decision, item)
+    assert 'needs-issue' in decision['labels']
+
+
+def test_fetch_pr_propagates_non_404_linked_issue_errors():
+    def get_json(path: str, token: str) -> object:
+        if path == '/repos/getzep/graphiti/issues/42':
+            raise RuntimeError('HTTP 500 from GitHub')
+        return {
+            '/repos/getzep/graphiti/pulls/17': {
+                'number': 17,
+                'title': 'Fix a thing',
+                'body': 'Fixes #42',
+                'user': {'login': 'contributor'},
+                'labels': [],
+            },
+            '/repos/getzep/graphiti/pulls/17/files?per_page=100&page=1': [],
+            '/repos/getzep/graphiti/issues/17/comments?per_page=10&page=1': [],
+        }[path]
+
+    with pytest.raises(RuntimeError, match='HTTP 500'):
+        classify.fetch_intake_item(
+            repo='getzep/graphiti',
+            number=17,
+            kind='pull_request',
+            github_token='read-token',
+            get_json=get_json,
+        )
+
+
+def test_fetch_pr_ignores_linked_number_that_is_a_pull_request():
+    github = FakeGitHub(
+        {
+            '/repos/getzep/graphiti/pulls/17': {
+                'number': 17,
+                'title': 'Fix a thing',
+                'body': 'Fixes #49',
+                'user': {'login': 'contributor'},
+                'labels': [],
+            },
+            '/repos/getzep/graphiti/pulls/17/files?per_page=100&page=1': [],
+            '/repos/getzep/graphiti/issues/17/comments?per_page=10&page=1': [],
+            '/repos/getzep/graphiti/issues/49': {
+                'number': 49,
+                'labels': [],
+                'pull_request': {'url': 'https://api.github.com/repos/getzep/graphiti/pulls/49'},
+            },
+        }
+    )
+
+    item = classify.fetch_intake_item(
+        repo='getzep/graphiti',
+        number=17,
+        kind='pull_request',
+        github_token='read-token',
+        get_json=github,
+    )
+
+    # The issues endpoint also serves pull requests; `Fixes #49` pointing at a
+    # PR is not a linked issue, so needs-issue still applies.
+    assert item.linked_issues == ()
+    decision = {'labels': []}
+    classify.apply_pr_facts(decision, item)
+    assert 'needs-issue' in decision['labels']
 
 
 def test_redacts_entire_private_key_block():
@@ -418,6 +554,39 @@ def test_apply_pr_facts_skips_needs_issue_when_issue_is_linked():
 
     assert decision['areas'] == ['scope:service']
     assert 'needs-issue' not in decision['labels']
+
+
+def test_apply_issue_facts_strips_needs_rfc_when_rfc_approved():
+    item = classify.IntakeItem(
+        kind='issue',
+        number=5,
+        title='t',
+        body='b',
+        author='c',
+        labels=('feature', 'rfc-approved'),
+    )
+    decision = {'category': 'feature', 'labels': ['feature', 'needs-rfc', 'needs-info']}
+
+    classify.apply_issue_facts(decision, item)
+
+    assert 'needs-rfc' not in decision['labels']
+    assert 'needs-info' in decision['labels']
+
+
+def test_apply_issue_facts_keeps_needs_rfc_without_rfc_approved():
+    item = classify.IntakeItem(
+        kind='issue',
+        number=5,
+        title='t',
+        body='b',
+        author='c',
+        labels=('feature',),
+    )
+    decision = {'category': 'feature', 'labels': ['feature', 'needs-rfc']}
+
+    classify.apply_issue_facts(decision, item)
+
+    assert 'needs-rfc' in decision['labels']
 
 
 @pytest.mark.parametrize('kind', ['not-an-issue', '', 'pr'])

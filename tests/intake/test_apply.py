@@ -371,7 +371,7 @@ def test_apply_to_github_replaces_managed_labels_and_preserves_maintainer_labels
                 ]
             },
             ('PATCH', '/repos/getzep/graphiti/issues/42'): {},
-            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100'): [],
+            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100&page=1'): [],
         }
     )
     result = apply_payload(
@@ -398,7 +398,7 @@ def test_apply_to_github_creates_sticky_comment():
     github = FakeGitHub(
         {
             ('GET', '/repos/getzep/graphiti/issues/42'): {'labels': [{'name': 'bug'}]},
-            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100'): [],
+            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100&page=1'): [],
             ('POST', '/repos/getzep/graphiti/issues/42/comments'): {'id': 101},
         }
     )
@@ -421,7 +421,7 @@ def test_apply_to_github_creates_sticky_comment():
 
 
 def test_apply_to_github_updates_first_bot_sticky_and_deletes_extras():
-    comments_path = '/repos/getzep/graphiti/issues/42/comments?per_page=100'
+    comments_path = '/repos/getzep/graphiti/issues/42/comments?per_page=100&page=1'
     github = FakeGitHub(
         {
             ('GET', '/repos/getzep/graphiti/issues/42'): {'labels': [{'name': 'bug'}]},
@@ -479,7 +479,7 @@ def test_apply_to_github_removes_old_sticky_when_no_comment_is_needed():
     github = FakeGitHub(
         {
             ('GET', '/repos/getzep/graphiti/issues/42'): {'labels': [{'name': 'bug'}]},
-            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100'): [
+            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100&page=1'): [
                 {
                     'id': 100,
                     'body': '<!-- graphiti-intake-bot -->\nOld request',
@@ -505,6 +505,66 @@ def test_apply_to_github_removes_old_sticky_when_no_comment_is_needed():
         None,
     ) in github.requests
     assert summary.comment_action == 'deleted'
+
+
+@pytest.mark.parametrize('bad_category', [[], {}, True, None, 1])
+def test_validate_rejects_non_string_category(bad_category):
+    payload = decision(category=bad_category)
+    assert apply.parse_decision(json.dumps(payload)) is None
+
+
+@pytest.mark.parametrize('bad_area', [[], {}, True, None, 1])
+def test_validate_rejects_non_string_area_items(bad_area):
+    payload = decision(areas=['scope:core', bad_area])
+    assert apply.parse_decision(json.dumps(payload)) is None
+
+
+@pytest.mark.parametrize('bad_comment_id', [[], {}, True, 1])
+def test_validate_rejects_non_string_comment_id(bad_comment_id):
+    payload = decision(comment_id=bad_comment_id)
+    assert apply.parse_decision(json.dumps(payload)) is None
+
+
+def test_apply_to_github_finds_sticky_comment_on_a_later_page():
+    page_1 = [
+        {'id': 900 + i, 'body': f'human comment {i}', 'user': {'type': 'User'}} for i in range(100)
+    ]
+    page_2 = [
+        {
+            'id': 141,
+            'body': '<!-- graphiti-intake-bot -->\nOld request',
+            'user': {'type': 'Bot'},
+        }
+    ]
+    github = FakeGitHub(
+        {
+            ('GET', '/repos/getzep/graphiti/issues/42'): {'labels': [{'name': 'bug'}]},
+            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100&page=1'): page_1,
+            ('GET', '/repos/getzep/graphiti/issues/42/comments?per_page=100&page=2'): page_2,
+            ('PATCH', '/repos/getzep/graphiti/issues/comments/141'): {},
+        }
+    )
+    result = apply_payload(
+        comment_id='ask_repro',
+        missing_fields=['reproduction'],
+    )
+
+    summary = apply.apply_to_github(
+        result,
+        repo='getzep/graphiti',
+        number=42,
+        github_token='write-token',
+        request_json=github,
+    )
+
+    assert summary.comment_action == 'updated'
+    assert (
+        'PATCH',
+        '/repos/getzep/graphiti/issues/comments/141',
+        'write-token',
+        {'body': result.comment},
+    ) in github.requests
+    assert all(request[0] != 'POST' for request in github.requests)
 
 
 def test_apply_to_github_noop_makes_no_requests():

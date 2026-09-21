@@ -42,6 +42,9 @@ MAX_BODY_CHARS = 12_000
 MAX_COMMENTS = 10
 MAX_COMMENT_CHARS = 5_000
 MAX_FILES = 100
+# GitHub caps the files listing at 3,000 entries (100 per page), so 30 pages is
+# the hard ceiling even for the largest pull requests.
+MAX_FILE_PAGES = 30
 LINKED_ISSUE_RE = re.compile(r'(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)\b')
 # High-signal secret shapes redacted from every field BEFORE it is sent to the
 # model, so a key pasted into an issue never leaves the runner. This is a curated
@@ -97,9 +100,16 @@ class IntakeItem:
 TRUSTED_ASSOCIATIONS = frozenset({'OWNER', 'MEMBER'})
 
 
+class GitHubNotFoundError(RuntimeError):
+    """The requested GitHub resource does not exist (HTTP 404)."""
+
+
 def _http_error(error: HTTPError) -> RuntimeError:
     body = error.read().decode('utf-8', errors='replace')
-    return RuntimeError(f'HTTP {error.code} from {error.url}: {body[:1000]}')
+    message = f'HTTP {error.code} from {error.url}: {body[:1000]}'
+    if error.code == 404:
+        return GitHubNotFoundError(message)
+    return RuntimeError(message)
 
 
 def get_github_json(path: str, token: str) -> object:
@@ -184,9 +194,18 @@ def _linked_issues(
 ) -> tuple[dict[str, Any], ...]:
     linked: list[dict[str, Any]] = []
     for number in _linked_issue_numbers(body):
-        payload = get_json(f'/repos/{repo}/issues/{number}', token)
+        try:
+            payload = get_json(f'/repos/{repo}/issues/{number}', token)
+        except GitHubNotFoundError:
+            # The referenced issue was deleted or never existed; it cannot
+            # satisfy the linked-issue requirement, so treat it as absent.
+            continue
         if not isinstance(payload, dict):
             raise RuntimeError(f'GitHub issue #{number} response was not an object')
+        # The issues endpoint also serves pull requests; a `Fixes #N` pointing
+        # at a PR is not a linked issue.
+        if 'pull_request' in payload:
+            continue
         linked.append({'number': number, 'labels': list(_labels(payload))})
     return tuple(linked)
 
@@ -242,6 +261,19 @@ def apply_pr_facts(decision: dict[str, Any], item: IntakeItem) -> dict[str, Any]
     return decision
 
 
+def apply_issue_facts(decision: dict[str, Any], item: IntakeItem) -> dict[str, Any]:
+    """Overlay deterministic issue facts onto a model decision, in place.
+
+    ``needs-rfc`` asks the reporter for a design; when a maintainer already
+    applied ``rfc-approved`` the request is wrong no matter what the model
+    decided, so it is stripped in code.
+    """
+    if 'rfc-approved' in item.labels:
+        labels = [label for label in (decision.get('labels') or []) if label != 'needs-rfc']
+        decision['labels'] = labels
+    return decision
+
+
 def fetch_intake_item(
     *,
     repo: str,
@@ -278,15 +310,20 @@ def fetch_intake_item(
     files: tuple[str, ...] = ()
     linked_issues: tuple[dict[str, Any], ...] = ()
     if kind == 'pull_request':
-        files_payload = get_json(
-            f'/repos/{repo}/pulls/{number}/files?per_page={MAX_FILES}',
-            github_token,
-        )
-        if not isinstance(files_payload, list):
-            raise RuntimeError('GitHub pull request files response was not a list')
+        files_payload: list[Any] = []
+        for page in range(1, MAX_FILE_PAGES + 1):
+            page_payload = get_json(
+                f'/repos/{repo}/pulls/{number}/files?per_page={MAX_FILES}&page={page}',
+                github_token,
+            )
+            if not isinstance(page_payload, list):
+                raise RuntimeError('GitHub pull request files response was not a list')
+            files_payload.extend(page_payload)
+            if len(page_payload) < MAX_FILES:
+                break
         files = tuple(
             f'{file["filename"]} ({file.get("status", "modified")})'
-            for file in files_payload[:MAX_FILES]
+            for file in files_payload
             if isinstance(file, dict) and isinstance(file.get('filename'), str)
         )
         # Scan the untruncated body: a `Fixes #N` past the MAX_BODY_CHARS cutoff
@@ -464,6 +501,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     if item.kind == 'pull_request':
         apply_pr_facts(decision, item)
+    else:
+        apply_issue_facts(decision, item)
     args.output.write_text(json.dumps(decision, indent=2) + '\n', encoding='utf-8')
     return 0
 
