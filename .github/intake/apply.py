@@ -6,7 +6,7 @@ sticky comment. Never executes model text and never echoes an issue or pull
 request body. GitHub writes happen only when the CLI is explicitly given
 ``--write`` and a write-scoped token.
 
-Deciding steps (classify.py, later reproduce.py) emit decision.schema.json.
+The deciding step (decide.py) emits decision.schema.json.
 This file is the only place that may turn a decision into GitHub-facing output.
 """
 
@@ -96,6 +96,9 @@ MISSING_FIELD_COPY = {
     'description': 'a short description of the problem',
     'problem': 'the user problem this would solve',
     'outcome': 'the desired outcome',
+    'goal': 'what you are trying to accomplish',
+    'attempted': 'what you tried and what happened',
+    'suggestion': 'a suggested improvement',
     'proposal': 'a proposed design',
     'alternatives': 'alternatives considered',
     'impact': 'compatibility and operational impact',
@@ -499,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description='Turn an intake decision JSON file into labels and a templated comment.'
     )
-    parser.add_argument('decision', type=Path, help='Path to decision JSON from classify.py')
+    parser.add_argument('decision', type=Path, help='Path to decision JSON from decide.py')
     parser.add_argument(
         '-o',
         '--output',

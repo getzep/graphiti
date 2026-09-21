@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/getzep/graphiti/blob/main/.github/intake/decision.schema.json",
   "title": "Graphiti intake decision",
-  "description": "Contract between a deciding step (classify.py, later reproduce.py) and apply.py. apply.py never executes model text.",
+  "description": "Contract between a deciding step (decide.py) and apply.py. apply.py never executes decider output.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -16,7 +16,14 @@
   "properties": {
     "category": {
       "type": "string",
-      "enum": ["bug", "feature", "documentation", "question", "security", "other"]
+      "enum": [
+        "bug",
+        "feature",
+        "documentation",
+        "question",
+        "security",
+        "other"
+      ]
     },
     "areas": {
       "type": "array",
@@ -62,29 +69,36 @@
     },
     "comment_id": {
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "string",
           "enum": [
             "ask_repro",
-            "point_security",
             "ask_rfc_fields",
-            "note_duplicate",
             "pr_needs_rfc",
             "pr_needs_tests",
-            "pr_needs_rework"
+            "pr_needs_rework",
+            "ask_info"
           ]
         }
       ]
     },
     "duplicate_issue_numbers": {
       "type": "array",
-      "items": { "type": "integer", "minimum": 1 },
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
       "maxItems": 5
     },
     "missing_fields": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 80 },
+      "items": {
+        "type": "string",
+        "maxLength": 80
+      },
       "maxItems": 10
     }
   }

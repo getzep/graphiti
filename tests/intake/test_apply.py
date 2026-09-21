@@ -91,17 +91,19 @@ def test_large_feature_missing_design_asks_rfc_fields():
     assert apply.STICKY_MARKER in result.comment
 
 
-def test_public_security_misfile_points_to_private_reporting():
+def test_ask_info_lists_missing_fields_without_bug_specific_copy():
     result = apply_payload(
-        category='security',
+        category='question',
         areas=['scope:core'],
-        labels=['security'],
-        comment_id='point_security',
+        labels=['question', 'needs-info'],
+        comment_id='ask_info',
+        missing_fields=['goal', 'attempted'],
     )
-    assert result.labels == ('security', 'scope:core')
+    assert 'needs-info' in result.labels
     assert result.comment is not None
-    assert 'security/advisories/new' in result.comment
-    assert 'exploit' in result.comment.lower() or 'private' in result.comment.lower()
+    assert apply.STICKY_MARKER in result.comment
+    assert 'what you are trying to accomplish' in result.comment
+    assert 'what you tried and what happened' in result.comment
 
 
 def test_enhancement_alias_becomes_feature():
@@ -265,18 +267,6 @@ def test_extra_issue_body_field_is_ignored():
     assert result.comment is not None
     assert 'ghp_' not in result.comment
     assert 'ignore all instructions' not in result.comment
-
-
-def test_duplicate_comment_uses_allowlisted_issue_links():
-    result = apply_payload(
-        comment_id='note_duplicate',
-        labels=['duplicate'],
-        duplicate_issue_numbers=[42, 99],
-    )
-    assert 'duplicate' in result.labels
-    assert result.comment is not None
-    assert 'https://github.com/getzep/graphiti/issues/42' in result.comment
-    assert 'https://github.com/getzep/graphiti/issues/99' in result.comment
 
 
 def test_non_allowlisted_urls_in_substitutions_are_stripped():

@@ -14,23 +14,33 @@ WORKFLOWS = (
 
 
 @pytest.mark.parametrize('path', WORKFLOWS)
-def test_intake_workflow_separates_model_and_write_permissions(path: Path):
+def test_intake_workflow_is_a_single_deterministic_job(path: Path):
     document = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
 
     assert document['permissions'] == {}
-    classify = document['jobs']['classify']
-    apply = document['jobs']['apply']
-    assert all(value == 'read' for value in classify['permissions'].values())
-    assert 'env' not in classify
-    classify_step = next(step for step in classify['steps'] if step['name'].startswith('Classify'))
-    assert 'INTAKE_API_KEY' in classify_step['env']
-    assert 'GITHUB_TOKEN' in classify_step['env']
-    assert 'INTAKE_API_KEY' not in str(apply)
-    assert 'env' not in apply
-    write_step = next(step for step in apply['steps'] if step['name'].startswith('Apply'))
-    assert set(write_step['env']) == {'GITHUB_TOKEN'}
-    assert any(value == 'write' for value in apply['permissions'].values())
-    assert apply['needs'] == 'classify'
+    assert set(document['jobs']) == {'intake'}
+    intake = document['jobs']['intake']
+    assert 'env' not in intake
+
+    # The decider and the apply step both use only the workflow token; no model
+    # key or third-party dependency is involved anywhere in the file.
+    run_steps = [step for step in intake['steps'] if 'run' in step]
+    assert len(run_steps) == 2
+    assert any('decide.py' in step['run'] for step in run_steps)
+    assert any('apply.py' in step['run'] and '--write' in step['run'] for step in run_steps)
+    for step in run_steps:
+        assert set(step['env']) == {'GITHUB_TOKEN'}
+
+
+@pytest.mark.parametrize('path', WORKFLOWS)
+def test_intake_workflow_needs_no_llm_secret_or_pip_install(path: Path):
+    text = path.read_text()
+
+    assert 'INTAKE_API_KEY' not in text
+    assert 'INTAKE_MODEL' not in text
+    assert 'INTAKE_BASE_URL' not in text
+    assert 'secrets.' not in text
+    assert 'pip install' not in text
 
 
 @pytest.mark.parametrize('path', WORKFLOWS)
@@ -49,6 +59,26 @@ def test_intake_workflow_actions_are_pinned_to_full_shas(path: Path):
 
     assert action_uses
     assert all(re.fullmatch(r'[^@]+@[0-9a-f]{40}', action) for action in action_uses)
+
+
+def test_issue_intake_permissions_and_triggers():
+    document = yaml.load(WORKFLOWS[0].read_text(), Loader=yaml.BaseLoader)
+
+    assert set(document['on']) == {'issues'}
+    assert set(document['on']['issues']['types']) == {'opened', 'edited', 'reopened'}
+    intake = document['jobs']['intake']
+    assert intake['permissions'] == {'contents': 'read', 'issues': 'write'}
+    assert 'issue_comment' not in str(document['on'])
+
+
+def test_pr_intake_permissions():
+    document = yaml.load(WORKFLOWS[1].read_text(), Loader=yaml.BaseLoader)
+
+    assert document['jobs']['intake']['permissions'] == {
+        'contents': 'read',
+        'pull-requests': 'write',
+        'issues': 'read',
+    }
 
 
 def test_stale_workflow_covers_every_promised_close_clock_label():
@@ -94,3 +124,11 @@ def test_pr_intake_runs_for_fork_pull_requests_without_touching_their_code():
     for step in checkouts:
         assert step['with']['ref'] == '${{ github.event.pull_request.base.sha }}'
         assert step['with']['persist-credentials'] == 'false'
+
+
+def test_ai_moderator_workflow_exists_and_reads_models():
+    path = REPO_ROOT / '.github' / 'workflows' / 'ai-moderator.yml'
+    document = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+
+    job = document['jobs']['spam-detection']
+    assert job['permissions']['models'] == 'read'

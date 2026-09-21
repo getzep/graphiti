@@ -1,11 +1,12 @@
 # Issue / PR intake automation
 
-A classify-then-apply bot that triages issues and pull requests. A read-only
-`classify` step asks an LLM for a structured decision; a separate write-scoped
-`apply` step turns that decision into allowlisted labels and one templated
-"sticky" comment. The model has no tools and no write token, and `apply.py`
-re-validates every decision, so a prompt-injected model can at worst produce a
-wrong-but-valid decision — never an arbitrary write.
+A fully deterministic triage bot for issues and pull requests. `decide.py`
+fetches the item through the GitHub API and computes a decision from objective
+facts only — the issue-form sections, the labels the forms apply, the changed
+file paths, and the `Fixes #<number>` references in the body. `apply.py` turns
+that decision into allowlisted labels and one templated "sticky" comment. No
+LLM is involved and no API key secret is needed: both scripts run on the
+standard `GITHUB_TOKEN` and the Python standard library alone.
 
 ## One-time setup
 
@@ -16,52 +17,82 @@ wrong-but-valid decision — never an arbitrary write.
    bash .github/scripts/setup-triage-labels.sh
    ```
 
-2. **Add the LLM API key** as a repository secret:
-
-   - `INTAKE_API_KEY` — a key for your OpenAI-API-compatible endpoint.
-
-3. **(Optional) repository variables** to tune behavior without editing code:
+2. **(Optional) repository variable** to disable intake without editing code:
 
    | Variable | Default | Purpose |
    |----------|---------|---------|
-   | `INTAKE_MODEL` | `gpt-4.1-mini` | Model id for the endpoint. |
-   | `INTAKE_BASE_URL` | unset (OpenAI SDK default) | Point at any OpenAI-API-compatible endpoint. |
    | `INTAKE_ENABLED` | unset (enabled) | Set to `false` to disable all intake + stale workflows (kill switch). |
 
 ## How it runs
 
-- **`.github/workflows/issue-intake.yml`** — on issue open/edit/reopen, and on
-  new comments while an issue carries `needs-info`.
+- **`.github/workflows/issue-intake.yml`** — on issue open/edit/reopen. One
+  job: `decide.py --kind issue` then `apply.py --write`.
 - **`.github/workflows/pr-intake.yml`** — on PR open/sync/reopen/edit, for
   same-repo and fork branches. It uses `pull_request_target` so the token can
-  label fork PRs, and it checks out the base-branch scripts (never the PR's)
-  and reads the PR through the API, so it never runs PR-authored code.
+  label fork PRs, checks out the base-branch scripts (never the PR's), and
+  reads the PR through the API, so it never runs PR-authored code.
+- **`.github/workflows/ai-moderator.yml`** — spam and AI-generated-content
+  detection for new issues and comments (the `github/ai-moderator` action).
 - **`.github/workflows/stale.yml`** — daily; warns then closes items that keep
   any `needs-*` label (`needs-info`, `needs-issue`, `needs-rfc`, `needs-tests`,
   `needs-rework`) for 14 days. `rfc-approved` and `security` items are exempt.
 
-Provider/model swap = change `INTAKE_MODEL` / `INTAKE_BASE_URL`. Because
-`apply.py` is the validation gate, structured-output strictness varies by model
-without weakening safety — but verify a new model returns schema-valid JSON.
+Trusted authors (`OWNER`/`MEMBER` author association) and draft pull requests
+are skipped: `decide.py` writes the empty decision `{}`, which `apply.py`
+treats as a clean no-op.
 
-## What is deterministic vs. model-decided
+## Issue rules
 
-Objective facts are computed in code, not left to the model:
+The issue forms (`.github/ISSUE_TEMPLATE/*.yml`) render into `### <Label>`
+sections in the body. A section counts as missing when it is absent, blank, or
+`_No response_`.
 
-- **PR scope** (`scope:*`) is derived from the changed file paths.
-- **`needs-issue`** is applied to any PR with no linked issue.
+- **`category`**: the first of `bug`, `feature`, `documentation`, `question`
+  already on the issue (the form sets it), else `other`.
+- **`areas`**: from the `Affected component` (or `Component`) dropdown —
+  `graphiti-core` → `scope:core`, `MCP server` → `scope:mcp`, `REST server` →
+  `scope:service`, `Documentation or examples` → `scope:docs`,
+  `CI, Docker, or release` → `scope:ci`. Other values and a missing section
+  give no scope; a `documentation` issue with no scope defaults to
+  `scope:docs`.
+- **Required sections** (missing ones produce `needs-info` and land in
+  `missing_fields`):
 
-The model only makes the genuinely fuzzy calls (category, duplicate, whether a
-repro is present, whether a large change needs an RFC).
+  | Category | Required |
+  |----------|----------|
+  | bug | description, reproduction, expected, actual, environment |
+  | feature | problem, outcome |
+  | question | goal, attempted, environment |
+  | documentation | location, problem |
+
+- **`needs-rfc`**: a feature whose `Size` is `Large feature requiring design
+  approval` gets `needs-rfc` unless the issue already has `rfc-approved`, and
+  `proposal`/`alternatives`/`impact` become required as well.
+- **`comment_id`**: `ask_rfc_fields` when `needs-rfc`; `ask_repro` for a bug
+  missing fields; `ask_info` for anything else missing fields; else none.
+
+## Pull request rules
+
+- **`areas`**: derived from the changed file paths (see `PATH_SCOPE_RULES`).
+- **`needs-issue`**: no linked issue (`Fixes #<number>`) → `needs-issue` and
+  the `linked-issue` missing field. A number that 404s or resolves to a pull
+  request does not count.
+- **`category`**: `feature`/`bug`/`documentation` when a linked issue carries
+  that label, else `feature` when the template's Feature checkbox is ticked,
+  else `other`.
+- **`needs-rfc`**: a feature PR whose linked issue lacks `rfc-approved`.
+- **`needs-tests`**: the diff touches code but no test file, and the
+  `Tests are not applicable` checkbox is not ticked.
+- **`needs-rework`**: `needs-issue` and `needs-tests` together.
+- **`comment_id`**: `pr_needs_rework` > `pr_needs_rfc` > `pr_needs_tests`.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `classify.py` | Read-only: fetch item, redact secrets, call the LLM, write a decision. Needs `requirements.txt` (openai). |
+| `decide.py` | Read-only: fetch item, compute the deterministic decision, write JSON. Stdlib only. |
 | `apply.py` | Deterministic: validate the decision, apply allowlisted labels + one templated sticky comment. Stdlib only. |
 | `decision.schema.json` | The decision contract and the **single source of truth** for the label taxonomy (apply.py derives its allowlist from it). |
-| `prompts/*.md` | Trusted classification instructions (sent as the system role). |
 | `templates/*.md` | The only text the bot can post; substitutions come from closed sets. |
 
 Tests: `tests/intake/` (run by `unit_tests.yml`). The workflow guard tests in
