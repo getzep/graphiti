@@ -33,8 +33,9 @@ wrong-but-valid decision — never an arbitrary write.
 - **`.github/workflows/issue-intake.yml`** — on issue open/edit/reopen, and on
   new comments while an issue carries `needs-info`.
 - **`.github/workflows/pr-intake.yml`** — on PR open/sync/reopen/edit, for
-  same-repo branches only. It checks out the base-branch scripts (not the PR's),
-  so it never runs PR-authored code with the token.
+  same-repo and fork branches. It uses `pull_request_target` so the token can
+  label fork PRs, and it checks out the base-branch scripts (never the PR's)
+  and reads the PR through the API, so it never runs PR-authored code.
 - **`.github/workflows/stale.yml`** — daily; warns then closes items that keep
   any `needs-*` label (`needs-info`, `needs-issue`, `needs-rfc`, `needs-tests`,
   `needs-rework`) for 14 days. `rfc-approved` and `security` items are exempt.

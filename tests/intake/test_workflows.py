@@ -71,7 +71,26 @@ def test_stale_workflow_covers_every_promised_close_clock_label():
     assert set(step['exempt-pr-labels'].split(',')) == {'rfc-approved', 'security'}
 
 
-def test_pr_intake_does_not_use_pull_request_target():
+def test_pr_intake_runs_for_fork_pull_requests_without_touching_their_code():
+    # pull_request_target is what lets the bot label fork pull requests. It is
+    # safe only while every checkout pins the base branch and nothing reads the
+    # pull request head, so those two facts are locked down together.
     text = WORKFLOWS[1].read_text()
+    document = yaml.load(text, Loader=yaml.BaseLoader)
 
-    assert 'pull_request_target' not in yaml.load(text, Loader=yaml.BaseLoader)['on']
+    assert 'pull_request_target' in document['on']
+    assert 'pull_request' not in document['on']
+    assert 'head.repo.full_name' not in text
+    assert 'github.event.pull_request.head' not in text
+    assert 'github.head_ref' not in text
+
+    checkouts = [
+        step
+        for job in document['jobs'].values()
+        for step in job['steps']
+        if step.get('uses', '').startswith('actions/checkout@')
+    ]
+    assert checkouts
+    for step in checkouts:
+        assert step['with']['ref'] == '${{ github.event.pull_request.base.sha }}'
+        assert step['with']['persist-credentials'] == 'false'

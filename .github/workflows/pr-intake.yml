@@ -1,7 +1,11 @@
 name: Pull request intake
 
+# pull_request_target runs this workflow file and the scripts from the base
+# branch with a token that can label fork pull requests. That is safe only
+# because no job checks out or executes pull request code: both jobs check out
+# `base.sha`, and the intake scripts read the pull request through the API.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions: {}
@@ -12,11 +16,9 @@ concurrency:
 
 jobs:
   classify:
-    # pull_request deliberately does not expose secrets to fork PRs. Do not
-    # switch this to pull_request_target or check out untrusted PR code.
-    if: >-
-      vars.INTAKE_ENABLED != 'false' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+    # Never check out the pull request head in this job: it holds the LLM key
+    # and runs with base-branch trust.
+    if: vars.INTAKE_ENABLED != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
