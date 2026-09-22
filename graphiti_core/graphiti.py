@@ -1242,13 +1242,21 @@ class Graphiti:
                 communities = []
                 community_edges = []
                 if update_communities:
-                    communities, community_edges = await semaphore_gather(
+                    # update_community returns (community_nodes, community_edges),
+                    # so gather produces one such pair per affected node. Flatten
+                    # the pairs; unpacking them directly either raises
+                    # (node count != 2) or silently binds mismatched tuples.
+                    community_results = await semaphore_gather(
                         *[
                             update_community(driver, clients.llm_client, clients.embedder, node)
                             for node in nodes
                         ],
                         max_coroutines=self.max_coroutines,
                     )
+                    communities = [
+                        community for result in community_results for community in result[0]
+                    ]
+                    community_edges = [edge for result in community_results for edge in result[1]]
 
                 end = time()
 
