@@ -92,6 +92,17 @@ class TestFalkorDriver:
         self.mock_client.select_graph.assert_called_once_with('default_db')
         assert result is mock_graph
 
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_get_graph_with_empty_name_defaults_to_default_database(self):
+        """Test _get_graph with an empty name defaults to default_db."""
+        mock_graph = MagicMock()
+        self.mock_client.select_graph.return_value = mock_graph
+
+        result = self.driver._get_graph('')
+
+        self.mock_client.select_graph.assert_called_once_with('default_db')
+        assert result is mock_graph
+
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     async def test_execute_query_success(self):
@@ -235,6 +246,50 @@ class TestFalkorDriver:
             await self.driver.delete_all_indexes()
 
             mock_execute.assert_called_once_with('CALL db.indexes()')
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_with_empty_database_falls_back_to_current_database(self):
+        """Test clone with an empty database falls back to the current database."""
+        cloned = self.driver.clone('')
+
+        assert cloned is self.driver
+        assert cloned._database == self.driver._database
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_clone_with_empty_database_never_selects_empty_graph(self):
+        """Test that a query on a clone('') driver never calls select_graph('')."""
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+        mock_result.header = []
+        mock_result.result_set = []
+        mock_graph.query = AsyncMock(return_value=mock_result)
+        self.mock_client.select_graph.return_value = mock_graph
+
+        cloned = self.driver.clone('')
+        await cloned.execute_query('MATCH (n) RETURN n')
+
+        self.mock_client.select_graph.assert_called_once_with('default_db')
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_with_database_creates_new_driver(self):
+        """Test clone with a specific database creates a new driver on that database."""
+        cloned = self.driver.clone('group')
+
+        assert cloned is not self.driver
+        assert isinstance(cloned, FalkorDriver)
+        assert cloned.client is self.mock_client
+        assert cloned._database == 'group'
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_with_default_group_id_uses_default_database(self):
+        """Test clone with the default group id creates a new driver on the default database."""
+        cloned = self.driver.clone(self.driver.default_group_id)
+
+        assert cloned is not self.driver
+        assert isinstance(cloned, FalkorDriver)
+        assert cloned.client is self.mock_client
+        assert cloned._database == 'default_db'
 
 
 class TestFalkorDriverSession:
