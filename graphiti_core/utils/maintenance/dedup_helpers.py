@@ -261,7 +261,12 @@ def _resolve_with_similarity(
 
         best_candidate: EntityNode | None = None
         best_score = 0.0
-        for candidate_id in candidate_ids:
+        # `candidate_ids` is a set, so its iteration order is not stable across processes.
+        # Iterating in sorted uuid order makes the choice deterministic: without it, two
+        # candidates sharing the same top Jaccard score would resolve to whichever the set
+        # happened to yield first -- a PYTHONHASHSEED-dependent, non-reproducible merge. Sorted
+        # order combined with the strict `>` keeps the lowest uuid among equally scored candidates.
+        for candidate_id in sorted(candidate_ids):
             candidate_shingles = indexes.shingles_by_candidate.get(candidate_id, set())
             score = _jaccard_similarity(shingles, candidate_shingles)
             if score > best_score:
