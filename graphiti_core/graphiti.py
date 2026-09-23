@@ -1268,9 +1268,7 @@ class Graphiti:
                         ],
                         max_coroutines=self.max_coroutines,
                     )
-                    communities, community_edges = _flatten_community_results(
-                        community_results
-                    )
+                    communities, community_edges = _flatten_community_results(community_results)
 
                 end = time()
 
