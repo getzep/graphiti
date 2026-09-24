@@ -35,7 +35,9 @@ class NodeDuplicate(BaseModel):
 
 
 class NodeResolutions(BaseModel):
-    entity_resolutions: list[NodeDuplicate] = Field(..., description='List of resolved nodes')
+    entity_resolutions: list[NodeDuplicate] = Field(
+        default_factory=list, description='List of resolved nodes'
+    )
 
 
 class Prompt(Protocol):
