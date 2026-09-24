@@ -90,18 +90,29 @@ async def get_community_clusters(
     return community_clusters
 
 
+MAX_LABEL_PROPAGATION_ITERATIONS = 100
+
+
 def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
     # Implement the label propagation community detection algorithm.
     # 1. Start with each node being assigned its own community
     # 2. Each node will take on the community of the plurality of its neighbors
     # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
+    # 4. Continue until no communities change during propagation, or a max
+    #    iteration count is reached.
+    #
+    # Updates are applied in place (asynchronous propagation) rather than via a
+    # separate snapshot swapped in at the end of each pass. Batching all updates
+    # together lets two nodes trade labels back and forth in lockstep on some
+    # graph shapes (e.g. several small components with degree-1 nodes),
+    # oscillating forever instead of converging; applying updates as they're
+    # computed breaks that symmetry. The iteration cap is a backstop in case a
+    # graph shape still oscillates despite that.
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
+    for _ in range(MAX_LABEL_PROPAGATION_ITERATIONS):
         no_change = True
-        new_community_map: dict[str, int] = {}
 
         for uuid, neighbors in projection.items():
             curr_community = community_map[uuid]
@@ -120,15 +131,12 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             else:
                 new_community = max(community_candidate, curr_community)
 
-            new_community_map[uuid] = new_community
-
             if new_community != curr_community:
+                community_map[uuid] = new_community
                 no_change = False
 
         if no_change:
             break
-
-        community_map = new_community_map
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():
