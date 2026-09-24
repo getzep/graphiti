@@ -44,7 +44,12 @@ from services.factories import (
     LLMClientFactory,
 )
 from services.queue_service import QueueService
-from utils.formatting import format_fact_result, to_edge_result, to_node_result
+from utils.formatting import (
+    format_fact_result,
+    is_invalidated,
+    to_edge_result,
+    to_node_result,
+)
 from utils.type_config import (
     build_edge_type_map,
     build_edge_types,
@@ -548,8 +553,10 @@ async def search_nodes(
             NODE_HYBRID_SEARCH_RRF,
         )
 
-        node_config = (
-            NODE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else NODE_HYBRID_SEARCH_RRF
+        node_config, ranker = (
+            (NODE_HYBRID_SEARCH_NODE_DISTANCE, 'node_distance')
+            if center_node_uuid
+            else (NODE_HYBRID_SEARCH_RRF, 'rrf')
         )
         results = await client.search_(
             query=query,
@@ -563,12 +570,19 @@ async def search_nodes(
         nodes = results.nodes[:max_nodes] if results.nodes else []
 
         if not nodes:
-            return NodeSearchResponse(message='No relevant nodes found', nodes=[])
+            return NodeSearchResponse(message='No relevant nodes found', nodes=[], ranker=ranker)
 
-        # Format the results (embeddings stripped by to_node_result)
-        node_results = [to_node_result(node) for node in nodes]
+        # Format the results (embeddings stripped by to_node_result). Scores are
+        # positional and can be shorter than nodes if a reranker returns fewer.
+        scores = results.node_reranker_scores[:max_nodes]
+        node_results = [
+            to_node_result(node, scores[i] if i < len(scores) else None)
+            for i, node in enumerate(nodes)
+        ]
 
-        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
+        return NodeSearchResponse(
+            message='Nodes retrieved successfully', nodes=node_results, ranker=ranker
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching nodes: {error_msg}')
@@ -586,6 +600,7 @@ async def search_memory_facts(
     valid_at_before: str | None = None,
     invalid_at_after: str | None = None,
     invalid_at_before: str | None = None,
+    exclude_invalidated: bool = False,
 ) -> FactSearchResponse | ErrorResponse:
     """Search the graph memory for relevant facts (entity edges).
 
@@ -601,6 +616,17 @@ async def search_memory_facts(
         valid_at_before: Optional ISO-8601 upper bound on a fact's valid_at
         invalid_at_after: Optional ISO-8601 lower bound on a fact's invalid_at
         invalid_at_before: Optional ISO-8601 upper bound on a fact's invalid_at
+        exclude_invalidated: Drop superseded facts (those carrying invalid_at or
+            expired_at) from the results. Off by default: Graphiti is bi-temporal,
+            and a superseded fact is often exactly what the caller wants to see.
+            Turning it on filters the ranked window rather than re-ranking without
+            them, so the response can hold fewer than max_facts facts;
+            `suppressed_invalidated` reports how many were dropped.
+
+    Returns:
+        The facts, the name of the reranker that ordered them (`ranker`), and
+        `suppressed_invalidated` — the number of superseded facts dropped from the
+        window, which is 0 unless `exclude_invalidated` is set.
     """
     global graphiti_service
 
@@ -636,19 +662,63 @@ async def search_memory_facts(
             else []
         )
 
-        relevant_edges = await client.search(
-            group_ids=effective_group_ids,
-            query=query,
-            num_results=max_facts,
-            center_node_uuid=center_node_uuid,
-            search_filter=search_filter,
+        from graphiti_core.search.search_config_recipes import (
+            EDGE_HYBRID_SEARCH_NODE_DISTANCE,
+            EDGE_HYBRID_SEARCH_RRF,
         )
 
-        if not relevant_edges:
-            return FactSearchResponse(message='No relevant facts found', facts=[])
+        # Mirrors Graphiti.search()'s recipe choice, but goes through search_() so the
+        # reranker scores come back with the edges. model_copy is deliberate: the
+        # recipes are module-level singletons and Graphiti.search() sets .limit on the
+        # shared object, which leaks the last caller's limit into concurrent searches.
+        edge_config, ranker = (
+            (EDGE_HYBRID_SEARCH_NODE_DISTANCE, 'node_distance')
+            if center_node_uuid
+            else (EDGE_HYBRID_SEARCH_RRF, 'rrf')
+        )
+        edge_config = edge_config.model_copy(deep=True, update={'limit': max_facts})
 
-        facts = [format_fact_result(edge) for edge in relevant_edges]
-        return FactSearchResponse(message='Facts retrieved successfully', facts=facts)
+        results = await client.search_(
+            query=query,
+            config=edge_config,
+            group_ids=effective_group_ids,
+            center_node_uuid=center_node_uuid,
+            search_filter=search_filter if search_filter is not None else SearchFilters(),
+        )
+
+        relevant_edges = results.edges[:max_facts]
+        # Scores are positional and can be shorter than the edges if a reranker
+        # returns fewer; pair them up rather than assuming equal length.
+        scores = results.edge_reranker_scores[:max_facts]
+        scored = [
+            (edge, scores[i] if i < len(scores) else None) for i, edge in enumerate(relevant_edges)
+        ]
+
+        kept = [pair for pair in scored if not (exclude_invalidated and is_invalidated(pair[0]))]
+        suppressed_invalidated = len(scored) - len(kept)
+
+        if not kept:
+            # Distinguish "nothing matched" from "everything that matched was superseded",
+            # so a caller that filtered does not read an empty result as absence of memory.
+            message = (
+                f'No current facts found; {suppressed_invalidated} superseded fact(s) suppressed'
+                if suppressed_invalidated
+                else 'No relevant facts found'
+            )
+            return FactSearchResponse(
+                message=message,
+                facts=[],
+                ranker=ranker,
+                suppressed_invalidated=suppressed_invalidated,
+            )
+
+        facts = [format_fact_result(edge, score) for edge, score in kept]
+        return FactSearchResponse(
+            message='Facts retrieved successfully',
+            facts=facts,
+            ranker=ranker,
+            suppressed_invalidated=suppressed_invalidated,
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching facts: {error_msg}')
