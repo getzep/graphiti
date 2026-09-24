@@ -31,7 +31,7 @@ from graphiti_core.driver.driver import (
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import normalize_l2, semaphore_gather
+from graphiti_core.helpers import normalize_l2, semaphore_gather, validate_group_id
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
     get_episodic_edge_save_bulk_query,
@@ -157,6 +157,12 @@ async def add_nodes_and_edges_bulk_tx(
     embedder: EmbedderClient,
     driver: GraphDriver,
 ):
+    # Validate group_ids on write only. Hydration from the DB stays tolerant of any
+    # stored value, so the bulk persistence boundary re-validates here (the per-object
+    # save() methods are bypassed on this path).
+    for element in (*episodic_nodes, *episodic_edges, *entity_nodes, *entity_edges):
+        validate_group_id(element.group_id)
+
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
