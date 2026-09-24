@@ -68,6 +68,21 @@ def _semantic_candidates(candidate_groups: list[list[EntityNode]]):
     return fake_search
 
 
+@pytest.fixture(autouse=True)
+def _default_fulltext_search(monkeypatch):
+    """Default the fulltext candidate pass to empty so tests that only stub the
+    semantic search keep exercising the semantic path. Individual tests override
+    this to assert the fulltext pass surfaces below-cosine exact-name matches."""
+
+    async def _empty(_clients, extracted_nodes):
+        return [[] for _ in extracted_nodes]
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._fulltext_candidate_search',
+        _empty,
+    )
+
+
 @pytest.mark.asyncio
 async def test_resolve_nodes_exact_match_skips_llm(monkeypatch):
     clients, llm_generate = _make_clients()
@@ -224,6 +239,70 @@ async def test_collect_candidate_nodes_dedupes_and_merges_override(monkeypatch):
     assert len(result[0]) == 1
     assert result[0][0].uuid == candidate.uuid
     semantic_search_mock.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_collect_candidate_nodes_merges_fulltext_below_cosine(monkeypatch):
+    """The fulltext pass contributes candidates the semantic pass misses."""
+    clients, _ = _make_clients()
+
+    fulltext_only = EntityNode(name='DGIA', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='DGIA', group_id='group', labels=['Entity'])
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        AsyncMock(return_value=[[]]),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._fulltext_candidate_search',
+        AsyncMock(return_value=[[fulltext_only]]),
+    )
+
+    result = await _collect_candidate_nodes(
+        clients,
+        [extracted],
+        existing_nodes_override=None,
+    )
+
+    assert len(result) == 1
+    assert [n.uuid for n in result[0]] == [fulltext_only.uuid]
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_fulltext_catches_below_cosine_exact_match(monkeypatch):
+    """Exact-name duplicates whose embeddings fall below NODE_DEDUP_COSINE_MIN_SCORE
+    must still be resolved via the fulltext candidate pass (regression for short
+    acronyms accumulating duplicate nodes)."""
+    clients, llm_generate = _make_clients()
+
+    candidate = EntityNode(name='DGIA', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='DGIA', group_id='group', labels=['Entity'])
+
+    # Semantic search misses it: the name embedding scores below the cosine gate.
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[]]),
+    )
+
+    # Fulltext surfaces the exact-name node regardless of embedding distance.
+    async def _fulltext(_clients, extracted_nodes):
+        return [[candidate] for _ in extracted_nodes]
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._fulltext_candidate_search',
+        _fulltext,
+    )
+
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    assert resolved[0].uuid == candidate.uuid
+    assert uuid_map[extracted.uuid] == candidate.uuid
+    llm_generate.assert_not_awaited()
 
 
 @pytest.mark.asyncio

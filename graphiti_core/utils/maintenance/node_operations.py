@@ -40,7 +40,7 @@ from graphiti_core.prompts.extract_nodes import (
     SummarizedEntities,
 )
 from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import node_similarity_search
+from graphiti_core.search.search_utils import node_fulltext_search, node_similarity_search
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.attribute_utils import apply_capped_attributes
 from graphiti_core.utils.maintenance.dedup_helpers import (
@@ -410,9 +410,18 @@ async def _collect_candidate_nodes(
     existing_nodes_override: list[EntityNode] | None,
 ) -> list[list[EntityNode]]:
     """Search per extracted name and return ordered candidates for each extracted node."""
-    search_results = await _semantic_candidate_search(clients, extracted_nodes)
+    semantic_results = await _semantic_candidate_search(clients, extracted_nodes)
+    fulltext_results = await _fulltext_candidate_search(clients, extracted_nodes)
 
-    return [_merge_candidate_nodes(result, existing_nodes_override) for result in search_results]
+    # Semantic hits come first so their cosine ordering is preserved; the fulltext
+    # pass appends exact-name matches whose embeddings fall below
+    # NODE_DEDUP_COSINE_MIN_SCORE and would otherwise never reach the
+    # deterministic exact-match step (e.g. short acronyms). _merge_candidate_nodes
+    # dedupes by uuid, so overlapping hits collapse.
+    return [
+        _merge_candidate_nodes([*semantic, *fulltext], existing_nodes_override)
+        for semantic, fulltext in zip(semantic_results, fulltext_results, strict=True)
+    ]
 
 
 async def _semantic_candidate_search(
@@ -445,6 +454,36 @@ async def _semantic_candidate_search(
                     NODE_DEDUP_COSINE_MIN_SCORE,
                 )
                 for node, query_vector in zip(extracted_nodes, query_vectors, strict=True)
+            ]
+        )
+    )
+
+
+async def _fulltext_candidate_search(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+) -> list[list[EntityNode]]:
+    """Run a BM25 fulltext search per extracted name.
+
+    Embedding similarity alone misses exact-name duplicates whose vectors score
+    below NODE_DEDUP_COSINE_MIN_SCORE (short, low-entropy strings such as
+    acronyms are especially prone). A fulltext pass on the name surfaces those
+    candidates so the deterministic exact-match step can merge them.
+    """
+    if not extracted_nodes:
+        return []
+
+    return list(
+        await semaphore_gather(
+            *[
+                node_fulltext_search(
+                    clients.driver,
+                    node.name,
+                    SearchFilters(),
+                    [node.group_id],
+                    NODE_DEDUP_CANDIDATE_LIMIT,
+                )
+                for node in extracted_nodes
             ]
         )
     )
