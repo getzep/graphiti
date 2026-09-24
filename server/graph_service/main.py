@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from graph_service.config import get_settings
 from graph_service.routers import ingest, retrieve
-from graph_service.zep_graphiti import initialize_graphiti
+from graph_service.zep_graphiti import close_graphiti_singleton, initialize_graphiti
 
 
 @asynccontextmanager
@@ -13,8 +13,7 @@ async def lifespan(_: FastAPI):
     settings = get_settings()
     await initialize_graphiti(settings)
     yield
-    # Shutdown
-    # No need to close Graphiti here, as it's handled per-request
+    await close_graphiti_singleton()
 
 
 app = FastAPI(lifespan=lifespan)

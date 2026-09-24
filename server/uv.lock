@@ -283,8 +283,8 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fastapi-cli", marker = "extra == 'dev'", specifier = ">=0.0.5" },
-    { name = "graphiti-core", specifier = ">=0.28.2" },
-    { name = "graphiti-core", extras = ["falkordb"], marker = "extra == 'dev'", specifier = ">=0.28.2" },
+    { name = "graphiti-core", specifier = ">=0.29.3" },
+    { name = "graphiti-core", extras = ["falkordb"], marker = "extra == 'dev'", specifier = ">=0.29.3" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", marker = "extra == 'dev'", specifier = ">=2.8.2" },
     { name = "pydantic-settings", specifier = ">=2.4.0" },
@@ -300,7 +300,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "graphiti-core"
-version = "0.28.2"
+version = "0.29.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "neo4j" },
@@ -311,9 +311,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/62/6d/81b78aec2030bff0030bbabb8b227a6fa3c5fb49fb11e8501e7d0f39f3fe/graphiti_core-0.28.2.tar.gz", hash = "sha256:9b2a72f117827e015a21b610eb2c3acbe05310b79736abef7372e81247578e9d", size = 6846195, upload-time = "2026-03-11T16:20:02.736Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/5b/afc2c564f4bcc247720dad769096184e3c298429ea4302a6ae4635267efc/graphiti_core-0.29.3.tar.gz", hash = "sha256:c3650626c0eb61c1ba2765ce6f08900abe68ec7f984f2e098b4922ebf5e81298", size = 6978366, upload-time = "2026-07-27T20:58:03.161Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/81/cd/e6203f1fee0a8e2a797f2d5f9a867513e0c63af4e19fdd1c5a7e14a47670/graphiti_core-0.28.2-py3-none-any.whl", hash = "sha256:4e1c19b7bc70a73a612a473144ed4b3fe615ac6d4c5d6b10f48e206a858bcb53", size = 314919, upload-time = "2026-03-11T16:20:01.037Z" },
+    { url = "https://files.pythonhosted.org/packages/61/e4/8273941a0e7a1a3ef4350ff810ed6ddd2d907ebdce95cbbcf2484b2c5de7/graphiti_core-0.29.3-py3-none-any.whl", hash = "sha256:0210510e8043b5b4fa57aa038934e849b2e61d31d298200b0074faf7ca793ed5", size = 361487, upload-time = "2026-07-27T20:58:00.971Z" },
 ]
 
 [package.optional-dependencies]

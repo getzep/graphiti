@@ -37,7 +37,7 @@ class GetMemoryRequest(BaseModel):
     group_id: str = Field(..., description='The group id of the memory to get')
     max_facts: int = Field(default=10, description='The maximum number of facts to retrieve')
     center_node_uuid: str | None = Field(
-        ..., description='The uuid of the node to center the retrieval on'
+        default=None, description='The uuid of the node to center the retrieval on'
     )
     messages: list[Message] = Field(
         ..., description='The messages to build the retrieval query from '
