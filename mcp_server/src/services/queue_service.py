@@ -18,6 +18,13 @@ class QueueService:
         self._episode_queues: dict[str, asyncio.Queue] = {}
         # Dictionary to track if a worker is running for each group_id
         self._queue_workers: dict[str, bool] = {}
+        # Strong references to worker tasks to prevent garbage collection.
+        # The event loop only keeps weak references to tasks. Without
+        # anchoring the task somewhere, the GC can collect it mid-execution —
+        # which manifests under streamable-http transport as "queue worker
+        # silently dies".
+        # See https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task
+        self._worker_tasks: dict[str, asyncio.Task] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
 
@@ -40,9 +47,15 @@ class QueueService:
         # Add the episode processing function to the queue
         await self._episode_queues[group_id].put(process_func)
 
-        # Start a worker for this queue if one isn't already running
+        # Start a worker for this queue if one isn't already running.
+        # IMPORTANT: keep a strong reference in self._worker_tasks so the
+        # task is not garbage-collected. This is critical under
+        # streamable-http transport where request lifecycles + GC pressure
+        # can otherwise cause silent task cancellation.
         if not self._queue_workers.get(group_id, False):
-            asyncio.create_task(self._process_episode_queue(group_id))
+            self._worker_tasks[group_id] = asyncio.create_task(
+                self._process_episode_queue(group_id)
+            )
 
         return self._episode_queues[group_id].qsize()
 
@@ -77,6 +90,8 @@ class QueueService:
             logger.error(f'Unexpected error in queue worker for group_id {group_id}: {str(e)}')
         finally:
             self._queue_workers[group_id] = False
+            # Drop the strong reference once the worker exits.
+            self._worker_tasks.pop(group_id, None)
             logger.info(f'Stopped episode queue worker for group_id: {group_id}')
 
     def get_queue_size(self, group_id: str) -> int:
