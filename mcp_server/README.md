@@ -282,7 +282,7 @@ The easiest way to run with Neo4j is using the provided Docker Compose configura
 
 ```bash
 # This starts both Neo4j and the MCP server
-docker compose -f docker/docker-compose.neo4j.yaml up
+docker compose -f docker/docker-compose-neo4j.yml up
 ```
 
 #### Option 2: Direct Execution with Existing Neo4j
@@ -311,7 +311,7 @@ uv run main.py --config config/config-docker-neo4j.yaml
 
 ```bash
 # This starts both FalkorDB (Redis-based) and the MCP server
-docker compose -f docker/docker-compose.falkordb.yaml up
+docker compose -f docker/docker-compose-falkordb.yml up
 ```
 
 #### Option 2: Direct Execution with Existing FalkorDB
@@ -624,7 +624,7 @@ docker compose up
 }
 ```
 
-3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
+3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](docs/cursor_rules.md) for details.
 
 4. Kick off an agent session in Cursor.
 
