@@ -1248,6 +1248,24 @@ async def initialize_server() -> ServerConfig:
     if config.server.port:
         mcp.settings.port = config.server.port
 
+    # FastMCP enables DNS-rebinding protection only for its default loopback
+    # host at construction time; mutating settings.host afterwards leaves that
+    # protection pointed at 127.0.0.1, so a server bound to 0.0.0.0 rejects
+    # every remote client with 421. Mirror the SDK's own semantics: keep the
+    # protection for loopback, disable it when binding a non-loopback host.
+    if config.server.host and config.server.host not in ('127.0.0.1', 'localhost', '::1', '[::1]'):
+        try:
+            from mcp.server.transport.security import TransportSecuritySettings
+
+            mcp.settings.transport_security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=False
+            )
+        except ImportError:
+            logger.warning(
+                'MCP SDK does not expose TransportSecuritySettings; '
+                'remote clients may be rejected by DNS-rebinding protection.'
+            )
+
     # Return MCP configuration for transport
     return config.server
 
