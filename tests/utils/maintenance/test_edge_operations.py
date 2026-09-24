@@ -274,7 +274,7 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
         name='test_edge',
         group_id='group_1',
         fact='User enjoys yoga',
-        episodes=['episode_1'],
+        episodes=['episode_1', episode.uuid],
         created_at=datetime.now(timezone.utc) - timedelta(days=1),
         valid_at=None,
         invalid_at=None,
@@ -328,6 +328,7 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
     # Verify that the resolved edge is one of the duplicates (the first one found)
     # Check UUID since the episode list gets modified
     assert resolved_edge.uuid == related_edge_0.uuid
+    assert resolved_edge.episodes.count(episode.uuid) == 1
     assert episode.uuid in resolved_edge.episodes
 
 
