@@ -69,6 +69,11 @@ from graphiti_core.tracer import NoOpTracer, Tracer
 logger = logging.getLogger(__name__)
 
 
+def _node_passage(node: EntityNode | CommunityNode) -> str:
+    """Text the cross-encoder scores for a node: name plus summary when there is one."""
+    return f'{node.name}: {node.summary}' if node.summary else node.name
+
+
 def _enum_value(value: Any) -> Any:
     return value.value if hasattr(value, 'value') else value
 
@@ -597,23 +602,27 @@ async def node_search(
                         reranker_min_score,
                     )
             elif config.reranker == NodeReranker.cross_encoder:
-                name_to_uuid_map = {node.name: node.uuid for node in list(node_uuid_map.values())}
+                # Score the summary along with the name: the name alone rarely carries the
+                # query's meaning ("who leads the search team?" vs. "Kim Minsu").
+                passage_to_uuid_map = {
+                    _node_passage(node): node.uuid for node in list(node_uuid_map.values())
+                }
 
                 with _trace_phase(
                     search_tracer,
                     'search.node_search.cross_encoder_rank',
-                    {'candidate_count': len(name_to_uuid_map)},
+                    {'candidate_count': len(passage_to_uuid_map)},
                 ):
-                    reranked_node_names = await cross_encoder.rank(
-                        query, list(name_to_uuid_map.keys())
+                    reranked_passages = await cross_encoder.rank(
+                        query, list(passage_to_uuid_map.keys())
                     )
                 reranked_uuids = [
-                    name_to_uuid_map[name]
-                    for name, score in reranked_node_names
+                    passage_to_uuid_map[passage]
+                    for passage, score in reranked_passages
                     if score >= reranker_min_score
                 ]
                 node_scores = [
-                    score for _, score in reranked_node_names if score >= reranker_min_score
+                    score for _, score in reranked_passages if score >= reranker_min_score
                 ]
             elif config.reranker == NodeReranker.episode_mentions:
                 with _trace_phase(
@@ -845,18 +854,20 @@ async def community_search(
                         reranker_min_score,
                     )
             elif config.reranker == CommunityReranker.cross_encoder:
-                name_to_uuid_map = {
-                    node.name: node.uuid for result in search_results for node in result
+                passage_to_uuid_map = {
+                    _node_passage(node): node.uuid for result in search_results for node in result
                 }
                 with _trace_phase(
                     search_tracer,
                     'search.community_search.cross_encoder_rank',
-                    {'candidate_count': len(name_to_uuid_map)},
+                    {'candidate_count': len(passage_to_uuid_map)},
                 ):
-                    reranked_nodes = await cross_encoder.rank(query, list(name_to_uuid_map.keys()))
+                    reranked_nodes = await cross_encoder.rank(
+                        query, list(passage_to_uuid_map.keys())
+                    )
                 reranked_uuids = [
-                    name_to_uuid_map[name]
-                    for name, score in reranked_nodes
+                    passage_to_uuid_map[passage]
+                    for passage, score in reranked_nodes
                     if score >= reranker_min_score
                 ]
                 community_scores = [
