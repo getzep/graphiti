@@ -103,17 +103,22 @@ class OpenAIRerankerClient(CrossEncoderClient):
                 else []
                 for response in responses
             ]
-            scores: list[float] = []
-            for top_logprobs in responses_top_logprobs:
+            results: list[tuple[str, float]] = []
+            for passage, top_logprobs in zip(passages, responses_top_logprobs, strict=True):
                 if len(top_logprobs) == 0:
+                    # No usable logprobs for this passage (e.g. an empty or
+                    # truncated response). Skip it, pairing each passage with its
+                    # own response so the lists can't fall out of sync — the
+                    # previous code collected scores separately and then did
+                    # ``zip(passages, scores, strict=True)``, which raised
+                    # ValueError whenever any response was skipped here.
                     continue
                 norm_logprobs = np.exp(top_logprobs[0].logprob)
                 if top_logprobs[0].token.strip().split(' ')[0].lower() == 'true':
-                    scores.append(norm_logprobs)
+                    results.append((passage, norm_logprobs))
                 else:
-                    scores.append(1 - norm_logprobs)
+                    results.append((passage, 1 - norm_logprobs))
 
-            results = [(passage, score) for passage, score in zip(passages, scores, strict=True)]
             results.sort(reverse=True, key=lambda x: x[1])
             return results
         except openai.RateLimitError as e:
