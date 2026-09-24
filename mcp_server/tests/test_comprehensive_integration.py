@@ -57,8 +57,6 @@ class GraphitiTestClient:
 
         self.client_context = stdio_client(server_params)
         read, write = await self.client_context.__aenter__()
-        # SDK 2.x: the session must be entered so its dispatcher task is running
-        # before initialize() can send requests.
         self.session_context = ClientSession(read, write)
         self.session = await self.session_context.__aenter__()
         await self.session.initialize()
