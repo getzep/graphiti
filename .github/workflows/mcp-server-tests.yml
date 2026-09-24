@@ -63,6 +63,19 @@ jobs:
             if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
             sleep 1
           done
+      - name: Run MCP unit tests
+        working-directory: mcp_server
+        # These need no database, LLM, or network, so they also run on fork PRs
+        # (no secrets). The files are listed explicitly because `tests/` cannot
+        # be collected wholesale: test_cross_encoder_factory.py needs the
+        # `providers` extra (google-genai) and test_stress_load.py imports
+        # test_fixtures by module name, so `uv sync` alone cannot import them.
+        run: |
+          uv run pytest \
+            tests/test_queue_service.py \
+            tests/test_factories.py \
+            tests/test_core_parity.py \
+            -p no:cacheprovider
       - name: Run live MCP integration tests
         working-directory: mcp_server
         env:
