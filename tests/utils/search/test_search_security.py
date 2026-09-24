@@ -35,6 +35,48 @@ def test_node_search_filter_constructor_keeps_valid_label_expression():
     assert filter_params == {}
 
 
+def test_node_search_filter_constructor_falkordb_single_label():
+    # Single-label case worked before the fix too; guards against regressing it.
+    filters = SearchFilters(node_labels=['Capacity'])
+
+    filter_queries, filter_params = node_search_filter_query_constructor(
+        filters, GraphProvider.FALKORDB
+    )
+
+    assert filter_queries == ['any(l IN labels(n) WHERE l IN $labels)']
+    assert filter_params == {'labels': ['Capacity']}
+
+
+def test_node_search_filter_constructor_falkordb_multiple_labels():
+    # Regression test for #1892: FalkorDB's Cypher parser rejects the
+    # Neo4j-style label expression (n:A|B) used for 2+ labels.
+    filters = SearchFilters(node_labels=['Capacity', 'Commitment'])
+
+    filter_queries, filter_params = node_search_filter_query_constructor(
+        filters, GraphProvider.FALKORDB
+    )
+
+    assert filter_queries == ['any(l IN labels(n) WHERE l IN $labels)']
+    assert filter_params == {'labels': ['Capacity', 'Commitment']}
+    # Must not contain the Neo4j-only label-expression syntax that FalkorDB rejects.
+    assert '|' not in filter_queries[0]
+
+
+def test_edge_search_filter_constructor_falkordb_multiple_labels():
+    # Regression test for #1892 on the edge (n/m) variant.
+    filters = SearchFilters(node_labels=['Capacity', 'Commitment'])
+
+    filter_queries, filter_params = edge_search_filter_query_constructor(
+        filters, GraphProvider.FALKORDB
+    )
+
+    assert filter_queries == [
+        'any(l IN labels(n) WHERE l IN $labels) AND any(l IN labels(m) WHERE l IN $labels)'
+    ]
+    assert filter_params == {'labels': ['Capacity', 'Commitment']}
+    assert '|' not in filter_queries[0]
+
+
 def test_node_search_filter_constructor_rejects_unsafe_labels_bypassing_pydantic():
     filters = SearchFilters.model_construct(node_labels=['Entity`) DETACH DELETE x //'])
 
