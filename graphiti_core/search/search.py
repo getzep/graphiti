@@ -394,7 +394,12 @@ async def edge_search(
                     )
             elif config.reranker == EdgeReranker.cross_encoder:
                 search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
-                rrf_result_uuids, _ = rrf(search_result_uuids, min_score=reranker_min_score)
+                # Seed RRF only orders the candidate pool: its scores live on a
+                # 1/(rank+1) scale, so prefiltering with reranker_min_score here
+                # would drop almost every candidate before the cross-encoder
+                # ever sees them. The threshold is applied to the
+                # cross-encoder scores below.
+                rrf_result_uuids, _ = rrf(search_result_uuids)
                 rrf_edges = [edge_uuid_map[uuid] for uuid in rrf_result_uuids][: 2 * limit]
                 fact_to_uuid_map = {edge.fact: edge.uuid for edge in rrf_edges}
                 with _trace_phase(
@@ -725,9 +730,11 @@ async def episode_search(
                     'search.episode_search.seed_rrf',
                     {'result_set_count': len(search_results)},
                 ):
-                    rrf_result_uuids, episode_scores = rrf(
-                        search_result_uuids, min_score=reranker_min_score
-                    )
+                    # Seed RRF only orders the candidate pool — applying
+                    # reranker_min_score here prefilters on the 1/(rank+1) RRF
+                    # scale and starves the cross-encoder. The threshold is
+                    # applied to the cross-encoder scores below.
+                    rrf_result_uuids, episode_scores = rrf(search_result_uuids)
                 rrf_results = [episode_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
 
                 content_to_uuid_map = {episode.content: episode.uuid for episode in rrf_results}
