@@ -285,8 +285,21 @@ class AnthropicClient(LLMClient):
         try:
             # Create the appropriate tool based on whether response_model is provided
             tools, tool_choice = self._create_tool(response_model)
+            # Mark the system prompt as an ephemeral prompt-cache breakpoint.
+            # The system prompt (and the tool definitions, which are rendered
+            # before it) is large and identical across the many extraction calls
+            # a single run makes, so caching it lets repeat calls read the prefix
+            # at the cache-read rate instead of paying full input price every time.
+            # A bare string requests no cache; the block form below does.
+            system_blocks: list[anthropic.types.TextBlockParam] = [
+                {
+                    'type': 'text',
+                    'text': system_message.content,
+                    'cache_control': {'type': 'ephemeral'},
+                }
+            ]
             result = await self.client.messages.create(
-                system=system_message.content,
+                system=system_blocks,
                 max_tokens=max_creation_tokens,
                 temperature=self.temperature,
                 messages=user_messages_cast,
