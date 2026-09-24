@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
+from typing import Any
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types import EmbeddingModel
@@ -28,6 +29,16 @@ class OpenAIEmbedderConfig(EmbedderConfig):
     embedding_model: EmbeddingModel | str = DEFAULT_EMBEDDING_MODEL
     api_key: str | None = None
     base_url: str | None = None
+    dimensions: int | None = None
+    """Requested output dimensionality.
+
+    When set, it is forwarded to the OpenAI ``dimensions`` parameter (supported by
+    ``text-embedding-3-*`` models) so the API returns a natively reduced, renormalized
+    vector instead of one that is naively truncated. Leave as ``None`` (the default) for
+    backwards-compatible behavior and for models/endpoints that do not support the
+    parameter (e.g. ``text-embedding-ada-002`` or custom ``base_url`` deployments). When
+    set, prefer matching :attr:`embedding_dim` so downstream storage stays consistent.
+    """
 
 
 class OpenAIEmbedder(EmbedderClient):
@@ -51,16 +62,28 @@ class OpenAIEmbedder(EmbedderClient):
         else:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
+    def _create_kwargs(self, input_data: Any) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            'input': input_data,
+            'model': self.config.embedding_model,
+        }
+        if self.config.dimensions is not None:
+            kwargs['dimensions'] = self.config.dimensions
+        return kwargs
+
+    def _postprocess(self, embedding: list[float]) -> list[float]:
+        # A natively requested ``dimensions`` value already yields a correctly sized,
+        # renormalized vector, so only fall back to truncation when it is not used.
+        if self.config.dimensions is not None:
+            return embedding
+        return embedding[: self.config.embedding_dim]
+
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
-        result = await self.client.embeddings.create(
-            input=input_data, model=self.config.embedding_model
-        )
-        return result.data[0].embedding[: self.config.embedding_dim]
+        result = await self.client.embeddings.create(**self._create_kwargs(input_data))
+        return self._postprocess(result.data[0].embedding)
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
-        result = await self.client.embeddings.create(
-            input=input_data_list, model=self.config.embedding_model
-        )
-        return [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
+        result = await self.client.embeddings.create(**self._create_kwargs(input_data_list))
+        return [self._postprocess(embedding.embedding) for embedding in result.data]
