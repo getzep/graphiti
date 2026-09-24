@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
@@ -771,9 +772,29 @@ async def get_episodes(
         from graphiti_core.nodes import EpisodicNode
 
         if effective_group_ids:
-            episodes = await EpisodicNode.get_by_group_ids(
-                client.driver, effective_group_ids, limit=max_episodes
-            )
+            if client.driver.provider == GraphProvider.FALKORDB and len(effective_group_ids) > 1:
+                episodes = []
+                for group_id in dict.fromkeys(effective_group_ids):
+                    # Match FalkorDriver.clone's default-group mapping without
+                    # constructing drivers that start background index builds.
+                    database = (
+                        'default_db'
+                        if group_id == client.driver.default_group_id
+                        and group_id != client.driver._database
+                        else group_id
+                    )
+                    driver = client.driver.with_database(database)
+                    episodes.extend(
+                        await EpisodicNode.get_by_group_ids(driver, [group_id], limit=max_episodes)
+                    )
+                # Per-graph top K contains every candidate for global top K.
+                # Preserve get_by_group_ids' UUID ordering, not group input order.
+                episodes.sort(key=lambda episode: episode.uuid, reverse=True)
+                episodes = episodes[:max_episodes]
+            else:
+                episodes = await EpisodicNode.get_by_group_ids(
+                    client.driver, effective_group_ids, limit=max_episodes
+                )
         else:
             # If no group IDs, we need to use a different approach
             # For now, return empty list when no group IDs specified
