@@ -82,6 +82,32 @@ class ServerConfig(BaseModel):
     )
     host: str = Field(default='0.0.0.0', description='Server host')
     port: int = Field(default=8000, description='Server port')
+    allowed_hosts: list[str] = Field(
+        default_factory=list,
+        description=(
+            'Additional Host header values accepted by the MCP transport '
+            'DNS-rebinding protection, on top of the localhost defaults — e.g. the '
+            'public hostname when running behind a reverse proxy. Wildcards such as '
+            '"memory.example.com" or "*.example.com:*" are supported. Ignored when '
+            'disable_transport_security is set.'
+        ),
+    )
+    allowed_origins: list[str] = Field(
+        default_factory=list,
+        description=(
+            'Additional Origin header values accepted by the MCP transport '
+            'DNS-rebinding protection, on top of the localhost defaults. Ignored '
+            'when disable_transport_security is set.'
+        ),
+    )
+    disable_transport_security: bool = Field(
+        default=False,
+        description=(
+            'Disable the MCP transport DNS-rebinding protection entirely. Use only '
+            'when the server sits behind a trusted proxy that already validates the '
+            'Host and Origin headers.'
+        ),
+    )
 
 
 class OpenAIProviderConfig(BaseModel):
