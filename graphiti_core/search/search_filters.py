@@ -150,8 +150,7 @@ def edge_search_filter_query_constructor(
             # FalkorDB's Cypher parser doesn't support Neo4j-style label
             # expressions (n:A|B) for 2+ labels, so match against labels(n)/labels(m) instead.
             node_label_filter = (
-                'any(l IN labels(n) WHERE l IN $labels) '
-                'AND any(l IN labels(m) WHERE l IN $labels)'
+                'any(l IN labels(n) WHERE l IN $labels) AND any(l IN labels(m) WHERE l IN $labels)'
             )
             filter_params['labels'] = filters.node_labels
         else:
