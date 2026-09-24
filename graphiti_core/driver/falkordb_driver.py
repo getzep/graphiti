@@ -174,7 +174,6 @@ class FalkorDriver(GraphDriver):
         self._next_episode_edge_ops = FalkorNextEpisodeEdgeOperations()
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
-
         self._init_task: asyncio.Task | None = None
         # Schedule the indices and constraints to be built
         try:
