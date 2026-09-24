@@ -142,6 +142,14 @@ class Neo4jSearchOperations(SearchOperations):
             filter_queries.append('n.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
+        # Exclude nodes with a missing or dimension-mismatched embedding before
+        # computing cosine similarity - vector.similarity.cosine() raises
+        # Neo.ClientError.Statement.ArgumentError on a null vector, and errors
+        # on a dimension mismatch too, which otherwise fails the entire search
+        # once any node lacks (or has a stale-dimension) name_embedding (#1328).
+        filter_queries.append('n.name_embedding IS NOT NULL')
+        filter_queries.append('size(n.name_embedding) = size($search_vector)')
+
         filter_query = ''
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
@@ -295,6 +303,14 @@ class Neo4jSearchOperations(SearchOperations):
         filter_queries, filter_params = edge_search_filter_query_constructor(
             search_filter, GraphProvider.NEO4J
         )
+
+        # Exclude edges with a missing or dimension-mismatched embedding before
+        # computing cosine similarity - vector.similarity.cosine() raises
+        # Neo.ClientError.Statement.ArgumentError on a null vector, and errors
+        # on a dimension mismatch too, which otherwise fails the entire search
+        # once any edge lacks (or has a stale-dimension) fact_embedding (#1328).
+        filter_queries.append('e.fact_embedding IS NOT NULL')
+        filter_queries.append('size(e.fact_embedding) = size($search_vector)')
 
         if group_ids is not None:
             filter_queries.append('e.group_id IN $group_ids')
@@ -490,9 +506,17 @@ class Neo4jSearchOperations(SearchOperations):
     ) -> list[CommunityNode]:
         query_params: dict[str, Any] = {}
 
-        group_filter_query = ''
+        # Exclude communities with a missing or dimension-mismatched embedding
+        # before computing cosine similarity - vector.similarity.cosine() raises
+        # Neo.ClientError.Statement.ArgumentError on a null vector, and errors
+        # on a dimension mismatch too, which otherwise fails the entire search
+        # once any community lacks (or has a stale-dimension) name_embedding
+        # (#1328).
+        group_filter_query = (
+            ' WHERE c.name_embedding IS NOT NULL AND size(c.name_embedding) = size($search_vector)'
+        )
         if group_ids is not None:
-            group_filter_query += ' WHERE c.group_id IN $group_ids'
+            group_filter_query += ' AND c.group_id IN $group_ids'
             query_params['group_ids'] = group_ids
 
         cypher = (
