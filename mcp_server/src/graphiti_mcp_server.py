@@ -46,12 +46,14 @@ from services.factories import (
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
 from utils.type_config import (
+    ALL_GROUPS,
     build_edge_type_map,
     build_edge_types,
     build_entity_types,
     build_fact_search_filters,
     coerce_group_ids,
     parse_reference_time,
+    resolve_read_group_ids,
 )
 
 # Load .env file from mcp_server directory
@@ -511,7 +513,12 @@ async def search_nodes(
     Args:
         query: The search query
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
-            string is accepted and treated as a one-element list)
+            string is accepted and treated as a one-element list). Pass '*' to read
+            across every group. Omitted means the server's configured default group,
+            so a single-tenant deployment never widens its scope by accident. The
+            group actually read is echoed back as `searched_group_ids` (None = all),
+            so an empty result reports its scope rather than reading as "nothing
+            exists".
         max_nodes: Maximum number of nodes to return (default: 10)
         entity_types: Optional list of entity type names (node labels) to filter by
         center_node_uuid: Optional UUID of a node to center the search around. Results
@@ -525,15 +532,10 @@ async def search_nodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        # Accept a scalar group_id or a list; '*' widens the read to every group,
+        # omission keeps it on the configured default.
         group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        effective_group_ids = resolve_read_group_ids(group_ids, config.graphiti.group_id)
 
         # Create search filters
         search_filters = SearchFilters(
@@ -563,12 +565,20 @@ async def search_nodes(
         nodes = results.nodes[:max_nodes] if results.nodes else []
 
         if not nodes:
-            return NodeSearchResponse(message='No relevant nodes found', nodes=[])
+            return NodeSearchResponse(
+                message='No relevant nodes found',
+                nodes=[],
+                searched_group_ids=effective_group_ids,
+            )
 
         # Format the results (embeddings stripped by to_node_result)
         node_results = [to_node_result(node) for node in nodes]
 
-        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
+        return NodeSearchResponse(
+            message='Nodes retrieved successfully',
+            nodes=node_results,
+            searched_group_ids=effective_group_ids,
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching nodes: {error_msg}')
@@ -592,7 +602,12 @@ async def search_memory_facts(
     Args:
         query: The search query
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
-            string is accepted and treated as a one-element list)
+            string is accepted and treated as a one-element list). Pass '*' to read
+            across every group. Omitted means the server's configured default group,
+            so a single-tenant deployment never widens its scope by accident. The
+            group actually read is echoed back as `searched_group_ids` (None = all),
+            so an empty result reports its scope rather than reading as "nothing
+            exists".
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
         edge_types: Optional list of edge (fact) type names to filter by
@@ -626,15 +641,10 @@ async def search_memory_facts(
 
         client = await graphiti_service.get_client()
 
-        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        # Accept a scalar group_id or a list; '*' widens the read to every group,
+        # omission keeps it on the configured default.
         group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        effective_group_ids = resolve_read_group_ids(group_ids, config.graphiti.group_id)
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -645,10 +655,18 @@ async def search_memory_facts(
         )
 
         if not relevant_edges:
-            return FactSearchResponse(message='No relevant facts found', facts=[])
+            return FactSearchResponse(
+                message='No relevant facts found',
+                facts=[],
+                searched_group_ids=effective_group_ids,
+            )
 
         facts = [format_fact_result(edge) for edge in relevant_edges]
-        return FactSearchResponse(message='Facts retrieved successfully', facts=facts)
+        return FactSearchResponse(
+            message='Facts retrieved successfully',
+            facts=facts,
+            searched_group_ids=effective_group_ids,
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching facts: {error_msg}')
@@ -746,7 +764,11 @@ async def get_episodes(
 
     Args:
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
-            string is accepted and treated as a one-element list)
+            string is accepted and treated as a one-element list). Omitted means the
+            server's configured default group. Unlike the search tools this one
+            cannot serve the whole graph -- it needs a concrete group, and returns an
+            error rather than an empty list when none resolves. The group read is
+            echoed back as `searched_group_ids`.
         max_episodes: Maximum number of episodes to return (default: 10)
     """
     global graphiti_service
@@ -757,30 +779,35 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Accept a scalar group_id or a list; fall back to the default when omitted.
+        # Accept a scalar group_id or a list; '*' widens the read to every group,
+        # omission keeps it on the configured default.
         group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        effective_group_ids = resolve_read_group_ids(group_ids, config.graphiti.group_id)
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
 
-        if effective_group_ids:
-            episodes = await EpisodicNode.get_by_group_ids(
-                client.driver, effective_group_ids, limit=max_episodes
+        if not effective_group_ids:
+            # get_by_group_ids needs a concrete list, so this tool cannot serve the
+            # whole graph the way the search tools can. Say so instead of returning
+            # an empty list, which reads as "there are no episodes".
+            return ErrorResponse(
+                error=(
+                    'get_episodes requires a concrete group: pass group_ids, or set a '
+                    "default group_id on the server. '*' is not supported here."
+                )
             )
-        else:
-            # If no group IDs, we need to use a different approach
-            # For now, return empty list when no group IDs specified
-            episodes = []
+
+        episodes = await EpisodicNode.get_by_group_ids(
+            client.driver, effective_group_ids, limit=max_episodes
+        )
 
         if not episodes:
-            return EpisodeSearchResponse(message='No episodes found', episodes=[])
+            return EpisodeSearchResponse(
+                message='No episodes found',
+                episodes=[],
+                searched_group_ids=effective_group_ids,
+            )
 
         # Format the results
         episode_results = []
@@ -799,7 +826,9 @@ async def get_episodes(
             episode_results.append(episode_dict)
 
         return EpisodeSearchResponse(
-            message='Episodes retrieved successfully', episodes=episode_results
+            message='Episodes retrieved successfully',
+            episodes=episode_results,
+            searched_group_ids=effective_group_ids,
         )
     except Exception as e:
         error_msg = str(e)
@@ -1054,6 +1083,20 @@ async def clear_graph(
 
         if not effective_group_ids:
             return ErrorResponse(error='No group IDs specified for clearing')
+
+        # '*' widens a *read* to every group. Refuse it here rather than let it
+        # through: clear_data would take it as a literal group name, match nothing,
+        # and report "cleared successfully for group IDs: *" — a success message for
+        # a destructive call that did nothing, on the one tool where being wrong
+        # about scope is unrecoverable.
+        if ALL_GROUPS in effective_group_ids:
+            return ErrorResponse(
+                error=(
+                    f"'{ALL_GROUPS}' is not accepted by clear_graph: it selects every "
+                    'group for reads, and clearing every group must be spelled out '
+                    'one group at a time.'
+                )
+            )
 
         # Clear data for the specified group IDs
         await clear_data(client.driver, group_ids=effective_group_ids)
