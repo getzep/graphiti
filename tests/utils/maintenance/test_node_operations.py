@@ -986,3 +986,104 @@ async def test_extract_attributes_preserves_prior_attributes_when_label_not_in_e
     )
 
     assert results[0].attributes == {'age': 30, 'city': 'New York'}
+
+
+def test_normalize_name_for_fuzzy_keeps_non_latin_scripts():
+    # The ASCII-only pattern emptied Korean names, so they never reached fuzzy matching.
+    assert _normalize_name_for_fuzzy('김민수') != ''
+    # Hangul is decomposed into jamo: three syllables give Latin-comparable shingle material.
+    assert len(_normalize_name_for_fuzzy('김민수').replace(' ', '')) >= 6
+    assert _normalize_name_for_fuzzy('스코프랩스 데이터팀').count(' ') == 1
+    # Latin behaviour is unchanged; accents are dropped rather than turned into separators.
+    assert _normalize_name_for_fuzzy('Alice-Smith!') == 'alice smith'
+    assert _normalize_name_for_fuzzy("O'Brien") == "o'brien"
+    assert _normalize_name_for_fuzzy('Kim_Minsu') == 'kim minsu'
+    assert _normalize_name_for_fuzzy('Ångström') == 'angstrom'
+
+
+def test_has_high_entropy_korean_names():
+    assert _has_high_entropy(_normalize_name_for_fuzzy('김민수')) is True
+    assert _has_high_entropy(_normalize_name_for_fuzzy('한국어 형태소 토크나이저')) is True
+    # Two syllables stay below the length gate, as short Latin names do.
+    assert _has_high_entropy(_normalize_name_for_fuzzy('서울')) is False
+
+
+def test_resolve_with_similarity_korean_spacing_variant_matches_without_llm():
+    from graphiti_core.utils.maintenance.dedup_helpers import (
+        DedupResolutionState,
+        _resolve_with_similarity,
+    )
+
+    candidate = EntityNode(name='스코프랩스', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='스코프 랩스', group_id='group', labels=['Entity'])
+    indexes = _build_candidate_indexes([candidate])
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+
+    _resolve_with_similarity([extracted], indexes, state)
+
+    assert state.resolved_nodes[0] is not None
+    assert state.resolved_nodes[0].uuid == candidate.uuid
+    assert state.unresolved_indices == []
+
+
+def test_resolve_with_similarity_korean_near_miss_defers_to_llm():
+    from graphiti_core.utils.maintenance.dedup_helpers import (
+        DedupResolutionState,
+        _resolve_with_similarity,
+    )
+
+    candidate = EntityNode(name='김민수', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='김민석', group_id='group', labels=['Entity'])
+    indexes = _build_candidate_indexes([candidate])
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+
+    _resolve_with_similarity([extracted], indexes, state)
+
+    # One different syllable is not a spelling variant; leave it to the LLM.
+    assert state.resolved_nodes[0] is None
+    assert state.unresolved_indices == [0]
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_fuzzy_match_korean(monkeypatch):
+    clients, llm_generate = _make_clients()
+
+    candidate = EntityNode(name='스코프랩스', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='스코프 랩스', group_id='group', labels=['Entity'])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidate]]),
+    )
+
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    assert resolved[0].uuid == candidate.uuid
+    assert uuid_map[extracted.uuid] == candidate.uuid
+    llm_generate.assert_not_awaited()
+
+
+def test_length_gate_boundary_keeps_six_letter_latin_names_and_never_merges_seoul_variants():
+    # _MIN_NAME_LENGTH stays 6: raising it to 7 would push 'london'/'berlin' to the LLM while
+    # changing nothing for two-syllable Korean names (5 jamo) or three-syllable ones (7+).
+    assert _has_high_entropy(_normalize_name_for_fuzzy('london')) is True
+    assert _has_high_entropy(_normalize_name_for_fuzzy('서울')) is False
+    assert _has_high_entropy(_normalize_name_for_fuzzy('서울대')) is True
+
+    from graphiti_core.utils.maintenance.dedup_helpers import (
+        DedupResolutionState,
+        _resolve_with_similarity,
+    )
+
+    # 서울 / 서울대 must not fuzzy-merge in either direction (Jaccard 0.60 < 0.9, or gate).
+    for existing_name, extracted_name in (('서울대', '서울'), ('서울', '서울대')):
+        existing = EntityNode(name=existing_name, group_id='group', labels=['Entity'])
+        extracted = EntityNode(name=extracted_name, group_id='group', labels=['Entity'])
+        state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+        _resolve_with_similarity([extracted], _build_candidate_indexes([existing]), state)
+        assert state.resolved_nodes[0] is None
+        assert state.unresolved_indices == [0]
