@@ -297,6 +297,9 @@ class GeminiClient(LLMClient):
                 response_schema=response_model if response_model else None,
                 system_instruction=system_prompt,
                 thinking_config=self.thinking_config,
+                # No tools are passed, so opt out of the SDK's automatic-function-calling
+                # loop; google-genai >= 2.22 warns when AFC is left enabled here.
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             )
 
             # Generate content using the simple string approach
