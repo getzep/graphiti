@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 from enum import Enum
+from typing import Any
 
 DEFAULT_MAX_TOKENS = 16384
 DEFAULT_TEMPERATURE = 1
@@ -42,6 +43,8 @@ class LLMConfig:
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         small_model: str | None = None,
+        timeout: float | None = None,
+        extra_body: dict[str, Any] | None = None,
     ):
         """
         Initialize the LLMConfig with the provided parameters.
@@ -59,10 +62,30 @@ class LLMConfig:
 
                 small_model (str, optional): The specific LLM model to use for generating responses of simpler prompts.
                                                                 Defaults to "gpt-4.1-nano".
+
+                timeout (float, optional): Per-request timeout in seconds for providers that support it.
+                    Defaults to ``None``, which leaves the provider SDK default unchanged.
+
+                extra_body (dict, optional): Provider-specific request-body fields for OpenAI-compatible
+                    endpoints. Support varies by server; unsupported fields may be ignored. Defaults to ``None``.
         """
+        if timeout is not None:
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+                raise TypeError('timeout must be a float or None')
+            if timeout < 0:
+                raise ValueError('timeout must be greater than or equal to zero')
+
+        if extra_body is not None:
+            if not isinstance(extra_body, dict):
+                raise TypeError('extra_body must be a dict or None')
+            if not all(isinstance(key, str) for key in extra_body):
+                raise TypeError('extra_body keys must be strings')
+
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
         self.small_model = small_model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.timeout = float(timeout) if timeout is not None else None
+        self.extra_body = extra_body
