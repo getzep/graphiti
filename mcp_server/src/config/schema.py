@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -84,51 +84,72 @@ class ServerConfig(BaseModel):
     port: int = Field(default=8000, description='Server port')
 
 
-class OpenAIProviderConfig(BaseModel):
-    """OpenAI provider configuration."""
+class APIKeyProviderConfig(BaseModel):
+    """Base configuration for providers authenticated with an API key."""
 
     api_key: str | None = None
+    api_key_file: Path | None = None
+
+    @model_validator(mode='after')
+    def load_api_key_file(self):
+        """Load a file-backed API key once when configuration is created."""
+        if self.api_key is not None and self.api_key_file is not None:
+            raise ValueError('api_key and api_key_file are mutually exclusive')
+
+        if self.api_key_file is None:
+            return self
+
+        try:
+            api_key = self.api_key_file.read_text(encoding='utf-8').strip()
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f'Unable to read api_key_file {self.api_key_file}') from error
+
+        if not api_key:
+            raise ValueError('api_key_file must not be empty')
+
+        self.api_key = api_key
+        return self
+
+
+class OpenAIProviderConfig(APIKeyProviderConfig):
+    """OpenAI provider configuration."""
+
     api_url: str = 'https://api.openai.com/v1'
     organization_id: str | None = None
 
 
-class AzureOpenAIProviderConfig(BaseModel):
+class AzureOpenAIProviderConfig(APIKeyProviderConfig):
     """Azure OpenAI provider configuration."""
 
-    api_key: str | None = None
     api_url: str | None = None
     api_version: str = '2024-10-21'
     deployment_name: str | None = None
     use_azure_ad: bool = False
 
 
-class AnthropicProviderConfig(BaseModel):
+class AnthropicProviderConfig(APIKeyProviderConfig):
     """Anthropic provider configuration."""
 
-    api_key: str | None = None
     api_url: str = 'https://api.anthropic.com'
     max_retries: int = 3
 
 
-class GeminiProviderConfig(BaseModel):
+class GeminiProviderConfig(APIKeyProviderConfig):
     """Gemini provider configuration."""
 
-    api_key: str | None = None
     project_id: str | None = None
     location: str = 'us-central1'
 
 
-class GroqProviderConfig(BaseModel):
+class GroqProviderConfig(APIKeyProviderConfig):
     """Groq provider configuration."""
 
-    api_key: str | None = None
     api_url: str = 'https://api.groq.com/openai/v1'
 
 
-class VoyageProviderConfig(BaseModel):
+class VoyageProviderConfig(APIKeyProviderConfig):
     """Voyage AI provider configuration."""
 
-    api_key: str | None = None
     api_url: str = 'https://api.voyageai.com/v1'
     model: str = 'voyage-3'
 
