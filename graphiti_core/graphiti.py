@@ -1080,7 +1080,9 @@ class Graphiti:
         group_id : str | None
             An id for the graph partition the episode is a part of.
         uuid : str | None
-            Optional uuid of the episode.
+            Optional uuid of the episode. If an episode with this uuid already
+            exists it is reprocessed; otherwise the episode is created with
+            this uuid.
         update_communities : bool
             Optional. Whether to update communities with new node information
         entity_types : dict[str, BaseModel] | None
@@ -1153,11 +1155,20 @@ class Graphiti:
                     else await EpisodicNode.get_by_uuids(driver, previous_episode_uuids)
                 )
 
-                # Get or create episode
-                episode = (
-                    await EpisodicNode.get_by_uuid(driver, uuid)
-                    if uuid is not None
-                    else EpisodicNode(
+                # Get or create episode. A supplied uuid that already exists in the
+                # graph reprocesses that episode; a uuid not yet in the graph creates
+                # the episode under the supplied uuid (matching the MERGE-on-uuid save
+                # semantics), so callers can pre-assign episode uuids.
+                episode = None
+                if uuid is not None:
+                    try:
+                        episode = await EpisodicNode.get_by_uuid(driver, uuid)
+                    except NodeNotFoundError:
+                        logger.info(
+                            f'Episode {uuid} not found in graph; creating it with the supplied uuid'
+                        )
+                if episode is None:
+                    episode = EpisodicNode(
                         name=name,
                         group_id=group_id,
                         labels=[],
@@ -1167,7 +1178,8 @@ class Graphiti:
                         created_at=now,
                         valid_at=reference_time,
                     )
-                )
+                    if uuid is not None:
+                        episode.uuid = uuid
 
                 # Create default edge type map
                 edge_type_map_default = (
