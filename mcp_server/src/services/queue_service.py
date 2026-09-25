@@ -1,36 +1,100 @@
 """Queue service for managing episode processing."""
 
 import asyncio
+import json
 import logging
+import random
+import secrets
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
+from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
-# Bounded retries for transient episode failures. Validation failures are
-# deterministic and are never retried; see is_retryable_failure.
+# Bounded retries for transient episode failures. Validation failures and other
+# permanently broken inputs are deterministic and are never retried; see
+# is_retryable_failure.
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_BASE_DELAY = 1.0
 
+# Log an aggregate counter line for a group every this many episodes handled
+# (processed + dropped), so the counters show up in the server logs at a steady,
+# bounded rate instead of one extra line per episode.
+STATS_LOG_INTERVAL = 100
+
+# Errors that are genuinely transient and worth retrying: the classes the core
+# LLM client already retries (graphiti_core.llm_client.client.is_server_or_retry_error)
+# plus transient IO. This is an allowlist: everything outside it — a
+# ValidationError, a bad uuid raising NodeNotFoundError, an HTTP 4xx, a
+# KeyError/TypeError from malformed input — is treated as permanent. Retrying
+# those repeats their side effects and delays the episodes queued behind them.
+_TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+    EmptyResponseError,
+    RateLimitError,
+    json.JSONDecodeError,
+    # TimeoutError is an OSError subclass; ConnectionError likewise. They are
+    # listed explicitly for readability.
+    TimeoutError,
+    ConnectionError,
+    OSError,
+    # On Python 3.10 (the MCP server's floor) asyncio.TimeoutError is a distinct
+    # class from the builtin TimeoutError; on 3.11+ it is an alias of it, so this
+    # entry is a no-op there.
+    asyncio.TimeoutError,
+    # httpx transport failures (connect/read/write timeouts, resets) are the
+    # transient IO errors an LLM/embedder endpoint produces; they are unrelated to
+    # OSError, so an OSError-family match alone would miss them.
+    httpx.TransportError,
+)
+
 
 def retry_delay(base_delay: float, attempt: int) -> float:
-    """Return the seconds to wait after `attempt` failed attempts (1-based)."""
+    """Return the deterministic minimum backoff after `attempt` failed attempts (1-based)."""
     return base_delay * (2 ** (attempt - 1))
+
+
+def retry_delay_with_jitter(base_delay: float, attempt: int) -> float:
+    """Return the backoff actually slept after `attempt` failed attempts (1-based).
+
+    Exponential backoff with full jitter, in the style of the tenacity
+    `wait_random_exponential` used by graphiti_core/llm_client/client.py: the wait is
+    uniform in [minimum, 2 * minimum), where `retry_delay` is the minimum. Randomising
+    the wait stops a batch of episodes failing together (a provider 429, a restart)
+    from retrying in lockstep, while the floor keeps the backoff from collapsing to
+    near-zero sleeps the way unfloored full jitter can.
+    """
+    minimum = retry_delay(base_delay, attempt)
+    return minimum + random.uniform(0.0, minimum)
 
 
 def is_retryable_failure(error: BaseException) -> bool:
     """Return whether a failed episode is worth retrying.
 
-    Schema/validation failures are deterministic: the same episode produces the
-    same malformed extraction on every attempt, so retrying only delays the
-    episodes queued behind it. Everything else — empty LLM responses, rate
-    limits, query timeouts, driver errors — is treated as transient.
+    This is an allowlist of genuinely transient failures, not a denylist. Schema or
+    validation failures are deterministic: the same episode produces the same
+    malformed extraction on every attempt. So is a bad episode uuid (a node that does
+    not exist raises `NodeNotFoundError: node ... not found`), an HTTP 401/403, and a
+    KeyError/TypeError from malformed input. Retrying those just burns the attempt cap
+    while repeating side effects.
     """
-    return not isinstance(error, ValidationError)
+    if isinstance(error, ValidationError):
+        # Permanently non-retryable, and pydantic's ValidationError is also a
+        # ValueError subclass, so keep this check explicit and ahead of the allowlist.
+        return False
+    if isinstance(error, _TRANSIENT_ERRORS):
+        return True
+    # A 5xx from an LLM, embedder, or database endpoint is transient; a 4xx is not.
+    return isinstance(error, httpx.HTTPStatusError) and 500 <= error.response.status_code < 600
+
+
+def new_correlation_id() -> str:
+    """Return a log-only correlation id for an episode queued without a uuid."""
+    return f'ep-{secrets.token_hex(4)}'
 
 
 @dataclass
@@ -62,7 +126,8 @@ class QueueService:
         Args:
             max_attempts: Total attempts per episode, including the first.
             retry_base_delay: Seconds to wait before the first retry. Doubles on
-                each subsequent attempt.
+                each subsequent attempt, with full jitter on top (see
+                retry_delay_with_jitter).
         """
         # Dictionary to store queues for each group_id
         self._episode_queues: dict[str, asyncio.Queue] = {}
@@ -86,8 +151,9 @@ class QueueService:
         Args:
             group_id: The group ID for the episode
             process_func: The async function to process the episode
-            item_id: Optional identifier (usually the episode UUID) used in the
-                worker's retry and drop logs
+            item_id: Optional identifier used in the worker's retry and drop logs.
+                This is the episode UUID when the caller supplied one, otherwise a
+                queue-time correlation id.
 
         Returns:
             The position in the queue
@@ -149,7 +215,10 @@ class QueueService:
 
         Retries happen in place, so the queue stays sequential per group_id. An
         episode that exhausts max_attempts, or fails permanently, is counted as
-        dropped and logged with the counters for that group.
+        dropped and logged with that group's counters plus the totals across all
+        groups. The counters are also logged periodically (every
+        STATS_LOG_INTERVAL episodes handled) so drops are visible without one log
+        line per episode.
         """
         stats = self._queue_stats[group_id]
         label = item_id or 'unknown'
@@ -164,12 +233,12 @@ class QueueService:
                     logger.error(
                         f'Dropping episode {label} for group_id {group_id} after '
                         f'{attempt} attempt(s): {type(e).__name__}: {str(e)} '
-                        f'(processed={stats.processed}, retried={stats.retried}, '
-                        f'dropped={stats.dropped})'
+                        f'({self._format_stats(stats)}; all groups: '
+                        f'{self._format_stats(self._totals())})'
                     )
                     return
 
-                delay = retry_delay(self._retry_base_delay, attempt)
+                delay = retry_delay_with_jitter(self._retry_base_delay, attempt)
                 stats.retried += 1
                 logger.warning(
                     f'Episode {label} for group_id {group_id} failed on attempt '
@@ -180,13 +249,37 @@ class QueueService:
                 await asyncio.sleep(delay)
             else:
                 stats.processed += 1
+                if (stats.processed + stats.dropped) % STATS_LOG_INTERVAL == 0:
+                    logger.info(
+                        f'Episode queue counters for group_id {group_id}: '
+                        f'{self._format_stats(stats)}; all groups: '
+                        f'{self._format_stats(self._totals())}'
+                    )
                 return
 
+    def _totals(self) -> QueueStats:
+        """Aggregate the counters of every group_id queue into a fresh QueueStats."""
+        totals = QueueStats()
+        for stats in self._queue_stats.values():
+            totals.processed += stats.processed
+            totals.retried += stats.retried
+            totals.dropped += stats.dropped
+        return totals
+
+    @staticmethod
+    def _format_stats(stats: QueueStats) -> str:
+        """Format counters for a log line."""
+        return f'processed={stats.processed}, retried={stats.retried}, dropped={stats.dropped}'
+
     def get_stats(self, group_id: str) -> QueueStats:
-        """Get the live processing counters for a group_id's queue."""
+        """Get a snapshot copy of the processing counters for a group_id's queue.
+
+        Returns a copy: mutating it does not affect the service's own counters, and
+        the counters keep advancing as the worker runs.
+        """
         if group_id not in self._queue_stats:
             return QueueStats()
-        return self._queue_stats[group_id]
+        return replace(self._queue_stats[group_id])
 
     def get_queue_size(self, group_id: str) -> int:
         """Get the current queue size for a group_id."""
@@ -258,13 +351,21 @@ class QueueService:
         if self._graphiti_client is None:
             raise RuntimeError('Queue service not initialized. Call initialize() first.')
 
+        # Correlation id for the worker's retry/drop logs. When the caller supplies no
+        # uuid (the default add_memory path) one is generated here, at queue time, and
+        # used for logging ONLY: it must never be handed to Graphiti.add_episode. A
+        # uuid that does not exist yet short-circuits through
+        # EpisodicNode.get_by_uuid and fails with 'node not found', so inventing one
+        # would break the very path it is meant to make observable.
+        log_label = uuid or new_correlation_id()
+
         async def process_episode():
             """Process the episode using the graphiti client."""
             try:
-                logger.info(f'Processing episode {uuid} for group {group_id}')
+                logger.info(f'Processing episode {log_label} for group {group_id}')
 
                 # Process the episode using the graphiti client
-                await self._graphiti_client.add_episode(
+                episode = await self._graphiti_client.add_episode(
                     name=name,
                     episode_body=content,
                     source_description=source_description,
@@ -283,11 +384,22 @@ class QueueService:
                     uuid=uuid,
                 )
 
-                logger.info(f'Successfully processed episode {uuid} for group {group_id}')
-
             except Exception as e:
-                logger.error(f'Failed to process episode {uuid} for group {group_id}: {str(e)}')
+                logger.error(
+                    f'Failed to process episode {log_label} for group {group_id}: {str(e)}'
+                )
                 raise
 
+            # The client assigns the uuid when the caller did not supply one; log the
+            # episode's own uuid so the success line correlates with the graph.
+            episode_uuid = getattr(episode, 'uuid', None)
+            queued_as = (
+                f' (queued as {log_label})' if episode_uuid and episode_uuid != log_label else ''
+            )
+            logger.info(
+                f'Successfully processed episode {episode_uuid or log_label}{queued_as} '
+                f'for group {group_id}'
+            )
+
         # Use the existing add_episode_task method to queue the processing
-        return await self.add_episode_task(group_id, process_episode, item_id=uuid)
+        return await self.add_episode_task(group_id, process_episode, item_id=log_label)

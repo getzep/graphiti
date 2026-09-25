@@ -386,6 +386,54 @@ Set this in your `.env` file:
 SEMAPHORE_LIMIT=10  # Adjust based on your LLM provider tier
 ```
 
+### Episode Queue: Retries, Drops, and Counters
+
+`add_memory` hands each episode to a per-`group_id` worker, which processes that group's episodes strictly in
+order. The worker belongs to `QueueService`, and it has two public knobs, both constructor arguments:
+
+- `max_attempts` (default `3`): total attempts per episode, including the first. Clamped to a minimum of 1.
+- `retry_base_delay` (default `1.0` seconds): how long to wait before the first retry. Each further attempt
+  doubles it and the wait is jittered: the actual sleep is uniform in `[minimum, 2 * minimum)` where
+  `minimum = retry_base_delay * 2 ** (attempt - 1)`. Full jitter, floored at the deterministic exponential
+  minimum, keeps a batch of episodes failing together (a provider 429, a restart) from retrying in lockstep.
+  Clamped to a minimum of 0.
+
+Retries are bounded and only cover genuinely transient failures:
+
+- **Retried**: `EmptyResponseError`, `RateLimitError`, `json.JSONDecodeError`, `TimeoutError` /
+  `asyncio.TimeoutError`, `ConnectionError`, other `OSError`s, httpx transport errors (connect/read
+  timeouts, resets), and HTTP 5xx responses. This mirrors the allowlist the core LLM client retries
+  (`graphiti_core.llm_client.client.is_server_or_retry_error`).
+- **Dropped without retrying**: pydantic `ValidationError` (a malformed extraction fails the same way on
+  every attempt), an episode uuid that does not exist (`NodeNotFoundError: node ... not found`), HTTP 4xx
+  (401/403 in particular), and deterministic `KeyError` / `TypeError` / `ValueError`s. Dropping them on the
+  first failure avoids burning the attempt cap and repeating their side effects.
+
+An episode is dropped after `max_attempts` transient failures, or immediately on a permanent one. A drop
+never blocks the queue: the worker moves on to the next episode. Every drop is logged at `ERROR` with the
+episode's own uuid (or a queue-time correlation id when the caller supplied no uuid), the failure, and the
+counters.
+
+Counters are readable from Python and visible in the logs:
+
+- `QueueService.get_stats(group_id)` returns a `QueueStats(processed, retried, dropped)` **snapshot copy**;
+  mutating it does not affect the service's own counters. `processed` counts completed episodes, `retried`
+  counts retry attempts, and `dropped` counts episodes abandoned — a dropped episode's facts are not in the
+  graph.
+- Every drop logs that group's counters plus the totals across all groups, and a summary line is logged
+  every 100 episodes handled per group (`STATS_LOG_INTERVAL`). There is no MCP tool for the counters: they
+  are operational state, not part of the tool surface.
+
+```python
+from services.queue_service import QueueService
+
+queue_service = QueueService(max_attempts=5, retry_base_delay=2.0)
+await queue_service.initialize(graphiti_client)
+
+stats = queue_service.get_stats('my-group')
+logger.info(f'processed={stats.processed}, dropped={stats.dropped}')
+```
+
 ### Docker Deployment
 
 The Graphiti MCP server can be deployed using Docker with your choice of database backend. The Dockerfile uses `uv` for package management, ensuring consistent dependency installation.
