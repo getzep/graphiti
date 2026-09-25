@@ -5,6 +5,7 @@ Graphiti MCP Server - Exposes Graphiti functionality through the Model Context P
 
 import argparse
 import asyncio
+import copy
 import logging
 import os
 import sys
@@ -15,8 +16,9 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.mcpserver import MCPServer
@@ -181,6 +183,32 @@ mcp = MCPServer(
 # Global services
 graphiti_service: Optional['GraphitiService'] = None
 queue_service: QueueService | None = None
+
+
+def _driver_for_group(client: Graphiti, group_id: str) -> GraphDriver:
+    """Return a driver bound to the graph that stores the given group.
+
+    FalkorDB stores each non-default group_id in its own graph; on backends
+    where clone() is a no-op this returns the base driver unchanged.
+    """
+    return client.driver.clone(database=group_id)
+
+
+def _client_for_group(client: Graphiti, group_id: str) -> Graphiti:
+    """Return a Graphiti client whose driver is bound to the group's graph.
+
+    Mirrors core's own request-scope resolution: methods that use self.driver
+    (remove_episode, summarize_saga, add_triplet, get_nodes_and_edges_by_episode)
+    must see the group-scoped driver or they touch the default graph instead.
+    """
+    driver = _driver_for_group(client, group_id)
+    if driver is client.driver:
+        return client
+    scoped = copy.copy(client)
+    scoped.driver = driver
+    scoped.clients = client.clients.model_copy(update={'driver': driver})
+    return scoped
+
 
 # Global client for backward compatibility
 graphiti_client: Graphiti | None = None
@@ -656,11 +684,14 @@ async def search_memory_facts(
 
 
 @mcp.tool()
-async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
+async def delete_entity_edge(
+    uuid: str, group_id: str | None = None
+) -> SuccessResponse | ErrorResponse:
     """Delete an entity edge from the graph memory.
 
     Args:
         uuid: UUID of the entity edge to delete
+        group_id: Optional group ID. Falls back to the default group when omitted.
     """
     global graphiti_service
 
@@ -670,10 +701,14 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
+        effective_group_id = group_id or config.graphiti.group_id
+        driver = (
+            _driver_for_group(client, effective_group_id) if effective_group_id else client.driver
+        )
         # Get the entity edge by UUID
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
         # Delete the edge using its delete method
-        await entity_edge.delete(client.driver)
+        await entity_edge.delete(driver)
         return SuccessResponse(message=f'Entity edge with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
@@ -682,7 +717,7 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
 
 
 @mcp.tool()
-async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
+async def delete_episode(uuid: str, group_id: str | None = None) -> SuccessResponse | ErrorResponse:
     """Delete an episode from the graph memory.
 
     Uses Graphiti.remove_episode, which cascades the deletion: entities and facts
@@ -691,6 +726,7 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
 
     Args:
         uuid: UUID of the episode to delete
+        group_id: Optional group ID. Falls back to the default group when omitted.
     """
     global graphiti_service
 
@@ -700,9 +736,13 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
+        effective_group_id = group_id or config.graphiti.group_id
+        scoped_client = (
+            _client_for_group(client, effective_group_id) if effective_group_id else client
+        )
         # remove_episode cascades cleanup of episode-created entities/edges,
         # unlike EpisodicNode.delete which would orphan them.
-        await client.remove_episode(uuid)
+        await scoped_client.remove_episode(uuid)
         return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
@@ -711,11 +751,12 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
 
 
 @mcp.tool()
-async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
+async def get_entity_edge(uuid: str, group_id: str | None = None) -> dict[str, Any] | ErrorResponse:
     """Get an entity edge from the graph memory by its UUID.
 
     Args:
         uuid: UUID of the entity edge to retrieve
+        group_id: Optional group ID. Falls back to the default group when omitted.
     """
     global graphiti_service
 
@@ -725,8 +766,12 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
+        effective_group_id = group_id or config.graphiti.group_id
+        driver = (
+            _driver_for_group(client, effective_group_id) if effective_group_id else client.driver
+        )
         # Get the entity edge directly using the EntityEdge class method
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
 
         # Use the format_fact_result function to serialize the edge
         # Return the Python dict directly - MCP will handle serialization
@@ -767,13 +812,23 @@ async def get_episodes(
             else []
         )
 
-        # Get episodes from the driver directly
-        from graphiti_core.nodes import EpisodicNode
-
+        # Each non-default group lives in its own graph, so query each group
+        # with a driver bound to that graph and merge the results.
         if effective_group_ids:
-            episodes = await EpisodicNode.get_by_group_ids(
-                client.driver, effective_group_ids, limit=max_episodes
+            per_group = await asyncio.gather(
+                *(
+                    EpisodicNode.get_by_group_ids(
+                        _driver_for_group(client, group_id), [group_id], limit=max_episodes
+                    )
+                    for group_id in effective_group_ids
+                )
             )
+            episodes = [episode for group_episodes in per_group for episode in group_episodes]
+            episodes.sort(
+                key=lambda episode: episode.created_at or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True,
+            )
+            episodes = episodes[:max_episodes]
         else:
             # If no group IDs, we need to use a different approach
             # For now, return empty list when no group IDs specified
@@ -839,14 +894,16 @@ async def summarize_saga(
         # add_memory takes a saga *name*; core keys sagas by (name, group_id) and
         # assigns its own UUID, while summarize_saga requires that UUID. Resolve the
         # name to its UUID within the group before delegating to core.
-        sagas = await SagaNode.get_by_group_ids(client.driver, [effective_group_id])
+        sagas = await SagaNode.get_by_group_ids(
+            _driver_for_group(client, effective_group_id), [effective_group_id]
+        )
         match = next((saga for saga in sagas if saga.name == saga_name), None)
         if match is None:
             return ErrorResponse(
                 error=f"No saga named '{saga_name}' found in group '{effective_group_id}'"
             )
 
-        saga_node = await client.summarize_saga(match.uuid)
+        saga_node = await _client_for_group(client, effective_group_id).summarize_saga(match.uuid)
 
         return SagaSummaryResponse(
             message=f"Saga '{saga_name}' summarized successfully",
@@ -975,7 +1032,9 @@ async def add_triplet(
             created_at=now,
         )
 
-        result = await client.add_triplet(source_node, edge, target_node)
+        result = await _client_for_group(client, effective_group_id).add_triplet(
+            source_node, edge, target_node
+        )
 
         return TripletResponse(
             message=f"Triplet '{source_node_name} -[{edge_name}]-> {target_node_name}' added",
@@ -991,6 +1050,7 @@ async def add_triplet(
 @mcp.tool()
 async def get_episode_entities(
     episode_uuids: list[str],
+    group_id: str | None = None,
 ) -> EpisodeEntitiesResponse | ErrorResponse:
     """Get the entities (nodes) and facts (edges) created by specific episodes.
 
@@ -999,6 +1059,7 @@ async def get_episode_entities(
 
     Args:
         episode_uuids: List of episode UUIDs to look up provenance for
+        group_id: Optional group ID. Falls back to the default group when omitted.
     """
     global graphiti_service
 
@@ -1011,7 +1072,11 @@ async def get_episode_entities(
     try:
         client = await graphiti_service.get_client()
 
-        results = await client.get_nodes_and_edges_by_episode(episode_uuids)
+        effective_group_id = group_id or config.graphiti.group_id
+        scoped_client = (
+            _client_for_group(client, effective_group_id) if effective_group_id else client
+        )
+        results = await scoped_client.get_nodes_and_edges_by_episode(episode_uuids)
 
         return EpisodeEntitiesResponse(
             message=f'Retrieved provenance for {len(episode_uuids)} episode(s)',
@@ -1055,8 +1120,9 @@ async def clear_graph(
         if not effective_group_ids:
             return ErrorResponse(error='No group IDs specified for clearing')
 
-        # Clear data for the specified group IDs
-        await clear_data(client.driver, group_ids=effective_group_ids)
+        # Clear data per group: each non-default group lives in its own graph.
+        for group_id in effective_group_ids:
+            await clear_data(_driver_for_group(client, group_id), group_ids=[group_id])
 
         return SuccessResponse(
             message=f'Graph data cleared successfully for group IDs: {", ".join(effective_group_ids)}'
