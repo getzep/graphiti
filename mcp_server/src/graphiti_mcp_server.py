@@ -19,7 +19,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -173,7 +173,7 @@ server requires a configured database and valid API keys for language-model oper
 """
 
 # MCP server instance
-mcp = FastMCP(
+mcp = MCPServer(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
@@ -1249,12 +1249,6 @@ async def initialize_server() -> ServerConfig:
     # Initialize queue service with the client
     await queue_service.initialize(graphiti_client)
 
-    # Set MCP server settings
-    if config.server.host:
-        mcp.settings.host = config.server.host
-    if config.server.port:
-        mcp.settings.port = config.server.port
-
     # Return MCP configuration for transport
     return config.server
 
@@ -1269,21 +1263,19 @@ async def run_mcp_server():
     if mcp_config.transport == 'stdio':
         await mcp.run_stdio_async()
     elif mcp_config.transport == 'sse':
-        logger.info(
-            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
-        )
-        logger.info(f'Access the server at: http://{mcp.settings.host}:{mcp.settings.port}/sse')
-        await mcp.run_sse_async()
+        logger.info(f'Running MCP server with SSE transport on {mcp_config.host}:{mcp_config.port}')
+        logger.info(f'Access the server at: http://{mcp_config.host}:{mcp_config.port}/sse')
+        await mcp.run_sse_async(host=mcp_config.host, port=mcp_config.port)
     elif mcp_config.transport == 'http':
         # Use localhost for display if binding to 0.0.0.0
-        display_host = 'localhost' if mcp.settings.host == '0.0.0.0' else mcp.settings.host
+        display_host = 'localhost' if mcp_config.host == '0.0.0.0' else mcp_config.host
         logger.info(
-            f'Running MCP server with streamable HTTP transport on {mcp.settings.host}:{mcp.settings.port}'
+            f'Running MCP server with streamable HTTP transport on {mcp_config.host}:{mcp_config.port}'
         )
         logger.info('=' * 60)
         logger.info('MCP Server Access Information:')
-        logger.info(f'  Base URL: http://{display_host}:{mcp.settings.port}/')
-        logger.info(f'  MCP Endpoint: http://{display_host}:{mcp.settings.port}/mcp/')
+        logger.info(f'  Base URL: http://{display_host}:{mcp_config.port}/')
+        logger.info(f'  MCP Endpoint: http://{display_host}:{mcp_config.port}/mcp/')
         logger.info('  Transport: HTTP (streamable)')
 
         # Show FalkorDB Browser UI access if enabled
@@ -1296,7 +1288,7 @@ async def run_mcp_server():
         # Configure uvicorn logging to match our format
         configure_uvicorn_logging()
 
-        await mcp.run_streamable_http_async()
+        await mcp.run_streamable_http_async(host=mcp_config.host, port=mcp_config.port)
     else:
         raise ValueError(
             f'Unsupported transport: {mcp_config.transport}. Use "sse", "stdio", or "http"'
