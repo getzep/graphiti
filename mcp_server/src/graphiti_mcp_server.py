@@ -185,13 +185,22 @@ graphiti_service: Optional['GraphitiService'] = None
 queue_service: QueueService | None = None
 
 
+_group_drivers: dict[tuple[int, str], GraphDriver] = {}
+
+
 def _driver_for_group(client: Graphiti, group_id: str) -> GraphDriver:
     """Return a driver bound to the graph that stores the given group.
 
     FalkorDB stores each non-default group_id in its own graph; on backends
-    where clone() is a no-op this returns the base driver unchanged.
+    where clone() is a no-op this returns the base driver unchanged. Clones are
+    cached per base driver and group so the backend builds indices once per group.
     """
-    return client.driver.clone(database=group_id)
+    key = (id(client.driver), group_id)
+    driver = _group_drivers.get(key)
+    if driver is None:
+        driver = client.driver.clone(database=group_id)
+        _group_drivers[key] = driver
+    return driver
 
 
 def _client_for_group(client: Graphiti, group_id: str) -> Graphiti:
@@ -813,17 +822,17 @@ async def get_episodes(
         )
 
         # Each non-default group lives in its own graph, so query each group
-        # with a driver bound to that graph and merge the results.
+        # with a driver bound to that graph and merge the results. FalkorDB
+        # clones share one connection, which drops concurrent queries, so the
+        # loop stays sequential.
         if effective_group_ids:
-            per_group = await asyncio.gather(
-                *(
-                    EpisodicNode.get_by_group_ids(
+            episodes = []
+            for group_id in effective_group_ids:
+                episodes.extend(
+                    await EpisodicNode.get_by_group_ids(
                         _driver_for_group(client, group_id), [group_id], limit=max_episodes
                     )
-                    for group_id in effective_group_ids
                 )
-            )
-            episodes = [episode for group_episodes in per_group for episode in group_episodes]
             episodes.sort(
                 key=lambda episode: episode.created_at or datetime.min.replace(tzinfo=timezone.utc),
                 reverse=True,

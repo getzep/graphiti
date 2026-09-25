@@ -10,7 +10,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 import graphiti_mcp_server as server
+
+
+@pytest.fixture(autouse=True)
+def fresh_group_drivers(monkeypatch):
+    monkeypatch.setattr(server, '_group_drivers', {})
 
 
 class FakeDriver:
@@ -82,6 +89,16 @@ def test_driver_for_group_clones_per_group():
 
     assert driver is not client.driver
     assert driver.database == 'group-a'
+
+
+def test_driver_for_group_caches_the_clone_per_group():
+    client = make_client(FakeDriver())
+
+    first = server._driver_for_group(client, 'group-a')
+    second = server._driver_for_group(client, 'group-a')
+
+    assert first is second
+    assert client.driver.databases == ['group-a']
 
 
 def test_driver_for_group_returns_same_driver_when_clone_is_noop():
