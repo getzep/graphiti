@@ -996,9 +996,11 @@ class Graphiti:
         -----
         The actual retrieval is performed by the `retrieve_episodes` function
         from the `graphiti_core.utils` module, unless a saga is specified.
+
+        A single ``group_id`` selects the same request-scoped database as
+        ``add_episode`` (issue #1876). An explicit ``driver`` is honored as-is.
         """
-        if driver is None:
-            driver = self.clients.driver
+        driver, _ = self._resolve_read_scope(group_ids, driver)
 
         if driver.graph_operations_interface:
             try:
@@ -1039,6 +1041,36 @@ class Graphiti:
         driver = self.driver.clone(database=group_id)
         clients = self.clients.model_copy(update={'driver': driver})
         return group_id, driver, clients
+
+    def _resolve_read_scope(
+        self,
+        group_ids: list[str] | None,
+        driver: GraphDriver | None = None,
+    ) -> tuple[GraphDriver, GraphitiClients]:
+        """Resolve a request-scoped driver/clients bundle for read paths.
+
+        Writes already go through ``_resolve_request_scope`` so a ``group_id`` that
+        differs from the driver's configured database is cloned into that graph.
+        Reads used to keep the shared driver, so ``search`` / ``retrieve_episodes``
+        queried the configured database and came back empty (issue #1876).
+
+        When the caller already passed a driver (for example ``add_episode``
+        threading its scoped driver into ``retrieve_episodes``), that driver is
+        honored and clients are copied only if it is not the shared instance.
+        A single ``group_id`` reuses ``_resolve_request_scope``. Multiple
+        ``group_ids`` stay on the shared driver here; FalkorDB fans them out via
+        ``handle_multiple_group_ids``.
+        """
+        if driver is not None:
+            if driver is self.driver:
+                return driver, self.clients
+            return driver, self.clients.model_copy(update={'driver': driver})
+
+        if group_ids is not None and len(group_ids) == 1:
+            _, scoped_driver, scoped_clients = self._resolve_request_scope(group_ids[0])
+            return scoped_driver, scoped_clients
+
+        return self.driver, self.clients
 
     async def add_episode(
         self,
@@ -1624,15 +1656,20 @@ class Graphiti:
 
         The search is performed using the current date and time as the reference
         point for temporal relevance.
+
+        A single ``group_id`` selects the same request-scoped database as
+        ``add_episode`` (issue #1876). An explicit ``driver`` is honored as-is.
         """
         search_config = (
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
         search_config.limit = num_results
 
+        driver, clients = self._resolve_read_scope(group_ids, driver)
+
         edges = (
             await search(
-                self.clients,
+                clients,
                 query,
                 group_ids,
                 search_config,
@@ -1674,10 +1711,14 @@ class Graphiti:
         different search and reranker methodologies across different layers in the graph.
 
         For different config recipes refer to search/search_config_recipes.
+
+        A single ``group_id`` selects the same request-scoped database as
+        ``add_episode`` (issue #1876). An explicit ``driver`` is honored as-is.
         """
+        driver, clients = self._resolve_read_scope(group_ids, driver)
 
         return await search(
-            self.clients,
+            clients,
             query,
             group_ids,
             config,

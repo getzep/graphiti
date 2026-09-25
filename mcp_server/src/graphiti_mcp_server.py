@@ -770,9 +770,16 @@ async def get_episodes(
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
 
+        # A single group_id must hit the same cloned/tenant database that
+        # add_episode writes to; querying the configured driver comes back
+        # empty after a successful write (issue #1876).
+        driver = client.driver
+        if len(effective_group_ids) == 1:
+            _, driver, _ = client._resolve_request_scope(effective_group_ids[0])
+
         if effective_group_ids:
             episodes = await EpisodicNode.get_by_group_ids(
-                client.driver, effective_group_ids, limit=max_episodes
+                driver, effective_group_ids, limit=max_episodes
             )
         else:
             # If no group IDs, we need to use a different approach
