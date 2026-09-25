@@ -37,3 +37,16 @@ class EmptyResponseError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
+
+
+class TruncatedResponseError(Exception):
+    """Exception raised when the LLM response was cut off at the output token cap.
+
+    Raised when ``finish_reason == 'length'``. The truncated body cannot be parsed,
+    and retrying with an identical request cannot succeed (e.g. a repetition loop at
+    low temperature), so this error is deliberately not retryable.
+    """
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
