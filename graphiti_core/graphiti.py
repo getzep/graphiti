@@ -21,7 +21,6 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
@@ -1828,25 +1827,61 @@ class Graphiti:
         # Find edges mentioned by the episode
         edges = await EntityEdge.get_by_uuids(self.driver, episode.entity_edges)
 
-        # We should only delete edges created by the episode
+        # An edge can be supported by several episodes (a later episode that restates a fact
+        # is appended to its episodes). Remove this episode from every edge it supports and
+        # delete only the edges left without support. Edges that the episode invalidated but
+        # does not support are left unchanged.
         edges_to_delete: list[EntityEdge] = []
+        edges_to_update: list[EntityEdge] = []
         for edge in edges:
-            if edge.episodes and edge.episodes[0] == episode.uuid:
+            if episode.uuid not in edge.episodes:
+                continue
+            edge.episodes = [uuid for uuid in edge.episodes if uuid != episode.uuid]
+            if edge.episodes:
+                edges_to_update.append(edge)
+            else:
                 edges_to_delete.append(edge)
 
         # Find nodes mentioned by the episode
         nodes = await get_mentioned_nodes(self.driver, [episode])
-        # We should delete all nodes that are only mentioned in the deleted episode
+        # Delete the nodes only mentioned in the deleted episode. The summary of every other
+        # node may contain content from the deleted episode, so it is rebuilt from the
+        # episodes that still mention it.
         nodes_to_delete: list[EntityNode] = []
+        nodes_to_rebuild: list[tuple[EntityNode, list[EpisodicNode]]] = []
         for node in nodes:
-            query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
-            records, _, _ = await self.driver.execute_query(query, uuid=node.uuid, routing_='r')
+            remaining_episodes = [
+                mention
+                for mention in await EpisodicNode.get_by_entity_node_uuid(self.driver, node.uuid)
+                if mention.uuid != episode.uuid
+            ]
+            if remaining_episodes:
+                remaining_episodes.sort(key=lambda mention: (mention.valid_at, mention.uuid))
+                nodes_to_rebuild.append((node, remaining_episodes))
+            else:
+                nodes_to_delete.append(node)
 
-            for record in records:
-                if record['episode_count'] == 1:
-                    nodes_to_delete.append(node)
+        # Rebuild summaries before any write, so a failed model call leaves the graph unchanged.
+        await semaphore_gather(
+            *[
+                self._rebuild_node_summary(node, remaining_episodes)
+                for node, remaining_episodes in nodes_to_rebuild
+            ],
+            max_coroutines=self.max_coroutines,
+        )
 
+        for edge in edges_to_update:
+            await edge.load_fact_embedding(self.driver)
+            await edge.save(self.driver)
         await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
+        for node, _ in nodes_to_rebuild:
+            await node.save(self.driver)
         await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
 
         await episode.delete(self.driver)
+
+    async def _rebuild_node_summary(self, node: EntityNode, episodes: list[EpisodicNode]):
+        # Summaries are built incrementally from the previous summary, so the previous summary
+        # cannot be used as input: it may carry content from the deleted episode.
+        node.summary = ''
+        await extract_attributes_from_nodes(self.clients, [node], episodes, None)
