@@ -124,13 +124,26 @@ async def semaphore_gather(
     *coroutines: Coroutine,
     max_coroutines: int | None = None,
 ) -> list[Any]:
+    """Run bounded concurrent work, settling owned coroutines before returning an error."""
     semaphore = asyncio.Semaphore(max_coroutines or SEMAPHORE_LIMIT)
 
     async def _wrap_coroutine(coroutine):
         async with semaphore:
             return await coroutine
 
-    return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
+    tasks = [asyncio.create_task(_wrap_coroutine(coroutine)) for coroutine in coroutines]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        # gather() does not cancel siblings when one child fails or is cancelled.
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+    finally:
+        # Wrappers cancelled before acquiring a slot never await their inputs.
+        for coroutine in coroutines:
+            coroutine.close()
 
 
 def validate_group_id(group_id: str | None) -> bool:
