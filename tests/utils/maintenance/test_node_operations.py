@@ -986,3 +986,38 @@ async def test_extract_attributes_preserves_prior_attributes_when_label_not_in_e
     )
 
     assert results[0].attributes == {'age': 30, 'city': 'New York'}
+
+
+def test_resolve_with_similarity_ties_resolve_deterministically():
+    """Fuzzy candidates that tie on the top Jaccard score must resolve deterministically.
+
+    ``candidate_ids`` is a set, so before the fix its iteration order (and therefore which of
+    two equally-scored candidates won) depended on PYTHONHASHSEED. Both candidates below share
+    the fuzzy-normalized name ``"alpha bravo"`` -- so each scores 1.0 against the extracted node
+    -- while keeping distinct exact-normalized names, which routes them through the fuzzy path
+    instead of the exact-match branch. The resolution must always pick the lowest uuid and must
+    not depend on the order the candidates were indexed in.
+    """
+    low_uuid = 'aaaaaaaa-0000-0000-0000-000000000001'
+    high_uuid = 'bbbbbbbb-0000-0000-0000-000000000002'
+
+    def make_candidate(name: str, uuid: str) -> EntityNode:
+        node = EntityNode(name=name, group_id='group', labels=['Entity'])
+        node.uuid = uuid
+        return node
+
+    for order in ([low_uuid, high_uuid], [high_uuid, low_uuid]):
+        candidates = [
+            make_candidate('alpha-bravo', order[0]),
+            make_candidate('alpha/bravo', order[1]),
+        ]
+        indexes = _build_candidate_indexes(candidates)
+        state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+        extracted = EntityNode(name='alpha bravo', group_id='group', labels=['Entity'])
+
+        _resolve_with_similarity([extracted], indexes, state)
+
+        assert state.uuid_map[extracted.uuid] == low_uuid
+        assert state.resolved_nodes[0] is not None
+        assert state.resolved_nodes[0].uuid == low_uuid
+        assert state.unresolved_indices == []
