@@ -273,6 +273,8 @@ class GLiNER2Client(LLMClient):
                 attribute_extraction=attribute_extraction,
             )
 
+        messages = self._clone_messages(messages)
+
         if max_tokens is None:
             max_tokens = self.max_tokens
 

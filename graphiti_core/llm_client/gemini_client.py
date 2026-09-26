@@ -389,6 +389,8 @@ class GeminiClient(LLMClient):
         Returns:
             dict[str, typing.Any]: The response from the language model.
         """
+        messages = self._clone_messages(messages)
+
         self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         # Add multilingual extraction instructions
         messages[0].content += get_extraction_language_instruction(group_id)
