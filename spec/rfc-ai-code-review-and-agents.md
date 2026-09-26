@@ -23,11 +23,13 @@ A survey of 35 high-star open-source repositories (internal research notes, Sept
 
 ## Decisions
 
+The decisions below describe the target state. The repository does not match this state yet: `ellipsis.yaml` still enables automatic review, and `.github/copilot-instructions.md` does not exist. The table in "Changes to the repository" lists the work that moves the repository to the target state.
+
 ### D1. Copilot is the AI reviewer
 
-Copilot code review replaces Ellipsis. The `ellipsis.yaml` file is removed and the Ellipsis GitHub App is uninstalled from the repository.
+Copilot code review will replace Ellipsis. The `ellipsis.yaml` file will be removed and the Ellipsis GitHub App will be uninstalled from the repository.
 
-Copilot review guidance is stored in `.github/copilot-instructions.md`. Copilot also reads `CLAUDE.md` and `AGENTS.md`, so those files stay accurate for review purposes. Path-specific instructions, when needed, are stored in `.github/instructions/**/*.instructions.md`.
+Copilot review guidance will be stored in `.github/copilot-instructions.md`. Copilot also reads `CLAUDE.md` and `AGENTS.md`, so those files stay accurate for review purposes. Path-specific instructions, when needed, will be stored in `.github/instructions/**/*.instructions.md`.
 
 ### D2. Copilot reviews on request only
 
@@ -38,7 +40,7 @@ A maintainer requests a review in one of two ways:
 - In the pull request sidebar, under Reviewers, click Request next to Copilot.
 - Through the REST API, request `copilot-pull-request-reviewer[bot]` as a reviewer.
 
-Note: an `@copilot` mention in a comment starts the Copilot cloud agent (the coding agent), and does not start a code review. The review trigger is the reviewer request. `CONTRIBUTING.md` documents this distinction so that contributors do not expect a review from a mention.
+Note: an `@copilot` mention in a comment starts the Copilot cloud agent (the coding agent), and does not start a code review. The review trigger is the reviewer request. `CONTRIBUTING.md` will document this distinction so that contributors do not expect a review from a mention.
 
 Copilot leaves a "Comment" review. Copilot approvals do not count toward required approvals. A human maintainer approval remains the merge gate.
 
