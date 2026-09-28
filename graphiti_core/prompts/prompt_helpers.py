@@ -15,9 +15,25 @@ limitations under the License.
 """
 
 import json
+from datetime import date, datetime
 from typing import Any
 
 DO_NOT_ESCAPE_UNICODE = '\nDo not escape unicode characters.\n'
+
+
+def _json_fallback(obj: Any) -> str:
+    """`json.dumps(default=...)` handler for values the stock encoder rejects.
+
+    Entity and edge attribute dicts commonly carry `datetime`/`date` values
+    (e.g. a date extracted into an entity attribute). Without a fallback,
+    serializing them for a prompt raises
+    `TypeError: Object of type datetime is not JSON serializable`. Dates are
+    rendered as ISO-8601; any other non-serializable value falls back to its
+    `str()` so prompt construction never crashes.
+    """
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    return str(obj)
 
 
 def to_prompt_json(data: Any, ensure_ascii: bool = False, indent: int | None = None) -> str:
@@ -36,5 +52,10 @@ def to_prompt_json(data: Any, ensure_ascii: bool = False, indent: int | None = N
         By default (ensure_ascii=False), non-ASCII characters (e.g., Korean, Japanese, Chinese)
         are preserved in their original form in the prompt, making them readable
         in LLM logs and improving model understanding.
+
+        Values the standard JSON encoder cannot serialize (e.g. ``datetime``)
+        are handled via ``_json_fallback``: dates become ISO-8601 strings and
+        anything else falls back to ``str()``, so prompt construction never
+        raises on real-world attribute data.
     """
-    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent, default=_json_fallback)
