@@ -862,7 +862,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.30.1"
+version = "0.30.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "neo4j" },
@@ -873,9 +873,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/5f/c59bec30bae0bfd470baddadc15bd8af7ef92e020466c272933090453b53/graphiti_core-0.30.1.tar.gz", hash = "sha256:7391424ad1e4412e99d4e1f5751da27969c1f908c87c383cef6c933dc67d13fe", size = 6970562, upload-time = "2026-09-01T19:15:08.27Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/a1/3e0fe119b6f3116ef7671ae1b2d98ef70655ac634d9914e748b5f97ecacb/graphiti_core-0.30.2.tar.gz", hash = "sha256:b8ac6999705d350ebb53d799505d49b76f5d74c20265a09df4094645b5d8ada9", size = 6978112, upload-time = "2026-09-08T20:39:14.59Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/a7/94b06a98f7c0bbe03021316488ca55481e8d6500a0e67b21af17b9fb39b4/graphiti_core-0.30.1-py3-none-any.whl", hash = "sha256:d7fd59c6ca01cfda45fe8e2669d30272d3d083e3ed5d62f810a72310670cdec8", size = 361453, upload-time = "2026-09-01T19:15:05.775Z" },
+    { url = "https://files.pythonhosted.org/packages/13/19/7ee37826a9dff81eb4d242a785c4ca76d2d510528dd52fc7dd10fb45d9cd/graphiti_core-0.30.2-py3-none-any.whl", hash = "sha256:97674a49514130db175faecf23221ce9338240be3cbe13a7e23e5a5033892b9f", size = 363163, upload-time = "2026-09-08T20:39:12.422Z" },
 ]
 
 [package.optional-dependencies]
@@ -1399,7 +1399,7 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.107.1" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.25.3" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=2.8.0" },
-    { name = "graphiti-core", extras = ["falkordb"], specifier = ">=0.30.1" },
+    { name = "graphiti-core", extras = ["falkordb"], specifier = ">=0.30.2" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=1.2.0" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "openai", specifier = ">=2.41.0" },
