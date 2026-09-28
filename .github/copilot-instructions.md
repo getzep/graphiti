@@ -15,15 +15,18 @@ that `ruff` already enforces.
 ### Required
 
 - Every Python file starts with the copyright header
-  (`Copyright 2024, Zep Software, Inc.` and the Apache 2.0 notice).
+  (`Copyright <year>, Zep Software, Inc.` and the Apache 2.0 notice). Any
+  year is acceptable.
 - Strings use single quotes, and lines are at most 100 characters
   (`pyproject.toml`).
 - No secret, credential, API key, or customer data is in the code or in the
   tests.
 - Logging does not include sensitive data: no prompts, no episode content,
   no credentials.
-- New behavior has tests under `tests/`. A test file is `test_<feature>.py`,
-  and a test function is `test_<behavior>`.
+- New behavior has tests. Core tests are under `tests/`, server tests are
+  under `server/tests/`, and MCP server tests are under `mcp_server/tests/`.
+  A test file is `test_<feature>.py`, and a test function is
+  `test_<behavior>`.
 - A test that needs a database is in a file with the `_int` suffix and is
   marked `@pytest.mark.integration`.
 - A change to a public interface updates the docs or the examples.
