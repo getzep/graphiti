@@ -207,6 +207,20 @@ that a feature issue has `rfc-approved` if you are adding new functionality.
 - Keep credentials, API keys, and customer data out of commits.
 - Sign the Contributor License Agreement when the bot prompts you.
 
+## AI review and agents
+
+Graphiti uses GitHub Copilot code review. A maintainer requests the review when
+it is useful; Copilot does not review a pull request automatically. The review
+criteria are in `.github/copilot-instructions.md`.
+
+- An `@copilot` mention in a comment does not start a review. It starts the
+  Copilot coding agent instead, so do not use it to ask for a review.
+- A Copilot review is a comment, not an approval. A maintainer approval is the
+  merge gate.
+- If an AI agent wrote the change, say which agent in the pull request
+  description. AI assistance is fine and is not by itself a reason for
+  `needs-rework`.
+
 ## Code Style and Quality
 
 We use several tools to maintain code quality:
