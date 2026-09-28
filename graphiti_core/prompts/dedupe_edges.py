@@ -28,7 +28,12 @@ class EdgeDuplicate(BaseModel):
     )
     contradicted_facts: list[int] = Field(
         ...,
-        description='List of idx values of contradicted facts (from full idx range). Empty list if none.',
+        description=(
+            'List of idx values of facts the new fact contradicts, from the full idx range. '
+            'Ending or negating a state contradicts that state even when the relation name differs '
+            '(for example "removed from" or "released from" contradicts "assigned to"). '
+            'Empty list if none.'
+        ),
     )
 
 
@@ -79,6 +84,8 @@ EXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.
 2. CONTRADICTION DETECTION:
    - Determine which facts the NEW FACT contradicts from either list.
    - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).
+   - A new fact contradicts an existing fact when they cannot both be true. Ending or negating a state contradicts that state even if the relation name differs: "removed from", "released from", "no longer", or "left" contradicts an open "assigned to" (or similar) fact about the same entities.
+   - Unrelated facts, and distinct events that can both be true, are not contradictions.
    - Return all contradicted idx values in contradicted_facts.
    - If no contradictions, return an empty list for contradicted_facts.
 
@@ -94,6 +101,14 @@ Result: duplicate_facts=[], contradicted_facts=[1] (same relationship but update
 EXISTING FACT: idx=2, "Bob ran 5 miles on Tuesday"
 NEW FACT: "Bob ran 3 miles on Wednesday"
 Result: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)
+
+EXISTING FACT: idx=3, "Kiran is assigned to project A"
+NEW FACT: "Kiran was removed from project A"
+Result: duplicate_facts=[], contradicted_facts=[3] (the removal ends the assignment — contradiction, NOT a duplicate and NOT an unrelated event)
+
+EXISTING FACT: idx=4, "Kiran is assigned to project A"
+NEW FACT: "Kiran likes coffee"
+Result: duplicate_facts=[], contradicted_facts=[] (unrelated fact — do not contradict the assignment)
 </EXAMPLE>
 """,
         ),

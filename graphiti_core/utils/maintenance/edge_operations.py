@@ -322,6 +322,35 @@ async def extract_edges(
     return edges
 
 
+def merge_edge_invalidation_candidates(
+    related_edges: list[EntityEdge],
+    searched_edges: list[EntityEdge],
+    same_endpoint_edges: list[EntityEdge],
+) -> list[EntityEdge]:
+    """Build the contradiction pool for one extracted edge.
+
+    Hybrid search ranks by similarity, so a negation such as "removed from"
+    can miss the open "assigned to" fact between the same entities. Those
+    open same-endpoint facts are still contradiction candidates. Facts already
+    listed for duplicate detection are not repeated here.
+    """
+    seen = {edge.uuid for edge in related_edges}
+    candidates: list[EntityEdge] = []
+    for edge in searched_edges:
+        if edge.uuid in seen:
+            continue
+        seen.add(edge.uuid)
+        candidates.append(edge)
+    for edge in same_endpoint_edges:
+        # Already-ended facts stay out of this fallback. Search can still
+        # return them when they are genuinely similar.
+        if edge.uuid in seen or edge.invalid_at is not None:
+            continue
+        seen.add(edge.uuid)
+        candidates.append(edge)
+    return candidates
+
+
 async def resolve_extracted_edges(
     clients: GraphitiClients,
     extracted_edges: list[EntityEdge],
@@ -417,17 +446,21 @@ async def resolve_extracted_edges(
         ]
     )
 
-    # Remove duplicates: if an edge appears in both duplicate candidates and invalidation candidates,
-    # keep it only in duplicate candidates
-    edge_invalidation_candidates: list[list[EntityEdge]] = []
-    for related_edges, invalidation_result in zip(
-        related_edges_lists, edge_invalidation_candidate_results, strict=True
-    ):
-        related_uuids = {edge.uuid for edge in related_edges}
-        deduplicated = [
-            edge for edge in invalidation_result.edges if edge.uuid not in related_uuids
-        ]
-        edge_invalidation_candidates.append(deduplicated)
+    # Keep an edge in only one list. Duplicate candidates win. Open facts between
+    # the same endpoints are included even when search did not rank them.
+    edge_invalidation_candidates: list[list[EntityEdge]] = [
+        merge_edge_invalidation_candidates(
+            related_edges,
+            invalidation_result.edges,
+            between_edges,
+        )
+        for related_edges, invalidation_result, between_edges in zip(
+            related_edges_lists,
+            edge_invalidation_candidate_results,
+            valid_edges_list,
+            strict=True,
+        )
+    ]
 
     logger.debug(
         f'Related edges: {[e.uuid for edges_lst in related_edges_lists for e in edges_lst]}'
@@ -567,6 +600,19 @@ def resolve_edge_contradictions(
             and edge_valid_at_utc < resolved_edge_valid_at_utc
         ):
             edge.invalid_at = resolved_edge.valid_at
+            edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
+            invalidated_edges.append(edge)
+        elif (
+            # End-only negation ("removed from", "released from") stores the time
+            # the prior fact stopped in invalid_at and often has no valid_at.
+            # Do not extend an interval that already ends at or before that time.
+            resolved_edge_valid_at_utc is None
+            and edge_valid_at_utc is not None
+            and resolved_edge_invalid_at_utc is not None
+            and edge_valid_at_utc < resolved_edge_invalid_at_utc
+            and (edge_invalid_at_utc is None or edge_invalid_at_utc > resolved_edge_invalid_at_utc)
+        ):
+            edge.invalid_at = resolved_edge.invalid_at
             edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
             invalidated_edges.append(edge)
 

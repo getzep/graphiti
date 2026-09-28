@@ -91,6 +91,7 @@ from graphiti_core.utils.maintenance.community_operations import (
 from graphiti_core.utils.maintenance.edge_operations import (
     build_episodic_edges,
     extract_edges,
+    merge_edge_invalidation_candidates,
     resolve_extracted_edge,
     resolve_extracted_edges,
 )
@@ -1786,7 +1787,7 @@ class Graphiti:
                 search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
             )
         ).edges
-        existing_edges = (
+        searched_invalidation_edges = (
             await search(
                 self.clients,
                 edge.fact,
@@ -1795,6 +1796,11 @@ class Graphiti:
                 search_filter=SearchFilters(),
             )
         ).edges
+        existing_edges = merge_edge_invalidation_candidates(
+            related_edges,
+            searched_invalidation_edges,
+            valid_edges,
+        )
 
         resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
             self.llm_client,
