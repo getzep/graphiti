@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 import typing
 
 logger = logging.getLogger(__name__)
@@ -34,12 +35,18 @@ class LLMCache:
     def __init__(self, directory: str):
         os.makedirs(directory, exist_ok=True)
         db_path = os.path.join(directory, 'cache.db')
+        # check_same_thread=False lets callers use the cache from other threads, but
+        # one sqlite3 connection cannot be used concurrently: parallel set/get calls
+        # raise OperationalError/InterfaceError and lose writes. Serialise access.
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.execute('CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT)')
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute('CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT)')
+            self._conn.commit()
 
     def get(self, key: str) -> dict[str, typing.Any] | None:
-        row = self._conn.execute('SELECT value FROM cache WHERE key = ?', (key,)).fetchone()
+        with self._lock:
+            row = self._conn.execute('SELECT value FROM cache WHERE key = ?', (key,)).fetchone()
         if row is None:
             return None
         try:
@@ -58,15 +65,17 @@ class LLMCache:
             # the cache skips it rather than failing the caller's request.
             logger.warning(f'Non-JSON-serializable cache value for key {key}, skipping')
             return
-        self._conn.execute(
-            'INSERT OR REPLACE INTO cache (key, value) VALUES (?, ?)',
-            (key, serialized),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                'INSERT OR REPLACE INTO cache (key, value) VALUES (?, ?)',
+                (key, serialized),
+            )
+            self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     def __del__(self) -> None:
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(Exception), self._lock:
             self._conn.close()
