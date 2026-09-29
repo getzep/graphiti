@@ -681,6 +681,9 @@ async def resolve_extracted_edge(
 
         return extracted_edge, [], []
 
+    related_edges = sorted(related_edges, key=lambda e: (e.fact, e.uuid))
+    existing_edges = sorted(existing_edges, key=lambda e: (e.fact, e.uuid))
+
     # Fast path: if the fact text and endpoints already exist verbatim, reuse the matching edge.
     normalized_fact = _normalize_string_exact(extracted_edge.fact)
     for edge in related_edges:

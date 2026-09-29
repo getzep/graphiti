@@ -152,6 +152,81 @@ async def test_resolve_extracted_edge_exact_fact_short_circuit(
     mock_llm_client.generate_response.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_sorts_candidates_before_prompt(
+    mock_llm_client,
+    mock_extracted_edge,
+    mock_current_episode,
+):
+    mock_llm_client.generate_response.return_value = {
+        'duplicate_facts': [],
+        'contradicted_facts': [],
+    }
+
+    related_zeta = EntityEdge(
+        uuid='rel-z',
+        source_node_uuid='source_uuid_2',
+        target_node_uuid='target_uuid_2',
+        name='related_edge',
+        group_id='group_1',
+        fact='zeta fact',
+        episodes=['episode_2'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    related_alpha = EntityEdge(
+        uuid='rel-a',
+        source_node_uuid='source_uuid_2',
+        target_node_uuid='target_uuid_2',
+        name='related_edge',
+        group_id='group_1',
+        fact='alpha fact',
+        episodes=['episode_2'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    existing_m = EntityEdge(
+        uuid='ex-m',
+        source_node_uuid='source_uuid_3',
+        target_node_uuid='target_uuid_3',
+        name='existing_edge',
+        group_id='group_1',
+        fact='m fact',
+        episodes=['episode_3'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    existing_b = EntityEdge(
+        uuid='ex-b',
+        source_node_uuid='source_uuid_3',
+        target_node_uuid='target_uuid_3',
+        name='existing_edge',
+        group_id='group_1',
+        fact='b fact',
+        episodes=['episode_3'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+
+    await resolve_extracted_edge(
+        mock_llm_client,
+        mock_extracted_edge,
+        [related_zeta, related_alpha],
+        [existing_m, existing_b],
+        mock_current_episode,
+        edge_type_candidates=None,
+    )
+
+    prompt = mock_llm_client.generate_response.call_args_list[0].args[0]
+    prompt_text = prompt if isinstance(prompt, str) else str(prompt)
+    assert prompt_text.index('alpha fact') < prompt_text.index('zeta fact')
+    assert prompt_text.index('b fact') < prompt_text.index('m fact')
+
+
 class OccurredAtEdge(BaseModel):
     """Edge model stub for OCCURRED_AT."""
 
@@ -318,11 +393,11 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
     # Verify LLM was called
     mock_llm_client.generate_response.assert_called_once()
 
-    # Verify the system correctly identified duplicates using integer indices
-    # The LLM returned [0, 1], so related_edge_0 and related_edge_1 should be marked as duplicates
+    # Candidates are sorted by (fact, uuid) before idx assignment, so [0, 1]
+    # maps to "User enjoys yoga" then "User loves swimming".
     assert len(duplicates) == 2
     assert related_edge_0 in duplicates
-    assert related_edge_1 in duplicates
+    assert related_edge_2 in duplicates
     assert invalidated == []
 
     # Verify that the resolved edge is one of the duplicates (the first one found)
