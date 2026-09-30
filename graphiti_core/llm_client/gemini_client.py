@@ -358,7 +358,7 @@ class GeminiClient(LLMClient):
                 raise RateLimitError from e
 
             logger.error(f'Error in generating LLM response: {e}')
-            raise Exception from e
+            raise Exception(str(e)) from e
 
     async def generate_response(
         self,
