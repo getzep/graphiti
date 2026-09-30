@@ -620,6 +620,25 @@ async def _extract_edge_timestamps(
         logger.warning('Failed to extract timestamps for edge %s', edge.uuid, exc_info=True)
 
 
+def _parse_edge_ids(ids: list[str], related: list[EntityEdge], existing: list[EntityEdge]):
+    """'E3' -> related[3]; 'I2' -> existing[2]. Unknown/malformed -> dropped + warned."""
+    related_out: list[EntityEdge] = []
+    existing_out: list[EntityEdge] = []
+    for raw in ids:
+        try:
+            prefix, num = raw[0], int(raw[1:])
+        except (IndexError, ValueError):
+            logger.warning('LLM returned malformed id %r', raw)
+            continue
+        if prefix == 'E' and 0 <= num < len(related):
+            related_out.append(related[num])
+        elif prefix == 'I' and 0 <= num < len(existing):
+            existing_out.append(existing[num])
+        else:
+            logger.warning('LLM returned out-of-range id %r', raw)
+    return related_out, existing_out
+
+
 async def resolve_extracted_edge(
     llm_client: LLMClient,
     extracted_edge: EntityEdge,
@@ -696,13 +715,13 @@ async def resolve_extracted_edge(
 
     start = time()
 
-    # Prepare context for LLM with continuous indexing
-    related_edges_context = [{'idx': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)]
+    # Prepare context for LLM with per-list E/I namespace ids
+    related_edges_context = [
+        {'id': f'E{i}', 'fact': edge.fact} for i, edge in enumerate(related_edges)
+    ]
 
-    # Invalidation candidates start where duplicate candidates end
-    invalidation_idx_offset = len(related_edges)
     invalidation_edge_candidates_context = [
-        {'idx': invalidation_idx_offset + i, 'fact': existing_edge.fact}
+        {'id': f'I{i}', 'fact': existing_edge.fact}
         for i, existing_edge in enumerate(existing_edges)
     ]
 
@@ -716,11 +735,9 @@ async def resolve_extracted_edge(
         logger.debug(
             'Resolving edge: sent %d EXISTING FACTS%s and %d INVALIDATION CANDIDATES%s',
             len(related_edges),
-            f' (idx 0-{len(related_edges) - 1})' if related_edges else '',
+            f' (ids E0-E{len(related_edges) - 1})' if related_edges else '',
             len(existing_edges),
-            f' (idx {invalidation_idx_offset}-{invalidation_idx_offset + len(existing_edges) - 1})'
-            if existing_edges
-            else '',
+            f' (ids I0-I{len(existing_edges) - 1})' if existing_edges else '',
         )
 
     llm_response = await llm_client.generate_response(
@@ -730,50 +747,26 @@ async def resolve_extracted_edge(
         prompt_name='dedupe_edges.resolve_edge',
     )
     response_object = EdgeDuplicate(**llm_response)
-    duplicate_facts = response_object.duplicate_facts
 
-    # Validate duplicate_facts are in valid range for EXISTING FACTS
-    invalid_duplicates = [i for i in duplicate_facts if i < 0 or i >= len(related_edges)]
-    if invalid_duplicates:
-        logger.warning(
-            'LLM returned invalid duplicate_facts idx values %s (valid range: 0-%d for EXISTING FACTS)',
-            invalid_duplicates,
-            len(related_edges) - 1,
-        )
-
-    duplicate_fact_ids: list[int] = [i for i in duplicate_facts if 0 <= i < len(related_edges)]
+    # Parse E/I prefixed ids: 'E3' -> related_edges[3], 'I2' -> existing_edges[2].
+    # Only related_edges may be merged as duplicates, so I ids in duplicate_facts are invalid.
+    duplicate_related, _ = _parse_edge_ids(response_object.duplicate_facts, related_edges, [])
 
     resolved_edge = extracted_edge
-    for duplicate_fact_id in duplicate_fact_ids:
-        resolved_edge = related_edges[duplicate_fact_id]
+    for duplicate_edge in duplicate_related:
+        resolved_edge = duplicate_edge
         break
 
-    if duplicate_fact_ids and episode is not None:
+    if duplicate_related and episode is not None:
         resolved_edge.episodes.append(episode.uuid)
 
-    # Process contradicted facts (continuous indexing across both lists)
-    contradicted_facts: list[int] = response_object.contradicted_facts
+    # Process contradicted facts: E-part -> related_edges candidates, I-part -> existing_edges candidates
     invalidation_candidates: list[EntityEdge] = []
-
-    # Only process contradictions if there are edges to check against
-    if related_edges or existing_edges:
-        max_valid_idx = len(related_edges) + len(existing_edges) - 1
-        invalid_contradictions = [i for i in contradicted_facts if i < 0 or i > max_valid_idx]
-        if invalid_contradictions:
-            logger.warning(
-                'LLM returned invalid contradicted_facts idx values %s (valid range: 0-%d)',
-                invalid_contradictions,
-                max_valid_idx,
-            )
-
-        # Split contradicted facts into those from related_edges vs existing_edges based on offset
-        for idx in contradicted_facts:
-            if 0 <= idx < len(related_edges):
-                # From EXISTING FACTS (duplicate candidates)
-                invalidation_candidates.append(related_edges[idx])
-            elif invalidation_idx_offset <= idx <= max_valid_idx:
-                # From FACT INVALIDATION CANDIDATES (adjust index by offset)
-                invalidation_candidates.append(existing_edges[idx - invalidation_idx_offset])
+    contradicted_related, contradicted_existing = _parse_edge_ids(
+        response_object.contradicted_facts, related_edges, existing_edges
+    )
+    invalidation_candidates.extend(contradicted_related)
+    invalidation_candidates.extend(contradicted_existing)
 
     # Only extract structured attributes if the edge's relation_type matches an allowed custom type
     # AND the edge model exists for this node pair signature
@@ -842,7 +835,7 @@ async def resolve_extracted_edge(
     invalidated_edges: list[EntityEdge] = resolve_edge_contradictions(
         resolved_edge, invalidation_candidates
     )
-    duplicate_edges: list[EntityEdge] = [related_edges[idx] for idx in duplicate_fact_ids]
+    duplicate_edges: list[EntityEdge] = list(duplicate_related)
 
     return resolved_edge, invalidated_edges, duplicate_edges
 
