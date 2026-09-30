@@ -2,11 +2,16 @@
 
 import asyncio
 import logging
+from collections import deque
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from models.response_types import IngestionStatusResponse
+
 logger = logging.getLogger(__name__)
+
+FAILURE_WINDOW = timedelta(minutes=15)
 
 
 class QueueService:
@@ -20,6 +25,10 @@ class QueueService:
         self._queue_workers: dict[str, bool] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
+        self._recent_failures: deque[tuple[str, datetime]] = deque()
+        self._consecutive_failures: dict[str, int] = {}
+        self._last_failure_at: datetime | None = None
+        self._last_failure_group_id: str | None = None
 
     async def add_episode_task(
         self, group_id: str, process_func: Callable[[], Awaitable[None]]
@@ -65,9 +74,12 @@ class QueueService:
                     # Process the episode
                     await process_func()
                 except Exception as e:
-                    logger.error(
+                    self._record_failure(group_id)
+                    logger.exception(
                         f'Error processing queued episode for group_id {group_id}: {str(e)}'
                     )
+                else:
+                    self._record_success(group_id)
                 finally:
                     # Mark the task as done regardless of success/failure
                     self._episode_queues[group_id].task_done()
@@ -78,6 +90,42 @@ class QueueService:
         finally:
             self._queue_workers[group_id] = False
             logger.info(f'Stopped episode queue worker for group_id: {group_id}')
+
+    def _record_failure(self, group_id: str) -> None:
+        """Record a terminal ingestion failure without retaining episode data."""
+        now = datetime.now(timezone.utc)
+        self._recent_failures.append((group_id, now))
+        self._consecutive_failures[group_id] = self._consecutive_failures.get(group_id, 0) + 1
+        self._last_failure_at = now
+        self._last_failure_group_id = group_id
+        self._prune_recent_failures(now)
+
+    def _record_success(self, group_id: str) -> None:
+        """Clear this group's consecutive failure state after a successful ingestion."""
+        self._consecutive_failures.pop(group_id, None)
+
+    def _prune_recent_failures(self, now: datetime) -> None:
+        cutoff = now - FAILURE_WINDOW
+        while self._recent_failures and self._recent_failures[0][1] < cutoff:
+            self._recent_failures.popleft()
+
+    def get_ingestion_status(self) -> IngestionStatusResponse:
+        """Return a sanitized queue-health summary for operational status reporting."""
+        self._prune_recent_failures(datetime.now(timezone.utc))
+        failing_groups = {
+            group_id: count for group_id, count in self._consecutive_failures.items() if count > 0
+        }
+
+        return {
+            'status': 'degraded' if failing_groups else 'ok',
+            'recent_failure_count': len(self._recent_failures),
+            'consecutive_failure_count': sum(failing_groups.values()),
+            'failing_group_count': len(failing_groups),
+            'last_failure_at': self._last_failure_at.isoformat() if self._last_failure_at else None,
+            'last_failure_group_id': self._last_failure_group_id,
+            'pending_episode_count': sum(queue.qsize() for queue in self._episode_queues.values()),
+            'active_worker_count': sum(self._queue_workers.values()),
+        }
 
     def get_queue_size(self, group_id: str) -> int:
         """Get the current queue size for a group_id."""
