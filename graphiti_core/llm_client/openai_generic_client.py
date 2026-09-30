@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from ..prompts.models import Message
 from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
-from .errors import EmptyResponseError, RateLimitError
+from .errors import EmptyResponseError, RateLimitError, TruncatedResponseError
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +159,22 @@ class OpenAIGenericClient(LLMClient):
                 max_tokens=max_tokens,
                 response_format=self._build_response_format(response_model),  # type: ignore[arg-type]
             )
-            result = response.choices[0].message.content or ''
-            # An empty body (refusal, length finish_reason, or a flaky endpoint) would make
+            choice = response.choices[0]
+            # finish_reason == 'length' means the output hit the max_tokens cap and was
+            # truncated (commonly a repetition loop at low temperature). The truncated
+            # body cannot be parsed, and resending the identical request is futile, so
+            # raise a dedicated non-retryable error instead of letting json.loads fail
+            # and route it through the generic transient-error retry path.
+            if getattr(choice, 'finish_reason', None) == 'length':
+                raise TruncatedResponseError(
+                    'LLM response was truncated at the output token cap '
+                    f'(finish_reason="length", max_tokens={max_tokens}) for '
+                    f'{len(messages)} input message(s); the answer is incomplete and '
+                    'an identical retry cannot succeed. Increase max_tokens, split the '
+                    'input, or raise the temperature for this extraction call.'
+                )
+            result = choice.message.content or ''
+            # An empty body (refusal or a flaky endpoint) would make
             # json.loads raise a cryptic JSONDecodeError; surface a clear error instead.
             if not result:
                 raise EmptyResponseError('LLM returned an empty response')

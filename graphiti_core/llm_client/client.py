@@ -31,7 +31,6 @@ from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import EmptyResponseError, RateLimitError
 from .token_tracker import TokenUsageTracker
 
-DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
 
