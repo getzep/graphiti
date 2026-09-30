@@ -442,8 +442,12 @@ async def edge_search(
                         driver, source_uuids, center_node_uuid, min_score=reranker_min_score
                     )
 
-                for node_uuid in reranked_node_uuids:
-                    reranked_uuids.extend(source_to_edge_uuid_map[node_uuid])
+                node_distance_scores: list[float] = []
+                for node_uuid, score in zip(reranked_node_uuids, edge_scores):
+                    node_edge_uuids = source_to_edge_uuid_map[node_uuid]
+                    reranked_uuids.extend(node_edge_uuids)
+                    node_distance_scores.extend([score] * len(node_edge_uuids))
+                edge_scores = node_distance_scores
 
         reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 
