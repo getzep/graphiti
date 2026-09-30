@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, Protocol, TypedDict
+from typing import Any, Protocol
+from typing_extensions import TypedDict
 
 from .dedupe_edges import Prompt as DedupeEdgesPrompt
 from .dedupe_edges import Versions as DedupeEdgesVersions
