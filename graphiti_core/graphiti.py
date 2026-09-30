@@ -38,6 +38,7 @@ from graphiti_core.edges import (
     create_entity_edge_embeddings,
 )
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
@@ -148,6 +149,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        use_vector_index: bool | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -184,6 +186,9 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        use_vector_index : bool | None, optional
+            Enable Neo4j vector-index search when Graphiti constructs its default
+            Neo4j driver. If omitted, the Neo4j environment fallback is used.
 
         Returns
         -------
@@ -204,12 +209,27 @@ class Graphiti:
         Graphiti if you're using the default OpenAIClient.
         """
 
-        if graph_driver:
+        if graph_driver is None and uri is None:
+            raise ValueError('uri must be provided when graph_driver is None')
+
+        if embedder:
+            self.embedder = embedder
+        else:
+            self.embedder = OpenAIEmbedder()
+
+        if graph_driver is not None:
             self.driver = graph_driver
         else:
-            if uri is None:
-                raise ValueError('uri must be provided when graph_driver is None')
-            self.driver = Neo4jDriver(uri, user, password)
+            assert uri is not None  # Narrowed by the validation above.
+            embedder_config = getattr(self.embedder, 'config', None)
+            embedding_dim = getattr(embedder_config, 'embedding_dim', EMBEDDING_DIM)
+            self.driver = Neo4jDriver(
+                uri,
+                user,
+                password,
+                embedding_dim=embedding_dim,
+                use_vector_index=use_vector_index,
+            )
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
@@ -217,10 +237,6 @@ class Graphiti:
             self.llm_client = llm_client
         else:
             self.llm_client = OpenAIClient()
-        if embedder:
-            self.embedder = embedder
-        else:
-            self.embedder = OpenAIEmbedder()
         if cross_encoder:
             self.cross_encoder = cross_encoder
         else:
