@@ -181,13 +181,20 @@ To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint
 llm:
   provider: "openai"
   model: "gpt-oss:120b"  # or your preferred Ollama model
-  api_base: "http://localhost:11434/v1"
-  api_key: "ollama"  # dummy key required
   structured_output_mode: "json_object"  # use when json_schema is accepted but not enforced
+  providers:
+    openai:
+      api_key: "ollama"  # dummy key required
+      api_url: "http://localhost:11434/v1"
 
 embedder:
-  provider: "sentence_transformers"  # recommended for local setup
-  model: "all-MiniLM-L6-v2"
+  provider: "openai"  # Ollama serves embeddings on the same OpenAI-compatible API
+  model: "nomic-embed-text"  # or another Ollama embedding model
+  dimensions: 768  # must match your embedding model
+  providers:
+    openai:
+      api_key: "ollama"
+      api_url: "http://localhost:11434/v1"
 ```
 
 Make sure Ollama is running locally with: `ollama serve`
