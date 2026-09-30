@@ -81,7 +81,9 @@ async def test_structured_completion_strips_reasoning_for_unsupported_models():
     call_args = dummy_client.beta.chat.completions.parse_calls[0]
     assert call_args['model'] == 'gpt-4.1'
     assert call_args['messages'] == []
-    assert call_args['max_tokens'] == 64
+    # Azure OpenAI 2024-10-21+ rejects 'max_tokens' (see issue #1496)
+    assert 'max_tokens' not in call_args
+    assert call_args['max_completion_tokens'] == 64
     assert call_args['response_format'] is DummyResponseModel
     assert call_args['temperature'] == 0.4
     # Reasoning and verbosity parameters should not be passed for non-reasoning models
