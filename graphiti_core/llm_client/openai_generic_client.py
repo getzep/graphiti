@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import typing
+from copy import deepcopy
 from typing import Any, Literal
 
 import openai
@@ -35,6 +36,27 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = 'gpt-4.1-mini'
 
 StructuredOutputMode = Literal['json_schema', 'json_object']
+
+
+def _to_strict_json_schema(schema: Any) -> Any:
+    """Recursively conform a JSON schema to OpenAI's strict subset, in place.
+
+    Every object schema that declares ``properties`` gets ``additionalProperties: false``
+    and ``required`` listing all of its keys. Object schemas without ``properties``
+    (free-form maps, e.g. ``dict[str, str]``) are left alone — tightening those would
+    narrow them to "no keys allowed".
+    """
+    if isinstance(schema, dict):
+        properties = schema.get('properties')
+        if isinstance(properties, dict):
+            schema['additionalProperties'] = False
+            schema['required'] = list(properties)
+        for value in schema.values():
+            _to_strict_json_schema(value)
+    elif isinstance(schema, list):
+        for item in schema:
+            _to_strict_json_schema(item)
+    return schema
 
 
 class OpenAIGenericClient(LLMClient):
@@ -110,16 +132,20 @@ class OpenAIGenericClient(LLMClient):
         if response_model is None or self.structured_output_mode == 'json_object':
             return {'type': 'json_object'}
 
-        # Native json_schema. We intentionally omit "strict": true — strict mode requires
-        # the schema to meet OpenAI's strict subset (additionalProperties: false, every
-        # field required), which raw model_json_schema() routinely violates (that's why the
-        # dedicated OpenAIClient uses responses.parse() instead). So adherence is best-effort
-        # on OpenAI-proper; constrained-decoding servers (vLLM, llama.cpp) still enforce it.
+        # Native json_schema. The raw model_json_schema() does not meet OpenAI's strict
+        # subset, and endpoints that translate chat.completions into the Responses API for
+        # gpt-5-family models reject it outright with 400 invalid_json_schema
+        # ("'additionalProperties' is required to be supplied and to be false"). Conform the
+        # schema to the strict subset so those endpoints accept it. "strict": true is still
+        # omitted: it is not needed for acceptance, and leaving it off keeps adherence
+        # best-effort for providers that treat the flag as a hard capability gate.
         return {
             'type': 'json_schema',
             'json_schema': {
                 'name': getattr(response_model, '__name__', 'structured_response'),
-                'schema': response_model.model_json_schema(),
+                'schema': _to_strict_json_schema(
+                    deepcopy(response_model.model_json_schema()),
+                ),
             },
         }
 
