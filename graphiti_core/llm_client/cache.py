@@ -41,7 +41,9 @@ class LLMCache:
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         with self._lock:
-            self._conn.execute('CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT)')
+            self._conn.execute(
+                'CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT)'
+            )
             self._conn.commit()
 
     def get(self, key: str) -> dict[str, typing.Any] | None:

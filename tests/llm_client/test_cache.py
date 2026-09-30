@@ -142,5 +142,7 @@ def test_concurrent_set_and_get(tmp_path):
         t.join()
 
     assert errors == []
-    assert all(cache.get(f'k-{t}-{i}') is not None for t in range(threads_count) for i in range(iterations))
+    assert all(
+        cache.get(f'k-{t}-{i}') is not None for t in range(threads_count) for i in range(iterations)
+    )
     cache.close()
