@@ -28,7 +28,7 @@ from typing_extensions import LiteralString
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
-from graphiti_core.helpers import parse_db_date
+from graphiti_core.helpers import merge_attributes_into_properties, parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_RETURN,
     EPISODIC_EDGE_RETURN,
@@ -362,9 +362,7 @@ class EntityEdge(Edge):
                 **edge_data,
             )
         else:
-            for k, v in (self.attributes or {}).items():
-                if k not in edge_data:
-                    edge_data[k] = v
+            merge_attributes_into_properties(edge_data, self.attributes)
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
                 edge_data=edge_data,
