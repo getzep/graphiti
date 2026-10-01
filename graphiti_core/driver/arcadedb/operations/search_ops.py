@@ -17,8 +17,6 @@ limitations under the License.
 import logging
 from typing import Any
 
-import numpy as np
-
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
@@ -29,6 +27,7 @@ from graphiti_core.driver.record_parsers import (
     episodic_node_from_record,
 )
 from graphiti_core.edges import EntityEdge
+from graphiti_core.graph_queries import get_vector_cosine_func_query
 from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
 from graphiti_core.models.nodes.node_db_queries import (
@@ -46,18 +45,6 @@ from graphiti_core.search.search_filters import (
 logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 128
-
-
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors."""
-    a_arr = np.array(a, dtype=np.float64)
-    b_arr = np.array(b, dtype=np.float64)
-    dot = np.dot(a_arr, b_arr)
-    norm_a = np.linalg.norm(a_arr)
-    norm_b = np.linalg.norm(b_arr)
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return float(dot / (norm_a * norm_b))
 
 
 def _build_arcadedb_fulltext_query(
@@ -171,43 +158,41 @@ class ArcadeDBSearchOperations(SearchOperations):
             filter_queries.append('n.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
-        filter_query = ''
-        if filter_queries:
-            filter_query = ' WHERE ' + (' AND '.join(filter_queries))
+        # The embedding guard is a filter like any other. Emitting it as a second
+        # WHERE after the group/uuid filters produced `WHERE ... WHERE ...`, a
+        # syntax error whenever any filter was present.
+        filter_queries.append('n.name_embedding IS NOT NULL')
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
-        # Fetch candidate nodes with embeddings
         cypher = (
             'MATCH (n:Entity)'
             + filter_query
             + """
-            WHERE n.name_embedding IS NOT NULL
+            WITH n, """
+            + get_vector_cosine_func_query(
+                'n.name_embedding', '$search_vector', GraphProvider.ARCADEDB
+            )
+            + """ AS score
+            WHERE score > $min_score
             RETURN
             """
             + get_entity_node_return_query(GraphProvider.ARCADEDB)
-            + """,
-            n.name_embedding AS name_embedding
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
             """
         )
 
         records, _, _ = await executor.execute_query(
             cypher,
+            search_vector=search_vector,
+            limit=limit,
+            min_score=min_score,
             routing_='r',
             **filter_params,
         )
 
-        # Compute cosine similarity in Python and filter/sort
-        scored_records = []
-        for r in records:
-            embedding = r.get('name_embedding')
-            if embedding is not None:
-                score = _cosine_similarity(embedding, search_vector)
-                if score > min_score:
-                    scored_records.append((score, r))
-
-        scored_records.sort(key=lambda x: x[0], reverse=True)
-        scored_records = scored_records[:limit]
-
-        return [entity_node_from_record(r) for _, r in scored_records]
+        return [entity_node_from_record(r) for r in records]
 
     async def node_bfs_search(
         self,
@@ -350,43 +335,38 @@ class ArcadeDBSearchOperations(SearchOperations):
                 filter_params['target_uuid'] = target_node_uuid
                 filter_queries.append('m.uuid = $target_uuid')
 
-        filter_query = ''
-        if filter_queries:
-            filter_query = ' WHERE ' + (' AND '.join(filter_queries))
+        filter_queries.append('e.fact_embedding IS NOT NULL')
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
-        # Fetch candidate edges with embeddings
         cypher = (
             'MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)'
             + filter_query
             + """
-            WHERE e.fact_embedding IS NOT NULL
-            RETURN DISTINCT
+            WITH DISTINCT e, n, m, """
+            + get_vector_cosine_func_query(
+                'e.fact_embedding', '$search_vector', GraphProvider.ARCADEDB
+            )
+            + """ AS score
+            WHERE score > $min_score
+            RETURN
             """
             + get_entity_edge_return_query(GraphProvider.ARCADEDB)
-            + """,
-            e.fact_embedding AS fact_embedding
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
             """
         )
 
         records, _, _ = await executor.execute_query(
             cypher,
+            search_vector=search_vector,
+            limit=limit,
+            min_score=min_score,
             routing_='r',
             **filter_params,
         )
 
-        # Compute cosine similarity in Python and filter/sort
-        scored_records = []
-        for r in records:
-            embedding = r.get('fact_embedding')
-            if embedding is not None:
-                score = _cosine_similarity(embedding, search_vector)
-                if score > min_score:
-                    scored_records.append((score, r))
-
-        scored_records.sort(key=lambda x: x[0], reverse=True)
-        scored_records = scored_records[:limit]
-
-        return [entity_edge_from_record(r) for _, r in scored_records]
+        return [entity_edge_from_record(r) for r in records]
 
     async def edge_bfs_search(
         self,
@@ -553,41 +533,40 @@ class ArcadeDBSearchOperations(SearchOperations):
     ) -> list[CommunityNode]:
         query_params: dict[str, Any] = {}
 
-        group_filter_query = ''
+        group_filter_query = ' WHERE c.name_embedding IS NOT NULL'
         if group_ids is not None:
-            group_filter_query += ' WHERE c.group_id IN $group_ids'
+            group_filter_query += ' AND c.group_id IN $group_ids'
             query_params['group_ids'] = group_ids
 
-        # Fetch candidate communities with embeddings
         cypher = (
             'MATCH (c:Community)'
             + group_filter_query
             + """
-            WHERE c.name_embedding IS NOT NULL
+            WITH c, """
+            + get_vector_cosine_func_query(
+                'c.name_embedding', '$search_vector', GraphProvider.ARCADEDB
+            )
+            + """ AS score
+            WHERE score > $min_score
             RETURN
             """
             + COMMUNITY_NODE_RETURN
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
         )
 
         records, _, _ = await executor.execute_query(
             cypher,
+            search_vector=search_vector,
+            limit=limit,
+            min_score=min_score,
             routing_='r',
             **query_params,
         )
 
-        # Compute cosine similarity in Python and filter/sort
-        scored_records = []
-        for r in records:
-            embedding = r.get('name_embedding')
-            if embedding is not None:
-                score = _cosine_similarity(embedding, search_vector)
-                if score > min_score:
-                    scored_records.append((score, r))
-
-        scored_records.sort(key=lambda x: x[0], reverse=True)
-        scored_records = scored_records[:limit]
-
-        return [community_node_from_record(r) for _, r in scored_records]
+        return [community_node_from_record(r) for r in records]
 
     # --- Rerankers ---
 
