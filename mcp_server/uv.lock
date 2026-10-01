@@ -1362,8 +1362,10 @@ version = "1.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "graphiti-core", extra = ["falkordb"] },
+    { name = "httpx" },
     { name = "mcp" },
     { name = "openai" },
+    { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "typing-extensions" },
@@ -1401,8 +1403,10 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=2.8.0" },
     { name = "graphiti-core", extras = ["falkordb"], specifier = ">=0.30.2" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=1.2.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "openai", specifier = ">=2.41.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=3.2.1" },
