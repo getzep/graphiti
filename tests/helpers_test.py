@@ -26,6 +26,7 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
+from graphiti_core.utils.datetime_utils import ensure_utc
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
@@ -268,15 +269,24 @@ async def print_graph(graph_driver: GraphDriver):
         print('  ', edge)
 
 
+def assert_datetimes_equal(left, right):
+    """Compare datetimes after normalizing naive values to UTC.
+
+    FalkorDB round-trips ISO strings with an explicit +00:00 offset, so a naive
+    input and an aware UTC result represent the same instant.
+    """
+    assert ensure_utc(left) == ensure_utc(right)
+
+
 async def assert_episodic_node_equals(retrieved: EpisodicNode, sample: EpisodicNode):
     assert retrieved.uuid == sample.uuid
     assert retrieved.name == sample.name
     assert retrieved.group_id == group_id
-    assert retrieved.created_at == sample.created_at
+    assert_datetimes_equal(retrieved.created_at, sample.created_at)
     assert retrieved.source == sample.source
     assert retrieved.source_description == sample.source_description
     assert retrieved.content == sample.content
-    assert retrieved.valid_at == sample.valid_at
+    assert_datetimes_equal(retrieved.valid_at, sample.valid_at)
     assert set(retrieved.entity_edges) == set(sample.entity_edges)
 
 
@@ -288,7 +298,7 @@ async def assert_entity_node_equals(
     assert retrieved.name == sample.name
     assert retrieved.group_id == sample.group_id
     assert set(retrieved.labels) == set(sample.labels)
-    assert retrieved.created_at == sample.created_at
+    assert_datetimes_equal(retrieved.created_at, sample.created_at)
     assert retrieved.name_embedding is not None
     assert sample.name_embedding is not None
     assert np.allclose(retrieved.name_embedding, sample.name_embedding)
@@ -303,7 +313,7 @@ async def assert_community_node_equals(
     assert retrieved.uuid == sample.uuid
     assert retrieved.name == sample.name
     assert retrieved.group_id == group_id
-    assert retrieved.created_at == sample.created_at
+    assert_datetimes_equal(retrieved.created_at, sample.created_at)
     assert retrieved.name_embedding is not None
     assert sample.name_embedding is not None
     assert np.allclose(retrieved.name_embedding, sample.name_embedding)
@@ -313,7 +323,7 @@ async def assert_community_node_equals(
 async def assert_episodic_edge_equals(retrieved: EpisodicEdge, sample: EpisodicEdge):
     assert retrieved.uuid == sample.uuid
     assert retrieved.group_id == sample.group_id
-    assert retrieved.created_at == sample.created_at
+    assert_datetimes_equal(retrieved.created_at, sample.created_at)
     assert retrieved.source_node_uuid == sample.source_node_uuid
     assert retrieved.target_node_uuid == sample.target_node_uuid
 
@@ -324,7 +334,7 @@ async def assert_entity_edge_equals(
     await retrieved.load_fact_embedding(graph_driver)
     assert retrieved.uuid == sample.uuid
     assert retrieved.group_id == sample.group_id
-    assert retrieved.created_at == sample.created_at
+    assert_datetimes_equal(retrieved.created_at, sample.created_at)
     assert retrieved.source_node_uuid == sample.source_node_uuid
     assert retrieved.target_node_uuid == sample.target_node_uuid
     assert retrieved.name == sample.name
@@ -333,9 +343,9 @@ async def assert_entity_edge_equals(
     assert sample.fact_embedding is not None
     assert np.allclose(retrieved.fact_embedding, sample.fact_embedding)
     assert retrieved.episodes == sample.episodes
-    assert retrieved.expired_at == sample.expired_at
-    assert retrieved.valid_at == sample.valid_at
-    assert retrieved.invalid_at == sample.invalid_at
+    assert_datetimes_equal(retrieved.expired_at, sample.expired_at)
+    assert_datetimes_equal(retrieved.valid_at, sample.valid_at)
+    assert_datetimes_equal(retrieved.invalid_at, sample.invalid_at)
     assert retrieved.attributes == sample.attributes
 
 

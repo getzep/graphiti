@@ -45,7 +45,7 @@ class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
         else:
             # Kuzu requires deleting RelatesToNode_ intermediates in addition to
             # Entity, Episodic, and Community nodes.
-            for label in ['RelatesToNode_', 'Entity', 'Episodic', 'Community']:
+            for label in ['RelatesToNode_', 'Entity', 'Episodic', 'Community', 'Saga']:
                 await executor.execute_query(
                     f"""
                     MATCH (n:{label})

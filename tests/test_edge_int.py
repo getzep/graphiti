@@ -23,7 +23,7 @@ import pytest
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
-from tests.helpers_test import get_edge_count, get_node_count, group_id
+from tests.helpers_test import assert_datetimes_equal, get_edge_count, get_node_count, group_id
 
 pytest_plugins = ('pytest_asyncio',)
 
@@ -104,7 +104,7 @@ async def test_episodic_edge(graph_driver, mock_embedder):
     assert retrieved.uuid == episodic_edge.uuid
     assert retrieved.source_node_uuid == episode_node.uuid
     assert retrieved.target_node_uuid == alice_node.uuid
-    assert retrieved.created_at == now
+    assert_datetimes_equal(retrieved.created_at, now)
     assert retrieved.group_id == group_id
 
     # Get edge by uuids
@@ -113,7 +113,7 @@ async def test_episodic_edge(graph_driver, mock_embedder):
     assert retrieved[0].uuid == episodic_edge.uuid
     assert retrieved[0].source_node_uuid == episode_node.uuid
     assert retrieved[0].target_node_uuid == alice_node.uuid
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Get edge by group ids
@@ -122,7 +122,7 @@ async def test_episodic_edge(graph_driver, mock_embedder):
     assert retrieved[0].uuid == episodic_edge.uuid
     assert retrieved[0].source_node_uuid == episode_node.uuid
     assert retrieved[0].target_node_uuid == alice_node.uuid
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Get episodic node by entity node uuid
@@ -130,7 +130,7 @@ async def test_episodic_edge(graph_driver, mock_embedder):
     assert len(retrieved) == 1
     assert retrieved[0].uuid == episode_node.uuid
     assert retrieved[0].name == 'test_episode'
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Delete edge by uuid
@@ -210,7 +210,7 @@ async def test_entity_edge(graph_driver, mock_embedder):
     assert retrieved.uuid == entity_edge.uuid
     assert retrieved.source_node_uuid == alice_node.uuid
     assert retrieved.target_node_uuid == bob_node.uuid
-    assert retrieved.created_at == now
+    assert_datetimes_equal(retrieved.created_at, now)
     assert retrieved.group_id == group_id
 
     # Get edge by uuids
@@ -219,7 +219,7 @@ async def test_entity_edge(graph_driver, mock_embedder):
     assert retrieved[0].uuid == entity_edge.uuid
     assert retrieved[0].source_node_uuid == alice_node.uuid
     assert retrieved[0].target_node_uuid == bob_node.uuid
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Get edge by group ids
@@ -228,7 +228,7 @@ async def test_entity_edge(graph_driver, mock_embedder):
     assert retrieved[0].uuid == entity_edge.uuid
     assert retrieved[0].source_node_uuid == alice_node.uuid
     assert retrieved[0].target_node_uuid == bob_node.uuid
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Get edge by node uuid
@@ -237,7 +237,7 @@ async def test_entity_edge(graph_driver, mock_embedder):
     assert retrieved[0].uuid == entity_edge.uuid
     assert retrieved[0].source_node_uuid == alice_node.uuid
     assert retrieved[0].target_node_uuid == bob_node.uuid
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Get edge by node uuid from the target side — direction must be preserved
@@ -360,7 +360,7 @@ async def test_community_edge(graph_driver, mock_embedder):
     assert retrieved.uuid == community_edge.uuid
     assert retrieved.source_node_uuid == community_node_1.uuid
     assert retrieved.target_node_uuid == community_node_2.uuid
-    assert retrieved.created_at == now
+    assert_datetimes_equal(retrieved.created_at, now)
     assert retrieved.group_id == group_id
 
     # Get edge by uuids
@@ -369,7 +369,7 @@ async def test_community_edge(graph_driver, mock_embedder):
     assert retrieved[0].uuid == community_edge.uuid
     assert retrieved[0].source_node_uuid == community_node_1.uuid
     assert retrieved[0].target_node_uuid == community_node_2.uuid
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Get edge by group ids
@@ -378,7 +378,7 @@ async def test_community_edge(graph_driver, mock_embedder):
     assert retrieved[0].uuid == community_edge.uuid
     assert retrieved[0].source_node_uuid == community_node_1.uuid
     assert retrieved[0].target_node_uuid == community_node_2.uuid
-    assert retrieved[0].created_at == now
+    assert_datetimes_equal(retrieved[0].created_at, now)
     assert retrieved[0].group_id == group_id
 
     # Delete edge by uuid

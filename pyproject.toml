@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.30.1"
+version = "0.30.2"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -103,6 +103,6 @@ indent-style = "space"
 docstring-code-format = true
 
 [tool.pyright]
-include = ["graphiti_core"]
+include = ["graphiti_core", ".github/intake"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"

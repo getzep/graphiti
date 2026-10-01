@@ -48,7 +48,7 @@ class NeptuneGraphMaintenanceOperations(GraphMaintenanceOperations):
         if group_ids is None:
             await executor.execute_query('MATCH (n) DETACH DELETE n')
         else:
-            for label in ['Entity', 'Episodic', 'Community']:
+            for label in ['Entity', 'Episodic', 'Community', 'Saga']:
                 await executor.execute_query(
                     f"""
                     MATCH (n:{label})

@@ -400,6 +400,40 @@ class TestDatetimeConversion:
         assert convert_datetimes_to_strings(None) is None
         assert convert_datetimes_to_strings(True) is True
 
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_static_method_handles_datetime_values(self):
+        """FalkorDriver.convert_datetimes_to_strings must not raise on datetime values.
+
+        Regression test: isinstance() was called with the datetime module instead
+        of the datetime.datetime class, raising TypeError for any datetime input.
+        """
+        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        result = FalkorDriver.convert_datetimes_to_strings({'ts': test_datetime, 'n': 5})
+
+        assert result == {'ts': test_datetime.isoformat(), 'n': 5}
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_convert_normalizes_non_utc_offsets(self):
+        """Non-UTC offsets must be normalized to UTC before serialization.
+
+        FalkorDB stores datetimes as ISO strings and compares them
+        lexicographically, which is only correct when all offsets match.
+        """
+        from datetime import timedelta
+
+        from graphiti_core.driver.falkordb_driver import convert_datetimes_to_strings
+
+        tz_plus_3 = timezone(timedelta(hours=3))
+        # 13:00+03:00 is 10:00 UTC
+        aware_non_utc = datetime(2024, 1, 1, 13, 0, 0, tzinfo=tz_plus_3)
+
+        assert convert_datetimes_to_strings(aware_non_utc) == '2024-01-01T10:00:00+00:00'
+
+        # naive datetimes are assumed UTC and serialized with an explicit offset
+        naive = datetime(2024, 1, 1, 10, 0, 0)
+        assert convert_datetimes_to_strings(naive) == '2024-01-01T10:00:00+00:00'
+
 
 # Simple integration test
 class TestFalkorDriverIntegration:
@@ -429,3 +463,145 @@ class TestFalkorDriverIntegration:
 
         except Exception as e:
             pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_clear_data_group_ids_includes_saga_nodes(self):
+        """clear_data(group_ids=...) must delete Saga nodes of those groups.
+
+        Regression test: the label list only covered Entity, Episodic and
+        Community, so Saga nodes survived group-scoped deletion.
+        """
+        pytest.importorskip('falkordb')
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_clear_saga')
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            await driver.execute_query(
+                "CREATE (:Saga {uuid: 's1', name: 'saga', group_id: 'g1', "
+                "created_at: '2024-01-01T00:00:00'})"
+            )
+            await driver.execute_query(
+                "CREATE (:Entity {uuid: 'e1', name: 'x', group_id: 'g1', "
+                "created_at: '2024-01-01T00:00:00'})"
+            )
+            await driver.execute_query(
+                "CREATE (:Saga {uuid: 's2', name: 'other', group_id: 'g2', "
+                "created_at: '2024-01-01T00:00:00'})"
+            )
+
+            await driver.graph_ops.clear_data(driver, group_ids=['g1'])
+
+            records, _, _ = await driver.execute_query('MATCH (n) RETURN n.uuid AS uuid')
+            remaining = sorted(r['uuid'] for r in records)
+            # everything in g1 is gone, including the Saga node; g2 is untouched
+            assert remaining == ['s2']
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_bulk_save_does_not_persist_labels_property(self):
+        """Bulk-saved entities must get real labels, not a stray 'labels' property.
+
+        Regression test: the FALKORDB bulk save query ran `SET n = node` with the
+        labels list still in the map, persisting it as a node property (the
+        single-node save does not), and issued one query per label.
+        """
+        pytest.importorskip('falkordb')
+
+        from graphiti_core.models.nodes.node_db_queries import get_entity_node_save_bulk_query
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_bulk_labels')
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            node = {
+                'uuid': 'bulk-1',
+                'name': 'BulkGuy',
+                'group_id': 'g1',
+                'summary': 's',
+                'created_at': '2024-01-01T00:00:00',
+                'labels': ['Entity', 'Person'],
+                'name_embedding': [0.1, 0.2, 0.3, 0.4],
+            }
+            queries = get_entity_node_save_bulk_query(GraphProvider.FALKORDB, [node])
+
+            # one query per node, not one per label
+            assert len(queries) == 1
+
+            for query, params in queries:
+                await driver.execute_query(query, **params)
+
+            records, _, _ = await driver.execute_query(
+                "MATCH (n:Entity {uuid: 'bulk-1'}) RETURN labels(n) AS labels, n.labels AS prop"
+            )
+            assert len(records) == 1
+            assert set(records[0]['labels']) == {'Entity', 'Person'}
+            assert records[0]['prop'] is None
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_retrieve_episodes_with_non_utc_valid_at(self):
+        """Episodes saved with a non-UTC offset must be found by a UTC reference time.
+
+        Regression test: valid_at was serialized with its original offset and
+        compared lexicographically against a UTC reference string, so an episode
+        at 10:00 UTC written as 13:00+03:00 was missed by a 10:30 UTC reference.
+        """
+        pytest.importorskip('falkordb')
+
+        from datetime import timedelta
+
+        from graphiti_core.nodes import EpisodeType, EpisodicNode
+        from graphiti_core.utils.datetime_utils import utc_now
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_tz_episodes')
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            tz_plus_3 = timezone(timedelta(hours=3))
+            episode = EpisodicNode(
+                name='ep-tz',
+                group_id='tz_group',
+                source=EpisodeType.text,
+                source_description='test',
+                content='timezone regression content',
+                # 13:00+03:00 is 10:00 UTC
+                valid_at=datetime(2024, 1, 1, 13, 0, tzinfo=tz_plus_3),
+                created_at=utc_now(),
+            )
+            await driver.episode_node_ops.save(driver, episode)
+
+            reference = datetime(2024, 1, 1, 10, 30, tzinfo=timezone.utc)
+            episodes = await driver.episode_node_ops.retrieve_episodes(
+                driver, reference, last_n=5, group_ids=['tz_group']
+            )
+
+            assert [e.name for e in episodes] == ['ep-tz']
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()

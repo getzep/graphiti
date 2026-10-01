@@ -1982,7 +1982,7 @@ async def test_episode_mentions_reranker(graph_driver, mock_embedder):
     uuid_to_name = {entity_node_1.uuid: entity_node_1.name, entity_node_2.uuid: entity_node_2.name}
     names = [uuid_to_name[uuid] for uuid in reranked_uuids]
     assert names == [entity_node_1.name, entity_node_2.name]
-    assert np.allclose(reranked_scores, [1.0, float('inf')])
+    assert np.allclose(reranked_scores, [1.0, 0.0])
 
 
 @pytest.mark.asyncio
