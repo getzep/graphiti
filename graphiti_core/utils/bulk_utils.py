@@ -558,8 +558,17 @@ async def dedupe_edges_bulk(
 
     # For now we won't track edge invalidation
     duplicate_pairs: list[tuple[str, str]] = []
-    for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
+    for i, (resolved, _, duplicates) in enumerate(bulk_edge_resolutions):
         episode, edge, candidates = dedupe_tuples[i]
+        # resolve_extracted_edge signals a duplicate in two ways: the LLM path
+        # lists the matched candidates as `duplicates`, while the exact-fact
+        # fast path returns the matched candidate itself as `resolved` with an
+        # EMPTY duplicates list. resolve_extracted_edges treats
+        # `resolved.uuid != edge.uuid` as "duplicate of an existing edge";
+        # mirror that here, or two episodes in one batch that yield the same
+        # fact between the same nodes both survive as distinct edges.
+        if resolved.uuid != edge.uuid:
+            duplicate_pairs.append((edge.uuid, resolved.uuid))
         for duplicate in duplicates:
             duplicate_pairs.append((edge.uuid, duplicate.uuid))
 
@@ -569,6 +578,19 @@ async def dedupe_edges_bulk(
     edge_uuid_map: dict[str, EntityEdge] = {
         edge.uuid: edge for edges in extracted_edges for edge in edges
     }
+
+    # The surviving edge of a collapsed group must carry every contributing
+    # episode. The fast path only appends the episode to the first matching
+    # candidate, so with three or more identical edges the provenance is
+    # spread unevenly across the group and the survivor (the lexicographically
+    # smallest uuid) can hold a partial list.
+    for uuid, canonical_uuid in compressed_map.items():
+        if uuid == canonical_uuid:
+            continue
+        canonical = edge_uuid_map[canonical_uuid]
+        for episode_uuid in edge_uuid_map[uuid].episodes:
+            if episode_uuid not in canonical.episodes:
+                canonical.episodes.append(episode_uuid)
 
     edges_by_episode: dict[str, list[EntityEdge]] = {}
     for i, edges in enumerate(extracted_edges):
