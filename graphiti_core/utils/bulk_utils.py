@@ -30,7 +30,7 @@ from graphiti_core.driver.driver import (
 )
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
 from graphiti_core.helpers import normalize_l2, semaphore_gather
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
@@ -49,7 +49,6 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _resolve_with_similarity,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
-    _accepts_clients_parameter,
     extract_edges,
     resolve_extracted_edge,
 )
@@ -541,9 +540,7 @@ async def dedupe_edges_bulk(
 
             dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
 
-    resolver_kwargs = (
-        {'clients': clients} if _accepts_clients_parameter(resolve_extracted_edge) else {}
-    )
+    resolver_kwargs = {'clients': clients} if uses_prompt_routing(clients) else {}
     bulk_edge_resolutions: list[
         tuple[EntityEdge, EntityEdge, list[EntityEdge]]
     ] = await semaphore_gather(

@@ -14,6 +14,7 @@ from graphiti_core.prompts import create_prompt_library
 from graphiti_core.prompts.extract_edges import ExtractedEdges
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
 from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
+from graphiti_core.search.search_config import SearchResults
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import community_operations as community_ops
 from graphiti_core.utils.maintenance import edge_operations as edge_ops
@@ -212,6 +213,53 @@ async def test_resolve_edges_uses_injected_prompt_library():
     ]
     assert resolve_calls
     assert resolve_calls[0].args[0][0].content.startswith(marker)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('configured', [True, False])
+async def test_resolve_extracted_edges_forwards_clients_only_for_prompt_routing(
+    monkeypatch,
+    configured: bool,
+):
+    library = (
+        create_prompt_library({'dedupe_edges': {'resolve_edge': _marker_prompt('custom')}})
+        if configured
+        else None
+    )
+    clients = _make_clients(library)
+    episode = _make_episode()
+    source = EntityNode(uuid='source', name='Alice', group_id='group', labels=['Entity'])
+    target = EntityNode(uuid='target', name='Acme', group_id='group', labels=['Entity'])
+    edge = EntityEdge(
+        source_node_uuid=source.uuid,
+        target_node_uuid=target.uuid,
+        name='WORKS_AT',
+        fact='Alice works at Acme',
+        group_id='group',
+        episodes=[],
+        created_at=utc_now(),
+    )
+    resolver = AsyncMock(return_value=(edge, [], []))
+
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+    monkeypatch.setattr(EntityEdge, 'get_between_nodes', AsyncMock(return_value=[]))
+    monkeypatch.setattr(edge_ops, 'search', AsyncMock(return_value=SearchResults()))
+    monkeypatch.setattr(edge_ops, 'resolve_extracted_edge', resolver)
+
+    await edge_ops.resolve_extracted_edges(
+        clients,
+        [edge],
+        episode,
+        [source, target],
+        {},
+        {('Entity', 'Entity'): []},
+    )
+
+    resolver.assert_awaited_once()
+    if configured:
+        assert resolver.await_args.kwargs['clients'] is clients
+    else:
+        assert 'clients' not in resolver.await_args.kwargs
 
 
 @pytest.mark.asyncio

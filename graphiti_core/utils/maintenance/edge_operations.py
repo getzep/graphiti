@@ -14,12 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import inspect
 import logging
-from collections.abc import Callable
 from datetime import datetime
 from time import time
-from typing import Any
 
 from pydantic import BaseModel
 from typing_extensions import LiteralString
@@ -31,7 +28,11 @@ from graphiti_core.edges import (
     EpisodicEdge,
     create_entity_edge_embeddings,
 )
-from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
+from graphiti_core.graphiti_types import (
+    GraphitiClients,
+    generate_prompt_response,
+    uses_prompt_routing,
+)
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
@@ -50,17 +51,6 @@ from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exac
 from graphiti_core.utils.text_utils import concatenate_episodes
 
 logger = logging.getLogger(__name__)
-
-
-def _accepts_clients_parameter(function: Callable[..., Any]) -> bool:
-    try:
-        parameters = inspect.signature(function).parameters.values()
-    except (TypeError, ValueError):
-        return True
-    return any(
-        parameter.name == 'clients' or parameter.kind == inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters
-    )
 
 
 def build_episodic_edges(
@@ -503,9 +493,7 @@ async def resolve_extracted_edges(
         edge_types_lst.append(extracted_edge_types)
 
     # resolve edges with related edges in the graph and find invalidation candidates
-    resolver_kwargs = (
-        {'clients': clients} if _accepts_clients_parameter(resolve_extracted_edge) else {}
-    )
+    resolver_kwargs = {'clients': clients} if uses_prompt_routing(clients) else {}
     results: list[tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]] = list(
         await semaphore_gather(
             *[

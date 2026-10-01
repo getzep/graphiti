@@ -91,6 +91,12 @@ class GraphitiClients(BaseModel):
         )
 
 
+def uses_prompt_routing(clients: GraphitiClients | None) -> bool:
+    return isinstance(clients, GraphitiClients) and (
+        clients.llm_runtime is not None or clients.prompt_library is not None
+    )
+
+
 class GeneratePromptResponseKwargs(TypedDict, total=False):
     response_model: type[BaseModel] | None
     prompt_name: PromptName
@@ -113,9 +119,7 @@ async def generate_prompt_response(
     group_id: str | None = None,
     attribute_extraction: bool = False,
 ) -> dict[str, Any]:
-    if isinstance(clients, GraphitiClients) and (
-        clients.llm_runtime is not None or clients.prompt_library is not None
-    ):
+    if uses_prompt_routing(clients) and clients is not None:
         return await clients.complete_prompt(
             prompt_name,
             context,

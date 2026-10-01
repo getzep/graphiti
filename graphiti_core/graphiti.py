@@ -1298,7 +1298,7 @@ class Graphiti:
                     communities, community_edges = await semaphore_gather(
                         *[
                             update_community(
-                                clients.driver,
+                                driver,
                                 clients.llm_client,
                                 clients.embedder,
                                 node,
