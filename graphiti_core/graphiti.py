@@ -134,6 +134,21 @@ class AddTripletResults(BaseModel):
     edges: list[EntityEdge]
 
 
+def _flatten_community_results(
+    results: list[tuple[list[CommunityNode], list[CommunityEdge]]],
+) -> tuple[list[CommunityNode], list[CommunityEdge]]:
+    """Flatten per-node ``update_community`` results into a single pair of lists.
+
+    ``update_community`` returns ``(community_nodes, community_edges)`` and the
+    call site gathers one coroutine per affected node, so the gathered value is
+    a list of those pairs. Unpacking it directly either raises (node count
+    other than 2) or silently binds mismatched tuples (#836).
+    """
+    communities = [community for pair in results for community in pair[0]]
+    community_edges = [edge for pair in results for edge in pair[1]]
+    return communities, community_edges
+
+
 class Graphiti:
     def __init__(
         self,
@@ -1242,13 +1257,18 @@ class Graphiti:
                 communities = []
                 community_edges = []
                 if update_communities:
-                    communities, community_edges = await semaphore_gather(
+                    # update_community returns (community_nodes, community_edges),
+                    # so gather produces one such pair per affected node. Flatten
+                    # the pairs; unpacking them directly either raises
+                    # (node count != 2) or silently binds mismatched tuples.
+                    community_results = await semaphore_gather(
                         *[
                             update_community(driver, clients.llm_client, clients.embedder, node)
                             for node in nodes
                         ],
                         max_coroutines=self.max_coroutines,
                     )
+                    communities, community_edges = _flatten_community_results(community_results)
 
                 end = time()
 
