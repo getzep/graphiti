@@ -202,6 +202,25 @@ class ArcadeDBDriver(GraphDriver):
 
         return result
 
+    def clone(self, database: str) -> 'ArcadeDBDriver':
+        """Return a driver bound to another database.
+
+        GraphDriver.clone() returns self, which is wrong here in the one place
+        it matters most: on ArcadeDB a database IS the tenant boundary, so
+        graphiti's per-tenant switch has to change which database subsequent
+        queries reach. Returning self left every call on the previous database,
+        which does not raise -- it returns no rows, so a caller sees an empty
+        tenant rather than an error.
+
+        The Bolt client is shared: it is not bound to a database (session() and
+        execute_query() take database_ per call), so closing one clone closes
+        them all, as it does for the other drivers.
+        """
+        cloned = object.__new__(ArcadeDBDriver)
+        cloned.__dict__.update(self.__dict__)
+        cloned._database = database
+        return cloned
+
     def session(self, database: str | None = None) -> GraphDriverSession:
         _database = database or self._database
         return self.client.session(database=_database)  # type: ignore
