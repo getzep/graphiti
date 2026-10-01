@@ -98,6 +98,35 @@ class TestArcadeDBDriver:
             )
             assert driver._database == 'graphiti'
 
+    @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
+    def test_clone_switches_database(self):
+        """clone() must return a driver bound to the requested database.
+
+        Regression test: GraphDriver.clone() returns self. On ArcadeDB a
+        database is the tenant boundary, so inheriting that default made a
+        per-tenant switch silently keep querying the previous tenant's
+        database -- no error, just zero rows.
+        """
+        cloned = self.driver.clone('other_tenant')
+
+        assert cloned is not self.driver
+        assert cloned._database == 'other_tenant'
+        assert self.driver._database == 'graphiti'
+        assert isinstance(cloned, ArcadeDBDriver)
+        # the Bolt client is per-connection, not per-database, and is shared
+        assert cloned.client is self.driver.client
+        assert cloned._http_uri == self.driver._http_uri
+
+    @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
+    def test_clone_session_targets_cloned_database(self):
+        """A cloned driver's session() must open on the cloned database."""
+        cloned = self.driver.clone('other_tenant')
+        cloned.client = MagicMock()
+
+        cloned.session()
+
+        cloned.client.session.assert_called_once_with(database='other_tenant')
+
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_ARCADEDB, 'ArcadeDB driver dependencies not available')
     async def test_execute_query_success(self):
