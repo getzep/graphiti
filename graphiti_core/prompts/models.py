@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,6 +27,13 @@ class Message(BaseModel):
 
     role: str
     content: str
+
+
+class PromptVersion(Protocol):
+    def __call__(self, context: dict[str, Any]) -> list[Message]: ...
+
+
+PromptFunction = Callable[[dict[str, Any]], list[Message]]
 
 
 class SystemMessage(BaseModel):
@@ -44,6 +51,17 @@ class ChatPrompt(BaseModel):
 
     system: SystemMessage
     user: UserMessage
+
+    @classmethod
+    def from_messages(cls, messages: list[Message]) -> 'ChatPrompt':
+        if len(messages) != 2:
+            raise ValueError('ChatPrompt requires exactly two messages')
+        if messages[0].role != 'system' or messages[1].role != 'user':
+            raise ValueError('ChatPrompt requires a system message followed by a user message')
+        return cls(
+            system=SystemMessage(content=messages[0].content),
+            user=UserMessage(content=messages[1].content),
+        )
 
     def as_messages(self, *, append_unicode_note: bool = True) -> list[Message]:
         """Render to transport messages.
@@ -73,4 +91,4 @@ class PromptSpec(BaseModel):
     dynamic_schema: bool = False
 
 
-PromptFunction = Callable[[dict[str, Any]], ChatPrompt]
+ChatPromptFunction = Callable[[dict[str, Any]], ChatPrompt]

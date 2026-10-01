@@ -45,9 +45,7 @@ from graphiti_core.prompts import (
     SystemMessage,
     UserMessage,
     create_prompt_library,
-)
-from graphiti_core.prompts import (
-    prompt_library as builtin_prompt_library,
+    default_chat_prompt_library,
 )
 from graphiti_core.prompts.models import Message
 
@@ -217,7 +215,7 @@ class StubCrossEncoder(CrossEncoderClient):
 
 def _custom_extract_message(ctx: dict[str, Any]) -> ChatPrompt:
     """Override that keeps default extract quality but marks system content."""
-    base = builtin_prompt_library.extract_nodes.extract_message(ctx)
+    base = default_chat_prompt_library.extract_nodes.extract_message(ctx)
     return ChatPrompt(
         system=SystemMessage(content=f'{CUSTOM_MARKER}\n{base.system.content}'),
         user=base.user,

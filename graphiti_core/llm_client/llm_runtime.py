@@ -21,14 +21,14 @@ from typing import Any
 from pydantic import BaseModel
 
 from graphiti_core.prompts.lib import (
-    PromptLibrary,
+    ChatPromptLibrary,
     create_prompt_library,
     ensure_chat_prompt,
     ensure_prompt_library_wrapped,
     get_prompt_builder,
     resolve_response_model,
 )
-from graphiti_core.prompts.models import PromptFunction
+from graphiti_core.prompts.models import ChatPromptFunction
 from graphiti_core.prompts.names import PromptName
 from graphiti_core.tracer import Tracer
 
@@ -44,7 +44,7 @@ from .prompt_config import (
 )
 
 
-def _wrap_builder(builder: PromptFunction, prompt_name: str) -> PromptFunction:
+def _wrap_builder(builder: ChatPromptFunction, prompt_name: str) -> ChatPromptFunction:
     def _call(context: dict[str, Any]):
         return ensure_chat_prompt(builder(context), prompt_name)
 
@@ -102,7 +102,7 @@ class LLMRuntime:
         *,
         routes: PromptRoutes | None = None,
         prompt_overrides: LLMPromptOverrides | None = None,
-        library: PromptLibrary | None = None,
+        library: ChatPromptLibrary | None = None,
     ) -> None:
         if not isinstance(model, LLMModel):
             raise TypeError('model must be an LLMModel instance')
@@ -155,7 +155,7 @@ class LLMRuntime:
             return routed
         return self.model
 
-    def resolve_builder(self, prompt_name: str, model: LLMModel) -> PromptFunction:
+    def resolve_builder(self, prompt_name: str, model: LLMModel) -> ChatPromptFunction:
         """Builder resolution: model override → general override → library method."""
         override = model.flat_overrides.get(prompt_name)
         if override is None:

@@ -7,7 +7,7 @@ import pytest
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.prompt_config import LLMTransport
-from graphiti_core.prompts import create_prompt_library, prompt_library
+from graphiti_core.prompts import create_prompt_library
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
 from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
 
@@ -24,7 +24,7 @@ def _clients(library=None, llm=None) -> GraphitiClients:
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
         tracer=MagicMock(),
-        prompt_library=library or prompt_library,
+        prompt_library=library,
     )
 
 
@@ -132,7 +132,7 @@ async def test_complete_prompt_routes_to_runtime_when_set():
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
         tracer=MagicMock(),
-        prompt_library=prompt_library,
+        prompt_library=None,
         llm_runtime=runtime,
     )
     clients.llm_client.generate_response = AsyncMock(return_value={})

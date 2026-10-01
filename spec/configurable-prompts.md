@@ -8,15 +8,14 @@ Paul Paliychuk
 
 ## 1. Overview
 
-Graphiti must allow callers to configure the LLM prompt library when creating a Graphiti
-client. Prompt selection must be instance-scoped, deterministic, and compatible with the
-existing default prompts.
+Graphiti must keep its existing module-level prompt API and support opt-in prompt
+customization through a separate chat prompt library. Callers can provide a chat prompt
+library when they create a Graphiti client. Prompt selection must be deterministic and
+compatible with the existing default prompts.
 
-Today, prompt builders are grouped behind a prompt library shape, but runtime code imports
-and calls a module-level default prompt library directly. This makes prompt customization
-global instead of per client. The implementation must invert that control: callers provide
-prompt behavior at Graphiti construction time, Graphiti stores it on the client dependency
-bundle, and all runtime prompt calls use the instance-owned prompt library.
+Legacy call sites use module-level prompt functions. The `generate_prompt_response` helper
+uses a configured chat prompt library or runtime when a real `GraphitiClients` bundle has
+one. Otherwise, it calls the legacy prompt function at call time.
 
 This feature does not change the response models, graph schema, LLM client API, embedding
 behavior, database drivers, search behavior, or prompt output contracts. It only changes how
@@ -26,18 +25,23 @@ prompt message builders are selected.
 
 ### 2.1. Prompt Function
 
-A prompt function is a callable that accepts a context map and returns a ``ChatPrompt``
-(typed system + user messages). Call ``ChatPrompt.as_messages()`` to render transport
-``Message`` objects (including the do-not-escape-unicode note on the system message).
+A legacy prompt function accepts a context map and returns ``list[Message]``. The
+``PromptFunction`` alias keeps this meaning.
+
+A chat prompt builder accepts a context map and returns a ``ChatPrompt`` (typed system + user
+messages). Call ``ChatPrompt.as_messages()`` to render transport ``Message`` objects,
+including the do-not-escape-unicode note on the system message. The ``ChatPromptFunction``
+alias names this builder type.
 
 Pseudocode:
 
 ```text
-PromptFunction(context: Map<String, Any>) -> ChatPrompt
+PromptFunction(context: Map<String, Any>) -> list[Message]
+ChatPromptFunction(context: Map<String, Any>) -> ChatPrompt
 ```
 
-**Migration:** overrides that return ``list[Message]`` are rejected with ``TypeError``.
-Return ``ChatPrompt(system=SystemMessage(...), user=UserMessage(...))`` instead.
+Chat prompt overrides must return ``ChatPrompt``. Returning ``list[Message]`` from a chat
+override raises ``TypeError``.
 
 ### 2.2. Prompt Group
 
@@ -52,9 +56,9 @@ same prompt function names as the default Graphiti prompt library.
 
 ### 2.4. Default Prompt Library
 
-The default prompt library is the built-in Graphiti prompt library. It must remain importable
-for backward compatibility and must remain the behavior used when callers do not configure
-custom prompts.
+The package-level ``prompt_library`` is the built-in legacy library. It returns
+``list[Message]`` and must remain available for backward compatibility. The opt-in chat API
+uses ``ChatPromptLibrary`` and ``DefaultChatPromptLibrary``.
 
 ### 2.5. Prompt Overrides
 
@@ -72,8 +76,9 @@ when constructing Graphiti, and Graphiti passes that dependency to the code that
 
 ### 3.1. Instance-Scoped Configuration
 
-Each Graphiti instance must have exactly one prompt library. Two Graphiti instances in the
-same process may use different prompt libraries concurrently without affecting each other.
+Each Graphiti instance can have one configured chat prompt library. When no library is
+configured, ``self.prompt_library`` and ``self.clients.prompt_library`` stay ``None``.
+Different Graphiti instances may use different prompt libraries without affecting each other.
 
 ### 3.2. Default Compatibility
 
@@ -130,26 +135,27 @@ The Graphiti constructor must accept one new optional parameter:
 ```text
 Graphiti(
     ...existing parameters...,
-    prompt_library: PromptLibrary | None = None,
+    prompt_library: ChatPromptLibrary | None = None,
 )
 ```
 
 Rules:
 
-1. If `prompt_library` is not provided, Graphiti uses the default prompt library.
+1. If `prompt_library` is not provided, Graphiti keeps the prompt library fields unset and
+   uses the legacy module-level prompt functions.
 2. If `prompt_library` is provided, Graphiti uses it as the instance prompt library after
    validating its shape.
 3. Partial customization is performed by calling `create_prompt_library(overrides)` before
    constructing Graphiti and passing the returned library as `prompt_library`.
-4. The resolved library is stored as `self.prompt_library`.
-5. The resolved library is stored on `self.clients.prompt_library`.
+4. The configured library is stored as `self.prompt_library` and
+   `self.clients.prompt_library`.
 
 ### 4.2. Prompt Library Creation Helper
 
 Graphiti must expose a helper that creates a prompt library from partial overrides:
 
 ```text
-create_prompt_library(overrides: PromptOverrides | None = None) -> PromptLibrary
+create_prompt_library(overrides: PromptOverrides | None = None) -> ChatPromptLibrary
 ```
 
 Rules:
@@ -170,13 +176,18 @@ The prompt package must export:
 ```text
 Message
 PromptFunction
-PromptLibrary
+PromptLibrary (graphiti_core.prompts.lib)
+ChatPromptFunction
+ChatPromptLibrary
+DefaultChatPromptLibrary
 PromptOverrides
 create_prompt_library
 prompt_library
 ```
 
-`prompt_library` remains the default built-in prompt library.
+`PromptLibrary` is the legacy protocol for version maps. The package-level
+`prompt_library` remains the legacy default wrapper and returns `list[Message]`.
+`ChatPromptLibrary` names the opt-in prompt customization API.
 
 ### 4.4. Complete Prompt Library Objects
 
@@ -189,7 +200,7 @@ created by `create_prompt_library`.
 Prompt overrides are a nested map:
 
 ```text
-PromptOverrides = Map<PromptGroupName, Map<PromptFunctionName, PromptFunction>>
+PromptOverrides = Map<PromptGroupName, Map<PromptFunctionName, ChatPromptFunction>>
 ```
 
 Example:
@@ -327,15 +338,15 @@ function.
 
 ### 6.1. Graphiti Client State
 
-Graphiti must resolve the prompt library during construction and store it in two places:
+Graphiti stores a configured chat prompt library in two places:
 
 ```text
 self.prompt_library
 self.clients.prompt_library
 ```
 
-`self.prompt_library` is used by methods implemented directly on Graphiti. `self.clients` is
-used by helper functions that already receive the Graphiti dependency bundle.
+These fields stay ``None`` when the caller does not pass a library or runtime. Configured
+chat prompt libraries are stored in both fields.
 
 ### 6.2. GraphitiClients
 
@@ -348,18 +359,19 @@ GraphitiClients:
     embedder
     cross_encoder
     tracer
-    prompt_library
+    prompt_library: optional
+    llm_runtime: optional
 ```
 
 ### 6.3. Runtime Access Rule
 
-Runtime code must not import or call the module-level default prompt library except inside the
-prompt library construction module. Prompt-consuming runtime code must obtain the prompt library
-from one of:
+Prompt-consuming call sites pass the legacy prompt builder and the optional ``clients`` bundle
+to ``generate_prompt_response``. The helper uses ``clients.complete_prompt`` only when ``clients``
+is a ``GraphitiClients`` instance with a runtime or chat prompt library. Otherwise, it calls the
+legacy module-level prompt builder at call time.
 
-1. `self.prompt_library`
-2. `clients.prompt_library`
-3. An explicit `prompt_library` parameter passed from a Graphiti-owned call path
+Direct calls to ``GraphitiClients.complete_prompt`` use ``default_chat_prompt_library`` when no
+chat prompt library is configured.
 
 ## 7. Required Refactoring
 
@@ -375,89 +387,72 @@ The Graphiti constructor must:
 
 ### 7.2. Graphiti Direct Prompt Calls
 
-Graphiti methods that build prompts directly must call `self.prompt_library`.
+Graphiti methods that build prompts must use ``generate_prompt_response``.
 
-The saga summary flow must change from:
-
-```text
-default_prompt_library.summarize_sagas.summarize_saga(context)
-```
-
-to:
+The saga summary flow passes the module-level legacy builder:
 
 ```text
-self.prompt_library.summarize_sagas.summarize_saga(context)
+generate_prompt_response(
+    self.llm_client,
+    "summarize_sagas.summarize_saga",
+    prompt_library.summarize_sagas.summarize_saga,
+    context,
+    clients=self.clients,
+)
 ```
 
 ### 7.3. Node Maintenance Operations
 
-Node maintenance operations must use `clients.prompt_library`.
+Node maintenance operations must pass the module-level legacy builder and the optional
+``clients`` bundle to ``generate_prompt_response``.
 
 Required changes:
 
 1. `extract_nodes` keeps accepting `clients`.
-2. `_extract_nodes_single` receives `clients` instead of only `llm_client`, or receives both
-   `llm_client` and `prompt_library`.
-3. `_call_extraction_llm` uses the injected prompt library for `extract_message`,
-   `extract_text`, and `extract_json`.
-4. `_resolve_with_llm` receives the injected prompt library or the full `clients` bundle and
-   uses it for `dedupe_nodes.nodes`.
-5. `_extract_entity_attributes` receives the injected prompt library and uses it for
-   `extract_nodes.extract_attributes`.
-6. `_process_summary_flight` receives the injected prompt library and uses it for
-   `extract_nodes.extract_entity_summaries_from_episodes` and
-   `extract_nodes.extract_summaries_batch`.
+2. `_extract_nodes_single` and `_call_extraction_llm` pass ``clients`` through.
+3. `_call_extraction_llm` reads the module-level builder for `extract_message`,
+   `extract_text`, or `extract_json` at call time.
+4. `_resolve_with_llm`, `_extract_entity_attributes`, and `_process_summary_flight` pass the
+   legacy module-level builder to the helper.
 
 ### 7.4. Edge Maintenance Operations
 
-Edge maintenance operations must use `clients.prompt_library`.
+Edge maintenance operations must pass the module-level legacy builder and the optional
+``clients`` bundle to ``generate_prompt_response``.
 
 Required changes:
 
-1. `extract_edges` uses `clients.prompt_library.extract_edges.edge`.
-2. `resolve_extracted_edges` passes the injected prompt library into each
-   `resolve_extracted_edge` call.
-3. `resolve_extracted_edge` uses the injected prompt library for
-   `dedupe_edges.resolve_edge` and `extract_edges.extract_attributes`.
-4. `_extract_edge_timestamps` receives the injected prompt library and uses it for
-   `extract_edges.extract_timestamps`.
-5. The early-return no-dedup path in `resolve_extracted_edge` also uses the injected prompt
-   library for edge attribute extraction.
+1. `extract_edges` passes the module-level `extract_edges.edge` builder.
+2. `resolve_extracted_edges` passes `clients` to each `resolve_extracted_edge` call.
+3. `resolve_extracted_edge` passes the legacy builders for edge deduplication and attributes.
+4. `_extract_edge_timestamps` passes the legacy timestamp builder.
 
 ### 7.5. Combined Extraction Operations
 
-Combined extraction must use `clients.prompt_library`.
+Combined extraction must pass the module-level legacy builder and the optional ``clients``
+bundle to ``generate_prompt_response``.
 
 Required changes:
 
-1. `extract_nodes_and_edges` uses
-   `clients.prompt_library.extract_nodes_and_edges.extract_message`.
-2. Batch timestamp extraction uses
-   `clients.prompt_library.extract_edges.extract_timestamps_batch`.
+1. `extract_nodes_and_edges` passes the module-level combined extraction builder.
+2. Batch timestamp extraction passes the module-level batch timestamp builder.
 
 ### 7.6. Community Operations
 
-Community operations currently receive individual clients instead of `GraphitiClients`.
-They must be refactored so all prompt-consuming functions receive the configured prompt
-library.
+Community operations keep their existing positional arguments and add an optional keyword-only
+``clients`` parameter to each prompt-consuming helper.
 
 Required changes:
 
-1. `summarize_pair` receives `prompt_library`.
-2. `generate_summary_description` receives `prompt_library`.
-3. `build_community` receives `prompt_library` and passes it to summary helpers.
-4. `build_communities` receives `prompt_library` and passes it through to each community
-   build.
-5. `update_community` receives `prompt_library` and passes it to summary helpers.
-6. Graphiti call sites for `build_communities` and `update_community` pass
-   `self.prompt_library`.
+1. Each helper passes the legacy builder to ``generate_prompt_response``.
+2. Nested helper calls pass ``clients`` onward.
+3. Graphiti call sites keep the main positional arguments and add ``clients=clients``.
 
 ### 7.7. Bulk Utilities
 
-Bulk utilities call node and edge maintenance functions that already receive
-`GraphitiClients`. No direct prompt library imports must be added to bulk utilities.
-After node and edge maintenance refactoring, bulk flows inherit configured prompts through
-`clients.prompt_library`.
+Bulk utilities pass ``GraphitiClients`` to node and edge maintenance functions. Those functions
+use the configured chat prompt library or runtime when present, and keep the legacy prompt
+path otherwise.
 
 ### 7.8. MCP Server Adoption
 
@@ -551,9 +546,9 @@ Existing `prompt_name` strings passed to `generate_response` must not change.
 
 ### 9.4. Existing Tests
 
-Tests that monkeypatch module-level prompt imports must be updated to exercise configured
-prompt libraries instead. Tests that directly render default prompts may continue using the
-module-level default prompt library.
+Tests that monkeypatch module-level legacy prompt imports must continue to work because
+call sites read the builder at call time. Tests that directly render default prompts may
+continue using the module-level default prompt library.
 
 ### 9.5. Type Checking
 
@@ -592,27 +587,29 @@ Pseudocode:
 
 ```text
 function create_prompt_library(overrides = null):
-    merged = deep_copy(DEFAULT_PROMPT_LIBRARY_IMPL)
+    base = DefaultChatPromptLibrary()
 
-    if overrides is not null:
-        for group_name, group_overrides in overrides:
-            if group_name not in merged:
-                raise ValueError("Unknown prompt group: " + group_name)
+    if overrides is null or overrides is empty:
+        return base
 
-            for function_name, function in group_overrides:
-                if function_name not in merged[group_name]:
-                    raise ValueError(
-                        "Unknown prompt function for group " + group_name + ": " + function_name
-                    )
+    for group_name, group_overrides in overrides:
+        if group_name not in PROMPT_GROUPS:
+            raise ValueError("Unknown prompt group: " + group_name)
 
-                if not callable(function):
-                    raise ValueError(
-                        "Prompt override must be callable: " + group_name + "." + function_name
-                    )
+        for function_name, function in group_overrides:
+            if function_name not in PROMPT_GROUPS[group_name]:
+                raise ValueError(
+                    "Unknown prompt function for group " + group_name + ": " + function_name
+                )
 
-                merged[group_name][function_name] = function
+            if not callable(function):
+                raise ValueError(
+                    "Prompt override must be callable: " + group_name + "." + function_name
+                )
 
-    return PromptLibraryWrapper(merged)
+            validate_chat_prompt_function(function)
+
+    return ComposedChatPromptLibrary(base, overrides)
 ```
 
 ### 11.2. Resolve Constructor Prompt Library
@@ -625,7 +622,7 @@ function resolve_prompt_library(prompt_library):
         validate_prompt_library(prompt_library)
         return prompt_library
 
-    return default_prompt_library
+    return null
 ```
 
 ### 11.3. Validate Complete Prompt Library
@@ -634,13 +631,13 @@ Pseudocode:
 
 ```text
 function validate_prompt_library(library):
-    for group_name, default_group in DEFAULT_PROMPT_LIBRARY_IMPL:
+    for group_name, function_names in PROMPT_GROUPS:
         if not has_attribute(library, group_name):
             raise ValueError("Prompt library missing group: " + group_name)
 
         group = get_attribute(library, group_name)
 
-        for function_name in default_group:
+        for function_name in function_names:
             if not has_attribute(group, function_name):
                 raise ValueError(
                     "Prompt library missing function: " + group_name + "." + function_name

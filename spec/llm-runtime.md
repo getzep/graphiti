@@ -25,7 +25,9 @@ There are no caller-invented model nicknames. Bind `LLMModel` instances to local
 Python variables and pass those variables into `PromptRoutes`.
 
 Unknown prompt names are constructor / type errors on the nested dataclasses.
-The legacy `Graphiti(llm_client=..., prompt_library=...)` path is unchanged.
+Graphiti keeps the legacy module-level prompt path when no chat library or runtime is configured.
+The package-level `prompt_library` also keeps its `list[Message]` builders.
+The runtime uses the separate `ChatPromptLibrary` API.
 
 ## 2. Constructor precedence
 
@@ -35,7 +37,9 @@ Graphiti(..., llm_client=..., prompt_library=..., llm_runtime=...)
 
 - `llm_runtime` with `llm_client` or `prompt_library` → `ValueError`
 - Only `llm_runtime` → runtime owns the transports and prompts
-- Only `prompt_library` (or neither) → legacy `llm_client` + library path
+- Only `prompt_library` → legacy `llm_client` + configured chat library
+- Neither → legacy `llm_client` + module-level prompt builders; Graphiti keeps
+  `prompt_library` unset
 
 ## 3. Builder resolution
 
@@ -43,7 +47,7 @@ For prompt `P` routed to model `M`:
 
 1. `M.prompt_overrides` for `P` if present
 2. Else general `prompt_overrides` for `P`
-3. Else default library ABC / duck-typed method
+3. Else default `ChatPromptLibrary` method
 
 Builders must return `ChatPrompt`. Schemas are never overridable.
 
@@ -97,7 +101,7 @@ LLMRuntime(
   *,
   routes: PromptRoutes | None = None,
   prompt_overrides: LLMPromptOverrides | None = None,
-  library: PromptLibrary | None = None,
+  library: ChatPromptLibrary | None = None,
 )
 ```
 

@@ -21,9 +21,10 @@ from time import time
 from pydantic import BaseModel
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.extract_edges import BatchEdgeTimestamps
 from graphiti_core.prompts.extract_nodes_and_edges import CombinedExtraction
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
@@ -82,6 +83,7 @@ async def extract_nodes_and_edges(
     primary_episode = episodes[0]
 
     start = time()
+    llm_client = clients.llm_client
 
     # Build entity types context
     entity_types_context = _build_entity_types_context(entity_types)
@@ -123,9 +125,13 @@ async def extract_nodes_and_edges(
     }
 
     # Single LLM call for combined extraction
-    llm_response = await clients.complete_prompt(
+    llm_response = await generate_prompt_response(
+        llm_client,
         'extract_nodes_and_edges.extract_message',
+        prompt_library.extract_nodes_and_edges.extract_message,
         context,
+        clients=clients,
+        response_model=CombinedExtraction,
         group_id=primary_episode.group_id,
     )
     response_object = CombinedExtraction(**llm_response)
@@ -239,9 +245,13 @@ async def extract_nodes_and_edges(
             for edge in extracted_edges
         ]
         try:
-            ts_response = await clients.complete_prompt(
+            ts_response = await generate_prompt_response(
+                llm_client,
                 'extract_edges.extract_timestamps_batch',
+                prompt_library.extract_edges.extract_timestamps_batch,
                 {'facts': facts_with_ref},
+                clients=clients,
+                response_model=BatchEdgeTimestamps,
                 model_size=ModelSize.small,
             )
             batch_timestamps = BatchEdgeTimestamps(**ts_response)

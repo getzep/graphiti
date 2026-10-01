@@ -637,6 +637,10 @@ Unspecified prompts keep the built-in defaults. Returning ``list[Message]`` from
 ``TypeError`` — migrate with ``return ChatPrompt(system=..., user=...)``. Unicode handling is applied
 via ``ChatPrompt.as_messages()``.
 
+The package-level ``prompt_library`` keeps the existing ``list[Message]`` API.
+The opt-in prompt customization API uses ``ChatPromptLibrary`` and
+``DefaultChatPromptLibrary``.
+
 For per-prompt routing across providers, pass an opt-in ``llm_runtime``. Create
 one ``LLMTransport`` for each provider client. Each ``LLMModel`` binds a provider
 model ID to one transport. An unrouted prompt uses the default model.
@@ -684,11 +688,11 @@ graphiti = Graphiti(..., llm_runtime=runtime)
 ```
 
 ``LLMModel`` does not have a ``small_id`` field. The runtime passes
-``model_size`` for legacy compatibility, but the selected model ID controls
-provider calls. A prompt routed to a small model uses that model ID. An
-unrouted prompt uses the default model ID. Route prompts that need a smaller
-model to that model explicitly. Legacy calls without ``llm_runtime`` retain
-``LLMConfig.small_model`` behavior.
+``model_size`` for legacy compatibility, but this value does not select a
+smaller model. The selected model ID controls provider calls. A routed prompt
+uses that model ID. An unrouted prompt uses the default model ID. Route prompts
+that need a smaller model to that model explicitly. Legacy calls without
+``llm_runtime`` retain ``LLMConfig.small_model`` behavior.
 
 GLiNER2 binds model objects at initialization. It does not support per-prompt
 model routing. See ``spec/llm-runtime.md`` for the runtime API.

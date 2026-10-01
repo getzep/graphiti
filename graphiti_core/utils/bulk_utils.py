@@ -49,6 +49,7 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _resolve_with_similarity,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
+    _accepts_clients_parameter,
     extract_edges,
     resolve_extracted_edge,
 )
@@ -540,17 +541,21 @@ async def dedupe_edges_bulk(
 
             dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
 
+    resolver_kwargs = (
+        {'clients': clients} if _accepts_clients_parameter(resolve_extracted_edge) else {}
+    )
     bulk_edge_resolutions: list[
         tuple[EntityEdge, EntityEdge, list[EntityEdge]]
     ] = await semaphore_gather(
         *[
             resolve_extracted_edge(
-                clients,
+                clients.llm_client,
                 edge,
                 candidates,
                 candidates,
                 episode,
                 edge_types,
+                **resolver_kwargs,
             )
             for episode, edge, candidates in dedupe_tuples
         ]

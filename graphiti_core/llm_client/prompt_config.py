@@ -23,7 +23,7 @@ from typing import Any, Generic, TypeVar, cast
 
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.prompts.lib import PROMPT_GROUPS
-from graphiti_core.prompts.models import PromptFunction
+from graphiti_core.prompts.models import ChatPromptFunction
 
 M = TypeVar('M', bound=str)
 
@@ -34,52 +34,52 @@ class LLMPromptOverrides:
 
     @dataclass(frozen=True)
     class ExtractNodes:
-        extract_message: PromptFunction | None = None
-        extract_json: PromptFunction | None = None
-        extract_text: PromptFunction | None = None
-        classify_nodes: PromptFunction | None = None
-        extract_attributes: PromptFunction | None = None
-        extract_summary: PromptFunction | None = None
-        extract_summaries_batch: PromptFunction | None = None
-        extract_entity_summaries_from_episodes: PromptFunction | None = None
+        extract_message: ChatPromptFunction | None = None
+        extract_json: ChatPromptFunction | None = None
+        extract_text: ChatPromptFunction | None = None
+        classify_nodes: ChatPromptFunction | None = None
+        extract_attributes: ChatPromptFunction | None = None
+        extract_summary: ChatPromptFunction | None = None
+        extract_summaries_batch: ChatPromptFunction | None = None
+        extract_entity_summaries_from_episodes: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class DedupeNodes:
-        node: PromptFunction | None = None
-        node_list: PromptFunction | None = None
-        nodes: PromptFunction | None = None
+        node: ChatPromptFunction | None = None
+        node_list: ChatPromptFunction | None = None
+        nodes: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class ExtractEdges:
-        edge: PromptFunction | None = None
-        extract_attributes: PromptFunction | None = None
-        extract_timestamps: PromptFunction | None = None
-        extract_timestamps_batch: PromptFunction | None = None
+        edge: ChatPromptFunction | None = None
+        extract_attributes: ChatPromptFunction | None = None
+        extract_timestamps: ChatPromptFunction | None = None
+        extract_timestamps_batch: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class ExtractNodesAndEdges:
-        extract_message: PromptFunction | None = None
+        extract_message: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class DedupeEdges:
-        resolve_edge: PromptFunction | None = None
+        resolve_edge: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class SummarizeNodes:
-        summarize_pair: PromptFunction | None = None
-        summarize_context: PromptFunction | None = None
-        summary_description: PromptFunction | None = None
+        summarize_pair: ChatPromptFunction | None = None
+        summarize_context: ChatPromptFunction | None = None
+        summary_description: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class SummarizeSagas:
-        summarize_saga: PromptFunction | None = None
+        summarize_saga: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class Eval:
-        query_expansion: PromptFunction | None = None
-        qa_prompt: PromptFunction | None = None
-        eval_prompt: PromptFunction | None = None
-        eval_add_episode_results: PromptFunction | None = None
+        query_expansion: ChatPromptFunction | None = None
+        qa_prompt: ChatPromptFunction | None = None
+        eval_prompt: ChatPromptFunction | None = None
+        eval_add_episode_results: ChatPromptFunction | None = None
 
     extract_nodes: ExtractNodes | None = None
     dedupe_nodes: DedupeNodes | None = None
@@ -96,11 +96,11 @@ def _nested_group_class(parent: type, group_name: str) -> type:
     return getattr(parent, nested_name)
 
 
-def flatten_overrides(overrides: LLMPromptOverrides | None) -> dict[str, PromptFunction]:
+def flatten_overrides(overrides: LLMPromptOverrides | None) -> dict[str, ChatPromptFunction]:
     """Turn nested override classes into ``group.function`` → builder."""
     if overrides is None:
         return {}
-    flat: dict[str, PromptFunction] = {}
+    flat: dict[str, ChatPromptFunction] = {}
     for group_field in fields(overrides):
         group_name = group_field.name
         if group_name not in PROMPT_GROUPS:
@@ -123,7 +123,7 @@ def flatten_overrides(overrides: LLMPromptOverrides | None) -> dict[str, PromptF
                     f'prompt_overrides.{group_name}.{method_name} must be callable, '
                     f'got {type(builder).__name__}'
                 )
-            flat[f'{group_name}.{method_name}'] = cast(PromptFunction, builder)
+            flat[f'{group_name}.{method_name}'] = cast(ChatPromptFunction, builder)
     return flat
 
 
@@ -180,7 +180,7 @@ class LLMModel:
     transport: LLMTransport[Any]
     prompt_overrides: LLMPromptOverrides | None = field(default=None, compare=False, hash=False)
     max_tokens: int | None = None
-    _flat_overrides: Mapping[str, PromptFunction] = field(
+    _flat_overrides: Mapping[str, ChatPromptFunction] = field(
         init=False, repr=False, compare=False, hash=False
     )
 
@@ -200,7 +200,7 @@ class LLMModel:
         )
 
     @property
-    def flat_overrides(self) -> Mapping[str, PromptFunction]:
+    def flat_overrides(self) -> Mapping[str, ChatPromptFunction]:
         return self._flat_overrides
 
 

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any
+from typing import Any, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,7 +24,12 @@ from graphiti_core.embedder import EmbedderClient
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.llm_client.llm_runtime import LLMRuntime
-from graphiti_core.prompts.lib import get_prompt_builder, resolve_response_model
+from graphiti_core.prompts.lib import (
+    default_chat_prompt_library,
+    get_prompt_builder,
+    resolve_response_model,
+)
+from graphiti_core.prompts.models import PromptFunction
 from graphiti_core.prompts.names import PromptName
 from graphiti_core.tracer import Tracer
 
@@ -35,8 +40,7 @@ class GraphitiClients(BaseModel):
     embedder: EmbedderClient
     cross_encoder: CrossEncoderClient
     tracer: Tracer
-    # PromptLibrary is an ABC / duck-typed object; store as Any for Pydantic compatibility.
-    prompt_library: Any
+    prompt_library: Any = None
     llm_runtime: LLMRuntime | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -70,7 +74,10 @@ class GraphitiClients(BaseModel):
             )
 
         resolved_model = resolve_response_model(prompt_name, response_model)
-        builder = get_prompt_builder(self.prompt_library, prompt_name)
+        library = (
+            self.prompt_library if self.prompt_library is not None else default_chat_prompt_library
+        )
+        builder = get_prompt_builder(library, prompt_name)
         messages = builder(context).as_messages()
 
         return await self.llm_client.generate_response(
@@ -82,3 +89,54 @@ class GraphitiClients(BaseModel):
             prompt_name=prompt_name,
             attribute_extraction=attribute_extraction,
         )
+
+
+class GeneratePromptResponseKwargs(TypedDict, total=False):
+    response_model: type[BaseModel] | None
+    prompt_name: PromptName
+    max_tokens: int | None
+    model_size: ModelSize
+    group_id: str | None
+    attribute_extraction: bool
+
+
+async def generate_prompt_response(
+    llm_client: LLMClient,
+    prompt_name: PromptName,
+    legacy_prompt: PromptFunction,
+    context: dict[str, Any],
+    *,
+    clients: GraphitiClients | None = None,
+    response_model: type[BaseModel] | None = None,
+    max_tokens: int | None = None,
+    model_size: ModelSize = ModelSize.medium,
+    group_id: str | None = None,
+    attribute_extraction: bool = False,
+) -> dict[str, Any]:
+    if isinstance(clients, GraphitiClients) and (
+        clients.llm_runtime is not None or clients.prompt_library is not None
+    ):
+        return await clients.complete_prompt(
+            prompt_name,
+            context,
+            response_model=response_model,
+            model_size=model_size,
+            attribute_extraction=attribute_extraction,
+            group_id=group_id,
+            max_tokens=max_tokens,
+        )
+
+    kwargs: GeneratePromptResponseKwargs = {
+        'response_model': response_model,
+        'prompt_name': prompt_name,
+    }
+    if max_tokens is not None:
+        kwargs['max_tokens'] = max_tokens
+    if model_size != ModelSize.medium:
+        kwargs['model_size'] = model_size
+    if group_id is not None:
+        kwargs['group_id'] = group_id
+    if attribute_extraction:
+        kwargs['attribute_extraction'] = True
+
+    return await llm_client.generate_response(legacy_prompt(context), **kwargs)

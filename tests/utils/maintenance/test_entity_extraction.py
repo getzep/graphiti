@@ -21,7 +21,6 @@ import pytest
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.prompts import prompt_library as default_prompt_library
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
@@ -45,8 +44,6 @@ def _make_clients():
         embedder=embedder,
         cross_encoder=cross_encoder,
         llm_client=llm_client,
-        tracer=MagicMock(),
-        prompt_library=default_prompt_library,
     )
 
     return clients, llm_generate
@@ -358,11 +355,8 @@ class TestExtractEntitySummariesBatch:
         node = _make_entity_node('Alice', summary='Alice is a person.')
         nodes = [node]
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             nodes,
             episode=None,
             previous_episodes=None,
@@ -389,11 +383,8 @@ class TestExtractEntitySummariesBatch:
             'alice-uuid': [edge],
         }
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             [node],
             episode=None,
             previous_episodes=None,
@@ -423,11 +414,8 @@ class TestExtractEntitySummariesBatch:
         long_summary = 'Alice is a person. ' * 200  # ~3800 chars
         node = _make_entity_node('Alice', summary=long_summary)
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             [node],
             episode=_make_episode(),
             previous_episodes=[],
@@ -453,11 +441,8 @@ class TestExtractEntitySummariesBatch:
         async def reject_all(n):
             return False
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             [node],
             episode=_make_episode(),
             previous_episodes=[],
@@ -486,11 +471,8 @@ class TestExtractEntitySummariesBatch:
         alice = _make_entity_node('Alice', summary=long_summary)
         bob = _make_entity_node('Bob', summary=long_summary)
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             [alice, bob],
             episode=_make_episode(),
             previous_episodes=[],
@@ -520,11 +502,8 @@ class TestExtractEntitySummariesBatch:
         long_summary = 'X ' * 1500
         alice = _make_entity_node('Alice', summary=long_summary)
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             [alice],
             episode=_make_episode(),
             previous_episodes=[],
@@ -544,11 +523,8 @@ class TestExtractEntitySummariesBatch:
 
         node = _make_entity_node('Alice', summary='')
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             [node],
             episode=None,
             previous_episodes=None,
@@ -570,23 +546,22 @@ class TestExtractEntitySummariesBatch:
         call_count = 0
         call_args_list = []
 
-        async def mock_complete(prompt_name, context, **kwargs):
+        async def mock_generate(*args, **kwargs):
             nonlocal call_count
             call_count += 1
+            # Extract entity names from the context
+            context = args[0][1].content if args else ''
             call_args_list.append(context)
             return {'summaries': []}
 
-        llm_client.generate_response = AsyncMock()
+        llm_client.generate_response = mock_generate
 
         # Create 5 nodes with long summaries (need LLM)
         long_summary = 'X ' * 1500
         nodes = [_make_entity_node(f'Entity{i}', summary=long_summary) for i in range(5)]
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = AsyncMock(side_effect=mock_complete)
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             nodes,
             episode=_make_episode(),
             previous_episodes=[],
@@ -614,11 +589,8 @@ class TestExtractEntitySummariesBatch:
         long_summary = 'X ' * 1500
         node = _make_entity_node('alice', summary=long_summary)
 
-        clients = MagicMock()
-        clients.llm_client = llm_client
-        clients.complete_prompt = llm_client.generate_response
         await _extract_entity_summaries_batch(
-            clients,
+            llm_client,
             [node],
             episode=_make_episode(),
             previous_episodes=[],

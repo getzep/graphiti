@@ -19,16 +19,38 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel
 
-from .dedupe_edges import DedupeEdgesPrompts, DefaultDedupeEdgesPrompts, EdgeDuplicate
+from .dedupe_edges import (
+    DedupeEdgesPrompts,
+    DefaultDedupeEdgesPrompts,
+    EdgeDuplicate,
+)
+from .dedupe_edges import (
+    Prompt as DedupeEdgesPrompt,
+)
+from .dedupe_edges import (
+    Versions as DedupeEdgesVersions,
+)
+from .dedupe_edges import (
+    versions as dedupe_edges_versions,
+)
 from .dedupe_nodes import (
     DedupeNodesPrompts,
     DefaultDedupeNodesPrompts,
     NodeDuplicate,
     NodeResolutions,
+)
+from .dedupe_nodes import (
+    Prompt as DedupeNodesPrompt,
+)
+from .dedupe_nodes import (
+    Versions as DedupeNodesVersions,
+)
+from .dedupe_nodes import (
+    versions as dedupe_nodes_versions,
 )
 from .eval import (
     DefaultEvalPrompts,
@@ -38,6 +60,15 @@ from .eval import (
     QAResponse,
     QueryExpansion,
 )
+from .eval import (
+    Prompt as EvalPrompt,
+)
+from .eval import (
+    Versions as EvalVersions,
+)
+from .eval import (
+    versions as eval_versions,
+)
 from .extract_edges import (
     BatchEdgeTimestamps,
     DefaultExtractEdgesPrompts,
@@ -45,25 +76,75 @@ from .extract_edges import (
     ExtractedEdges,
     ExtractEdgesPrompts,
 )
+from .extract_edges import (
+    Prompt as ExtractEdgesPrompt,
+)
+from .extract_edges import (
+    Versions as ExtractEdgesVersions,
+)
+from .extract_edges import (
+    versions as extract_edges_versions,
+)
 from .extract_nodes import (
     DefaultExtractNodesPrompts,
     ExtractedEntities,
     ExtractNodesPrompts,
     SummarizedEntities,
 )
+from .extract_nodes import (
+    Prompt as ExtractNodesPrompt,
+)
+from .extract_nodes import (
+    Versions as ExtractNodesVersions,
+)
+from .extract_nodes import (
+    versions as extract_nodes_versions,
+)
 from .extract_nodes_and_edges import (
     CombinedExtraction,
     DefaultExtractNodesAndEdgesPrompts,
     ExtractNodesAndEdgesPrompts,
 )
-from .models import ChatPrompt, PromptFunction, PromptSpec
+from .extract_nodes_and_edges import (
+    Prompt as ExtractNodesAndEdgesPrompt,
+)
+from .extract_nodes_and_edges import (
+    Versions as ExtractNodesAndEdgesVersions,
+)
+from .extract_nodes_and_edges import (
+    versions as extract_nodes_and_edges_versions,
+)
+from .models import ChatPrompt, ChatPromptFunction, Message, PromptFunction, PromptSpec
+from .prompt_helpers import DO_NOT_ESCAPE_UNICODE
 from .summarize_nodes import (
     DefaultSummarizeNodesPrompts,
     SummarizeNodesPrompts,
     Summary,
     SummaryDescription,
 )
-from .summarize_sagas import DefaultSummarizeSagasPrompts, SagaSummary, SummarizeSagasPrompts
+from .summarize_nodes import (
+    Prompt as SummarizeNodesPrompt,
+)
+from .summarize_nodes import (
+    Versions as SummarizeNodesVersions,
+)
+from .summarize_nodes import (
+    versions as summarize_nodes_versions,
+)
+from .summarize_sagas import (
+    DefaultSummarizeSagasPrompts,
+    SagaSummary,
+    SummarizeSagasPrompts,
+)
+from .summarize_sagas import (
+    Prompt as SummarizeSagasPrompt,
+)
+from .summarize_sagas import (
+    Versions as SummarizeSagasVersions,
+)
+from .summarize_sagas import (
+    versions as summarize_sagas_versions,
+)
 
 # Canonical group -> method names for structural validation and overrides.
 PROMPT_GROUPS: dict[str, tuple[str, ...]] = {
@@ -96,9 +177,61 @@ PROMPT_GROUPS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Backward-compatible alias used by older tests.
-PROMPT_LIBRARY_IMPL: dict[str, dict[str, None]] = {
-    group: {name: None for name in methods} for group, methods in PROMPT_GROUPS.items()
+
+class PromptLibrary(Protocol):
+    extract_nodes: ExtractNodesPrompt
+    dedupe_nodes: DedupeNodesPrompt
+    extract_edges: ExtractEdgesPrompt
+    extract_nodes_and_edges: ExtractNodesAndEdgesPrompt
+    dedupe_edges: DedupeEdgesPrompt
+    summarize_nodes: SummarizeNodesPrompt
+    summarize_sagas: SummarizeSagasPrompt
+    eval: EvalPrompt
+
+
+class PromptLibraryImpl(TypedDict):
+    extract_nodes: ExtractNodesVersions
+    dedupe_nodes: DedupeNodesVersions
+    extract_edges: ExtractEdgesVersions
+    extract_nodes_and_edges: ExtractNodesAndEdgesVersions
+    dedupe_edges: DedupeEdgesVersions
+    summarize_nodes: SummarizeNodesVersions
+    summarize_sagas: SummarizeSagasVersions
+    eval: EvalVersions
+
+
+class VersionWrapper:
+    def __init__(self, func: PromptFunction):
+        self.func = func
+
+    def __call__(self, context: dict[str, Any]) -> list[Message]:
+        messages = self.func(context)
+        for message in messages:
+            message.content += DO_NOT_ESCAPE_UNICODE if message.role == 'system' else ''
+        return messages
+
+
+class PromptTypeWrapper:
+    def __init__(self, versions: dict[str, PromptFunction]):
+        for version, func in versions.items():
+            setattr(self, version, VersionWrapper(func))
+
+
+class PromptLibraryWrapper:
+    def __init__(self, library: PromptLibraryImpl):
+        for prompt_type, versions in library.items():
+            setattr(self, prompt_type, PromptTypeWrapper(versions))  # type: ignore[arg-type]
+
+
+PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
+    'extract_nodes': extract_nodes_versions,
+    'dedupe_nodes': dedupe_nodes_versions,
+    'extract_edges': extract_edges_versions,
+    'extract_nodes_and_edges': extract_nodes_and_edges_versions,
+    'dedupe_edges': dedupe_edges_versions,
+    'summarize_nodes': summarize_nodes_versions,
+    'summarize_sagas': summarize_sagas_versions,
+    'eval': eval_versions,
 }
 
 CHAT_PROMPT_MIGRATION_NOTE = (
@@ -228,7 +361,7 @@ def resolve_response_model(
     return spec.response_model
 
 
-class PromptLibrary(ABC):
+class ChatPromptLibrary(ABC):
     """Top-level prompt library ABC. Prefer subclassing; duck-typed libraries also work."""
 
     @property
@@ -268,7 +401,7 @@ class PromptLibrary(ABC):
     def specs(self) -> Mapping[str, PromptSpec]: ...
 
 
-class DefaultPromptLibrary(PromptLibrary):
+class DefaultChatPromptLibrary(ChatPromptLibrary):
     """Built-in Graphiti prompt library."""
 
     def __init__(self) -> None:
@@ -319,13 +452,16 @@ class DefaultPromptLibrary(PromptLibrary):
         return self._specs
 
 
-PromptOverrides = dict[str, dict[str, PromptFunction]]
+default_chat_prompt_library = DefaultChatPromptLibrary()
+
+
+PromptOverrides = dict[str, dict[str, ChatPromptFunction]]
 
 
 class _OverrideGroup:
     """Group proxy that prefers override callables, else delegates to the base group."""
 
-    def __init__(self, base: Any, overrides: dict[str, PromptFunction]) -> None:
+    def __init__(self, base: Any, overrides: dict[str, ChatPromptFunction]) -> None:
         self._base = base
         self._overrides = overrides
 
@@ -344,7 +480,7 @@ class _OverrideGroup:
 class _ComposedPromptLibrary:
     """Duck-typed library composed from defaults + partial overrides."""
 
-    def __init__(self, base: PromptLibrary, overrides: PromptOverrides) -> None:
+    def __init__(self, base: ChatPromptLibrary, overrides: PromptOverrides) -> None:
         self._base = base
         self._groups: dict[str, Any] = {}
         for group_name in PROMPT_GROUPS:
@@ -377,7 +513,7 @@ def _ensure_chat_prompt(result: Any, label: str) -> ChatPrompt:
     return ensure_chat_prompt(result, label)
 
 
-def get_prompt_builder(library: Any, prompt_name: str) -> PromptFunction:
+def get_prompt_builder(library: Any, prompt_name: str) -> ChatPromptFunction:
     """Resolve ``group.method`` from a prompt library to a callable builder."""
     if '.' not in prompt_name:
         raise ValueError(f'Invalid prompt_name (expected group.method): {prompt_name}')
@@ -397,17 +533,17 @@ def get_prompt_builder(library: Any, prompt_name: str) -> PromptFunction:
     return _call
 
 
-prompt_library: PromptLibrary = DefaultPromptLibrary()
+prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)  # type: ignore[assignment]
 
 
-def create_prompt_library(overrides: PromptOverrides | None = None) -> PromptLibrary:
+def create_prompt_library(overrides: PromptOverrides | None = None) -> ChatPromptLibrary:
     """Create a prompt library, optionally applying partial overrides to the defaults.
 
     Override callables must return ``ChatPrompt``. Returning ``list[Message]`` raises
     ``TypeError`` with a migration note.
     """
     if not overrides:
-        return DefaultPromptLibrary()
+        return DefaultChatPromptLibrary()
 
     for group_name, group_overrides in overrides.items():
         if group_name not in PROMPT_GROUPS:
@@ -418,7 +554,7 @@ def create_prompt_library(overrides: PromptOverrides | None = None) -> PromptLib
             if not callable(function):
                 raise ValueError(f'Prompt override must be callable: {group_name}.{function_name}')
 
-    return _ComposedPromptLibrary(DefaultPromptLibrary(), overrides)  # type: ignore[return-value]
+    return _ComposedPromptLibrary(DefaultChatPromptLibrary(), overrides)  # type: ignore[return-value]
 
 
 class _LibraryWithBuiltinSpecs:
@@ -473,7 +609,7 @@ def validate_prompt_library(library: Any) -> None:
                 )
 
 
-def ensure_prompt_library_wrapped(library: Any) -> Any:
+def ensure_prompt_library_wrapped(library: ChatPromptLibrary) -> Any:
     """Validate and return the library, attaching builtin specs when missing.
 
     Unicode post-processing is handled by ``ChatPrompt.as_messages``; no VersionWrapper.

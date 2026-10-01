@@ -9,7 +9,7 @@ from graphiti_core.graphiti import Graphiti
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.prompt_config import LLMTransport
-from graphiti_core.prompts import create_prompt_library, prompt_library
+from graphiti_core.prompts import create_prompt_library, default_chat_prompt_library
 from graphiti_core.prompts.lib import (
     PROMPT_GROUPS,
     ensure_prompt_library_wrapped,
@@ -45,10 +45,10 @@ def _make_graphiti(**kwargs) -> Graphiti:
         )
 
 
-def test_graphiti_stores_default_prompt_library_when_unconfigured():
+def test_graphiti_keeps_prompt_library_unset_when_unconfigured():
     graphiti = _make_graphiti()
-    assert graphiti.prompt_library is prompt_library
-    assert graphiti.clients.prompt_library is prompt_library
+    assert graphiti.prompt_library is None
+    assert graphiti.clients.prompt_library is None
 
 
 def test_graphiti_stores_custom_prompt_library():
@@ -163,12 +163,13 @@ def test_create_prompt_library_does_not_mutate_default_prompt_library():
         'entity_types': [],
         'source_description': 'test',
     }
-    before = prompt_library.extract_nodes.extract_message(context).system.content
+    before = default_chat_prompt_library.extract_nodes.extract_message(context).system.content
     _ = create_prompt_library({'extract_nodes': {'extract_message': _custom_extract_message}})
     graphiti = _make_graphiti()
-    assert graphiti.prompt_library is prompt_library
-    assert graphiti.prompt_library.extract_nodes.extract_message(context).system.content == before
-    assert prompt_library.extract_nodes.extract_message(context).system.content == before
+    assert graphiti.prompt_library is None
+    assert (
+        default_chat_prompt_library.extract_nodes.extract_message(context).system.content == before
+    )
     assert before != 'custom system'
 
 

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from graphiti_core.prompts import create_prompt_library, prompt_library
+from graphiti_core.prompts import create_prompt_library, default_chat_prompt_library, prompt_library
 from graphiti_core.prompts.lib import PROMPT_GROUPS, ensure_prompt_library_wrapped
 from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
 from graphiti_core.prompts.prompt_helpers import DO_NOT_ESCAPE_UNICODE
@@ -33,13 +33,14 @@ def _custom_extract_message(context: dict) -> ChatPrompt:
 def test_default_prompt_library_remains_importable():
     assert prompt_library is not None
     assert hasattr(prompt_library, 'extract_nodes')
-    assert hasattr(prompt_library, 'specs')
+    assert default_chat_prompt_library is not None
+    assert hasattr(default_chat_prompt_library, 'specs')
 
 
 def test_create_prompt_library_returns_default_equivalent_when_no_overrides():
     lib = create_prompt_library()
     context = _default_extract_context()
-    default_prompt = prompt_library.extract_nodes.extract_message(context)
+    default_prompt = default_chat_prompt_library.extract_nodes.extract_message(context)
     created_prompt = lib.extract_nodes.extract_message(context)
     assert isinstance(default_prompt, ChatPrompt)
     assert isinstance(created_prompt, ChatPrompt)
@@ -99,10 +100,12 @@ def test_default_library_exposes_required_groups_and_functions():
 def test_prompt_specs_are_fixed():
     from graphiti_core.prompts.extract_nodes import ExtractedEntities
 
-    spec = prompt_library.specs['extract_nodes.extract_message']
+    spec = default_chat_prompt_library.specs['extract_nodes.extract_message']
     assert spec.response_model is ExtractedEntities
     assert spec.dynamic_schema is False
-    assert prompt_library.specs['extract_nodes.extract_attributes'].dynamic_schema is True
+    assert (
+        default_chat_prompt_library.specs['extract_nodes.extract_attributes'].dynamic_schema is True
+    )
 
 
 def test_ensure_prompt_library_wrapped_attaches_specs_to_hand_built_library():

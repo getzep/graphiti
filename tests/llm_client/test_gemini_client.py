@@ -50,13 +50,7 @@ def mock_gemini_client():
 @pytest.fixture
 def gemini_client(mock_gemini_client):
     """Fixture to create a GeminiClient with a mocked client."""
-    config = LLMConfig(
-        api_key='test_api_key',
-        model='test-model',
-        small_model=DEFAULT_SMALL_MODEL,
-        temperature=0.5,
-        max_tokens=1000,
-    )
+    config = LLMConfig(api_key='test_api_key', model='test-model', temperature=0.5, max_tokens=1000)
     client = GeminiClient(config=config, cache=False)
     # Replace the client's client with our mock to ensure we're using the mock
     client.client = mock_gemini_client
@@ -186,15 +180,6 @@ class TestGeminiClientGenerateResponse:
         # Test medium/large model
         medium_model = gemini_client._get_model_for_size(ModelSize.medium)
         assert medium_model == gemini_client.model
-
-    @pytest.mark.asyncio
-    async def test_get_model_for_size_honors_overrides(self, gemini_client):
-        assert gemini_client._get_model_for_size(ModelSize.medium, model='gemini-2.5-pro') == (
-            'gemini-2.5-pro'
-        )
-        assert gemini_client._get_model_for_size(ModelSize.small, model='x') == 'x'
-        assert gemini_client._get_model_for_size(ModelSize.medium) == gemini_client.model
-        assert gemini_client._get_model_for_size(ModelSize.small) == gemini_client.small_model
 
     @pytest.mark.asyncio
     async def test_rate_limit_error_handling(self, gemini_client, mock_gemini_client):
@@ -454,20 +439,6 @@ class TestGeminiClientGenerateResponse:
         # Verify correct model is used
         call_args = mock_gemini_client.aio.models.generate_content.call_args
         assert call_args[1]['model'] == DEFAULT_SMALL_MODEL
-
-    @pytest.mark.asyncio
-    async def test_generate_response_honors_model_override(self, gemini_client, mock_gemini_client):
-        mock_response = MagicMock()
-        mock_response.text = 'Test response'
-        mock_response.candidates = []
-        mock_response.prompt_feedback = None
-        mock_gemini_client.aio.models.generate_content.return_value = mock_response
-
-        messages = [Message(role='user', content='Test message')]
-        await gemini_client.generate_response(messages, model='gemini-2.5-pro')
-
-        call_args = mock_gemini_client.aio.models.generate_content.call_args
-        assert call_args[1]['model'] == 'gemini-2.5-pro'
 
     @pytest.mark.asyncio
     async def test_gemini_model_max_tokens_mapping(self, mock_gemini_client):

@@ -39,7 +39,7 @@ from graphiti_core.edges import (
 )
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
 from graphiti_core.helpers import (
     get_default_group_id,
     semaphore_gather,
@@ -57,14 +57,13 @@ from graphiti_core.nodes import (
     SagaNode,
     create_entity_node_embeddings,
 )
+from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.lib import (
-    PromptLibrary,
+    ChatPromptLibrary,
     ensure_prompt_library_wrapped,
     validate_prompt_library,
 )
-from graphiti_core.prompts.lib import (
-    prompt_library as default_prompt_library,
-)
+from graphiti_core.prompts.summarize_sagas import SagaSummary
 from graphiti_core.search.search import SearchConfig, search
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResults
 from graphiti_core.search.search_config_recipes import (
@@ -154,7 +153,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
-        prompt_library: PromptLibrary | None = None,
+        prompt_library: ChatPromptLibrary | None = None,
         llm_runtime: LLMRuntime | None = None,
     ):
         """
@@ -193,9 +192,10 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
-        prompt_library : PromptLibrary | None, optional
+        prompt_library : ChatPromptLibrary | None, optional
             An instance-scoped prompt library used for all LLM prompt construction.
-            If not provided, Graphiti uses the built-in default prompt library.
+            If not provided, Graphiti uses its legacy module-level prompt functions.
+            ``self.prompt_library`` and ``self.clients.prompt_library`` remain ``None`` by default.
             For partial customization, compose overrides with
             ``create_prompt_library(overrides)`` and pass the result here.
             Override callables must return ``ChatPrompt``.
@@ -203,9 +203,11 @@ class Graphiti:
         llm_runtime : LLMRuntime | None, optional
             An opt-in runtime that routes prompts across one or more
             ``LLMTransport`` instances. It requires a default ``LLMModel``.
-            The runtime owns prompt selection and model routing. GLiNER2 does
-            not support per-prompt routing. Cannot be combined with
-            ``llm_client`` or ``prompt_library``.
+            The runtime owns prompt selection and model routing. It has no
+            ``small_id`` field. ``model_size`` does not select a smaller model
+            on the runtime path. Route lightweight prompts to a smaller model.
+            GLiNER2 does not support per-prompt routing. Cannot be combined
+            with ``llm_client`` or ``prompt_library``.
 
         Returns
         -------
@@ -258,7 +260,7 @@ class Graphiti:
                 validate_prompt_library(prompt_library)
                 self.prompt_library = ensure_prompt_library_wrapped(prompt_library)
             else:
-                self.prompt_library = default_prompt_library
+                self.prompt_library = None
 
         if embedder:
             self.embedder = embedder
@@ -594,9 +596,13 @@ class Graphiti:
             'episodes': episode_contents,
         }
 
-        llm_response = await self.clients.complete_prompt(
+        llm_response = await generate_prompt_response(
+            self.llm_client,
             'summarize_sagas.summarize_saga',
+            prompt_library.summarize_sagas.summarize_saga,
             context,
+            clients=self.clients,
+            response_model=SagaSummary,
         )
 
         summary = llm_response.get('summary', '')
@@ -1290,7 +1296,16 @@ class Graphiti:
                 community_edges = []
                 if update_communities:
                     communities, community_edges = await semaphore_gather(
-                        *[update_community(clients, node) for node in nodes],
+                        *[
+                            update_community(
+                                clients.driver,
+                                clients.llm_client,
+                                clients.embedder,
+                                node,
+                                clients=clients,
+                            )
+                            for node in nodes
+                        ],
                         max_coroutines=self.max_coroutines,
                     )
 
@@ -1611,7 +1626,12 @@ class Graphiti:
         clients = self.clients
         if driver is not None and driver is not self.driver:
             clients = self.clients.model_copy(update={'driver': driver})
-        community_nodes, community_edges = await build_communities(clients, group_ids)
+        community_nodes, community_edges = await build_communities(
+            clients.driver,
+            clients.llm_client,
+            group_ids,
+            clients=clients,
+        )
 
         await semaphore_gather(
             *[node.generate_name_embedding(self.embedder) for node in community_nodes],
@@ -1844,7 +1864,7 @@ class Graphiti:
         ).edges
 
         resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
-            self.clients,
+            self.llm_client,
             edge,
             related_edges,
             existing_edges,
@@ -1858,6 +1878,7 @@ class Graphiti:
                 group_id=edge.group_id,
             ),
             None,
+            clients=self.clients,
         )
 
         edges: list[EntityEdge] = [resolved_edge] + invalidated_edges
