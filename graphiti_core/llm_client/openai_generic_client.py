@@ -145,7 +145,6 @@ class OpenAIGenericClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
@@ -187,7 +186,6 @@ class OpenAIGenericClient(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
@@ -230,7 +228,6 @@ class OpenAIGenericClient(LLMClient):
                     max_tokens=max_tokens,
                     model_size=model_size,
                     model=model,
-                    small_model=small_model,
                 )
             except Exception as e:
                 span.set_status('error', str(e))

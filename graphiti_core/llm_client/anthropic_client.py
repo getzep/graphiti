@@ -259,7 +259,6 @@ class AnthropicClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> tuple[dict[str, typing.Any], int, int]:
         """
         Generate a response from the Anthropic LLM using tool-based approach for all requests.
@@ -357,7 +356,6 @@ class AnthropicClient(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the LLM.
@@ -407,7 +405,6 @@ class AnthropicClient(LLMClient):
                         max_tokens,
                         model_size,
                         model=model,
-                        small_model=small_model,
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens

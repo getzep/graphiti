@@ -228,7 +228,6 @@ class GLiNER2Client(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         # String model ids cannot select a GLiNER2 weight bound at init; ignore them.
         gliner_model = self._get_model_for_size(model_size)
@@ -265,7 +264,6 @@ class GLiNER2Client(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         # Delegate non-extraction operations to the wrapped LLM client.
         if not self._is_gliner2_operation(response_model):
@@ -278,7 +276,6 @@ class GLiNER2Client(LLMClient):
                 prompt_name=prompt_name,
                 attribute_extraction=attribute_extraction,
                 model=model,
-                small_model=small_model,
             )
 
         if max_tokens is None:

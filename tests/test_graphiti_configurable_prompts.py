@@ -7,6 +7,8 @@ import pytest
 
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.llm_client.client import LLMClient
+from graphiti_core.llm_client.prompt_config import LLMTransport
 from graphiti_core.prompts import create_prompt_library, prompt_library
 from graphiti_core.prompts.lib import (
     PROMPT_GROUPS,
@@ -171,35 +173,31 @@ def test_create_prompt_library_does_not_mutate_default_prompt_library():
 
 
 def test_graphiti_rejects_prompt_library_and_llm_runtime_together():
-    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
+    from graphiti_core.llm_client.llm_runtime import LLMRuntime
 
     custom = create_prompt_library({'extract_nodes': {'extract_message': _custom_extract_message}})
-    llm = MagicMock()
-    llm.set_tracer = MagicMock()
-    runtime = LLMRuntime(llm, model=LLMModel(id='gpt-4.1-mini'))
+    llm = MagicMock(spec=LLMClient)
+    runtime = LLMRuntime(model=LLMTransport(llm).model('gpt-4.1-mini'))
     with pytest.raises(ValueError, match='cannot be combined with: prompt_library'):
         _make_graphiti(prompt_library=custom, llm_runtime=runtime)
 
 
 def test_graphiti_rejects_llm_client_and_llm_runtime_together():
-    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
+    from graphiti_core.llm_client.llm_runtime import LLMRuntime
 
-    llm = MagicMock()
-    llm.set_tracer = MagicMock()
-    runtime = LLMRuntime(llm, model=LLMModel(id='gpt-4.1-mini'))
+    llm = MagicMock(spec=LLMClient)
+    runtime = LLMRuntime(model=LLMTransport(llm).model('gpt-4.1-mini'))
     with pytest.raises(ValueError, match='cannot be combined with: llm_client'):
         _make_graphiti(llm_client=MagicMock(), llm_runtime=runtime)
 
 
 def test_graphiti_llm_runtime_populates_prompt_library_from_bundle():
-    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
+    from graphiti_core.llm_client.llm_runtime import LLMRuntime
 
-    llm = MagicMock()
-    llm.set_tracer = MagicMock()
+    llm = MagicMock(spec=LLMClient)
     custom = create_prompt_library({'extract_nodes': {'extract_message': _custom_extract_message}})
     runtime = LLMRuntime(
-        llm,
-        model=LLMModel(id='gpt-4.1-mini'),
+        model=LLMTransport(llm).model('gpt-4.1-mini'),
         library=custom,
     )
     graphiti = _make_graphiti(llm_runtime=runtime)
@@ -209,3 +207,15 @@ def test_graphiti_llm_runtime_populates_prompt_library_from_bundle():
     assert (
         graphiti.prompt_library.extract_nodes.extract_message({}).system.content == 'custom system'
     )
+
+
+def test_graphiti_uses_default_runtime_transport_client():
+    from graphiti_core.llm_client.llm_runtime import LLMRuntime
+
+    llm = MagicMock(spec=LLMClient)
+    runtime = LLMRuntime(model=LLMTransport(llm).model('gpt-4.1-mini'))
+
+    graphiti = _make_graphiti(llm_runtime=runtime)
+
+    assert runtime.client is llm
+    assert graphiti.llm_client is runtime.client

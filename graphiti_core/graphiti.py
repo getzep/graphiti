@@ -201,10 +201,11 @@ class Graphiti:
             Override callables must return ``ChatPrompt``.
             Cannot be combined with ``llm_runtime``.
         llm_runtime : LLMRuntime | None, optional
-            Opt-in runtime coupling a single LLMClient transport with a required
-            default ``LLMModel``, optional per-prompt ``routes``, and prompt text
-            overrides. When set, owns prompt selection and per-prompt model routing.
-            Cannot be combined with ``llm_client`` or ``prompt_library``.
+            An opt-in runtime that routes prompts across one or more
+            ``LLMTransport`` instances. It requires a default ``LLMModel``.
+            The runtime owns prompt selection and model routing. GLiNER2 does
+            not support per-prompt routing. Cannot be combined with
+            ``llm_client`` or ``prompt_library``.
 
         Returns
         -------
@@ -246,7 +247,7 @@ class Graphiti:
 
         self.llm_runtime = llm_runtime
         if llm_runtime is not None:
-            self.llm_client = llm_runtime.transport
+            self.llm_client = llm_runtime.client
             self.prompt_library = llm_runtime.library
         else:
             if llm_client:
@@ -1289,13 +1290,7 @@ class Graphiti:
                 community_edges = []
                 if update_communities:
                     communities, community_edges = await semaphore_gather(
-                        *[
-                            update_community(
-                                clients,
-                                node,
-                            )
-                            for node in nodes
-                        ],
+                        *[update_community(clients, node) for node in nodes],
                         max_coroutines=self.max_coroutines,
                     )
 

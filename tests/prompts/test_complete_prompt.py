@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.llm_client.client import LLMClient
+from graphiti_core.llm_client.prompt_config import LLMTransport
 from graphiti_core.prompts import create_prompt_library, prompt_library
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
 from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
@@ -119,14 +121,11 @@ async def test_complete_prompt_legacy_passes_model_size_and_attribute_flag():
 
 @pytest.mark.asyncio
 async def test_complete_prompt_routes_to_runtime_when_set():
-    from graphiti_core.llm_client.llm_runtime import LLMModel, LLMRuntime
+    from graphiti_core.llm_client.llm_runtime import LLMRuntime
 
-    transport = MagicMock()
-    transport.generate_response = AsyncMock(return_value={'extracted_entities': []})
-    runtime = LLMRuntime(
-        transport,
-        model=LLMModel(id='gpt-4.1'),
-    )
+    transport_client = MagicMock(spec=LLMClient)
+    transport_client.generate_response = AsyncMock(return_value={'extracted_entities': []})
+    runtime = LLMRuntime(model=LLMTransport(transport_client).model('gpt-4.1'))
     clients = GraphitiClients.model_construct(
         driver=MagicMock(),
         llm_client=MagicMock(),
@@ -147,8 +146,8 @@ async def test_complete_prompt_routes_to_runtime_when_set():
             'source_description': 't',
         },
     )
-    transport.generate_response.assert_awaited_once()
-    kwargs = transport.generate_response.await_args.kwargs
+    transport_client.generate_response.assert_awaited_once()
+    kwargs = transport_client.generate_response.await_args.kwargs
     assert kwargs['model'] == 'gpt-4.1'
-    assert kwargs['small_model'] is None
+    assert 'small_model' not in kwargs
     assert clients.llm_client.generate_response.await_count == 0

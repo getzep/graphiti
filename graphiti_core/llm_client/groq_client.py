@@ -63,7 +63,6 @@ class GroqClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         msgs: list[ChatCompletionMessageParam] = []
         for m in messages:

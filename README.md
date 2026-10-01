@@ -637,42 +637,45 @@ Unspecified prompts keep the built-in defaults. Returning ``list[Message]`` from
 ``TypeError`` — migrate with ``return ChatPrompt(system=..., user=...)``. Unicode handling is applied
 via ``ChatPrompt.as_messages()``.
 
-For per-prompt model routing on a **single provider transport**, pass an opt-in
-``llm_runtime``. Do not pass ``llm_client`` or ``prompt_library`` together with
-``llm_runtime``. Response schemas stay fixed; only prompt text and which
-``LLMModel`` runs a prompt are configurable:
+For per-prompt routing across providers, pass an opt-in ``llm_runtime``. Create
+one ``LLMTransport`` for each provider client. Each ``LLMModel`` binds a provider
+model ID to one transport. An unrouted prompt uses the default model.
+``llm_runtime`` cannot be combined with ``llm_client`` or ``prompt_library``.
+Response schemas stay fixed. You can configure prompt text and model routes:
 
 ```python
+from typing import Literal
+
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import OpenAIClient, LLMModel, LLMPromptOverrides, LLMRuntime, PromptRoutes
-from graphiti_core.prompts import ChatPrompt, SystemMessage, UserMessage
-
-def custom_extract_message(context: dict) -> ChatPrompt:
-    return ChatPrompt(
-        system=SystemMessage(content='Extract entities for my domain.'),
-        user=UserMessage(content=str(context.get('episode_content', ''))),
-    )
-
-main = LLMModel(id='gpt-4.1')
-nano = LLMModel(
-    id='gpt-4.1-nano',
-    prompt_overrides=LLMPromptOverrides(
-        extract_nodes=LLMPromptOverrides.ExtractNodes(
-            extract_attributes=custom_extract_message,
-        ),
-    ),
+from graphiti_core.llm_client.anthropic_client import AnthropicClient
+from graphiti_core.llm_client import (
+    LLMRuntime,
+    LLMTransport,
+    OpenAIClient,
+    PromptRoutes,
 )
 
-runtime = LLMRuntime(
+OpenAIModels = Literal['gpt-5.1', 'gpt-5-nano']
+openai = LLMTransport[OpenAIModels](
     OpenAIClient(),
+    models=['gpt-5.1', 'gpt-5-nano'],
+)
+
+AnthropicModels = Literal['claude-sonnet-4-5', 'claude-haiku-4-5']
+anthropic = LLMTransport[AnthropicModels](
+    AnthropicClient(),
+    models=['claude-sonnet-4-5', 'claude-haiku-4-5'],
+)
+
+main = openai.model('gpt-5.1')
+nano = openai.model('gpt-5-nano')
+haiku = anthropic.model('claude-haiku-4-5')
+runtime = LLMRuntime(
     model=main,
     routes=PromptRoutes(
         extract_nodes=PromptRoutes.ExtractNodes(extract_attributes=nano),
-        extract_edges=PromptRoutes.ExtractEdges(extract_attributes=nano),
-    ),
-    prompt_overrides=LLMPromptOverrides(
-        extract_nodes=LLMPromptOverrides.ExtractNodes(
-            extract_message=custom_extract_message,
+        dedupe_edges=PromptRoutes.DedupeEdges(
+            resolve_edge=haiku,
         ),
     ),
 )
@@ -680,15 +683,15 @@ runtime = LLMRuntime(
 graphiti = Graphiti(..., llm_runtime=runtime)
 ```
 
-``ModelSize.small`` call sites still work on the runtime path. Set ``LLMModel.small_id``
-explicitly, or omit it on the default model to keep the transport's ``small_model``.
-Routed models without ``small_id`` use their own ``id`` for small-model calls.
+``LLMModel`` does not have a ``small_id`` field. The runtime passes
+``model_size`` for legacy compatibility, but the selected model ID controls
+provider calls. A prompt routed to a small model uses that model ID. An
+unrouted prompt uses the default model ID. Route prompts that need a smaller
+model to that model explicitly. Legacy calls without ``llm_runtime`` retain
+``LLMConfig.small_model`` behavior.
 
-v1 is multi-model on one client that selects models via the ``model`` /
-``small_model`` kwargs on ``generate_response`` (OpenAI, Anthropic, Gemini,
-Groq, ...). The transport is never cloned or mutated. Routing a Claude id
-through an OpenAI client is unsupported, as is per-prompt routing on providers
-that bind a model object at init (for example GLiNER2). See ``spec/llm-runtime.md``.
+GLiNER2 binds model objects at initialization. It does not support per-prompt
+model routing. See ``spec/llm-runtime.md`` for the runtime API.
 
 ## Documentation
 

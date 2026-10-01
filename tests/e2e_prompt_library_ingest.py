@@ -31,11 +31,10 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.graphiti import Graphiti
-from graphiti_core.llm_client import OpenAIClient
+from graphiti_core.llm_client import LLMTransport, OpenAIClient
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig, ModelSize
 from graphiti_core.llm_client.llm_runtime import (
-    LLMModel,
     LLMPromptOverrides,
     LLMRuntime,
     PromptRoutes,
@@ -93,7 +92,6 @@ class StubLLM(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, Any]:
         return {}
 
@@ -108,7 +106,6 @@ class StubLLM(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, Any]:
         self.calls.append({'prompt_name': prompt_name, 'messages': messages})
         name = prompt_name or ''
@@ -166,7 +163,6 @@ class RecordingLLM(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, Any]:
         return await self.inner._generate_response(  # noqa: SLF001
             messages,
@@ -174,7 +170,6 @@ class RecordingLLM(LLMClient):
             max_tokens=max_tokens,
             model_size=model_size,
             model=model,
-            small_model=small_model,
         )
 
     async def generate_response(
@@ -188,7 +183,6 @@ class RecordingLLM(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, Any]:
         self.calls.append(
             {
@@ -205,7 +199,6 @@ class RecordingLLM(LLMClient):
             prompt_name=prompt_name,
             attribute_extraction=attribute_extraction,
             model=model,
-            small_model=small_model,
         )
 
 
@@ -295,11 +288,10 @@ async def _run_mock(driver: Neo4jDriver) -> int:
     print('OK custom ChatPrompt override observed in LLM messages')
 
     # Path 3: LLMRuntime
-    transport = StubLLM()
-    nano = LLMModel(id='gpt-4.1-nano')
+    transport = LLMTransport(StubLLM())
+    nano = transport.model('gpt-4.1-nano')
     runtime = LLMRuntime(
-        transport,
-        model=LLMModel(id='gpt-4.1-mini'),
+        model=transport.model('gpt-4.1-mini'),
         routes=PromptRoutes(
             extract_nodes=PromptRoutes.ExtractNodes(extract_message=nano),
         ),
@@ -373,11 +365,10 @@ async def _run_openai(driver: Neo4jDriver) -> int:
 
     async def path_bound() -> None:
         group_id = f'e2e-oa-bound-{run_id}'
-        transport = OpenAIClient()
-        nano = LLMModel(id='gpt-4.1-nano')
+        transport = LLMTransport(OpenAIClient())
+        nano = transport.model('gpt-4.1-nano')
         runtime = LLMRuntime(
-            transport,
-            model=LLMModel(id='gpt-4.1-mini'),
+            model=transport.model('gpt-4.1-mini'),
             routes=PromptRoutes(
                 extract_nodes=PromptRoutes.ExtractNodes(extract_message=nano),
             ),

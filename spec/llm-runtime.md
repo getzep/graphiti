@@ -8,7 +8,8 @@ Paul Paliychuk
 
 ## 1. Overview
 
-`LLMRuntime` is an opt-in object that couples a single `LLMClient` transport with:
+`LLMRuntime` is an opt-in object that routes prompts to models across one or
+more provider transports. It contains:
 
 1. A required default `LLMModel` (omitting it is a type error)
 2. Optional `PromptRoutes` (per-group `LLMModel` or nested group class)
@@ -16,10 +17,12 @@ Paul Paliychuk
 4. A prompt library (`ChatPrompt` builders). Schemas live in the immutable
    `BUILTIN_PROMPT_SPECS` registry and are not user-configurable.
 
+`LLMTransport` wraps one `LLMClient` and an optional set of model IDs. Each
+`LLMModel` binds one model ID to a transport. The model ID must appear in the
+transport's `models` set when the set is configured.
+
 There are no caller-invented model nicknames. Bind `LLMModel` instances to local
-Python variables and pass those variables into `PromptRoutes`. Multi-provider
-routing is out of scope for v1. Putting a Claude model id on an OpenAI client
-is unsupported.
+Python variables and pass those variables into `PromptRoutes`.
 
 Unknown prompt names are constructor / type errors on the nested dataclasses.
 The legacy `Graphiti(llm_client=..., prompt_library=...)` path is unchanged.
@@ -31,7 +34,7 @@ Graphiti(..., llm_client=..., prompt_library=..., llm_runtime=...)
 ```
 
 - `llm_runtime` with `llm_client` or `prompt_library` → `ValueError`
-- Only `llm_runtime` → runtime owns the transport and prompts
+- Only `llm_runtime` → runtime owns the transports and prompts
 - Only `prompt_library` (or neither) → legacy `llm_client` + library path
 
 ## 3. Builder resolution
@@ -47,16 +50,34 @@ Builders must return `ChatPrompt`. Schemas are never overridable.
 ## 4. Facade
 
 `GraphitiClients.complete_prompt` routes to `LLMRuntime.complete` when a runtime is set.
-`model_size` and `attribute_extraction` are forwarded on both paths. On the default
-model, omitting `LLMModel.small_id` keeps the transport's `small_model` (`small_model`
-is passed as `None`). Routed models without `small_id` pin small to their own `id`.
+`model_size` and `attribute_extraction` are forwarded on both paths. The runtime
+selects the model ID from the prompt route or the default model. For string-model
+transports, `ModelSize.small` does not select `LLMConfig.small_model`. Route a
+prompt to a smaller model when the prompt requires one. Legacy calls without a
+runtime keep `LLMConfig.small_model` behavior.
+
+GLiNER2 binds model objects at initialization. It does not support per-prompt
+model routing.
 
 ## 5. Public API
 
 ```text
+LLMTransport[M](
+  client: LLMClient,
+  *,
+  models: Sequence[M] | None = None,
+)
+
+LLMTransport.model(
+  id: M,
+  *,
+  prompt_overrides: LLMPromptOverrides | None = None,
+  max_tokens: int | None = None,
+)
+
 LLMModel(
   id: str,
-  small_id: str | None = None,
+  transport: LLMTransport[Any],
   prompt_overrides: LLMPromptOverrides | None = None,
   max_tokens: int | None = None,
 )
@@ -72,8 +93,8 @@ LLMPromptOverrides(
 )
 
 LLMRuntime(
-  transport: LLMClient,
   model: LLMModel,
+  *,
   routes: PromptRoutes | None = None,
   prompt_overrides: LLMPromptOverrides | None = None,
   library: PromptLibrary | None = None,
@@ -84,13 +105,28 @@ Omitting `model` is a type error. Reuse the same `LLMModel` instance on several
 routes (a local variable, not a Graphiti nickname).
 
 Override callables must return `ChatPrompt`. `LLMModel.id` is an exact provider
-model id; reserved fields (temperature, structured_output_mode, …) may be added
-later without changing call sites.
+model ID. `LLMModel` has no `small_id` field.
 
-Per-prompt model selection passes ``model`` / ``small_model`` into
-`LLMClient.generate_response` for that call. The original transport is not
-cloned or mutated, and concurrent calls are not serialized. v1 requires a
-transport that selects models via the ``model`` / ``small_model`` string
-attributes. Providers that bind a model object at init (for example GLiNER2)
-cannot be routed per prompt. Putting a Claude id on an OpenAI client is
-unsupported.
+The runtime passes `model` and `model_size` to the selected transport client.
+It does not pass a `small_model` keyword. Each prompt uses the selected model's
+transport. The runtime does not clone or mutate transports, and concurrent
+calls are not serialized.
+
+Use a `Literal` type to restrict model IDs during static checking:
+
+```python
+from typing import Literal
+
+from graphiti_core.llm_client import LLMTransport, OpenAIClient
+
+OpenAIModels = Literal['gpt-5.1', 'gpt-5-nano']
+openai = LLMTransport[OpenAIModels](
+    OpenAIClient(),
+    models=['gpt-5.1', 'gpt-5-nano'],
+)
+main = openai.model('gpt-5.1')
+```
+
+Create one transport for each provider client. A route can select a model from
+any configured transport. A model ID must match the provider client used by its
+transport.

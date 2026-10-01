@@ -50,7 +50,13 @@ def mock_gemini_client():
 @pytest.fixture
 def gemini_client(mock_gemini_client):
     """Fixture to create a GeminiClient with a mocked client."""
-    config = LLMConfig(api_key='test_api_key', model='test-model', temperature=0.5, max_tokens=1000)
+    config = LLMConfig(
+        api_key='test_api_key',
+        model='test-model',
+        small_model=DEFAULT_SMALL_MODEL,
+        temperature=0.5,
+        max_tokens=1000,
+    )
     client = GeminiClient(config=config, cache=False)
     # Replace the client's client with our mock to ensure we're using the mock
     client.client = mock_gemini_client
@@ -186,9 +192,9 @@ class TestGeminiClientGenerateResponse:
         assert gemini_client._get_model_for_size(ModelSize.medium, model='gemini-2.5-pro') == (
             'gemini-2.5-pro'
         )
-        assert gemini_client._get_model_for_size(ModelSize.small, small_model='other') == 'other'
+        assert gemini_client._get_model_for_size(ModelSize.small, model='x') == 'x'
         assert gemini_client._get_model_for_size(ModelSize.medium) == gemini_client.model
-        assert gemini_client._get_model_for_size(ModelSize.small) == DEFAULT_SMALL_MODEL
+        assert gemini_client._get_model_for_size(ModelSize.small) == gemini_client.small_model
 
     @pytest.mark.asyncio
     async def test_rate_limit_error_handling(self, gemini_client, mock_gemini_client):

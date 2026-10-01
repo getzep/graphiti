@@ -16,13 +16,16 @@ limitations under the License.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from types import MappingProxyType
-from typing import cast
+from typing import Any, Generic, TypeVar, cast
 
+from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.prompts.lib import PROMPT_GROUPS
 from graphiti_core.prompts.models import PromptFunction
+
+M = TypeVar('M', bound=str)
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,47 @@ def flatten_overrides(overrides: LLMPromptOverrides | None) -> dict[str, PromptF
     return flat
 
 
+class LLMTransport(Generic[M]):
+    """One provider client plus the model ids it may serve."""
+
+    def __init__(self, client: LLMClient, *, models: Sequence[M] | None = None) -> None:
+        if not isinstance(client, LLMClient):
+            raise TypeError(f'client must be an LLMClient, got {type(client).__name__}')
+
+        if models is None:
+            self.models: frozenset[str] | None = None
+        else:
+            model_ids = tuple(models)
+            if not model_ids or any(
+                not isinstance(model_id, str) or not model_id.strip() for model_id in model_ids
+            ):
+                raise ValueError('models must contain non-empty model ids')
+            self.models = frozenset(model_ids)
+
+        self.client = client
+
+    def supports(self, model_id: str) -> bool:
+        return self.models is None or model_id in self.models
+
+    def model(
+        self,
+        id: M,
+        *,
+        prompt_overrides: LLMPromptOverrides | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMModel:
+        return LLMModel(
+            id=id,
+            transport=self,
+            prompt_overrides=prompt_overrides,
+            max_tokens=max_tokens,
+        )
+
+    def __repr__(self) -> str:
+        models = sorted(self.models) if self.models is not None else None
+        return f'{type(self).__name__}(client={type(self.client).__name__}, models={models!r})'
+
+
 @dataclass(frozen=True)
 class LLMModel:
     """A provider model id, plus optional per-model prompt text overrides.
@@ -133,7 +177,7 @@ class LLMModel:
     """
 
     id: str
-    small_id: str | None = None
+    transport: LLMTransport[Any]
     prompt_overrides: LLMPromptOverrides | None = field(default=None, compare=False, hash=False)
     max_tokens: int | None = None
     _flat_overrides: Mapping[str, PromptFunction] = field(
@@ -143,8 +187,12 @@ class LLMModel:
     def __post_init__(self) -> None:
         if not self.id.strip():
             raise ValueError('LLMModel.id must be a non-empty string')
-        if self.small_id is not None and not self.small_id.strip():
-            raise ValueError('LLMModel.small_id must be a non-empty string')
+        if not isinstance(self.transport, LLMTransport):
+            raise TypeError(
+                f'LLMModel.transport must be an LLMTransport, got {type(self.transport).__name__}'
+            )
+        if not self.transport.supports(self.id):
+            raise ValueError(f'{self.id!r} is not declared on transport {self.transport!r}')
         if self.max_tokens is not None and self.max_tokens <= 0:
             raise ValueError('LLMModel.max_tokens must be positive')
         object.__setattr__(

@@ -37,6 +37,7 @@ from .config import ModelSize
 from .prompt_config import (
     LLMModel,
     LLMPromptOverrides,
+    LLMTransport,
     PromptRoutes,
     flatten_overrides,
     flatten_routes,
@@ -51,49 +52,52 @@ def _wrap_builder(builder: PromptFunction, prompt_name: str) -> PromptFunction:
 
 
 class LLMRuntime:
-    """Opt-in LLM runtime: one transport, a required default model, optional routes.
+    """Route prompts across one or more provider transports.
 
     Example::
 
-        main = LLMModel(id='gpt-4.1', small_id='gpt-4.1-nano')
-        nano = LLMModel(
-            id='gpt-4.1-nano',
-            prompt_overrides=LLMPromptOverrides(
-                extract_nodes=LLMPromptOverrides.ExtractNodes(
-                    extract_attributes=nano_extract_attrs,
-                ),
-            ),
+        from typing import Literal
+
+        from graphiti_core import Graphiti
+        from graphiti_core.llm_client.anthropic_client import AnthropicClient
+        from graphiti_core.llm_client import (
+            LLMRuntime,
+            LLMTransport,
+            OpenAIClient,
+            PromptRoutes,
         )
+
+        OpenAIModels = Literal['gpt-5.1', 'gpt-5-nano']
+        openai = LLMTransport[OpenAIModels](
+            OpenAIClient(),
+            models=['gpt-5.1', 'gpt-5-nano'],
+        )
+        AnthropicModels = Literal['claude-sonnet-4-5', 'claude-haiku-4-5']
+        anthropic = LLMTransport[AnthropicModels](
+            AnthropicClient(),
+            models=['claude-sonnet-4-5', 'claude-haiku-4-5'],
+        )
+
         runtime = LLMRuntime(
-            transport=OpenAIClient(),
-            model=main,
+            model=openai.model('gpt-5.1'),
             routes=PromptRoutes(
-                extract_nodes=PromptRoutes.ExtractNodes(extract_attributes=nano),
-                extract_edges=PromptRoutes.ExtractEdges(extract_attributes=nano),
-            ),
-            prompt_overrides=LLMPromptOverrides(
-                extract_nodes=LLMPromptOverrides.ExtractNodes(
-                    extract_message=my_extract,
+                extract_nodes=PromptRoutes.ExtractNodes(
+                    extract_attributes=openai.model('gpt-5-nano'),
+                ),
+                dedupe_edges=PromptRoutes.DedupeEdges(
+                    resolve_edge=anthropic.model('claude-haiku-4-5'),
                 ),
             ),
         )
         graphiti = Graphiti(..., llm_runtime=runtime)
 
-    Builder resolution for prompt P on model M:
-
-    1. ``M.prompt_overrides`` for P
-    2. else general ``prompt_overrides`` for P
-    3. else the builtin / supplied library
-
-    Schemas are never part of that stack. v1 is multi-model on one transport
-    that selects models via the ``model`` string attribute. Per-prompt routing
-    passes ``model`` / ``small_model`` into ``generate_response``; the transport
-    is never cloned or mutated.
+    The runtime uses the routed model ID for each prompt. An unrouted prompt
+    uses the default model. ``model_size`` does not select a second model on
+    this path. Route prompts that need a smaller model to that model explicitly.
     """
 
     def __init__(
         self,
-        transport: LLMClient,
         model: LLMModel,
         *,
         routes: PromptRoutes | None = None,
@@ -115,14 +119,30 @@ class LLMRuntime:
         else:
             resolved_library = ensure_prompt_library_wrapped(library)
 
-        self.transport = transport
+        transports = []
+        for routed_model in (model, *resolved_routes.values()):
+            transport = routed_model.transport
+            if not any(transport is existing for existing in transports):
+                transports.append(transport)
+
+        self.transports: tuple[LLMTransport[Any], ...] = tuple(transports)
         self.model = model
         self.routes = resolved_routes
         self.prompt_overrides = resolved_overrides
         self.library = resolved_library
 
+    @property
+    def client(self) -> LLMClient:
+        return self.model.transport.client
+
     def set_tracer(self, tracer: Tracer) -> None:
-        self.transport.set_tracer(tracer)
+        seen_clients: set[int] = set()
+        for transport in self.transports:
+            client = transport.client
+            if id(client) in seen_clients:
+                continue
+            seen_clients.add(id(client))
+            client.set_tracer(tracer)
 
     def resolve_model(self, prompt_name: str) -> LLMModel:
         """Return the LLMModel that should run ``prompt_name``."""
@@ -144,20 +164,6 @@ class LLMRuntime:
             return _wrap_builder(override, prompt_name)
         return get_prompt_builder(self.library, prompt_name)
 
-    def _small_id_for(self, model: LLMModel) -> str | None:
-        """Resolve the per-call ``small_model`` override for ``model``.
-
-        ``None`` means "leave the transport's ``small_model`` alone", which is
-        what the default model does when ``small_id`` is omitted so
-        ``ModelSize.small`` call sites keep working. Routed models without
-        ``small_id`` pin small to their own ``id``.
-        """
-        if model.small_id is not None:
-            return model.small_id
-        if model is self.model:
-            return None
-        return model.id
-
     async def complete(
         self,
         prompt_name: PromptName,
@@ -175,7 +181,7 @@ class LLMRuntime:
         messages = builder(context).as_messages()
         effective_max_tokens = max_tokens if max_tokens is not None else model.max_tokens
 
-        return await self.transport.generate_response(
+        return await model.transport.client.generate_response(
             messages,
             response_model=resolved_schema,
             max_tokens=effective_max_tokens,
@@ -184,5 +190,4 @@ class LLMRuntime:
             prompt_name=prompt_name,
             attribute_extraction=attribute_extraction,
             model=model.id,
-            small_model=self._small_id_for(model),
         )

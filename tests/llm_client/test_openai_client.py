@@ -86,7 +86,7 @@ def test_get_model_for_size_honors_overrides():
         client=DummyOpenAIClient(),
     )
     assert client._get_model_for_size(ModelSize.medium, model='gpt-5.5') == 'gpt-5.5'
-    assert client._get_model_for_size(ModelSize.small, small_model='other') == 'other'
+    assert client._get_model_for_size(ModelSize.small, model='x') == 'x'
     assert client._get_model_for_size(ModelSize.medium) == 'gpt-4.1'
     assert client._get_model_for_size(ModelSize.small) == 'gpt-4.1-nano'
 

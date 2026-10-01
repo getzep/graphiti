@@ -136,7 +136,6 @@ class LLMClient(ABC):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         try:
             # Only splat overrides when set so third-party subclasses with the
@@ -144,8 +143,6 @@ class LLMClient(ABC):
             overrides: dict[str, typing.Any] = {}
             if model is not None:
                 overrides['model'] = model
-            if small_model is not None:
-                overrides['small_model'] = small_model
             return await self._generate_response(
                 messages, response_model, max_tokens, model_size, **overrides
             )
@@ -161,7 +158,6 @@ class LLMClient(ABC):
         model_size: ModelSize = ModelSize.medium,
         *,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         pass
 
@@ -220,7 +216,6 @@ class LLMClient(ABC):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
-        small_model: str | None = None,
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
@@ -274,7 +269,6 @@ class LLMClient(ABC):
                     max_tokens,
                     model_size,
                     model=model,
-                    small_model=small_model,
                 )
             except Exception as e:
                 span.set_status('error', str(e))

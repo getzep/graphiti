@@ -32,7 +32,6 @@ class MockLLMClient(LLMClient):
         model_size=None,
         *,
         model=None,
-        small_model=None,
     ):
         return {'content': 'test'}
 
@@ -134,9 +133,8 @@ class RecordingLLMClient(LLMClient):
         model_size=None,
         *,
         model=None,
-        small_model=None,
     ):
-        self.received = {'model': model, 'small_model': small_model}
+        self.received = {'model': model}
         return {'content': 'test'}
 
 
@@ -161,8 +159,8 @@ def _sys_user() -> list[Message]:
 @pytest.mark.asyncio
 async def test_generate_response_forwards_model_overrides():
     client = RecordingLLMClient()
-    await client.generate_response(_sys_user(), model='x', small_model='y')
-    assert client.received == {'model': 'x', 'small_model': 'y'}
+    await client.generate_response(_sys_user(), model='x')
+    assert client.received == {'model': 'x'}
 
 
 @pytest.mark.asyncio
