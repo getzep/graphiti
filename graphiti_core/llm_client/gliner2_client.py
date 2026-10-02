@@ -267,6 +267,9 @@ class GLiNER2Client(LLMClient):
     ) -> dict[str, typing.Any]:
         # Delegate non-extraction operations to the wrapped LLM client.
         if not self._is_gliner2_operation(response_model):
+            overrides: dict[str, typing.Any] = {}
+            if model is not None:
+                overrides['model'] = model
             return await self.llm_client.generate_response(
                 messages,
                 response_model=response_model,
@@ -275,7 +278,7 @@ class GLiNER2Client(LLMClient):
                 group_id=group_id,
                 prompt_name=prompt_name,
                 attribute_extraction=attribute_extraction,
-                model=model,
+                **overrides,
             )
 
         if max_tokens is None:
