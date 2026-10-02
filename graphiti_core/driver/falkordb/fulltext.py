@@ -50,9 +50,20 @@ def sanitize_falkor_fulltext_query(query: str) -> str:
     return ' '.join(query.translate(_SEPARATOR_MAP).split())
 
 
-def _escape_fulltext_group_id(group_id: str) -> str:
-    """Escape a validated group ID for RediSearch fulltext syntax."""
-    return re.sub(r'([^a-zA-Z0-9])', r'\\\1', group_id)
+def _group_id_phrase(group_id: str) -> str:
+    """Quote a validated group ID as the phrase RediSearch indexed it as.
+
+    RediSearch tokenizes TEXT fields on separators, so a stored group_id such as
+    ``ko-verify`` is the token sequence ``ko verify``. Escaping the hyphen
+    (``"ko\\-verify"``) matched nothing; the phrase ``"ko verify"`` does. Characters that
+    are not separators but still special to the query syntax - the default group id ``_``
+    above all - do need escaping (``"\\_"``), or the query silently matches nothing.
+    """
+    phrase = sanitize_falkor_fulltext_query(group_id)
+    # Escape only what RediSearch treats specially; word characters of any script pass through
+    # (an escaped Hangul syllable such as \\한 no longer matches the indexed token).
+    phrase = re.sub(r'([^\w ]|_)', r'\\\1', phrase)
+    return f'"{phrase}"'
 
 
 def build_falkor_fulltext_query(
@@ -65,8 +76,8 @@ def build_falkor_fulltext_query(
 
     group_filter = ''
     if group_ids:
-        escaped_group_ids = [f'"{_escape_fulltext_group_id(group_id)}"' for group_id in group_ids]
-        group_filter = f'(@group_id:{"|".join(escaped_group_ids)})'
+        phrases = [_group_id_phrase(group_id) for group_id in group_ids if group_id.strip()]
+        group_filter = f'(@group_id:{"|".join(phrases)})' if phrases else ''
 
     filtered_words = [
         word
