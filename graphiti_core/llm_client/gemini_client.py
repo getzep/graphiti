@@ -161,8 +161,15 @@ class GeminiClient(LLMClient):
         if block_reason:
             raise Exception(f'Prompt blocked by Gemini: {block_reason}')
 
-    def _get_model_for_size(self, model_size: ModelSize) -> str:
+    def _get_model_for_size(
+        self,
+        model_size: ModelSize,
+        *,
+        model: str | None = None,
+    ) -> str:
         """Get the appropriate model name based on the requested size."""
+        if model is not None:
+            return model
         if model_size == ModelSize.small:
             return self.small_model or DEFAULT_SMALL_MODEL
         else:
@@ -239,6 +246,8 @@ class GeminiClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
     ) -> tuple[dict[str, typing.Any], int, int]:
         """
         Generate a response from the Gemini language model.
@@ -284,10 +293,10 @@ class GeminiClient(LLMClient):
                 )
 
             # Get the appropriate model for the requested size
-            model = self._get_model_for_size(model_size)
+            resolved_model = self._get_model_for_size(model_size, model=model)
 
             # Resolve max_tokens using precedence rules (see _resolve_max_tokens for details)
-            resolved_max_tokens = self._resolve_max_tokens(max_tokens, model)
+            resolved_max_tokens = self._resolve_max_tokens(max_tokens, resolved_model)
 
             # Create generation config
             generation_config = types.GenerateContentConfig(
@@ -301,7 +310,7 @@ class GeminiClient(LLMClient):
 
             # Generate content using the simple string approach
             response = await self.client.aio.models.generate_content(
-                model=model,
+                model=resolved_model,
                 contents=gemini_messages,
                 config=generation_config,
             )
@@ -370,6 +379,7 @@ class GeminiClient(LLMClient):
         prompt_name: str | None = None,
         *,
         attribute_extraction: bool = False,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model with retry logic and error handling.
@@ -417,6 +427,7 @@ class GeminiClient(LLMClient):
                         response_model=response_model,
                         max_tokens=max_tokens,
                         model_size=model_size,
+                        model=model,
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens

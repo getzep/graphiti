@@ -21,7 +21,7 @@ from time import time
 from pydantic import BaseModel
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
@@ -125,11 +125,14 @@ async def extract_nodes_and_edges(
     }
 
     # Single LLM call for combined extraction
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes_and_edges.extract_message(context),
+    llm_response = await generate_prompt_response(
+        llm_client,
+        'extract_nodes_and_edges.extract_message',
+        prompt_library.extract_nodes_and_edges.extract_message,
+        context,
+        clients=clients,
         response_model=CombinedExtraction,
         group_id=primary_episode.group_id,
-        prompt_name='extract_nodes_and_edges.extract_message',
     )
     response_object = CombinedExtraction(**llm_response)
 
@@ -242,11 +245,14 @@ async def extract_nodes_and_edges(
             for edge in extracted_edges
         ]
         try:
-            ts_response = await llm_client.generate_response(
-                prompt_library.extract_edges.extract_timestamps_batch({'facts': facts_with_ref}),
+            ts_response = await generate_prompt_response(
+                llm_client,
+                'extract_edges.extract_timestamps_batch',
+                prompt_library.extract_edges.extract_timestamps_batch,
+                {'facts': facts_with_ref},
+                clients=clients,
                 response_model=BatchEdgeTimestamps,
                 model_size=ModelSize.small,
-                prompt_name='extract_edges.extract_timestamps_batch',
             )
             batch_timestamps = BatchEdgeTimestamps(**ts_response)
             if len(batch_timestamps.timestamps) != len(extracted_edges):

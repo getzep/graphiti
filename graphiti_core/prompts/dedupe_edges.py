@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 
 
 class EdgeDuplicate(BaseModel):
@@ -101,3 +102,13 @@ Result: duplicate_facts=[], contradicted_facts=[] (different events on different
 
 
 versions: Versions = {'resolve_edge': resolve_edge}
+
+
+class DedupeEdgesPrompts(ABC):
+    @abstractmethod
+    def resolve_edge(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultDedupeEdgesPrompts(DedupeEdgesPrompts):
+    def resolve_edge(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(resolve_edge(context))
