@@ -116,7 +116,18 @@ def lucene_sanitize(query: str) -> str:
 def normalize_l2(embedding: list[float]) -> NDArray:
     embedding_array = np.array(embedding)
     norm = np.linalg.norm(embedding_array, 2, axis=0, keepdims=True)
-    return np.where(norm == 0, embedding_array, embedding_array / norm)
+    # Divide only where the norm is non-zero. Evaluating ``embedding_array / norm``
+    # unconditionally (as ``np.where`` does with both branches) computes ``0 / 0`` for a
+    # zero-magnitude embedding, which raises numpy "divide by zero" / "invalid value"
+    # RuntimeWarnings and can leak NaNs downstream (e.g. into the MMR reranker, whose
+    # ``mmr >= min_score`` filter then silently drops every candidate). A zero vector is
+    # left unchanged, matching the previous behaviour.
+    return np.divide(
+        embedding_array,
+        norm,
+        out=np.array(embedding_array, dtype=float),
+        where=norm != 0,
+    )
 
 
 # Use this instead of asyncio.gather() to bound coroutines
