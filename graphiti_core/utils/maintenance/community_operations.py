@@ -5,6 +5,7 @@ from collections import defaultdict
 from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.operations.graph_utils import MIN_LABEL_PROPAGATION_ITERATIONS
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import semaphore_gather
@@ -99,7 +100,20 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
+    max_iterations = max(len(projection), MIN_LABEL_PROPAGATION_ITERATIONS)
+    iteration = 0
+
     while True:
+        iteration += 1
+        if iteration > max_iterations:
+            logger.warning(
+                'label_propagation did not converge within %d iterations over %d nodes; '
+                'returning the current partition',
+                max_iterations,
+                len(projection),
+            )
+            break
+
         no_change = True
         new_community_map: dict[str, int] = {}
 
