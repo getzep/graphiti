@@ -274,7 +274,6 @@ class TestChunkOverlap:
                 # At minimum, common words like 'Paragraph', 'with', etc.
                 assert len(overlap) > 0
 
-
     def test_explicit_zero_overlap_is_not_replaced_by_default(self):
         text = '\n\n'.join(f'Paragraph {i} with some content here.' for i in range(400))
         json_content = json.dumps([{'k': i, 'v': 'x' * 30} for i in range(600)])
