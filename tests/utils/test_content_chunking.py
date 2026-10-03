@@ -274,6 +274,19 @@ class TestChunkOverlap:
                 # At minimum, common words like 'Paragraph', 'with', etc.
                 assert len(overlap) > 0
 
+    def test_explicit_zero_overlap_matches_env_zero_overlap(self, monkeypatch):
+        from graphiti_core.utils import content_chunking
+
+        paragraphs = [f'Paragraph {i} with some content here.' for i in range(10)]
+        text = '\n\n'.join(paragraphs)
+
+        argument_route = chunk_text_content(text, chunk_size_tokens=50, overlap_tokens=0)
+
+        monkeypatch.setattr(content_chunking, 'CHUNK_OVERLAP_TOKENS', 0)
+        env_route = chunk_text_content(text, chunk_size_tokens=50)
+
+        assert argument_route == env_route
+
 
 class TestEdgeCases:
     def test_very_large_single_element(self):
