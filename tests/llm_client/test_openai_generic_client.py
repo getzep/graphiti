@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -55,6 +56,85 @@ def _make_client(content: str = '{"foo": "bar"}', error: Exception | None = None
         **kwargs,
     )
     return client, completions
+
+
+@pytest.mark.asyncio
+async def test_llm_config_timeout_and_extra_body_are_forwarded():
+    extra_body = {'guided_json': {'type': 'object'}, 'top_k': 20}
+    completions = DummyChatCompletions()
+    client = OpenAIGenericClient(
+        config=LLMConfig(
+            api_key='test',
+            model='test-model',
+            timeout=12.5,
+            extra_body=extra_body,
+        ),
+        client=DummyClient(completions),
+    )
+
+    await client._generate_response(_messages(), response_model=ResponseModel)
+
+    call = completions.create_calls[0]
+    assert call['timeout'] == 12.5
+    assert call['extra_body'] == extra_body
+
+
+@pytest.mark.asyncio
+async def test_llm_config_optional_fields_are_omitted_by_default():
+    client, completions = _make_client()
+
+    await client._generate_response(_messages(), response_model=ResponseModel)
+
+    call = completions.create_calls[0]
+    assert 'timeout' not in call
+    assert 'extra_body' not in call
+
+
+@pytest.mark.asyncio
+async def test_timeout_and_extra_body_are_preserved_across_retry():
+    extra_body = {'top_k': 20}
+    completions = DummyChatCompletions(error=ValueError('bad response'))
+    client = OpenAIGenericClient(
+        config=LLMConfig(
+            api_key='test',
+            model='test-model',
+            timeout=1.0,
+            extra_body=extra_body,
+        ),
+        client=DummyClient(completions),
+    )
+
+    with pytest.raises(ValueError):
+        await client.generate_response(_messages(), response_model=ResponseModel)
+
+    assert len(completions.create_calls) == 1
+    assert completions.create_calls[0]['timeout'] == 1.0
+    assert completions.create_calls[0]['extra_body'] == extra_body
+
+
+@pytest.mark.asyncio
+async def test_cancellation_is_not_swallowed_or_retried():
+    completions = DummyChatCompletions(error=asyncio.CancelledError())
+    client = OpenAIGenericClient(
+        config=LLMConfig(api_key='test', model='test-model', timeout=1.0),
+        client=DummyClient(completions),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await client.generate_response(_messages(), response_model=ResponseModel)
+
+    assert len(completions.create_calls) == 1
+
+
+def test_llm_config_rejects_invalid_optional_field_types():
+    with pytest.raises(TypeError, match='timeout'):
+        LLMConfig(timeout='10')  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError, match='extra_body'):
+        LLMConfig(extra_body=['invalid'])  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match='timeout'):
+        LLMConfig(timeout=-1)
 
 
 @pytest.mark.asyncio
