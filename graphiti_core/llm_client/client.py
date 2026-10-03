@@ -20,7 +20,10 @@ import logging
 import typing
 from abc import ABC, abstractmethod
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    import httpx2 as httpx
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
