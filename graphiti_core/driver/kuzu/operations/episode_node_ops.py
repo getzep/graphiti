@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
 from datetime import datetime
 from typing import Any
@@ -50,6 +51,7 @@ class KuzuEpisodeNodeOperations(EpisodeNodeOperations):
             'created_at': node.created_at,
             'valid_at': node.valid_at,
             'source': node.source.value,
+            'episode_metadata': json.dumps(node.episode_metadata or {}),
         }
         if tx is not None:
             await tx.run(query, **params)
