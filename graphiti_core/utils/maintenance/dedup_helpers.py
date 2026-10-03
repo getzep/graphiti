@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -43,8 +44,18 @@ def _normalize_string_exact(name: str) -> str:
 
 
 def _normalize_name_for_fuzzy(name: str) -> str:
-    """Produce a fuzzier form that keeps alphanumerics and apostrophes for n-gram shingles."""
-    normalized = re.sub(r"[^a-z0-9' ]", ' ', _normalize_string_exact(name))
+    """Produce a fuzzier form that keeps word characters and apostrophes for n-gram shingles.
+
+    Letters of every script are kept (``\\w``), not just ``a-z``: the ASCII-only version turned a
+    Korean or Japanese name into the empty string, so those names never passed the entropy gate
+    and always fell through to the LLM. Hangul syllables are decomposed into their jamo (NFD)
+    first, so a three-syllable name yields 8-9 characters of shingle material - comparable to a
+    Latin name - and near-identical spellings share most of their 3-grams. Combining marks are
+    dropped, which also makes accented Latin compare accent-insensitively.
+    """
+    decomposed = unicodedata.normalize('NFD', _normalize_string_exact(name))
+    without_marks = ''.join(ch for ch in decomposed if unicodedata.category(ch) != 'Mn')
+    normalized = re.sub(r"[^\w' ]|_", ' ', without_marks)
     normalized = normalized.strip()
     return re.sub(r'[\s]+', ' ', normalized)
 
