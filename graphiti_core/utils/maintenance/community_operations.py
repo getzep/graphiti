@@ -79,13 +79,19 @@ async def get_community_clusters(
 
         cluster_uuids = label_propagation(projection)
 
-        community_clusters.extend(
-            list(
-                await semaphore_gather(
-                    *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
-                )
-            )
+        # Mirror the driver-specific implementations, which skip empty clusters
+        # (see e.g. driver/neo4j/operations/graph_ops.py). This fallback path
+        # skipped neither an empty uuid list nor a cluster whose nodes all
+        # failed to resolve -- get_by_uuids returns whatever it finds without
+        # erroring, so a node deleted or filtered out after label propagation
+        # yields an empty cluster. build_community then raises IndexError on
+        # summaries[0], and because semaphore_gather uses asyncio.gather
+        # without return_exceptions, that one empty cluster fails the whole
+        # batch and discards every community already built alongside it.
+        resolved_clusters = await semaphore_gather(
+            *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids if cluster]
         )
+        community_clusters.extend([cluster for cluster in resolved_clusters if cluster])
 
     return community_clusters
 
@@ -175,6 +181,8 @@ async def build_community(
     llm_client: LLMClient, community_cluster: list[EntityNode]
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     summaries = [entity.summary for entity in community_cluster]
+    if not summaries:
+        raise ValueError('build_community requires a non-empty community_cluster')
     length = len(summaries)
     while length > 1:
         odd_one_out: str | None = None
