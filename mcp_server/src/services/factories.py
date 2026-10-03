@@ -436,7 +436,15 @@ class CrossEncoderFactory:
             if provider == 'bge':
                 return CrossEncoderFactory._local_reranker(logger)
 
-            for source, config in (('LLM', llm_config), ('embedder', embedder_config)):
+            # An unset ${VAR} leaves a provider entry with api_key=None. Try entries that carry a
+            # key first (keeping LLM-before-embedder order) so an empty LLM entry cannot hide a
+            # configured embedder entry; keyless entries stay a fallback for clients that read
+            # the key from the environment.
+            sources = sorted(
+                (('LLM', llm_config), ('embedder', embedder_config)),
+                key=lambda source: not CrossEncoderFactory._has_api_key(source[1], provider),
+            )
+            for source, config in sources:
                 explicit_config = config.model_copy(update={'provider': provider})
                 reranker = CrossEncoderFactory._reranker_for_provider(
                     source, explicit_config, logger, model
@@ -456,6 +464,12 @@ class CrossEncoderFactory:
                 return reranker
 
         return CrossEncoderFactory._local_reranker(logger)
+
+    @staticmethod
+    def _has_api_key(config: LLMConfig | EmbedderConfig, provider: str) -> bool:
+        """Return whether the config's entry for this provider carries an API key."""
+        entry = getattr(config.providers, provider, None)
+        return bool(getattr(entry, 'api_key', None))
 
     @staticmethod
     def _local_reranker(logger) -> CrossEncoderClient:

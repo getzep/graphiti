@@ -18,6 +18,7 @@ from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerCli
 import graphiti_mcp_server
 from config.schema import (
     AnthropicProviderConfig,
+    AzureOpenAIProviderConfig,
     DatabaseConfig,
     EmbedderConfig,
     EmbedderProvidersConfig,
@@ -124,6 +125,122 @@ class TestCrossEncoderFactory:
 
         assert isinstance(reranker, OpenAIRerankerClient)
         assert reranker.config.model == 'gpt-4.1-mini'
+
+    @pytest.mark.parametrize(
+        ('provider', 'provider_config', 'client_type'),
+        [
+            ('openai', OpenAIProviderConfig, OpenAIRerankerClient),
+            ('gemini', GeminiProviderConfig, GeminiRerankerClient),
+        ],
+    )
+    def test_explicit_reranker_skips_keyless_llm_entry(
+        self, monkeypatch, provider, provider_config, client_type
+    ):
+        # An unset ${VAR} leaves a provider entry with api_key=None. That entry must not hide a
+        # configured embedder entry for the same provider.
+        for name in ('OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'):
+            monkeypatch.delenv(name, raising=False)
+        llm = LLMConfig(
+            provider='anthropic',
+            providers=LLMProvidersConfig(**{provider: provider_config(api_key=None)}),
+        )
+        embedder = EmbedderConfig(
+            provider=provider,
+            providers=EmbedderProvidersConfig(
+                **{provider: provider_config(api_key='embedder-key')}
+            ),
+        )
+
+        reranker = CrossEncoderFactory.create(llm, embedder, RerankerConfig(provider=provider))
+
+        assert isinstance(reranker, client_type)
+        assert reranker.config.api_key == 'embedder-key'
+
+    def test_explicit_reranker_prefers_llm_entry_when_both_have_keys(self):
+        llm = LLMConfig(
+            provider='anthropic',
+            providers=LLMProvidersConfig(gemini=GeminiProviderConfig(api_key='llm-key')),
+        )
+        embedder = EmbedderConfig(
+            provider='gemini',
+            providers=EmbedderProvidersConfig(gemini=GeminiProviderConfig(api_key='embedder-key')),
+        )
+
+        reranker = CrossEncoderFactory.create(llm, embedder, RerankerConfig(provider='gemini'))
+
+        assert reranker.config.api_key == 'llm-key'
+
+    def test_explicit_reranker_keyless_entry_can_use_ambient_key(self, monkeypatch):
+        monkeypatch.setenv('OPENAI_API_KEY', 'ambient-key')
+        llm = LLMConfig(
+            provider='anthropic',
+            providers=LLMProvidersConfig(openai=OpenAIProviderConfig(api_key=None)),
+        )
+        embedder = EmbedderConfig(
+            provider='voyage',
+            providers=EmbedderProvidersConfig(voyage=VoyageProviderConfig(api_key='test-key')),
+        )
+
+        reranker = CrossEncoderFactory.create(llm, embedder, RerankerConfig(provider='openai'))
+
+        assert isinstance(reranker, OpenAIRerankerClient)
+        assert reranker.client.api_key == 'ambient-key'
+
+    def test_explicit_reranker_without_matching_entry_fails_startup(self):
+        llm = LLMConfig(
+            provider='openai',
+            providers=LLMProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+        embedder = EmbedderConfig(
+            provider='openai',
+            providers=EmbedderProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+
+        with pytest.raises(ValueError, match="Reranker provider 'gemini' is not configured"):
+            CrossEncoderFactory.create(llm, embedder, RerankerConfig(provider='gemini'))
+
+    def test_explicit_bge_reranker_skips_api_providers(self, monkeypatch):
+        local_reranker = Mock()
+        monkeypatch.setattr(
+            CrossEncoderFactory, '_local_reranker', staticmethod(lambda _logger: local_reranker)
+        )
+        llm = LLMConfig(
+            provider='openai',
+            providers=LLMProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+        embedder = EmbedderConfig(
+            provider='openai',
+            providers=EmbedderProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+
+        reranker = CrossEncoderFactory.create(llm, embedder, RerankerConfig(provider='bge'))
+
+        assert reranker is local_reranker
+
+    def test_explicit_azure_reranker_uses_v1_endpoint_and_model(self):
+        llm = LLMConfig(
+            provider='openai',
+            providers=LLMProvidersConfig(
+                openai=OpenAIProviderConfig(api_key='openai-key'),
+                azure_openai=AzureOpenAIProviderConfig(
+                    api_key='azure-key', api_url='https://example.openai.azure.com'
+                ),
+            ),
+        )
+        embedder = EmbedderConfig(
+            provider='openai',
+            providers=EmbedderProvidersConfig(openai=OpenAIProviderConfig(api_key='openai-key')),
+        )
+
+        reranker = CrossEncoderFactory.create(
+            llm,
+            embedder,
+            RerankerConfig(provider='azure_openai', model='reranker-deployment'),
+        )
+
+        assert isinstance(reranker, OpenAIRerankerClient)
+        assert str(reranker.client.base_url) == 'https://example.openai.azure.com/openai/v1/'
+        assert reranker.config.model == 'reranker-deployment'
 
     def test_missing_local_reranker_dependency_is_actionable(self, monkeypatch, caplog):
         llm = LLMConfig(
