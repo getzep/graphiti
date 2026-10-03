@@ -267,6 +267,35 @@ class TestCrossEncoderFactory:
         assert '~2.3 GB' in caplog.text
 
 
+@pytest.mark.parametrize(
+    'config_file',
+    sorted((Path(__file__).parent.parent / 'config').glob('config*.yaml')),
+    ids=lambda path: path.name,
+)
+def test_shipped_configs_read_reranker_settings_from_env(monkeypatch, config_file):
+    # The Docker images load the config-docker-*.yaml files, not config.yaml, so each shipped
+    # config must expose the documented RERANKER_* and *_RERANKER variables.
+    for name in (
+        'RERANKER__PROVIDER',
+        'RERANKER__MODEL',
+        'GRAPHITI__FACT_RERANKER',
+        'GRAPHITI__NODE_RERANKER',
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('CONFIG_PATH', str(config_file))
+    monkeypatch.setenv('RERANKER_PROVIDER', 'gemini')
+    monkeypatch.setenv('RERANKER_MODEL', 'gemini-2.5-flash')
+    monkeypatch.setenv('FACT_RERANKER', 'cross_encoder')
+    monkeypatch.setenv('NODE_RERANKER', 'cross_encoder')
+
+    config = GraphitiConfig()
+
+    assert config.reranker.provider == 'gemini'
+    assert config.reranker.model == 'gemini-2.5-flash'
+    assert config.graphiti.fact_reranker == 'cross_encoder'
+    assert config.graphiti.node_reranker == 'cross_encoder'
+
+
 @pytest.mark.asyncio
 async def test_graphiti_service_does_not_swallow_reranker_configuration_error(monkeypatch):
     error = ValueError('reranker setup failed')
