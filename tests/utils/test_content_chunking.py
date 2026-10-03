@@ -274,6 +274,20 @@ class TestChunkOverlap:
                 # At minimum, common words like 'Paragraph', 'with', etc.
                 assert len(overlap) > 0
 
+    def test_explicit_zero_overlap_is_not_replaced_by_default(self):
+        text = '\n\n'.join(f'Paragraph {i} with some content here.' for i in range(400))
+        json_content = json.dumps([{'k': i, 'v': 'x' * 30} for i in range(600)])
+        message_content = '\n'.join(f'Alice: line {i} with words in it' for i in range(600))
+
+        for chunker, content in (
+            (chunk_text_content, text),
+            (chunk_json_content, json_content),
+            (chunk_message_content, message_content),
+        ):
+            no_overlap = chunker(content, chunk_size_tokens=400, overlap_tokens=0)
+            default_overlap = chunker(content, chunk_size_tokens=400)
+            assert sum(len(c) for c in no_overlap) < sum(len(c) for c in default_overlap)
+
 
 class TestEdgeCases:
     def test_very_large_single_element(self):
