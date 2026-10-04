@@ -160,6 +160,14 @@ class LLMConfig(BaseModel):
             'OpenAI-compatible providers that do not reliably honor json_schema.'
         ),
     )
+    reasoning_effort: str | None = Field(
+        default=None,
+        description=(
+            'Reasoning effort for OpenAI and Azure OpenAI reasoning models (o1, o3, gpt-5 '
+            "family), e.g. 'low'. Unset keeps the model default ('none' for gpt-5.5, "
+            "'minimal' otherwise). Accepted values vary by model."
+        ),
+    )
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)
 
 

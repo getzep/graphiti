@@ -168,6 +168,9 @@ llm:
   model: "gpt-5.5"  # Default model
   # Optional for OpenAI-compatible providers: "json_schema" (default) or "json_object"
   structured_output_mode: "json_schema"
+  # Optional for OpenAI/Azure reasoning models (o1, o3, gpt-5*). Unset keeps the model
+  # default ("none" for gpt-5.5, "minimal" otherwise); accepted values vary by model.
+  # reasoning_effort: "low"
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
@@ -244,6 +247,7 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
 - `NEO4J_DATABASE`: Neo4j database name (default: `neo4j`)
 - `OPENAI_API_KEY`: OpenAI API key (required for OpenAI LLM/embedder)
+- `LLM_REASONING_EFFORT`: Optional reasoning effort for OpenAI/Azure OpenAI reasoning models (o1, o3, gpt-5 family), e.g. `low`. Unset keeps the model default (`none` for gpt-5.5, `minimal` otherwise). Set it when a model rejects `minimal` (e.g. gpt-5.4-mini) or needs more reasoning.
 - `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
 - `GOOGLE_API_KEY`: Google API key (for Gemini models)
 - `GROQ_API_KEY`: Groq API key (for Groq models)
