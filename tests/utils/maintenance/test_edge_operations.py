@@ -8,8 +8,10 @@ from pydantic import BaseModel
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config import SearchResults
+from graphiti_core.search.search_filters import ComparisonOperator, SearchFilters
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
+    invalidation_candidate_filter,
     resolve_extracted_edge,
     resolve_extracted_edges,
 )
@@ -771,3 +773,182 @@ async def test_resolve_extracted_edge_overcap_attribute_preserves_prior(monkeypa
     assert resolved.attributes['is_current'] == 'true'
     assert dupes == []
     assert invalidated == []
+
+
+def _dated_edge(fact: str, valid_at, invalid_at=None) -> EntityEdge:
+    return EntityEdge(
+        source_node_uuid='alice',
+        target_node_uuid='city',
+        name='LIVES_IN',
+        group_id='group_1',
+        fact=fact,
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=valid_at,
+        invalid_at=invalid_at,
+    )
+
+
+def test_invalidation_candidate_filter_keeps_open_and_later_ending_facts():
+    valid_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    search_filter = invalidation_candidate_filter(_dated_edge('new', valid_at), [])
+
+    assert search_filter.invalid_at is not None
+    is_null, ends_later = search_filter.invalid_at
+    assert [f.comparison_operator for f in is_null] == [ComparisonOperator.is_null]
+    assert [(f.comparison_operator, f.date) for f in ends_later] == [
+        (ComparisonOperator.greater_than, valid_at)
+    ]
+
+
+def test_invalidation_candidate_filter_without_valid_at_is_unfiltered():
+    # Timestamps can still be extracted after the search, so nothing may be filtered out.
+    earlier = _dated_edge('duplicate', datetime(2024, 1, 1, tzinfo=timezone.utc))
+    assert invalidation_candidate_filter(_dated_edge('new', None), [earlier]) == SearchFilters()
+
+
+def test_invalidation_candidate_filter_uses_earliest_duplicate_start():
+    """A duplicate replaces the extracted edge and brings its own, earlier valid_at."""
+    new = _dated_edge('new', datetime(2024, 1, 21, tzinfo=timezone.utc))
+    duplicate = _dated_edge('duplicate', datetime(2024, 1, 6))  # naive: normalized to UTC
+
+    (_, ends_later) = invalidation_candidate_filter(new, [duplicate]).invalid_at
+
+    assert ends_later[0].date == datetime(2024, 1, 6, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_filtered_candidates_keep_the_fact_a_duplicate_invalidates():
+    """Jan 1-11 is contradicted by a duplicate starting Jan 6, though the new fact is Jan 21."""
+    utc = timezone.utc
+    new = _dated_edge('Alice lives in Berlin', datetime(2024, 1, 21, tzinfo=utc))
+    duplicate = _dated_edge('Alice resides in Berlin', datetime(2024, 1, 6, tzinfo=utc))
+    candidate = _dated_edge(
+        'Alice lives in Paris', datetime(2024, 1, 1, tzinfo=utc), datetime(2024, 1, 11, tzinfo=utc)
+    )
+    episode = EpisodicNode(
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice lives in Berlin.',
+        valid_at=new.valid_at,
+    )
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [0], 'contradicted_facts': [1]}
+    )
+    (_, ends_later) = invalidation_candidate_filter(new, [duplicate]).invalid_at
+    assert candidate.invalid_at > ends_later[0].date  # the filter keeps it
+
+    _, invalidated, _ = await resolve_extracted_edge(
+        llm_client, new, [duplicate], [candidate], episode
+    )
+
+    assert [e.fact for e in invalidated] == ['Alice lives in Paris']
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edges_skips_facts_ended_before_new_fact(monkeypatch):
+    """Facts that ended before the new fact began cannot be invalidated by it.
+
+    Searching them only lets a subject's superseded history fill the limited
+    candidate list and push out the open fact that the new one replaces.
+    """
+    from graphiti_core.utils.maintenance import edge_operations as edge_ops
+
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+    monkeypatch.setattr(EntityEdge, 'get_between_nodes', AsyncMock(return_value=[]))
+
+    async def immediate_gather(*aws, max_coroutines=None):
+        return [await aw for aw in aws]
+
+    monkeypatch.setattr(edge_ops, 'semaphore_gather', immediate_gather)
+    search_mock = AsyncMock(return_value=SearchResults())
+    monkeypatch.setattr(edge_ops, 'search', search_mock)
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [], 'contradicted_facts': []}
+    )
+    clients = SimpleNamespace(
+        driver=MagicMock(),
+        llm_client=llm_client,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+    )
+    alice = EntityNode(uuid='alice', name='Alice', group_id='group_1', labels=['Entity'])
+    berlin = EntityNode(uuid='berlin', name='Berlin', group_id='group_1', labels=['Entity'])
+    valid_at = datetime(2024, 6, 1, tzinfo=timezone.utc)
+    extracted_edge = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=berlin.uuid,
+        name='LIVES_IN',
+        group_id='group_1',
+        fact='Alice lives in Berlin',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=valid_at,
+    )
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice moved to Berlin.',
+        valid_at=valid_at,
+    )
+
+    await resolve_extracted_edges(clients, [extracted_edge], episode, [alice, berlin], {}, {})
+
+    filters = [call.kwargs['search_filter'] for call in search_mock.await_args_list]
+    assert invalidation_candidate_filter(extracted_edge, []) in filters
+    assert SearchFilters() not in filters
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edges_bounds_candidates_by_duplicate_start(monkeypatch):
+    """The duplicate candidates found first can replace the extracted edge, with their own start."""
+    from graphiti_core.utils.maintenance import edge_operations as edge_ops
+
+    utc = timezone.utc
+    extracted_edge = _dated_edge('Alice lives in Berlin', datetime(2024, 1, 21, tzinfo=utc))
+    duplicate = _dated_edge('Alice resides in Berlin', datetime(2024, 1, 6, tzinfo=utc))
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+    monkeypatch.setattr(EntityEdge, 'get_between_nodes', AsyncMock(return_value=[duplicate]))
+
+    async def immediate_gather(*aws, max_coroutines=None):
+        return [await aw for aw in aws]
+
+    async def fake_search(clients, query, **kwargs):
+        if kwargs['search_filter'].edge_uuids:
+            return SearchResults(edges=[duplicate])
+        return SearchResults()
+
+    search_mock = AsyncMock(side_effect=fake_search)
+    monkeypatch.setattr(edge_ops, 'semaphore_gather', immediate_gather)
+    monkeypatch.setattr(edge_ops, 'search', search_mock)
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [], 'contradicted_facts': []}
+    )
+    clients = SimpleNamespace(
+        driver=MagicMock(), llm_client=llm_client, embedder=MagicMock(), cross_encoder=MagicMock()
+    )
+    alice = EntityNode(uuid='alice', name='Alice', group_id='group_1', labels=['Entity'])
+    city = EntityNode(uuid='city', name='Berlin', group_id='group_1', labels=['Entity'])
+    episode = EpisodicNode(
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice lives in Berlin.',
+        valid_at=extracted_edge.valid_at,
+    )
+
+    await resolve_extracted_edges(clients, [extracted_edge], episode, [alice, city], {}, {})
+
+    invalidation_filter = search_mock.await_args_list[-1].kwargs['search_filter']
+    assert invalidation_filter == invalidation_candidate_filter(extracted_edge, [duplicate])

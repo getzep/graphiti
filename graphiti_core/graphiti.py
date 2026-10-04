@@ -91,6 +91,7 @@ from graphiti_core.utils.maintenance.community_operations import (
 from graphiti_core.utils.maintenance.edge_operations import (
     build_episodic_edges,
     extract_edges,
+    invalidation_candidate_filter,
     resolve_extracted_edge,
     resolve_extracted_edges,
 )
@@ -1792,7 +1793,7 @@ class Graphiti:
                 edge.fact,
                 group_ids=[edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
-                search_filter=SearchFilters(),
+                search_filter=invalidation_candidate_filter(edge, related_edges),
             )
         ).edges
 
