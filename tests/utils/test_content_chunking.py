@@ -277,15 +277,26 @@ class TestChunkOverlap:
     def test_explicit_zero_overlap_matches_env_zero_overlap(self, monkeypatch):
         from graphiti_core.utils import content_chunking
 
-        paragraphs = [f'Paragraph {i} with some content here.' for i in range(10)]
-        text = '\n\n'.join(paragraphs)
+        cases = (
+            (
+                chunk_text_content,
+                '\n\n'.join(f'Paragraph {i} with some content here.' for i in range(10)),
+            ),
+            (chunk_json_content, json.dumps([{'id': i, 'value': 'x' * 30} for i in range(60)])),
+            (
+                chunk_message_content,
+                '\n'.join(f'Alice: line {i} with words in it' for i in range(60)),
+            ),
+        )
 
-        argument_route = chunk_text_content(text, chunk_size_tokens=50, overlap_tokens=0)
+        argument_routes = [
+            chunker(content, chunk_size_tokens=50, overlap_tokens=0) for chunker, content in cases
+        ]
 
         monkeypatch.setattr(content_chunking, 'CHUNK_OVERLAP_TOKENS', 0)
-        env_route = chunk_text_content(text, chunk_size_tokens=50)
+        env_routes = [chunker(content, chunk_size_tokens=50) for chunker, content in cases]
 
-        assert argument_route == env_route
+        assert argument_routes == env_routes
 
 
 class TestEdgeCases:
