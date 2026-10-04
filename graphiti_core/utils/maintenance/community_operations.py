@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 from collections import defaultdict
 
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ from graphiti_core.utils.maintenance.edge_operations import build_community_edge
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
+MAX_ITERATIONS = 500
 
 logger = logging.getLogger(__name__)
 
@@ -90,24 +92,31 @@ async def get_community_clusters(
     return community_clusters
 
 
-def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
+def label_propagation(projection: dict[str, list[Neighbor]], seed: int = 0) -> list[list[str]]:
     # Implement the label propagation community detection algorithm.
     # 1. Start with each node being assigned its own community
     # 2. Each node will take on the community of the plurality of its neighbors
     # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
+    # 4. Visit nodes in a seeded random order and apply updates in place so later
+    #    nodes in the same iteration see earlier updates. This asynchronous update
+    #    prevents two weight-tied connected nodes from oscillating forever.
+    # 5. Continue until no communities change during propagation, bounded by
+    #    MAX_ITERATIONS as a safety net
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
-        no_change = True
-        new_community_map: dict[str, int] = {}
+    rng = random.Random(seed)
 
-        for uuid, neighbors in projection.items():
+    for _ in range(MAX_ITERATIONS):
+        no_change = True
+        node_order = list(projection.keys())
+        rng.shuffle(node_order)
+
+        for uuid in node_order:
             curr_community = community_map[uuid]
 
             community_candidates: dict[int, int] = defaultdict(int)
-            for neighbor in neighbors:
+            for neighbor in projection[uuid]:
                 community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
             community_lst = [
                 (count, community) for community, count in community_candidates.items()
@@ -120,15 +129,18 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             else:
                 new_community = max(community_candidate, curr_community)
 
-            new_community_map[uuid] = new_community
-
             if new_community != curr_community:
+                community_map[uuid] = new_community
                 no_change = False
 
         if no_change:
             break
-
-        community_map = new_community_map
+    else:
+        logger.warning(
+            'Label propagation did not converge within %d iterations; '
+            'using best-effort communities',
+            MAX_ITERATIONS,
+        )
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():
