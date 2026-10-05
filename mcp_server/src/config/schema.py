@@ -178,7 +178,45 @@ class EmbedderConfig(BaseModel):
     provider: str = Field(default='openai', description='Embedder provider')
     model: str = Field(default='text-embedding-3-small', description='Model name')
     dimensions: int = Field(default=1536, description='Embedding dimensions')
+    batch_size: int | None = Field(
+        default=None,
+        ge=1,
+        description='Maximum texts per embeddings request. '
+        'Set to the provider cap (e.g. 10 for DashScope) to divide larger batches. '
+        'None sends one request per batch.',
+    )
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
+
+
+class RerankerLocalConfig(BaseModel):
+    """Local reranker configuration."""
+
+    type: str = Field(default='rrf', description='Local reranker type')
+    mmr_lambda: float = Field(default=0.5, description='MMR lambda parameter')
+
+
+class RerankerProvidersConfig(BaseModel):
+    """Reranker providers configuration."""
+
+    openai: OpenAIProviderConfig | None = None
+    gemini: GeminiProviderConfig | None = None
+
+
+class RerankerConfig(BaseModel):
+    """Reranker configuration."""
+
+    enabled: bool = Field(default=True, description='Whether reranker is enabled')
+    type: str = Field(
+        default='rrf',
+        description='Reranker type: rrf, mmr, node_distance, episode_mentions, cross_encoder',
+    )
+    provider: str = Field(
+        default='openai',
+        description='CrossEncoder provider: openai, gemini, sentence_transformers',
+    )
+    model: str = Field(default='gpt-4.1-nano', description='Model name')
+    local: RerankerLocalConfig = Field(default_factory=RerankerLocalConfig)
+    providers: RerankerProvidersConfig = Field(default_factory=RerankerProvidersConfig)
 
 
 class Neo4jProviderConfig(BaseModel):
@@ -227,6 +265,12 @@ class EntityTypeConfig(BaseModel):
     description: str
 
 
+class DeduplicationConfig(BaseModel):
+    """Episode deduplication configuration (single exact-match mechanism)."""
+
+    enabled: bool = Field(default=True, description='Enable/disable episode deduplication')
+
+
 class EdgeTypeConfig(BaseModel):
     """Edge (fact) type configuration.
 
@@ -255,6 +299,22 @@ class EdgeTypeMapEntry(BaseModel):
     )
 
 
+class QueueConfig(BaseModel):
+    """Background episode-processing queue configuration."""
+
+    max_concurrent_processing: int = Field(
+        default=5,
+        ge=1,
+        description='Maximum episodes processed concurrently across ALL group_ids',
+    )
+    max_queue_size_per_group: int = Field(
+        default=0,
+        ge=0,
+        description='Maximum queued episodes per group_id before rejecting new ones. '
+        '0 means unbounded.',
+    )
+
+
 class GraphitiAppConfig(BaseModel):
     """Graphiti-specific configuration."""
 
@@ -262,6 +322,8 @@ class GraphitiAppConfig(BaseModel):
     episode_id_prefix: str | None = Field(default='', description='Episode ID prefix')
     user_id: str = Field(default='mcp_user', description='User ID')
     entity_types: list[EntityTypeConfig] = Field(default_factory=list)
+    deduplication: DeduplicationConfig = Field(default_factory=DeduplicationConfig)
+    queue: QueueConfig = Field(default_factory=QueueConfig)
     edge_types: list[EdgeTypeConfig] = Field(default_factory=list)
     edge_type_map: list[EdgeTypeMapEntry] = Field(default_factory=list)
 
@@ -277,6 +339,7 @@ class GraphitiConfig(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 
@@ -338,3 +401,13 @@ class GraphitiConfig(BaseSettings):
             self.graphiti.group_id = args.group_id
         if hasattr(args, 'user_id') and args.user_id:
             self.graphiti.user_id = args.user_id
+
+        # Override reranker settings
+        if hasattr(args, 'reranker_enabled') and args.reranker_enabled is not None:
+            self.reranker.enabled = args.reranker_enabled
+        if hasattr(args, 'reranker_type') and args.reranker_type:
+            self.reranker.type = args.reranker_type
+        if hasattr(args, 'reranker_provider') and args.reranker_provider:
+            self.reranker.provider = args.reranker_provider
+        if hasattr(args, 'reranker_model') and args.reranker_model:
+            self.reranker.model = args.reranker_model

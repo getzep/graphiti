@@ -99,6 +99,7 @@ python tests/run_tests.py all --check-only
 ## Test Coverage
 
 ### Core Operations
+
 - Server initialization and tool discovery
 - Adding memories (text, JSON, message)
 - Episode queue management
@@ -107,18 +108,21 @@ python tests/run_tests.py all --check-only
 - Entity and edge operations
 
 ### Async Operations
+
 - Concurrent operations
 - Queue management
 - Sequential processing within groups
 - Parallel processing across groups
 
 ### Performance Testing
+
 - Latency measurement
 - Throughput testing
 - Batch processing
 - Resource usage monitoring
 
 ### Stress Testing
+
 - Sustained load scenarios
 - Spike load handling
 - Memory leak detection
@@ -148,6 +152,7 @@ export LOG_LEVEL=INFO
 ### pytest.ini Configuration
 
 The `pytest.ini` file configures:
+
 - Test discovery patterns
 - Async mode settings
 - Test markers
@@ -242,6 +247,7 @@ jobs:
 ### Common Issues
 
 1. **Database connection failures**
+
    ```bash
    # Check Neo4j
    curl http://localhost:7474
@@ -251,18 +257,21 @@ jobs:
    ```
 
 2. **API key issues**
+
    ```bash
    # Use mock LLM for testing without API key
    python tests/run_tests.py all --mock-llm
    ```
 
 3. **Timeout errors**
+
    ```bash
    # Increase timeout for slow systems
    python tests/run_tests.py integration --timeout 600
    ```
 
 4. **Memory issues**
+
    ```bash
    # Skip stress tests on low-memory systems
    python tests/run_tests.py all --skip-slow

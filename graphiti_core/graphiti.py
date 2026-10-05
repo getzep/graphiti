@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
+from graphiti_core.config import DeduplicationConfig
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.decorators import handle_multiple_group_ids
@@ -88,6 +89,7 @@ from graphiti_core.utils.bulk_utils import (
     retrieve_previous_episodes_bulk,
 )
 from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.episode_dedup import check_duplicate_episode
 from graphiti_core.utils.maintenance.community_operations import (
     build_communities,
     remove_communities,
@@ -153,6 +155,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        deduplication_config: DeduplicationConfig | None = None,
         prompt_library: ChatPromptLibrary | None = None,
         llm_runtime: LLMRuntime | None = None,
     ):
@@ -192,6 +195,8 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        deduplication_config : DeduplicationConfig | None, optional
+            Configuration for episode deduplication. If not provided, a default DeduplicationConfig instance will be used.
         prompt_library : ChatPromptLibrary | None, optional
             An instance-scoped prompt library used for all LLM prompt construction.
             If not provided, Graphiti uses its legacy module-level prompt functions.
@@ -246,6 +251,9 @@ class Graphiti:
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
+        self.deduplication_config = deduplication_config or DeduplicationConfig()
+        if llm_client:
+            self.llm_client = llm_client
 
         self.llm_runtime = llm_runtime
         if llm_runtime is not None:
@@ -1221,6 +1229,35 @@ class Graphiti:
                         valid_at=reference_time,
                     )
                 )
+
+                # Check for duplicate episode if deduplication is enabled
+                if self.deduplication_config.enabled and uuid is None:
+                    # Only check for duplicates if this is a new episode (no uuid provided).
+                    # Single mechanism: fulltext near-match confirmed by exact
+                    # content+name equality (the hash path is not implemented).
+
+                    duplicate_episode = await check_duplicate_episode(
+                        self.driver,
+                        group_id,
+                        name,
+                        episode_body,
+                        enable_hash_check=False,
+                        enable_similarity_check=True,
+                    )
+
+                    if duplicate_episode is not None:
+                        logger.info(
+                            f'Duplicate episode detected, skipping processing: {duplicate_episode.uuid}'
+                        )
+                        # Return empty results since we didn't process the duplicate
+                        return AddEpisodeResults(
+                            episode=duplicate_episode,
+                            episodic_edges=[],
+                            nodes=[],
+                            edges=[],
+                            communities=[],
+                            community_edges=[],
+                        )
 
                 # Create default edge type map
                 edge_type_map_default = (

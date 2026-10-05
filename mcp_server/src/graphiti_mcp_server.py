@@ -6,6 +6,7 @@ Graphiti MCP Server - Exposes Graphiti functionality through the Model Context P
 import argparse
 import asyncio
 import copy
+import json
 import logging
 import os
 import sys
@@ -40,13 +41,15 @@ from models.response_types import (
     TripletResponse,
 )
 from services.factories import (
-    CrossEncoderFactory,
     DatabaseDriverFactory,
     EmbedderFactory,
     LLMClientFactory,
+    RerankerFactory,
 )
 from services.queue_service import QueueService
+from services.smart_writer import SmartMemoryWriter
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
+from utils.project_config import ProjectConfig, find_project_config
 from utils.type_config import (
     build_edge_type_map,
     build_edge_types,
@@ -183,6 +186,7 @@ mcp = MCPServer(
 # Global services
 graphiti_service: Optional['GraphitiService'] = None
 queue_service: QueueService | None = None
+smart_writer: SmartMemoryWriter | None = None
 
 
 _group_drivers: dict[tuple[int, str], GraphDriver] = {}
@@ -223,6 +227,9 @@ def _client_for_group(client: Graphiti, group_id: str) -> Graphiti:
 graphiti_client: Graphiti | None = None
 semaphore: asyncio.Semaphore
 
+# Global project config (for smart writer)
+project_config: ProjectConfig | None = None
+
 
 class GraphitiService:
     """Graphiti service using the unified configuration system."""
@@ -232,6 +239,7 @@ class GraphitiService:
         self.semaphore_limit = semaphore_limit
         self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.client: Graphiti | None = None
+        self.llm_client = None  # Store LLM client for use by classifiers
         self.entity_types: dict[str, type[BaseModel]] | None = None
         self.edge_types: dict[str, type[BaseModel]] | None = None
         self.edge_type_map: dict[tuple[str, str], list[str]] | None = None
@@ -246,6 +254,7 @@ class GraphitiService:
             # Create LLM client based on configured provider
             try:
                 llm_client = LLMClientFactory.create(self.config.llm)
+                self.llm_client = llm_client  # Store for use by classifiers
             except Exception as e:
                 logger.warning(f'Failed to create LLM client: {e}')
 
@@ -255,10 +264,20 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
-            # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
-            # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
-            # Reranker setup errors must remain fatal rather than silently restoring that default.
-            cross_encoder_client = CrossEncoderFactory.create(self.config.llm, self.config.embedder)
+            # Create reranker client based on configured provider
+            cross_encoder = None
+            try:
+                cross_encoder = RerankerFactory.create(self.config.reranker)
+                if cross_encoder:
+                    logger.info(
+                        f'Using cross_encoder: {self.config.reranker.provider} / {self.config.reranker.model}'
+                    )
+                else:
+                    logger.info(f'Using local reranker: {self.config.reranker.type}')
+            except ImportError as e:
+                logger.warning(f'Reranker dependency not available: {e}')
+            except Exception as e:
+                logger.warning(f'Failed to create Reranker client: {e}')
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
@@ -288,8 +307,9 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
-                        cross_encoder=cross_encoder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
+                        deduplication_config=self.config.graphiti.deduplication,
                     )
                 elif self.config.database.provider.lower() == 'neo4j':
                     # For neo4j, create a Neo4jDriver instance directly
@@ -306,8 +326,9 @@ class GraphitiService:
                         graph_driver=neo4j_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
-                        cross_encoder=cross_encoder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
+                        deduplication_config=self.config.graphiti.deduplication,
                     )
                 else:
                     raise ValueError(
@@ -402,7 +423,7 @@ class GraphitiService:
 @mcp.tool()
 async def add_memory(
     name: str,
-    episode_body: str,
+    episode_body: str | dict,
     group_id: str | None = None,
     source: str = 'text',
     source_description: str = '',
@@ -420,15 +441,30 @@ async def add_memory(
     This function returns immediately and processes the episode addition in the background.
     Episodes for the same group_id are processed sequentially to avoid race conditions.
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config):
+    - The episode is queued for background classification and routing
+    - LLM-based classification (if write_strategy=llm_based) happens asynchronously
+    - Content is routed to appropriate groups (project, shared, or both) in the background
+    - Returns immediately with a task_id for tracking
+
+    Without SmartMemoryWriter:
+    - The episode is queued directly for the effective group
+    - Returns immediately with confirmation message
+
+    Note: .graphiti.json is the single source of truth for the project group;
+    an explicitly passed group_id does NOT bypass SmartMemoryWriter (agents
+    may pass stale defaults such as "main").
+
     Graphiti uses a bi-temporal model: each episode records both when it was ingested and
     when the described events actually occurred (its reference_time). Pass reference_time to
     set the event-occurrence time explicitly; otherwise the current time is used.
 
     Args:
         name (str): Name of the episode
-        episode_body (str): The content of the episode to persist to memory. When source='json', this must be a
-                           properly escaped JSON string, not a raw Python dictionary. The JSON data will be
-                           automatically processed to extract entities and relationships.
+        episode_body (str | dict): The content of the episode to persist to memory. Can be a string or a
+                                   dictionary. If a dictionary is provided, it will be automatically
+                                   converted to a JSON string. When source='json', the JSON data will be
+                                   automatically processed to extract entities and relationships.
         group_id (str, optional): A unique ID for this graph. If not provided, uses the default group_id from CLI
                                  or a generated one.
         source (str, optional): Source type, must be one of:
@@ -464,11 +500,18 @@ async def add_memory(
             group_id="some_arbitrary_string"
         )
 
-        # Adding structured JSON data
-        # NOTE: episode_body should be a JSON string (standard JSON escaping)
+        # Adding structured JSON data as dict (auto-converted to JSON string)
         add_memory(
             name="Customer Profile",
-            episode_body='{"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}, {"id": "P002", "name": "DataMiner"}]}',
+            episode_body={"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}]},
+            source="json",
+            source_description="CRM data"
+        )
+
+        # Adding structured JSON data as string (also works)
+        add_memory(
+            name="Customer Profile",
+            episode_body='{"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}]}',
             source="json",
             source_description="CRM data"
         )
@@ -480,10 +523,38 @@ async def add_memory(
             reference_time="2020-03-01T00:00:00Z"
         )
     """
-    global graphiti_service, queue_service
+    global graphiti_service, queue_service, smart_writer, project_config
+
+    # Auto-convert dict to JSON string for convenience
+    if isinstance(episode_body, dict):
+        episode_body = json.dumps(episode_body)
+        logger.debug(f"Auto-converted dict to JSON string for episode '{name}'")
 
     if graphiti_service is None or queue_service is None:
         return ErrorResponse(error='Services not initialized')
+
+    # === Dynamic .graphiti.json Detection ===
+    # Always check for .graphiti.json on each call to get the current project's group_id
+    # This ensures .graphiti.json is the single source of truth, overriding any
+    # group_id value passed by the AI agent (which may use outdated defaults like "main")
+    detected_project_config = find_project_config()
+    if detected_project_config is not None:
+        # Override group_id with the one from .graphiti.json
+        logger.info(
+            f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+            f"group_id='{detected_project_config.group_id}' (overriding passed value: '{group_id}')"
+        )
+        group_id = detected_project_config.group_id
+        project_config = detected_project_config  # Update global project_config
+    else:
+        # The project config disappeared after startup: clear the stale
+        # global so smart routing stops referencing groups that are gone.
+        if project_config is not None:
+            logger.warning(
+                '.graphiti.json no longer detected; clearing stale project config '
+                '(smart routing falls back to the standard path)'
+            )
+            project_config = None
 
     # Parse the optional reference_time before queuing so callers get an immediate
     # error on a malformed timestamp rather than a silent background failure.
@@ -493,7 +564,42 @@ async def add_memory(
         return ErrorResponse(error=f'Invalid reference_time: {e}')
 
     try:
-        # Use the provided group_id or fall back to the default from config
+        # === Smart Writer Path ===
+        # Use smart writer if available and project_config was detected
+        # Note: project_config is now set dynamically on each call if .graphiti.json exists
+        if smart_writer is not None and project_config is not None:
+            logger.debug(f"Using SmartMemoryWriter for episode '{name}'")
+
+            result = await smart_writer.add_memory(
+                name=name,
+                episode_body=episode_body,
+                project_config=project_config,
+                metadata={'source_description': source_description, 'source': source},
+                uuid=uuid,
+                reference_time=parsed_reference_time,
+                excluded_entity_types=excluded_entity_types,
+                custom_extraction_instructions=custom_extraction_instructions,
+                previous_episode_uuids=previous_episode_uuids,
+                update_communities=update_communities,
+                saga=saga,
+                saga_previous_episode_uuid=saga_previous_episode_uuid,
+                edge_types=graphiti_service.edge_types,
+                edge_type_map=graphiti_service.edge_type_map,
+            )
+
+            if result.success:
+                return SuccessResponse(
+                    message=f"Episode '{name}' queued for background processing "
+                    f'(task_id: {result.task_id[:20]}...; routes via .graphiti.json: '
+                    f"project='{project_config.group_id}' + shared groups "
+                    f'{project_config.shared_group_ids})'
+                )
+            else:
+                return ErrorResponse(error=f'Smart writer error: {result.error}')
+
+        # === Standard Path (fallback or no smart writer) ===
+        # Use the group_id (which may have been overridden by .graphiti.json detection)
+        # or fall back to the default from config
         effective_group_id = group_id or config.graphiti.group_id
 
         # Try to parse the source as an EpisodeType enum, with fallback to text
@@ -545,16 +651,20 @@ async def search_nodes(
 ) -> NodeSearchResponse | ErrorResponse:
     """Search for nodes (entities) in the graph memory.
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config), searches will
+    automatically include shared groups to find knowledge that's accessible across projects.
+
     Args:
         query: The search query
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
-            string is accepted and treated as a one-element list)
+            string is accepted and treated as a one-element list). If not provided,
+            searches the project group and any configured shared groups.
         max_nodes: Maximum number of nodes to return (default: 10)
         entity_types: Optional list of entity type names (node labels) to filter by
         center_node_uuid: Optional UUID of a node to center the search around. Results
             closer to this node in the graph are ranked higher.
     """
-    global graphiti_service
+    global graphiti_service, project_config
 
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
@@ -562,15 +672,44 @@ async def search_nodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Accept a scalar group_id or a list; fall back to the default when omitted.
-        group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # === Dynamic .graphiti.json Detection ===
+        # Detect .graphiti.json to get the current project's group_id
+        detected_project_config = find_project_config()
+        if detected_project_config is not None:
+            logger.info(
+                f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+                f"group_id='{detected_project_config.group_id}'"
+            )
+            # Update global project_config for this session
+            project_config = detected_project_config
+        elif project_config is not None:
+            # Config disappeared: clear the stale global so reads stop
+            # extending groups that are gone.
+            project_config = None
+
+        # Explicit group_ids are an exact retrieval intent: honor them without
+        # extending to the project or shared groups. Only an omitted group_ids
+        # gets the smart default (project group + shared groups).
+        coerced_group_ids = coerce_group_ids(group_ids) if group_ids is not None else None
+        if coerced_group_ids is not None:
+            # Explicit group_ids are an exact retrieval intent: honor them without
+            # extending to the project or shared groups. (A blank string coerces
+            # to None and falls through to the smart default.)
+            effective_group_ids = coerced_group_ids
+        else:
+            effective_group_ids = []
+            if detected_project_config:
+                effective_group_ids.append(detected_project_config.group_id)
+            elif config.graphiti.group_id:
+                effective_group_ids.append(config.graphiti.group_id)
+            if project_config and project_config.has_shared_config:
+                effective_group_ids.extend(project_config.shared_group_ids)
+
+        # Deduplicate while preserving order
+        seen = set()
+        effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+
+        logger.debug(f'Searching in groups: {effective_group_ids}')
 
         # Create search filters
         search_filters = SearchFilters(
@@ -626,10 +765,14 @@ async def search_memory_facts(
 ) -> FactSearchResponse | ErrorResponse:
     """Search the graph memory for relevant facts (entity edges).
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config), searches will
+    automatically include shared groups to find knowledge that's accessible across projects.
+
     Args:
         query: The search query
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
-            string is accepted and treated as a one-element list)
+            string is accepted and treated as a one-element list). If not provided,
+            searches the project group and any configured shared groups.
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
         edge_types: Optional list of edge (fact) type names to filter by
@@ -639,7 +782,7 @@ async def search_memory_facts(
         invalid_at_after: Optional ISO-8601 lower bound on a fact's invalid_at
         invalid_at_before: Optional ISO-8601 upper bound on a fact's invalid_at
     """
-    global graphiti_service
+    global graphiti_service, project_config
 
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
@@ -663,15 +806,44 @@ async def search_memory_facts(
 
         client = await graphiti_service.get_client()
 
-        # Accept a scalar group_id or a list; fall back to the default when omitted.
-        group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # === Dynamic .graphiti.json Detection ===
+        # Detect .graphiti.json to get the current project's group_id
+        detected_project_config = find_project_config()
+        if detected_project_config is not None:
+            logger.info(
+                f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+                f"group_id='{detected_project_config.group_id}'"
+            )
+            # Update global project_config for this session
+            project_config = detected_project_config
+        elif project_config is not None:
+            # Config disappeared: clear the stale global so reads stop
+            # extending groups that are gone.
+            project_config = None
+
+        # Explicit group_ids are an exact retrieval intent: honor them without
+        # extending to the project or shared groups. Only an omitted group_ids
+        # gets the smart default (project group + shared groups).
+        coerced_group_ids = coerce_group_ids(group_ids) if group_ids is not None else None
+        if coerced_group_ids is not None:
+            # Explicit group_ids are an exact retrieval intent: honor them without
+            # extending to the project or shared groups. (A blank string coerces
+            # to None and falls through to the smart default.)
+            effective_group_ids = coerced_group_ids
+        else:
+            effective_group_ids = []
+            if detected_project_config:
+                effective_group_ids.append(detected_project_config.group_id)
+            elif config.graphiti.group_id:
+                effective_group_ids.append(config.graphiti.group_id)
+            if project_config and project_config.has_shared_config:
+                effective_group_ids.extend(project_config.shared_group_ids)
+
+        # Deduplicate while preserving order
+        seen = set()
+        effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+
+        logger.debug(f'Searching in groups: {effective_group_ids}')
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -798,12 +970,16 @@ async def get_episodes(
 ) -> EpisodeSearchResponse | ErrorResponse:
     """Get episodes from the graph memory.
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config), searches will
+    automatically include shared groups to find knowledge that's accessible across projects.
+
     Args:
         group_ids: Optional group ID, or list of group IDs, to filter results (a single
-            string is accepted and treated as a one-element list)
+            string is accepted and treated as a one-element list). If not provided,
+            searches the project group and any configured shared groups.
         max_episodes: Maximum number of episodes to return (default: 10)
     """
-    global graphiti_service
+    global graphiti_service, project_config
 
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
@@ -811,30 +987,70 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Accept a scalar group_id or a list; fall back to the default when omitted.
-        group_ids = coerce_group_ids(group_ids)
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # === Dynamic .graphiti.json Detection ===
+        # Detect .graphiti.json to get the current project's group_id
+        detected_project_config = find_project_config()
+        if detected_project_config is not None:
+            logger.info(
+                f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+                f"group_id='{detected_project_config.group_id}'"
+            )
+            # Update global project_config for this session
+            project_config = detected_project_config
+        elif project_config is not None:
+            # Config disappeared: clear the stale global so reads stop
+            # extending groups that are gone.
+            project_config = None
+
+        # Explicit group_ids are an exact retrieval intent: honor them without
+        # extending to the project or shared groups. Only an omitted group_ids
+        # gets the smart default (project group + shared groups).
+        coerced_group_ids = coerce_group_ids(group_ids) if group_ids is not None else None
+        if coerced_group_ids is not None:
+            # Explicit group_ids are an exact retrieval intent: honor them without
+            # extending to the project or shared groups. (A blank string coerces
+            # to None and falls through to the smart default.)
+            effective_group_ids = coerced_group_ids
+        else:
+            effective_group_ids = []
+            if detected_project_config:
+                effective_group_ids.append(detected_project_config.group_id)
+            elif config.graphiti.group_id:
+                effective_group_ids.append(config.graphiti.group_id)
+            if project_config and project_config.has_shared_config:
+                effective_group_ids.extend(project_config.shared_group_ids)
+
+        # Deduplicate while preserving order
+        seen = set()
+        effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+
+        logger.debug(f'Searching in groups: {effective_group_ids}')
 
         # Each non-default group lives in its own graph, so query each group
         # with a driver bound to that graph and merge the results. FalkorDB
         # clones share one connection, which drops concurrent queries, so the
         # loop stays sequential.
         if effective_group_ids:
-            episodes = []
-            for group_id in effective_group_ids:
-                episodes.extend(
-                    await EpisodicNode.get_by_group_ids(
-                        _driver_for_group(client, group_id), [group_id], limit=max_episodes
-                    )
+            if getattr(client.driver, 'single_graph_mode', False):
+                # Single-graph drivers filter by the group_id property, so one
+                # call with all groups serves the whole request (shared-group
+                # reads stay a single query).
+                episodes = await EpisodicNode.get_by_group_ids(
+                    client.driver, effective_group_ids, limit=max_episodes
                 )
+            else:
+                episodes = []
+                for group_id in effective_group_ids:
+                    episodes.extend(
+                        await EpisodicNode.get_by_group_ids(
+                            _driver_for_group(client, group_id), [group_id], limit=max_episodes
+                        )
+                    )
             episodes.sort(
-                key=lambda episode: episode.created_at or datetime.min.replace(tzinfo=timezone.utc),
+                key=lambda episode: (
+                    episode.created_at or datetime.min.replace(tzinfo=timezone.utc),
+                    episode.uuid,
+                ),
                 reverse=True,
             )
             episodes = episodes[:max_episodes]
@@ -1183,7 +1399,14 @@ async def health_check(request) -> JSONResponse:
 
 async def initialize_server() -> ServerConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
-    global config, graphiti_service, queue_service, graphiti_client, semaphore
+    global \
+        config, \
+        graphiti_service, \
+        queue_service, \
+        smart_writer, \
+        graphiti_client, \
+        semaphore, \
+        project_config
 
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with YAML configuration support'
@@ -1234,13 +1457,30 @@ async def initialize_server() -> ServerConfig:
 
     # LLM configuration arguments
     parser.add_argument('--model', help='Model name to use with the LLM client')
-    parser.add_argument('--small-model', help='Small model name to use with the LLM client')
     parser.add_argument(
         '--temperature', type=float, help='Temperature setting for the LLM (0.0-2.0)'
     )
 
     # Embedder configuration arguments
     parser.add_argument('--embedder-model', help='Model name to use with the embedder')
+
+    # Reranker configuration arguments
+    parser.add_argument(
+        '--reranker-enabled',
+        type=lambda x: x.lower() in ('true', '1', 'yes', 'on'),
+        help='Enable reranker for search',
+    )
+    parser.add_argument(
+        '--reranker-type',
+        choices=['rrf', 'mmr', 'node_distance', 'episode_mentions', 'cross_encoder'],
+        help='Reranker type to use',
+    )
+    parser.add_argument(
+        '--reranker-provider',
+        choices=['openai', 'gemini', 'sentence_transformers'],
+        help='CrossEncoder provider (when type=cross_encoder)',
+    )
+    parser.add_argument('--reranker-model', help='Model name for CrossEncoder')
 
     # Graphiti-specific arguments
     parser.add_argument(
@@ -1258,6 +1498,29 @@ async def initialize_server() -> ServerConfig:
     )
 
     args = parser.parse_args()
+
+    # === Project Configuration Detection ===
+    # Check for project directory override from environment
+    project_dir_str = os.environ.get('GRAPHITI_PROJECT_DIR')
+    if project_dir_str:
+        project_dir = Path(project_dir_str).resolve()
+        logger.info(f'Detecting project configuration starting from: {project_dir}')
+
+        # Try to find .graphiti.json in project directory hierarchy
+        project_config = find_project_config(project_dir)
+
+        if project_config:
+            # Override group_id from project config
+            logger.info(f'Using project group_id: {project_config.group_id}')
+            logger.info(f'Project root: {project_config.project_root}')
+
+            # Set environment variable that will be picked up by GraphitiConfig
+            # Note: We use GRAPHITI_GROUP_ID (single underscore) to match the config schema
+            os.environ['GRAPHITI_GROUP_ID'] = project_config.group_id
+        else:
+            logger.info(f'No .graphiti.json found in {project_dir} or parent directories')
+            logger.info('Using server default group_id or other configuration sources')
+    # === End Project Configuration Detection ===
 
     # Set config path in environment for the settings to pick up
     if args.config:
@@ -1307,7 +1570,10 @@ async def initialize_server() -> ServerConfig:
 
     # Initialize services
     graphiti_service = GraphitiService(config, SEMAPHORE_LIMIT)
-    queue_service = QueueService()
+    queue_service = QueueService(
+        max_concurrent=config.graphiti.queue.max_concurrent_processing,
+        max_queue_size_per_group=config.graphiti.queue.max_queue_size_per_group,
+    )
     await graphiti_service.initialize()
 
     # Set global client for backward compatibility
@@ -1317,6 +1583,55 @@ async def initialize_server() -> ServerConfig:
     # Initialize queue service with the client
     await queue_service.initialize(graphiti_client)
 
+    # === Smart Memory Writer Initialization ===
+    # Initialize SmartMemoryWriter if project has shared config
+    if project_config and project_config.has_shared_config:
+        # Select classifier based on write_strategy
+        write_strategy = project_config.write_strategy
+
+        if write_strategy == 'llm_based':
+            from classifiers.llm_based import LLMClassifier
+
+            # Get LLM client from service (must be an actual client instance, not config)
+            if graphiti_service.llm_client is None:
+                logger.error(
+                    'LLM client not initialized. Cannot use LLMClassifier. '
+                    'Falling back to RuleBasedClassifier.'
+                )
+                from classifiers.rule_based import RuleBasedClassifier
+
+                classifier = RuleBasedClassifier()
+            else:
+                classifier = LLMClassifier(llm_client=graphiti_service.llm_client)
+            logger.info('Using LLMClassifier (write_strategy=llm_based)')
+        else:
+            from classifiers.rule_based import RuleBasedClassifier
+
+            classifier = RuleBasedClassifier()
+            logger.info(f'Using RuleBasedClassifier (write_strategy={write_strategy})')
+
+        smart_writer = SmartMemoryWriter(
+            classifier=classifier,
+            graphiti_client=graphiti_client,
+            queue_service=queue_service,
+            entity_types=graphiti_service.entity_types,
+            edge_types=graphiti_service.edge_types,
+            edge_type_map=graphiti_service.edge_type_map,
+        )
+        logger.info(
+            f'SmartMemoryWriter initialized with shared groups: {project_config.shared_group_ids}'
+        )
+        logger.info(f'Shared entity types: {project_config.shared_entity_types or "default"}')
+    else:
+        smart_writer = None
+        if project_config:
+            logger.info('Project config found but no shared config - SmartMemoryWriter disabled')
+    # === End Smart Memory Writer Initialization ===
+
+    # Host and port are passed to run_sse_async / run_http_async at start time.
+    # The current MCP SDK Settings object has no host/port fields; setting them
+    # here crashes startup.
+
     # Return MCP configuration for transport
     return config.server
 
@@ -1325,42 +1640,51 @@ async def run_mcp_server():
     """Run the MCP server in the current event loop."""
     # Initialize the server
     mcp_config = await initialize_server()
+    global queue_service
 
     # Run the server with configured transport
     logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
-    if mcp_config.transport == 'stdio':
-        await mcp.run_stdio_async()
-    elif mcp_config.transport == 'sse':
-        logger.info(f'Running MCP server with SSE transport on {mcp_config.host}:{mcp_config.port}')
-        logger.info(f'Access the server at: http://{mcp_config.host}:{mcp_config.port}/sse')
-        await mcp.run_sse_async(host=mcp_config.host, port=mcp_config.port)
-    elif mcp_config.transport == 'http':
-        # Use localhost for display if binding to 0.0.0.0
-        display_host = 'localhost' if mcp_config.host == '0.0.0.0' else mcp_config.host
-        logger.info(
-            f'Running MCP server with streamable HTTP transport on {mcp_config.host}:{mcp_config.port}'
-        )
-        logger.info('=' * 60)
-        logger.info('MCP Server Access Information:')
-        logger.info(f'  Base URL: http://{display_host}:{mcp_config.port}/')
-        logger.info(f'  MCP Endpoint: http://{display_host}:{mcp_config.port}/mcp/')
-        logger.info('  Transport: HTTP (streamable)')
+    try:
+        if mcp_config.transport == 'stdio':
+            await mcp.run_stdio_async()
+        elif mcp_config.transport == 'sse':
+            logger.info(
+                f'Running MCP server with SSE transport on {mcp_config.host}:{mcp_config.port}'
+            )
+            logger.info(f'Access the server at: http://{mcp_config.host}:{mcp_config.port}/sse')
+            await mcp.run_sse_async(host=mcp_config.host, port=mcp_config.port)
+        elif mcp_config.transport == 'http':
+            # Use localhost for display if binding to 0.0.0.0
+            display_host = 'localhost' if mcp_config.host == '0.0.0.0' else mcp_config.host
+            logger.info(
+                f'Running MCP server with streamable HTTP transport on {mcp_config.host}:{mcp_config.port}'
+            )
+            logger.info('=' * 60)
+            logger.info('MCP Server Access Information:')
+            logger.info(f'  Base URL: http://{display_host}:{mcp_config.port}/')
+            logger.info(f'  MCP Endpoint: http://{display_host}:{mcp_config.port}/mcp/')
+            logger.info('  Transport: HTTP (streamable)')
 
-        # Show FalkorDB Browser UI access if enabled
-        if os.environ.get('BROWSER', '1') == '1':
-            logger.info(f'  FalkorDB Browser UI: http://{display_host}:3000/')
+            # Show FalkorDB Browser UI access if enabled
+            if os.environ.get('BROWSER', '1') == '1':
+                logger.info(f'  FalkorDB Browser UI: http://{display_host}:3000/')
 
-        logger.info('=' * 60)
-        logger.info('For MCP clients, connect to the /mcp/ endpoint above')
+            logger.info('=' * 60)
+            logger.info('For MCP clients, connect to the /mcp/ endpoint above')
 
-        # Configure uvicorn logging to match our format
-        configure_uvicorn_logging()
+            # Configure uvicorn logging to match our format
+            configure_uvicorn_logging()
 
-        await mcp.run_streamable_http_async(host=mcp_config.host, port=mcp_config.port)
-    else:
-        raise ValueError(
-            f'Unsupported transport: {mcp_config.transport}. Use "sse", "stdio", or "http"'
-        )
+            await mcp.run_streamable_http_async(host=mcp_config.host, port=mcp_config.port)
+        else:
+            raise ValueError(
+                f'Unsupported transport: {mcp_config.transport}. Use "sse", "stdio", or "http"'
+            )
+
+    finally:
+        if queue_service is not None:
+            logger.info('Draining episode queue before shutdown...')
+            await queue_service.drain()
 
 
 def main():
