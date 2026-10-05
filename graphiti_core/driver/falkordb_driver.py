@@ -230,8 +230,8 @@ class FalkorDriver(GraphDriver):
         return self._graph_ops
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
-        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
-        if graph_name is None:
+        # FalkorDB rejects empty graph names, so route them to the configured database.
+        if not graph_name:
             graph_name = self._database
         return self.client.select_graph(graph_name)
 
@@ -333,6 +333,8 @@ class FalkorDriver(GraphDriver):
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
         """
+        database = database or self._database
+
         if database == self._database:
             cloned = self
         elif database == self.default_group_id:
