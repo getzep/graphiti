@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from graphiti_core import Graphiti
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError
 from graphiti_core.helpers import validate_group_id
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -32,8 +33,16 @@ NOW = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
 class NoCloneDriver:
     """Neo4j-like driver: clone() is a no-op, so per-group routing keeps one graph."""
 
+    provider = GraphProvider.NEO4J
+
     def clone(self, database: str):
         return self
+
+
+class GraphPerGroupDriver(NoCloneDriver):
+    """FalkorDB-like driver: every group is a separate graph."""
+
+    provider = GraphProvider.FALKORDB
 
 
 @pytest.fixture
@@ -124,6 +133,40 @@ class TestStarReadsEverything:
 
         assert fake_service.search_.call_args.kwargs['group_ids'] is None
         assert result['searched_group_ids'] is None
+
+
+class TestStarOnGraphPerGroupBackend:
+    """With one graph per group, core's None filter reads only the default graph."""
+
+    @pytest.mark.asyncio
+    async def test_facts_star_is_refused(self, fake_service, configured_group):
+        fake_service.driver = GraphPerGroupDriver()
+
+        result = await server.search_memory_facts(query='q', group_ids='*')
+
+        # Passing None through would quietly search the default group only: the
+        # same silent narrowing that '*' exists to remove.
+        assert 'error' in result
+        fake_service.search.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_nodes_star_is_refused(self, fake_service, configured_group):
+        fake_service.driver = GraphPerGroupDriver()
+
+        result = await server.search_nodes(query='q', group_ids='*')
+
+        assert 'error' in result
+        fake_service.search_.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_explicit_groups_still_read(self, fake_service, configured_group):
+        fake_service.driver = GraphPerGroupDriver()
+        fake_service.search.return_value = []
+
+        result = await server.search_memory_facts(query='q', group_ids=['a', 'b'])
+
+        assert fake_service.search.call_args.kwargs['group_ids'] == ['a', 'b']
+        assert result['searched_group_ids'] == ['a', 'b']
 
 
 class TestEmptyResultReportsItsScope:

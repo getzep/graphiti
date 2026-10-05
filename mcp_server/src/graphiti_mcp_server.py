@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
@@ -219,6 +219,27 @@ def _client_for_group(client: Graphiti, group_id: str) -> Graphiti:
     scoped.driver = driver
     scoped.clients = client.clients.model_copy(update={'driver': driver})
     return scoped
+
+
+def _refuse_all_groups_read(client: Graphiti, group_ids: list[str] | None) -> ErrorResponse | None:
+    """Refuse '*' on backends that keep each group in its own graph.
+
+    Core reads every group through group_ids=None only when all groups share one
+    graph. On FalkorDB, None queries the driver's default graph alone, so '*'
+    would quietly narrow to the default group: the silent-scope failure the
+    sentinel exists to remove. Fanning out instead would need the list of
+    graphs, which GraphDriver does not expose, so ask for explicit groups.
+    """
+    if group_ids is None or ALL_GROUPS not in group_ids:
+        return None
+    if client.driver.provider != GraphProvider.FALKORDB:
+        return None
+    return ErrorResponse(
+        error=(
+            f"'{ALL_GROUPS}' is not supported on FalkorDB, where each group is a separate "
+            'graph: pass the group_ids to read explicitly.'
+        )
+    )
 
 
 # Global client for backward compatibility
@@ -573,6 +594,8 @@ async def search_nodes(
         # omission keeps it on the configured default.
         group_ids = coerce_group_ids(group_ids)
         effective_group_ids = resolve_read_group_ids(group_ids, config.graphiti.group_id)
+        if (refused := _refuse_all_groups_read(client, group_ids)) is not None:
+            return refused
 
         # Create search filters
         search_filters = SearchFilters(
@@ -682,6 +705,8 @@ async def search_memory_facts(
         # omission keeps it on the configured default.
         group_ids = coerce_group_ids(group_ids)
         effective_group_ids = resolve_read_group_ids(group_ids, config.graphiti.group_id)
+        if (refused := _refuse_all_groups_read(client, group_ids)) is not None:
+            return refused
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
