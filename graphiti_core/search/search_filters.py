@@ -154,11 +154,11 @@ def edge_search_filter_query_constructor(
                     ComparisonOperator.is_null,
                     ComparisonOperator.is_not_null,
                 ]:
-                    filter_params['valid_at_' + str(j)] = date_filter.date
+                    filter_params[f'valid_at_{i}_{j}'] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
-                    'e.valid_at', f'$valid_at_{j}', date_filter.comparison_operator
+                    'e.valid_at', f'$valid_at_{i}_{j}', date_filter.comparison_operator
                 )
                 for j, date_filter in enumerate(or_list)
             ]
@@ -185,11 +185,11 @@ def edge_search_filter_query_constructor(
                     ComparisonOperator.is_null,
                     ComparisonOperator.is_not_null,
                 ]:
-                    filter_params['invalid_at_' + str(j)] = date_filter.date
+                    filter_params[f'invalid_at_{i}_{j}'] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
-                    'e.invalid_at', f'$invalid_at_{j}', date_filter.comparison_operator
+                    'e.invalid_at', f'$invalid_at_{i}_{j}', date_filter.comparison_operator
                 )
                 for j, date_filter in enumerate(or_list)
             ]
@@ -216,11 +216,11 @@ def edge_search_filter_query_constructor(
                     ComparisonOperator.is_null,
                     ComparisonOperator.is_not_null,
                 ]:
-                    filter_params['created_at_' + str(j)] = date_filter.date
+                    filter_params[f'created_at_{i}_{j}'] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
-                    'e.created_at', f'$created_at_{j}', date_filter.comparison_operator
+                    'e.created_at', f'$created_at_{i}_{j}', date_filter.comparison_operator
                 )
                 for j, date_filter in enumerate(or_list)
             ]
@@ -247,11 +247,11 @@ def edge_search_filter_query_constructor(
                     ComparisonOperator.is_null,
                     ComparisonOperator.is_not_null,
                 ]:
-                    filter_params['expired_at_' + str(j)] = date_filter.date
+                    filter_params[f'expired_at_{i}_{j}'] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
-                    'e.expired_at', f'$expired_at_{j}', date_filter.comparison_operator
+                    'e.expired_at', f'$expired_at_{i}_{j}', date_filter.comparison_operator
                 )
                 for j, date_filter in enumerate(or_list)
             ]
