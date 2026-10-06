@@ -54,7 +54,6 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _resolve_with_identity_properties,
     _resolve_with_similarity,
 )
-from graphiti_core.utils.maintenance.entity_type_hierarchy import most_specific_entity_type_name
 from graphiti_core.utils.text_utils import (
     MAX_SUMMARY_CHARS,
     concatenate_episodes,
@@ -222,8 +221,13 @@ def _filter_entity_types_context(
 def _get_entity_type_description(
     labels: list[str], entity_types: dict[str, type[BaseModel]] | None
 ) -> str:
-    type_name = most_specific_entity_type_name(labels, entity_types)
-    type_model = entity_types.get(type_name) if entity_types is not None else None
+    type_name = next(
+        (label for label in labels if entity_types is not None and label in entity_types),
+        None,
+    )
+    type_model = (
+        entity_types.get(type_name) if entity_types is not None and type_name is not None else None
+    )
     return (type_model.__doc__ if type_model is not None else None) or 'Default Entity Type'
 
 
@@ -431,16 +435,11 @@ def _collapse_exact_duplicate_extracted_nodes(
 
 def _merge_candidate_nodes(
     candidate_nodes: list[EntityNode],
-    existing_nodes_override: list[EntityNode] | None,
 ) -> list[EntityNode]:
-    """Deduplicate candidate nodes while preserving search order and overrides."""
-    merged_candidates = list(candidate_nodes)
-    if existing_nodes_override is not None:
-        merged_candidates.extend(existing_nodes_override)
-
+    """Deduplicate candidate nodes while preserving search order."""
     seen_candidate_uuids: set[str] = set()
     ordered_candidates: list[EntityNode] = []
-    for candidate in merged_candidates:
+    for candidate in candidate_nodes:
         if candidate.uuid in seen_candidate_uuids:
             continue
         seen_candidate_uuids.add(candidate.uuid)
@@ -452,9 +451,7 @@ def _merge_candidate_nodes(
 async def _collect_candidate_nodes(
     clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
-    existing_nodes_override: list[EntityNode] | None,
     identity_properties: dict[str, list[str]] | None = None,
-    exclude_self_candidates: bool = False,
 ) -> list[list[EntityNode]]:
     """Search per extracted name and return ordered candidates for each extracted node."""
     identity_results = await _collect_identity_property_candidate_nodes(
@@ -466,20 +463,15 @@ async def _collect_candidate_nodes(
     search_results = await _semantic_candidate_search(clients, extracted_nodes)
 
     candidates_by_node: list[list[EntityNode]] = []
-    for node, identity_result, exact_results, search_result in zip(
-        extracted_nodes,
+    for identity_result, exact_results, search_result in zip(
         identity_results,
         exact_name_results,
         search_results,
         strict=True,
     ):
-        candidates = _merge_candidate_nodes(
-            identity_result + exact_results + search_result,
-            existing_nodes_override,
+        candidates_by_node.append(
+            _merge_candidate_nodes(identity_result + exact_results + search_result)
         )
-        if exclude_self_candidates:
-            candidates = [candidate for candidate in candidates if candidate.uuid != node.uuid]
-        candidates_by_node.append(candidates)
     return candidates_by_node
 
 
@@ -818,18 +810,14 @@ async def resolve_extracted_nodes(
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
-    existing_nodes_override: list[EntityNode] | None = None,
     identity_properties: dict[str, list[str]] | None = None,
-    exclude_self_candidates: bool = False,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup."""
     llm_client = clients.llm_client
     candidate_nodes_by_extracted = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
-        existing_nodes_override,
         identity_properties,
-        exclude_self_candidates,
     )
 
     state = DedupResolutionState(
@@ -878,8 +866,7 @@ async def resolve_extracted_nodes(
                 candidate
                 for idx in state.unresolved_indices
                 for candidate in candidate_nodes_by_extracted[idx]
-            ],
-            None,
+            ]
         )
         await _resolve_with_llm(
             llm_client,
@@ -933,8 +920,8 @@ def _entity_type_for_node(
 ) -> type[BaseModel] | None:
     if entity_types is None:
         return None
-    type_name = most_specific_entity_type_name(node.labels, entity_types)
-    return entity_types.get(type_name)
+    type_name = next((label for label in node.labels if label in entity_types), None)
+    return entity_types.get(type_name) if type_name is not None else None
 
 
 async def extract_attributes_only_from_nodes(

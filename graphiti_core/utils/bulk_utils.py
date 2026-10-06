@@ -53,7 +53,6 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     retrieve_episodes,
 )
-from graphiti_core.utils.maintenance.hyperedge import absorb_canonical_edges
 from graphiti_core.utils.maintenance.node_operations import (
     resolve_extracted_nodes,
 )
@@ -205,7 +204,6 @@ async def add_nodes_and_edges_bulk_tx(
             'valid_at': edge.valid_at,
             'invalid_at': edge.invalid_at,
             'reference_time': edge.reference_time,
-            'hyperedge_uuid': edge.hyperedge_uuid,
             'fact_embedding': edge.fact_embedding,
         }
 
@@ -270,7 +268,6 @@ async def extract_nodes_and_edges_bulk(
     edge_types: dict[str, type[BaseModel]] | None = None,
     strict_edge_types: bool = False,
     custom_extraction_instructions: str | None = None,
-    enable_hyperedges: bool = False,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     """Extract nodes and edges with the combined extractor for each episode."""
     return await _extract_nodes_and_edges_bulk_combined(
@@ -282,7 +279,6 @@ async def extract_nodes_and_edges_bulk(
         edge_types=edge_types,
         strict_edge_types=strict_edge_types,
         custom_extraction_instructions=custom_extraction_instructions,
-        enable_hyperedges=enable_hyperedges,
     )
 
 
@@ -295,7 +291,6 @@ async def _extract_nodes_and_edges_bulk_combined(
     edge_types: dict[str, type[BaseModel]] | None = None,
     strict_edge_types: bool = False,
     custom_extraction_instructions: str | None = None,
-    enable_hyperedges: bool = False,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     """Combined extraction: single LLM call per episode for both nodes and edges."""
     from graphiti_core.utils.maintenance.combined_extraction import (
@@ -314,7 +309,6 @@ async def _extract_nodes_and_edges_bulk_combined(
                 edge_types=edge_types,
                 strict_edge_types=strict_edge_types,
                 custom_extraction_instructions=custom_extraction_instructions,
-                enable_hyperedges=enable_hyperedges,
             )
             for episode, previous_episodes in episode_tuples
         ],
@@ -529,10 +523,6 @@ async def dedupe_edges_bulk(
     edge_uuid_map: dict[str, EntityEdge] = {
         edge.uuid: edge for edges in extracted_edges for edge in edges
     }
-
-    # The canonical edge may be ungrouped. Carry the stamp over before it replaces
-    # the grouped edge below, or that group loses this member.
-    absorb_canonical_edges(compressed_map, edge_uuid_map)
 
     edges_by_episode: dict[str, list[EntityEdge]] = {}
     for i, edges in enumerate(extracted_edges):

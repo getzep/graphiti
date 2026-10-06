@@ -417,23 +417,16 @@ class GeminiClient(LLMClient):
             retry_count = 0
             last_error = None
             last_output = None
-            total_input_tokens = 0
-            total_output_tokens = 0
 
             while retry_count < self.MAX_RETRIES:
                 try:
-                    response, input_tokens, output_tokens = await self._generate_response(
+                    response, _, _ = await self._generate_response(
                         messages=messages,
                         response_model=response_model,
                         max_tokens=max_tokens,
                         model_size=model_size,
                         model=model,
                     )
-                    total_input_tokens += input_tokens
-                    total_output_tokens += output_tokens
-
-                    # Record token usage
-                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
 
                     last_output = (
                         response.get('content')

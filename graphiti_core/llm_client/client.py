@@ -29,10 +29,10 @@ from ..tracer import NoOpTracer, Tracer
 from .cache import LLMCache
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import EmptyResponseError, RateLimitError
-from .token_tracker import TokenUsageTracker
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
+
 
 def get_extraction_language_instruction(group_id: str | None = None) -> str:
     """Returns instruction for language extraction behavior.
@@ -84,7 +84,6 @@ class LLMClient(ABC):
         self.cache_enabled = cache
         self.cache_dir = None
         self.tracer: Tracer = NoOpTracer()
-        self.token_tracker: TokenUsageTracker = TokenUsageTracker()
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:

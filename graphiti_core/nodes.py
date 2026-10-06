@@ -31,7 +31,6 @@ from graphiti_core.driver.driver import (
     GraphProvider,
 )
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.embedder.canonical_text import canonical_node_name_text
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date, validate_node_labels
 from graphiti_core.models.nodes.node_db_queries import (
@@ -391,11 +390,11 @@ class EpisodicNode(Node):
         return episodes[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str], group_id: str | None = None):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.episodic_node_get_by_uuids(
-                    cls, driver, uuids, group_id
+                    cls, driver, uuids
                 )
             except NotImplementedError:
                 pass
@@ -506,7 +505,7 @@ class EntityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = canonical_node_name_text(self.name)
+        text = self.name
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(
@@ -757,7 +756,7 @@ class CommunityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = canonical_node_name_text(self.name)
+        text = self.name
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(
@@ -1162,8 +1161,6 @@ async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[En
     if not filtered_nodes:
         return
 
-    name_embeddings = await embedder.create_batch(
-        [canonical_node_name_text(node.name) for node in filtered_nodes]
-    )
+    name_embeddings = await embedder.create_batch([node.name for node in filtered_nodes])
     for node, name_embedding in zip(filtered_nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding

@@ -203,7 +203,7 @@ class GraphOperationsInterface(BaseModel):
         raise NotImplementedError
 
     async def episodic_node_get_by_uuids(
-        self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None
+        self, _cls: Any, driver: Any, uuids: list[str]
     ) -> list[Any]:
         """Retrieve multiple episodic nodes by UUIDs."""
         raise NotImplementedError
@@ -466,9 +466,7 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve a single edge by UUID."""
         raise NotImplementedError
 
-    async def edge_get_by_uuids(
-        self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None
-    ) -> list[Any]:
+    async def edge_get_by_uuids(self, _cls: Any, driver: Any, uuids: list[str]) -> list[Any]:
         """Retrieve multiple edges by UUIDs."""
         raise NotImplementedError
 

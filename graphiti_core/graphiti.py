@@ -16,7 +16,6 @@ limitations under the License.
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import datetime
 from time import time
 from uuid import uuid4
@@ -404,18 +403,6 @@ class Graphiti:
             # Silently handle telemetry errors
             pass
 
-    @property
-    def token_tracker(self):
-        """Access the LLM client's token usage tracker.
-
-        Returns the TokenUsageTracker from the LLM client, which can be used to:
-        - Get token usage by prompt type: tracker.get_usage()
-        - Get total token usage: tracker.get_total_usage()
-        - Print a formatted summary: tracker.print_summary()
-        - Reset tracking: tracker.reset()
-        """
-        return self.llm_client.token_tracker
-
     def _get_provider_type(self, client) -> str:
         """Get provider type from client class name."""
         if client is None:
@@ -585,24 +572,8 @@ class Graphiti:
     async def summarize_saga(
         self,
         saga_id: str,
-        rebuild: bool = False,
-        before_publish: Callable[[str], Awaitable[str]] | None = None,
     ) -> SagaNode:
         """Incrementally summarize a saga using only new episodes since the last summary.
-
-        ``before_publish`` runs with the generated summary text immediately
-        before the saga node is saved and returns the text to publish. The
-        caller uses it to check the selected input episodes and to evaluate
-        the text against a content policy; an exception it raises stops the
-        publication and the node is not saved.
-
-        With ``rebuild=True`` the summary is regenerated from scratch: the
-        watermark filter is ignored (all surviving episodes are fetched) and
-        the existing summary is NOT fed back into the prompt. This is the
-        retention rebuild (abac spec-10 §6.2): after an episode the saga
-        summarized is deleted, the incremental path would carry the deleted
-        episode's content forward inside the old summary text, so the text is
-        discarded and rebuilt from the surviving contributors alone.
 
         Two watermarks are maintained on the saga node, with deliberately
         different semantics:
@@ -641,16 +612,13 @@ class Graphiti:
         """
         saga = await SagaNode.get_by_uuid(self.driver, saga_id)
 
-        # Fetch only episodes added since the last summary (or all if never
-        # summarized, or on a rebuild). Cap the window to the same episode
+        # Fetch only episodes added since the last summary. Cap the window to the same episode
         # count node summaries use so a long thread or document cannot fill
         # the model context window in one pass. Deferred episodes remain
         # eligible because last_summarized_at advances only through this batch.
         max_episodes = MAX_SAGA_EPISODES_FOR_SUMMARY
-        since = None if rebuild else saga.last_summarized_at
-        existing_summary = ''
-        if not rebuild:
-            existing_summary = truncate_at_sentence(saga.summary or '', SAGA_SUMMARY_MAX_CHARS)
+        since = saga.last_summarized_at
+        existing_summary = truncate_at_sentence(saga.summary or '', SAGA_SUMMARY_MAX_CHARS)
 
         # Try IoC interface first, fall back to raw Cypher
         episodes_data = await self._saga_get_episode_contents(
@@ -698,19 +666,6 @@ class Graphiti:
             saga._summary_episodes_selected = 0
             saga._summary_episodes_skipped = 0
             saga._summary_selected_episode_bytes = 0
-            if rebuild:
-                # No surviving episodes: the old text (generated from episodes
-                # that have since been deleted) must not be kept, and an LLM
-                # call over nothing would only invent content. Clear it.
-                # The watermark is cleared, so that an episode that is not
-                # eligible yet (a pending policy state) is read by the next
-                # incremental run.
-                saga.summary = ''
-                saga.last_summarized_at = None
-                saga.last_summarized_episode_valid_at = None
-                await saga.save(self.driver)
-                logger.info(f'Rebuilt saga {saga_id} summary to empty: no surviving episodes')
-                return saga
             logger.info(f'No new episodes found for saga {saga_id}, skipping summary')
             return saga
 
@@ -722,7 +677,7 @@ class Graphiti:
         saga._summary_episodes_selected = len(episodes_data)
         saga._summary_episodes_skipped = total_episode_count - len(episodes_data)
         saga._summary_selected_episode_bytes = selected_episode_bytes
-        if not episodes_data and not rebuild:
+        if not episodes_data:
             logger.info(f'No saga episode content fit the summary byte budget for saga {saga_id}')
             return saga
         if episodes_dropped:
@@ -747,9 +702,6 @@ class Graphiti:
             )
             return {
                 'saga_name': saga.name,
-                # A rebuild discards the prior text: it was generated from episodes
-                # that may since have been deleted, and feeding it back would carry
-                # their content into the new summary.
                 'existing_summary': existing_summary,
                 'episodes': [content for content, _, _ in prompt_episodes_data],
             }
@@ -783,54 +735,37 @@ class Graphiti:
         saga._summary_selected_episode_bytes = sum(
             len(content.encode('utf-8')) for content, _, _ in episodes_data
         )
-        if not episodes_data and not rebuild:
+        if not episodes_data:
             logger.info(f'No saga episode content fit the summary byte budget for saga {saga_id}')
             return saga
-        episode_contents = _prompt_context(episodes_data)['episodes'] if episodes_data else []
         valid_ats = [valid_at for _, valid_at, _ in episodes_data if valid_at is not None]
         summarized_created_ats = [created_at for _, _, created_at in episodes_data]
 
         context = _prompt_context(episodes_data)
 
-        if rebuild and not episode_contents:
-            # Nothing survives to summarize; an LLM call over an empty episode
-            # list would only invent content. The saga keeps an empty summary
-            # until new episodes arrive.
-            summary = ''
-        else:
-            llm_response = await generate_prompt_response(
-                self.llm_client,
-                'summarize_sagas.summarize_saga',
-                prompt_library.summarize_sagas.summarize_saga,
-                context,
-                clients=self.clients,
-                response_model=SagaSummary,
-                max_tokens=SAGA_SUMMARY_MAX_TOKENS,
-            )
+        llm_response = await generate_prompt_response(
+            self.llm_client,
+            'summarize_sagas.summarize_saga',
+            prompt_library.summarize_sagas.summarize_saga,
+            context,
+            clients=self.clients,
+            response_model=SagaSummary,
+            max_tokens=SAGA_SUMMARY_MAX_TOKENS,
+        )
 
-            summary = llm_response.get('summary', '')
-            if len(summary) > SAGA_SUMMARY_MAX_CHARS:
-                summary = truncate_at_sentence(summary, SAGA_SUMMARY_MAX_CHARS)
-
-        if before_publish is not None:
-            summary = await before_publish(summary)
+        summary = llm_response.get('summary', '')
+        if len(summary) > SAGA_SUMMARY_MAX_CHARS:
+            summary = truncate_at_sentence(summary, SAGA_SUMMARY_MAX_CHARS)
 
         saga.summary = summary
         # Ingestion-time watermark for the next-run filter. Advance only
         # through the episodes that were actually sent to the summary prompt so
-        # byte-budgeted later episodes remain reachable on subsequent runs. A
-        # rebuild that summarized nothing clears the watermark, so that an
-        # episode that becomes eligible later is read by the next run.
+        # byte-budgeted later episodes remain reachable on subsequent runs.
         saga.last_summarized_at = max(summarized_created_ats) if summarized_created_ats else None
         # Episode-time watermark for public/temporal consumers: advance only
         # forward to the latest reference time we just summarized. If no
-        # episode in this batch carried a valid_at, leave the previous value
-        # unchanged so the field never regresses -- except on a rebuild, where
-        # the summary now covers only the surviving episodes and the watermark
-        # must reflect them even if that moves it backward.
-        if rebuild:
-            saga.last_summarized_episode_valid_at = max(valid_ats) if valid_ats else None
-        elif valid_ats:
+        # episode in this batch carried a valid_at, leave the previous value unchanged.
+        if valid_ats:
             new_episode_watermark = max(valid_ats)
             if (
                 saga.last_summarized_episode_valid_at is None

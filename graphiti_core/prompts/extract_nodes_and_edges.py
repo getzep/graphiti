@@ -67,72 +67,6 @@ class CombinedFact(BaseModel):
     )
 
 
-class EntityEndpointPair(BaseModel):
-    """One directed projection of a hyperedge-capable fact onto the pairwise graph."""
-
-    source_entity_name: str = Field(
-        ...,
-        description=(
-            'The name of the source entity. MUST exactly match an entity `name` in '
-            'extracted_entities (including value-like endpoints such as versions).'
-        ),
-    )
-    target_entity_name: str = Field(
-        ...,
-        description=(
-            'The name of the target entity. MUST exactly match an entity `name` in '
-            'extracted_entities (including value-like endpoints such as versions).'
-        ),
-    )
-    relation_type: str = Field(
-        ...,
-        description=(
-            'The type of relationship for this specific source→target projection, in '
-            'SCREAMING_SNAKE_CASE (e.g., WORKS_AT, LIVES_IN, INTRODUCED_TO). Members of '
-            'the same multi-entity fact MAY use different relation types.'
-        ),
-    )
-
-
-class CombinedFactHyperedge(BaseModel):
-    """Relationship fact that may project onto one or more typed endpoint pairs.
-
-    Binary facts use a single endpoint object. Atomic multi-entity facts use multiple
-    objects that share the same canonical fact text; each object carries its own
-    relation_type for that projection.
-    """
-
-    entity_endpoints: list[EntityEndpointPair] = Field(
-        ...,
-        min_length=1,
-        description=(
-            'Non-empty list of projection objects for this fact. Each object has '
-            'source_entity_name, target_entity_name, and relation_type. Binary facts use '
-            'exactly one object. Multi-entity atomic assertions use multiple objects that '
-            'together project the same assertion onto the pairwise graph.'
-        ),
-    )
-    fact: str = Field(
-        ...,
-        description='A self-contained natural language description of the relationship, '
-        'paraphrased from the source text with all specific details preserved. '
-        'When entity_endpoints has multiple entries, this is the canonical fact text shared '
-        'by every projection.',
-    )
-    episode_indices: list[int] = Field(
-        default_factory=lambda: [0],
-        description='List of episode numbers (0-indexed) that this fact was derived from. '
-        'When processing a single episode, this should be [0].',
-    )
-    fact_group_id: int | str | None = Field(
-        default=None,
-        description=(
-            'Response-local ID shared by all records that project one atomic multi-entity '
-            'fact. Use null for an ordinary binary fact. This ID is never persisted.'
-        ),
-    )
-
-
 class CombinedExtraction(BaseModel):
     """Combined node and edge extraction response."""
 
@@ -140,24 +74,12 @@ class CombinedExtraction(BaseModel):
     edges: list[CombinedFact] = Field(..., description='List of extracted relationship facts')
 
 
-class CombinedExtractionHyperedge(BaseModel):
-    """Combined node and edge extraction response with multi-endpoint facts."""
-
-    extracted_entities: list[CombinedEntity] = Field(..., description='List of extracted entities')
-    edges: list[CombinedFactHyperedge] = Field(
-        ...,
-        description='List of extracted relationship facts, each with one or more endpoint pairs',
-    )
-
-
 class Prompt(Protocol):
     extract_message: PromptVersion
-    extract_message_hyperedges: PromptVersion
 
 
 class Versions(TypedDict):
     extract_message: PromptFunction
-    extract_message_hyperedges: PromptFunction
 
 
 def _build_edge_types_section(
@@ -258,97 +180,6 @@ _PAIRWISE_FACT_RULES = """\
 7. Do not emit redundant facts across episodes. But if a later episode adds new
    details (brand, count, location), extract the more detailed version as a new fact.
 8. Prefer DIRECT speaker-to-target edges over fragmenting a relationship through
-   descriptive intermediaries. When a person is/visits/wants/recommends a
-   Location, performs at/works for an Organization, owns/uses/likes an Object,
-   or feels strongly about a Topic, emit the edge directly from the person —
-   do not route the relationship through scenery nouns, observed features, or
-   ad-hoc descriptive entities.
-   GOOD: Calvin -> TOOK_PHOTO_IN -> Tokyo
-         Calvin -> PERFORMED_IN -> Tokyo
-         Dave -> WANTS_TO_VISIT -> Tokyo
-   BAD:  city lights -> LOCATED_IN -> Tokyo,
-         night skyline -> LOCATED_IN -> Tokyo,
-         insane crowd -> LOCATED_IN -> Tokyo
-         (the descriptive scenery is observation about the location, not its
-         own subject — Calvin's and Dave's actual relationships to Tokyo
-         become unretrievable. Put the scenery details inside fact text.)
-   The same applies for organizations and possessions: each speaker-relevant
-   thing should have at least one edge with the speaker (or an entity they
-   own/identify with) as source, not an observation noun."""
-
-_HYPEREDGE_FACT_RULES = """\
-1. Each fact has `entity_endpoints`: a non-empty list of projection objects. Each
-   object has source_entity_name, target_entity_name, and relation_type.
-   - Binary facts use exactly one object.
-   - Atomic multi-entity assertions use multiple objects that together project the
-     same assertion onto the pairwise graph.
-   Every source_entity_name and target_entity_name MUST match names in
-   extracted_entities. Every edge endpoint must also appear as an entity —
-   including value-like endpoints (versions, quantities, days of week, titles)
-   when used as source or target. Emitting an endpoint without listing both
-   entities drops that projection from the graph.
-   GOOD: entities ["AMI", "version 2.18.1"];
-         entity_endpoints: [{AMI, version 2.18.1, PINNED_AT}]
-   BAD:  entities ["AMI"] only;
-         entity_endpoints: [{AMI, version 2.18.1, PINNED_AT}]
-2. When a fact involves two entities that are BOTH in your extracted entities list,
-   you MUST use both as a source/target pair — never collapse into a self-referencing fact:
-   "Nate plays games on a Gamecube" → entity_endpoints: [{Nate, Gamecube, PLAYS_GAMES_ON}]
-   "Sarah lives in San Francisco" → entity_endpoints: [{Sarah, San Francisco, LIVES_IN}]
-   "James has a dog named Maximilian" → entity_endpoints: [{James, Maximilian, HAS_PET}]
-   Only use a self-referencing pair when no second entity in your list fits.
-   Self-referencing facts are still common and valuable — do NOT skip them:
-   - Routines/health: "Deborah goes jogging every morning", "Evan has a knee injury"
-   - Preferences/plans: "Nate's favorite game is Xenoblade Chronicles",
-     "Jon said he would not quit on his dreams"
-   - Emotions/states: "Sam feels he lacks motivation"
-3. For one atomic multi-entity assertion, emit ONE fact with multiple endpoint
-   objects and the SAME self-contained canonical `fact` text. Set `fact_group_id`
-   to a short response-local integer or string. Do NOT split one atomic assertion
-   merely because it involves more than two entities. If you must use multiple
-   records, every record MUST use the same `fact_group_id` and canonical fact text.
-   Each projection MAY have its own relation_type when the ontology calls for
-   different directed relations. Do NOT group independent assertions merely because
-   they share a message or an entity.
-   Example: "Alice introduced Bob to Carol at the Graph Summit"
-   → one fact with entity_endpoints like
-     [{Alice, Bob, INTRODUCED}, {Alice, Carol, INTRODUCED_TO},
-      {Alice, Graph Summit, ATTENDED}]
-     (exact projections and relation types depend on extracted entities and the
-     ontology)
-   Independent binary assertions remain separate facts, each with a single object
-   and a null `fact_group_id`.
-4. Facts must be SELF-CONTAINED — understandable without the original episode.
-   Use entity names, not pronouns. Preserve specific details where possible.
-5. Extract facts from EVERY episode — not just the meatiest one. Conversational
-   setup episodes still contain real facts that belong in the graph:
-   - Narrative announcements: "something funny happened last night",
-     "I have news to share", "you won't believe what happened"
-   - Forward commitments: "I'll keep you posted", "I'll let you know how it
-     goes", "I'll call you when I land"
-   - Plans / intentions: "I'm calling them tomorrow", "I'm planning to start
-     next week"
-   - Emotional / state setup: "I've been feeling stressed lately",
-     "I'm so excited about this"
-   Process each episode's CURRENT_MESSAGE independently. Set `episode_indices`
-   to the 0-based episode number(s) each fact comes from (matching
-   [Episode N] headers). If the SAME fact appears across multiple episodes,
-   extract it ONCE and list ALL episode indices — do NOT emit duplicate facts
-   with different episode numbers. Messages headed [CONTEXT EPISODE] are NOT
-   numbered episodes: do NOT extract facts from them and do NOT give them an
-   episode index.
-6. You MAY use PREVIOUS MESSAGES and [CONTEXT EPISODE] messages to resolve what
-   the current message refers to. [CONTEXT EPISODE] messages are conversation
-   turns that fall between the numbered episodes, shown so you can read the
-   conversation in order. If the current message reacts to or confirms prior
-   context, extract the full contextualized fact (e.g., "all the hard work paid
-   off" → extract what paid off).
-7. Extract liberally — when in doubt, extract the fact. Preferences, opinions,
-   reactions, advice, plans, states, and experiences are all valuable. Only skip
-   content-free utterances like "Hi!", "Bye!", "Thanks!".
-8. Do not emit redundant facts across episodes. But if a later episode adds new
-   details (brand, count, location), extract the more detailed version as a new fact.
-9. Prefer DIRECT speaker-to-target edges over fragmenting a relationship through
    descriptive intermediaries. When a person is/visits/wants/recommends a
    Location, performs at/works for an Organization, owns/uses/likes an Object,
    or feels strongly about a Topic, emit the edge directly from the person —
@@ -532,16 +363,8 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-def extract_message_hyperedges(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(role='system', content=_SYSTEM_PROMPT),
-        Message(role='user', content=_build_extract_user_prompt(context, _HYPEREDGE_FACT_RULES)),
-    ]
-
-
 versions: Versions = {
     'extract_message': extract_message,
-    'extract_message_hyperedges': extract_message_hyperedges,
 }
 
 

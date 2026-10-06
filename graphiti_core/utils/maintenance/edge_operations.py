@@ -55,10 +55,6 @@ from graphiti_core.utils.maintenance.dangling_endpoints import (
     prune_unreferenced_materialized_nodes,
 )
 from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
-from graphiti_core.utils.maintenance.hyperedge import (
-    absorb_into_hyperedge,
-    group_hyperedges,
-)
 from graphiti_core.utils.maintenance.temporal_edge_utils import (
     apply_extracted_timestamps,
     normalize_future_temporal_bounds,
@@ -403,9 +399,8 @@ async def extract_edges(
 def _pair_search_filter(edge: EntityEdge) -> SearchFilters:
     """Filter restricting an edge search to the extracted edge's endpoints.
 
-    src IN {a, b} AND tgt IN {a, b} covers both orientations in one query;
-    backends with endpoint indexes (e.g. graph-service) pre-filter before
-    ranking, so the search never scans the whole graph. The filter also
+    src IN {a, b} AND tgt IN {a, b} covers both orientations in one query.
+    The filter can reduce the candidate set before ranking. It also
     admits self-loops on either endpoint when a != b -- callers drop those
     with _same_pair_edges.
     """
@@ -433,8 +428,6 @@ async def resolve_extracted_edges(
     entities: list[EntityNode],
     edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
-    existing_edges_override: list[EntityEdge] | None = None,
-    exclude_self_candidates: bool = False,
     strict_edge_types: bool = False,
     invalidated_by: dict[str, list[str]] | None = None,
 ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
@@ -472,7 +465,7 @@ async def resolve_extracted_edges(
 
     # Fetch missing nodes from the database
     if referenced_node_uuids:
-        # Pass group_id so graph-service implementations can scope the lookup
+        # Limit the lookup to the edge group.
         edge_group_id = extracted_edges[0].group_id
         missing_nodes = await EntityNode.get_by_uuids(
             driver, list(referenced_node_uuids), group_id=edge_group_id
@@ -505,8 +498,6 @@ async def resolve_extracted_edges(
             _normalize_string_exact(edge.fact),
         )
         if key in seen:
-            # The replaced edge may be the group's only claim on this pair.
-            absorb_into_hyperedge(edge, seen[key])
             continue
 
         reverse_key = (
@@ -516,7 +507,6 @@ async def resolve_extracted_edges(
         )
         reverse_edge = seen.get(reverse_key)
         if reverse_edge is not None and reverse_edge.name == edge.name:
-            absorb_into_hyperedge(edge, reverse_edge)
             continue
 
         seen[key] = edge
@@ -528,18 +518,10 @@ async def resolve_extracted_edges(
 
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
-    # Duplicate candidates are, by contract, edges between the same endpoints
-    # in either direction (resolve_extracted_edge's related_edges). Fetch them
-    # with a hybrid search PRE-FILTERED to the pair's endpoints: the filter is
-    # pushed into the backend (endpoint-indexed on graph-service, cypher WHERE
-    # on OSS drivers), so ranking runs over the pair's edges only -- never a
-    # graph-wide scan. The endpoint post-filter drops the self-loops the
-    # {a,b}x{a,b} filter admits and is defense-in-depth against backends that
-    # ignore the endpoint filter.
-    # query_vector: the fact embeddings were just computed above; passing them
-    # skips a per-search embedder round-trip. The stored edge vectors were
-    # embedded from canonical_edge_fact_text, so searching with the same
-    # canonical vector is exactly consistent with what the index holds.
+    # Duplicate candidates have the same endpoints in either direction.
+    # Prefiltering the search by endpoints limits the search work. The post-filter
+    # removes self-loops and protects against indexes that return unrelated edges.
+    # Reuse each computed fact embedding to avoid another embedder request.
     related_edges_results: list[SearchResults] = await semaphore_gather(
         *[
             search(
@@ -555,40 +537,9 @@ async def resolve_extracted_edges(
         max_coroutines=getattr(clients, 'max_coroutines', None),
     )
     related_edges_lists: list[list[EntityEdge]] = [
-        [
-            candidate
-            for candidate in _same_pair_edges(extracted_edge, result.edges)
-            if not exclude_self_candidates or candidate.uuid != extracted_edge.uuid
-        ]
+        [candidate for candidate in _same_pair_edges(extracted_edge, result.edges)]
         for extracted_edge, result in zip(extracted_edges, related_edges_results, strict=True)
     ]
-
-    # Merge override edges (e.g. from the recent Redis dedup cache) into
-    # the per-extracted-edge candidate lists so that recently resolved edges
-    # that are not yet visible in the search indexes are still considered
-    # during deduplication.
-    if existing_edges_override:
-        override_by_pair: dict[tuple[str, str], list[EntityEdge]] = {}
-        for oe in existing_edges_override:
-            key = (oe.source_node_uuid, oe.target_node_uuid)
-            override_by_pair.setdefault(key, []).append(oe)
-
-        for i, extracted_edge in enumerate(extracted_edges):
-            # Candidates are undirected (a reverse-orientation edge is a
-            # duplicate candidate), so consult the override cache for both
-            # orientations; the uuid guard below dedupes self-edges.
-            pair_key = (extracted_edge.source_node_uuid, extracted_edge.target_node_uuid)
-            overrides = override_by_pair.get(pair_key, []) + override_by_pair.get(
-                (pair_key[1], pair_key[0]), []
-            )
-            if overrides:
-                existing_uuids = {e.uuid for e in related_edges_lists[i]}
-                for oe in overrides:
-                    if exclude_self_candidates and oe.uuid == extracted_edge.uuid:
-                        continue
-                    if oe.uuid not in existing_uuids:
-                        related_edges_lists[i].append(oe)
-                        existing_uuids.add(oe.uuid)
 
     edge_invalidation_candidate_results: list[SearchResults] = await semaphore_gather(
         *[
@@ -607,7 +558,7 @@ async def resolve_extracted_edges(
 
     resolver_kwargs = {'clients': clients} if uses_prompt_routing(clients) else {}
     edge_invalidation_candidates: list[list[EntityEdge]] = []
-    for extracted_edge, related_edges, invalidation_result in zip(
+    for _extracted_edge, related_edges, invalidation_result in zip(
         extracted_edges,
         related_edges_lists,
         edge_invalidation_candidate_results,
@@ -615,9 +566,7 @@ async def resolve_extracted_edges(
     ):
         related_uuids = {edge.uuid for edge in related_edges}
         deduplicated = [
-            edge
-            for edge in invalidation_result.edges
-            if edge.uuid not in related_uuids
+            edge for edge in invalidation_result.edges if edge.uuid not in related_uuids
         ]
         edge_invalidation_candidates.append(deduplicated)
 
@@ -665,15 +614,6 @@ async def resolve_extracted_edges(
     logger.debug(f'Resolved edges: {[e.uuid for e in resolved_edges]}')
     logger.debug(f'New edges (non-duplicates): {[e.uuid for e in new_edges]}')
 
-    await _extract_hyperedge_timestamps(
-        llm_client,
-        resolved_edges,
-        episode,
-        max_coroutines=getattr(clients, 'max_coroutines', None),
-    )
-
-    # Now that every edge carries the dates it will be saved with, compare them.
-    # Running this before the call above would judge hyperedge members as undated.
     for resolved_edge, _duplicates, candidates in dedupe_results:
         if candidates is None:
             continue
@@ -756,34 +696,6 @@ def enforce_edge_type_signatures(
         kept_edges.append(extracted_edge)
         kept_edge_types.append(matching_edge_types)
     return kept_edges, kept_edge_types
-
-
-async def _extract_hyperedge_timestamps(
-    llm_client: LLMClient,
-    resolved_edges: list[EntityEdge],
-    episode: EpisodicNode,
-    max_coroutines: int | None = None,
-) -> None:
-    """Give each hyperedge one set of dates, once dedupe knows every member.
-
-    Dedupe skips dating hyperedge members so siblings cannot be dated differently.
-    A group with no dates yet is dated by one LLM call on its representative; then
-    normalize copies the group's shared fact and window onto every member. Undated
-    groups are dated concurrently under the same cap as the rest of this pass. Runs
-    before contradiction, which compares dates.
-    """
-    groups = group_hyperedges(resolved_edges)
-    await semaphore_gather(
-        *[
-            _extract_edge_timestamps(llm_client, group.representative, episode)
-            for group in groups
-            if group.is_undated
-        ],
-        max_coroutines=max_coroutines,
-    )
-
-    for group in groups:
-        group.apply()
 
 
 def _apply_temporal_invalidation(
@@ -917,10 +829,9 @@ async def resolve_extracted_edge(
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     """Fully resolve one edge on its own: dedupe it, date it, then apply contradictions.
 
-    Facts ingestion uses resolve_extracted_edges, which dates a hyperedge across
-    the whole batch before contradictions run. This wrapper is for single-edge
-    callers (add_triplet, bulk_utils) and does not delay contradiction for a group.
+    This wrapper resolves one edge and applies its temporal contradictions.
     """
+    resolver_kwargs = {'clients': clients} if clients is not None else {}
     resolved_edge, duplicate_edges, candidates = await _dedupe_extracted_edge(
         llm_client,
         extracted_edge,
@@ -928,6 +839,7 @@ async def resolve_extracted_edge(
         existing_edges,
         episode,
         edge_type_candidates,
+        **resolver_kwargs,
     )
     if candidates is None:
         return resolved_edge, [], duplicate_edges
@@ -942,10 +854,13 @@ async def _dedupe_extracted_edge(
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
     edge_type_candidates: dict[str, type[BaseModel]] | None = None,
+    *,
+    clients: GraphitiClients | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge] | None]:
     """Deduplicate an extracted edge and gather the edges it might contradict.
 
-    Stops before contradiction so a batch caller can date hyperedge members first.
+    Stops before contradiction so the caller can apply temporal invalidation after
+    the edge is dated.
     Returns (resolved_edge, duplicate_edges, invalidation_candidates). Candidates is
     None when the edge took an early return and must skip contradiction entirely;
     an empty list would instead mean "no candidates, but still run the checks".
@@ -971,6 +886,8 @@ async def _dedupe_extracted_edge(
     tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]
         The resolved edge, any duplicates, and edges to invalidate.
     """
+    resolver_kwargs = {'clients': clients} if clients is not None else {}
+
     # Nothing to compare against, so there is no duplicate and nothing to contradict.
     if len(related_edges) == 0 and len(existing_edges) == 0:
         # Still extract custom attributes and timestamps even when no dedup needed
@@ -1002,7 +919,7 @@ async def _dedupe_extracted_edge(
             )
             extracted_edge.attributes = merged
 
-        await _extract_edge_timestamps(llm_client, extracted_edge, episode, clients=clients)
+        await _extract_edge_timestamps(llm_client, extracted_edge, episode, **resolver_kwargs)
 
         return extracted_edge, [], None
 
@@ -1015,8 +932,6 @@ async def _dedupe_extracted_edge(
             and _normalize_string_exact(edge.fact) == normalized_fact
         ):
             resolved = edge
-            # Same absorb rule as the LLM duplicate path below.
-            absorb_into_hyperedge(extracted_edge, resolved)
             if episode is not None and episode.uuid not in resolved.episodes:
                 resolved.episodes.append(episode.uuid)
             return resolved, [], None
@@ -1077,11 +992,6 @@ async def _dedupe_extracted_edge(
     for duplicate_fact_id in duplicate_fact_ids:
         resolved_edge = related_edges[duplicate_fact_id]
         break
-
-    # Absorb the stored edge into the group so the hyperedge still counts this member
-    # once dedupe swaps the edge out, and so the group keeps its canonical fact.
-    if resolved_edge is not extracted_edge:
-        absorb_into_hyperedge(extracted_edge, resolved_edge)
 
     if duplicate_fact_ids and episode is not None:
         resolved_edge.episodes.append(episode.uuid)
@@ -1149,7 +1059,7 @@ async def _dedupe_extracted_edge(
 
     # Extract timestamps for new edges (duplicated edges retain their existing timestamps)
     if resolved_edge.uuid == extracted_edge.uuid:
-        await _extract_edge_timestamps(llm_client, resolved_edge, episode, clients=clients)
+        await _extract_edge_timestamps(llm_client, resolved_edge, episode, **resolver_kwargs)
 
     end = time()
     logger.debug(

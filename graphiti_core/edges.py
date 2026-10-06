@@ -27,7 +27,6 @@ from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.embedder.canonical_text import canonical_edge_fact_text
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
@@ -292,15 +291,11 @@ class EntityEdge(Edge):
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the edge. Dependent on edge name'
     )
-    hyperedge_uuid: str | None = Field(
-        default=None,
-        description='ID shared by edges from the same atomic fact.',
-    )
 
     async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
 
-        text = canonical_edge_fact_text(self.fact)
+        text = self.fact
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
@@ -457,12 +452,10 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str], group_id: str | None = None):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.edge_get_by_uuids(
-                    cls, driver, uuids, group_id
-                )
+                return await driver.graph_operations_interface.edge_get_by_uuids(cls, driver, uuids)
             except NotImplementedError:
                 pass
 
@@ -1056,8 +1049,6 @@ async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[En
 
     if len(filtered_edges) == 0:
         return
-    fact_embeddings = await embedder.create_batch(
-        [canonical_edge_fact_text(edge.fact) for edge in filtered_edges]
-    )
+    fact_embeddings = await embedder.create_batch([edge.fact for edge in filtered_edges])
     for edge, fact_embedding in zip(filtered_edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding

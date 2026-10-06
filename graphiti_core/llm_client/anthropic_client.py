@@ -394,23 +394,16 @@ class AnthropicClient(LLMClient):
             retry_count = 0
             max_retries = 2
             last_error: Exception | None = None
-            total_input_tokens = 0
-            total_output_tokens = 0
 
             while retry_count <= max_retries:
                 try:
-                    response, input_tokens, output_tokens = await self._generate_response(
+                    response, _, _ = await self._generate_response(
                         messages,
                         response_model,
                         max_tokens,
                         model_size,
                         model=model,
                     )
-                    total_input_tokens += input_tokens
-                    total_output_tokens += output_tokens
-
-                    # Record token usage
-                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
 
                     # If we have a response_model, attempt to validate the response
                     if response_model is not None:
