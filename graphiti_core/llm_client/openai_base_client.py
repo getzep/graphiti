@@ -285,16 +285,23 @@ class BaseOpenAIClient(LLMClient):
 
             retry_count = 0
             last_error = None
+            total_input_tokens = 0
+            total_output_tokens = 0
 
             while retry_count <= self.MAX_RETRIES:
                 try:
-                    response, _, _ = await self._generate_response(
+                    response, input_tokens, output_tokens = await self._generate_response(
                         messages,
                         response_model,
                         max_tokens,
                         model_size,
                         model=model,
                     )
+                    total_input_tokens += input_tokens
+                    total_output_tokens += output_tokens
+
+                    # Record token usage
+                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
 
                     return response
                 except (RateLimitError, RefusalError):
