@@ -39,14 +39,14 @@ from graphiti_core.edges import (
 )
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
 from graphiti_core.helpers import (
     get_default_group_id,
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
 )
-from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client import LLMClient, LLMRuntime, OpenAIClient
 from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
@@ -57,7 +57,12 @@ from graphiti_core.nodes import (
     SagaNode,
     create_entity_node_embeddings,
 )
-from graphiti_core.prompts.lib import prompt_library
+from graphiti_core.prompts import prompt_library
+from graphiti_core.prompts.lib import (
+    ChatPromptLibrary,
+    ensure_prompt_library_wrapped,
+    validate_prompt_library,
+)
 from graphiti_core.prompts.summarize_sagas import SagaSummary
 from graphiti_core.search.search import SearchConfig, search
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResults
@@ -148,6 +153,8 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        prompt_library: ChatPromptLibrary | None = None,
+        llm_runtime: LLMRuntime | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -166,6 +173,7 @@ class Graphiti:
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
+            Cannot be combined with ``llm_runtime``.
         embedder : EmbedderClient | None, optional
             An instance of EmbedderClient for embedding tasks.
             If not provided, a default OpenAIEmbedder will be initialized.
@@ -184,6 +192,22 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        prompt_library : ChatPromptLibrary | None, optional
+            An instance-scoped prompt library used for all LLM prompt construction.
+            If not provided, Graphiti uses its legacy module-level prompt functions.
+            ``self.prompt_library`` and ``self.clients.prompt_library`` remain ``None`` by default.
+            For partial customization, compose overrides with
+            ``create_prompt_library(overrides)`` and pass the result here.
+            Override callables must return ``ChatPrompt``.
+            Cannot be combined with ``llm_runtime``.
+        llm_runtime : LLMRuntime | None, optional
+            An opt-in runtime that routes prompts across one or more
+            ``LLMTransport`` instances. It requires a default ``LLMModel``.
+            The runtime owns prompt selection and model routing. It has no
+            ``small_id`` field. ``model_size`` does not select a smaller model
+            on the runtime path. Route lightweight prompts to a smaller model.
+            GLiNER2 does not support per-prompt routing. Cannot be combined
+            with ``llm_client`` or ``prompt_library``.
 
         Returns
         -------
@@ -204,6 +228,15 @@ class Graphiti:
         Graphiti if you're using the default OpenAIClient.
         """
 
+        if llm_runtime is not None:
+            extras = [
+                name
+                for name, value in (('llm_client', llm_client), ('prompt_library', prompt_library))
+                if value is not None
+            ]
+            if extras:
+                raise ValueError('llm_runtime cannot be combined with: ' + ', '.join(extras) + '.')
+
         if graph_driver:
             self.driver = graph_driver
         else:
@@ -213,10 +246,22 @@ class Graphiti:
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
-        if llm_client:
-            self.llm_client = llm_client
+
+        self.llm_runtime = llm_runtime
+        if llm_runtime is not None:
+            self.llm_client = llm_runtime.client
+            self.prompt_library = llm_runtime.library
         else:
-            self.llm_client = OpenAIClient()
+            if llm_client:
+                self.llm_client = llm_client
+            else:
+                self.llm_client = OpenAIClient()
+            if prompt_library is not None:
+                validate_prompt_library(prompt_library)
+                self.prompt_library = ensure_prompt_library_wrapped(prompt_library)
+            else:
+                self.prompt_library = None
+
         if embedder:
             self.embedder = embedder
         else:
@@ -230,7 +275,10 @@ class Graphiti:
         self.tracer = create_tracer(tracer, trace_span_prefix)
 
         # Set tracer on clients
-        self.llm_client.set_tracer(self.tracer)
+        if self.llm_runtime is not None:
+            self.llm_runtime.set_tracer(self.tracer)
+        else:
+            self.llm_client.set_tracer(self.tracer)
 
         self.clients = GraphitiClients(
             driver=self.driver,
@@ -238,6 +286,8 @@ class Graphiti:
             embedder=self.embedder,
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
+            prompt_library=self.prompt_library,
+            llm_runtime=self.llm_runtime,
         )
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
@@ -546,10 +596,13 @@ class Graphiti:
             'episodes': episode_contents,
         }
 
-        llm_response = await self.llm_client.generate_response(
-            prompt_library.summarize_sagas.summarize_saga(context),
+        llm_response = await generate_prompt_response(
+            self.llm_client,
+            'summarize_sagas.summarize_saga',
+            prompt_library.summarize_sagas.summarize_saga,
+            context,
+            clients=self.clients,
             response_model=SagaSummary,
-            prompt_name='summarize_sagas.summarize_saga',
         )
 
         summary = llm_response.get('summary', '')
@@ -1244,7 +1297,13 @@ class Graphiti:
                 if update_communities:
                     communities, community_edges = await semaphore_gather(
                         *[
-                            update_community(driver, clients.llm_client, clients.embedder, node)
+                            update_community(
+                                driver,
+                                clients.llm_client,
+                                clients.embedder,
+                                node,
+                                clients=clients,
+                            )
                             for node in nodes
                         ],
                         max_coroutines=self.max_coroutines,
@@ -1562,8 +1621,16 @@ class Graphiti:
         # Clear existing communities (scoped: only the groups being rebuilt)
         await remove_communities(driver, group_ids=group_ids)
 
+        # Prefer the resolved clients bundle (llm_runtime / prompt_library),
+        # but honor an explicit driver override when provided.
+        clients = self.clients
+        if driver is not None and driver is not self.driver:
+            clients = self.clients.model_copy(update={'driver': driver})
         community_nodes, community_edges = await build_communities(
-            driver, self.llm_client, group_ids
+            clients.driver,
+            clients.llm_client,
+            group_ids,
+            clients=clients,
         )
 
         await semaphore_gather(
@@ -1811,6 +1878,7 @@ class Graphiti:
                 group_id=edge.group_id,
             ),
             None,
+            clients=self.clients,
         )
 
         edges: list[EntityEdge] = [resolved_edge] + invalidated_edges

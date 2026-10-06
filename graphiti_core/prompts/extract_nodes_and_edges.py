@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 
 
@@ -310,3 +311,13 @@ G) Direct speaker-to-target edges (no fragmenting through scenery)
 versions: Versions = {
     'extract_message': extract_message,
 }
+
+
+class ExtractNodesAndEdgesPrompts(ABC):
+    @abstractmethod
+    def extract_message(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultExtractNodesAndEdgesPrompts(ExtractNodesAndEdgesPrompts):
+    def extract_message(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_message(context))
