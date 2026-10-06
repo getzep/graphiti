@@ -285,9 +285,6 @@ class EntityEdge(Edge):
     reference_time: datetime | None = Field(
         default=None, description='reference timestamp from the episode that produced this edge'
     )
-    reference_time: datetime | None = Field(
-        default=None, description='reference timestamp from the episode that produced this edge'
-    )
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the edge. Dependent on edge name'
     )
