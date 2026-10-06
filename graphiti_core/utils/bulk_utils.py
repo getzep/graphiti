@@ -48,12 +48,13 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _normalize_string_exact,
     _resolve_with_similarity,
 )
-from graphiti_core.utils.maintenance.edge_operations import resolve_extracted_edge
+from graphiti_core.utils.maintenance.edge_operations import extract_edges, resolve_extracted_edge
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
+    extract_nodes,
     resolve_extracted_nodes,
 )
 
@@ -266,11 +267,23 @@ async def extract_nodes_and_edges_bulk(
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
-    strict_edge_types: bool = False,
     custom_extraction_instructions: str | None = None,
+    use_combined_extraction: bool = False,
+    strict_edge_types: bool = False,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
-    """Extract nodes and edges with the combined extractor for each episode."""
-    return await _extract_nodes_and_edges_bulk_combined(
+    if use_combined_extraction:
+        return await _extract_nodes_and_edges_bulk_combined(
+            clients,
+            episode_tuples,
+            edge_type_map,
+            entity_types=entity_types,
+            excluded_entity_types=excluded_entity_types,
+            edge_types=edge_types,
+            strict_edge_types=strict_edge_types,
+            custom_extraction_instructions=custom_extraction_instructions,
+        )
+
+    return await _extract_nodes_and_edges_bulk_separate(
         clients,
         episode_tuples,
         edge_type_map,
@@ -318,6 +331,58 @@ async def _extract_nodes_and_edges_bulk_combined(
     nodes_bulk = [nodes for nodes, _, _ in results]
     edges_bulk = [edges for _, edges, _ in results]
     return nodes_bulk, edges_bulk
+
+
+async def _extract_nodes_and_edges_bulk_separate(
+    clients: GraphitiClients,
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
+    strict_edge_types: bool = False,
+    custom_extraction_instructions: str | None = None,
+) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
+    extracted_results: list[tuple[list[EntityNode], dict[str, list[int]]]] = await semaphore_gather(
+        *[
+            extract_nodes(
+                clients,
+                episode,
+                previous_episodes,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
+                custom_extraction_instructions=custom_extraction_instructions,
+            )
+            for episode, previous_episodes in episode_tuples
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
+    )
+    extracted_nodes_bulk = [nodes for nodes, _ in extracted_results]
+
+    edge_results: list[tuple[list[EntityEdge], list[EntityNode]]] = await semaphore_gather(
+        *[
+            extract_edges(
+                clients,
+                episode,
+                extracted_nodes_bulk[i],
+                previous_episodes,
+                edge_type_map=edge_type_map,
+                group_id=episode.group_id,
+                edge_types=edge_types,
+                strict_edge_types=strict_edge_types,
+                custom_extraction_instructions=custom_extraction_instructions,
+            )
+            for i, (episode, previous_episodes) in enumerate(episode_tuples)
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
+    )
+
+    extracted_edges_bulk: list[list[EntityEdge]] = []
+    for i, (edges, materialized_nodes) in enumerate(edge_results):
+        extracted_edges_bulk.append(edges)
+        extracted_nodes_bulk[i].extend(materialized_nodes)
+
+    return extracted_nodes_bulk, extracted_edges_bulk
 
 
 async def dedupe_nodes_bulk(

@@ -331,6 +331,37 @@ async def test_collect_candidate_nodes_prepends_exact_name_candidates(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_collect_candidate_nodes_dedupes_and_merges_override(monkeypatch):
+    clients, _ = _make_clients()
+
+    candidate = EntityNode(name='Alice', group_id='group', labels=['Entity'])
+    override_duplicate = EntityNode(
+        uuid=candidate.uuid,
+        name='Alice Alt',
+        group_id='group',
+        labels=['Entity'],
+    )
+    extracted = EntityNode(name='Alice', group_id='group', labels=['Entity'])
+
+    semantic_search_mock = AsyncMock(return_value=[[candidate]])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        semantic_search_mock,
+    )
+
+    result = await _collect_candidate_nodes(
+        clients,
+        [extracted],
+        existing_nodes_override=[override_duplicate],
+    )
+
+    assert len(result) == 1
+    assert len(result[0]) == 1
+    assert result[0][0].uuid == candidate.uuid
+    semantic_search_mock.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_collect_exact_name_candidate_nodes_scopes_by_group(monkeypatch):
     clients, _ = _make_clients()
 

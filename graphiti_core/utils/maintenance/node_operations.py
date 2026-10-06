@@ -435,11 +435,16 @@ def _collapse_exact_duplicate_extracted_nodes(
 
 def _merge_candidate_nodes(
     candidate_nodes: list[EntityNode],
+    existing_nodes_override: list[EntityNode] | None = None,
 ) -> list[EntityNode]:
-    """Deduplicate candidate nodes while preserving search order."""
+    """Deduplicate candidate nodes while preserving search order and overrides."""
+    merged_candidates = list(candidate_nodes)
+    if existing_nodes_override is not None:
+        merged_candidates.extend(existing_nodes_override)
+
     seen_candidate_uuids: set[str] = set()
     ordered_candidates: list[EntityNode] = []
-    for candidate in candidate_nodes:
+    for candidate in merged_candidates:
         if candidate.uuid in seen_candidate_uuids:
             continue
         seen_candidate_uuids.add(candidate.uuid)
@@ -451,6 +456,7 @@ def _merge_candidate_nodes(
 async def _collect_candidate_nodes(
     clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
+    existing_nodes_override: list[EntityNode] | None = None,
     identity_properties: dict[str, list[str]] | None = None,
 ) -> list[list[EntityNode]]:
     """Search per extracted name and return ordered candidates for each extracted node."""
@@ -470,7 +476,10 @@ async def _collect_candidate_nodes(
         strict=True,
     ):
         candidates_by_node.append(
-            _merge_candidate_nodes(identity_result + exact_results + search_result)
+            _merge_candidate_nodes(
+                identity_result + exact_results + search_result,
+                existing_nodes_override,
+            )
         )
     return candidates_by_node
 
@@ -810,6 +819,7 @@ async def resolve_extracted_nodes(
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
+    existing_nodes_override: list[EntityNode] | None = None,
     identity_properties: dict[str, list[str]] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup."""
@@ -817,7 +827,8 @@ async def resolve_extracted_nodes(
     candidate_nodes_by_extracted = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
-        identity_properties,
+        existing_nodes_override=existing_nodes_override,
+        identity_properties=identity_properties,
     )
 
     state = DedupResolutionState(

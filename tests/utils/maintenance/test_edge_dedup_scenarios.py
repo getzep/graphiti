@@ -16,8 +16,8 @@ Two uses:
 2. As a cross-version A/B reporter: run the file directly, pointing
    PYTHONPATH at any graphiti checkout, and diff the printed reports::
 
-       git worktree add /tmp/zep-baseline <ref>
-       PYTHONPATH=/tmp/zep-baseline/graphiti uv run --no-sync \
+       git worktree add /tmp/graphiti-baseline <ref>
+       PYTHONPATH=/tmp/graphiti-baseline uv run --no-sync \
            python tests/utils/maintenance/test_edge_dedup_scenarios.py
        uv run python tests/utils/maintenance/test_edge_dedup_scenarios.py
 
