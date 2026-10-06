@@ -146,7 +146,7 @@ def test_logs_info_on_drop_with_uuid_and_group_id_no_pii(caplog):
 
 def test_log_aggregate_trigger_reports_aggregate_length_and_cap(caplog):
     """When list-aggregate fires, length= must be the total (not max element)
-    and cap= must be the aggregate cap, so DataDog operators see the breach
+    and cap= must be the aggregate cap, so logs show the breach
     directly instead of the misleading length=under-cap cap=per-item view."""
     item = 'x' * (DEFAULT_ATTRIBUTE_MAX_LENGTH - 1)
     items = [item] * (LIST_TOTAL_LENGTH_MULTIPLIER + 2)

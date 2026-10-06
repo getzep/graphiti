@@ -1,4 +1,3 @@
-from collections import deque
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -51,23 +50,17 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
 
     canonical = extracted_one
 
-    call_queue = deque()
-
     async def fake_resolve(
         clients_arg,
         nodes_arg,
         episode_arg,
         previous_episodes_arg,
         entity_types_arg,
-        existing_nodes_override=None,
     ):
-        call_queue.append(existing_nodes_override)
-
         if nodes_arg == [extracted_one]:
             return [canonical], {canonical.uuid: canonical.uuid}, []
 
         assert nodes_arg == [extracted_two]
-        assert existing_nodes_override is None
 
         return [canonical], {extracted_two.uuid: canonical.uuid}, [(extracted_two, canonical)]
 
@@ -78,10 +71,6 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
         [[extracted_one], [extracted_two]],
         [(episode_one, []), (episode_two, [])],
     )
-
-    assert len(call_queue) == 2
-    assert call_queue[0] is None
-    assert call_queue[1] is None
 
     assert nodes_by_episode[episode_one.uuid] == [canonical]
     assert nodes_by_episode[episode_two.uuid] == [canonical]
@@ -146,7 +135,6 @@ async def test_dedupe_nodes_bulk_uuid_map_respects_direction(monkeypatch):
         episode_arg,
         previous_episodes_arg,
         entity_types_arg,
-        existing_nodes_override=None,
     ):
         if nodes_arg == [extracted_one]:
             return [canonical], {canonical.uuid: canonical.uuid}, []
@@ -408,7 +396,6 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_combin
         edge_types=None,
         strict_edge_types=False,
         custom_extraction_instructions=None,
-        enable_hyperedges=False,
     ):
         extract_combined_calls.append(
             {
@@ -458,7 +445,6 @@ async def test_extract_nodes_and_edges_bulk_passes_edge_ontology_to_combined_ext
         edge_types=None,
         strict_edge_types=False,
         custom_extraction_instructions=None,
-        enable_hyperedges=False,
     ):
         extract_combined_calls.append(
             {
@@ -511,7 +497,6 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_none_by_default(
         edge_types=None,
         strict_edge_types=False,
         custom_extraction_instructions=None,
-        enable_hyperedges=False,
     ):
         extract_combined_calls.append(
             {'custom_extraction_instructions': custom_extraction_instructions}
@@ -551,7 +536,6 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
         edge_types=None,
         strict_edge_types=False,
         custom_extraction_instructions=None,
-        enable_hyperedges=False,
     ):
         extract_combined_calls.append(
             {
@@ -576,40 +560,3 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
 
     for call in extract_combined_calls:
         assert call['custom_extraction_instructions'] == custom_instructions
-
-
-@pytest.mark.asyncio
-async def test_extract_nodes_and_edges_bulk_passes_enable_hyperedges(monkeypatch):
-    """Test that enable_hyperedges is forwarded to combined extraction."""
-    clients = _make_clients()
-    episode = _make_episode('1')
-
-    extract_combined_calls = []
-
-    async def mock_extract_combined(
-        clients,
-        episode,
-        previous_episodes,
-        *,
-        entity_types=None,
-        excluded_entity_types=None,
-        edge_type_map=None,
-        edge_types=None,
-        strict_edge_types=False,
-        custom_extraction_instructions=None,
-        enable_hyperedges=False,
-    ):
-        extract_combined_calls.append({'enable_hyperedges': enable_hyperedges})
-        return [], [], {}
-
-    monkeypatch.setattr(combined_extraction, 'extract_nodes_and_edges', mock_extract_combined)
-
-    await extract_nodes_and_edges_bulk(
-        clients,
-        [(episode, [])],
-        edge_type_map={},
-        enable_hyperedges=True,
-    )
-
-    assert len(extract_combined_calls) == 1
-    assert extract_combined_calls[0]['enable_hyperedges'] is True

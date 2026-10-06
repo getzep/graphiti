@@ -15,6 +15,7 @@ from graphiti_core.prompts.extract_edges import ExtractedEdges
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
 from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
 from graphiti_core.search.search_config import SearchResults
+from graphiti_core.utils.bulk_utils import extract_nodes_and_edges_bulk
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import community_operations as community_ops
 from graphiti_core.utils.maintenance import edge_operations as edge_ops
@@ -46,6 +47,7 @@ def _marker_prompt(marker: str):
 
 def _make_clients(custom_library=None) -> GraphitiClients:
     llm_client = MagicMock()
+    llm_client.max_tokens = 16384
     llm_client.generate_response = AsyncMock(
         return_value={'extracted_entities': [], 'edges': [], 'entity_resolutions': []}
     )
@@ -244,7 +246,7 @@ async def test_resolve_extracted_edges_forwards_clients_only_for_prompt_routing(
     monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
     monkeypatch.setattr(EntityEdge, 'get_between_nodes', AsyncMock(return_value=[]))
     monkeypatch.setattr(edge_ops, 'search', AsyncMock(return_value=SearchResults()))
-    monkeypatch.setattr(edge_ops, 'resolve_extracted_edge', resolver)
+    monkeypatch.setattr(edge_ops, '_dedupe_extracted_edge', resolver)
 
     await edge_ops.resolve_extracted_edges(
         clients,
@@ -478,39 +480,26 @@ async def test_community_operations_use_configured_prompt_library():
 
 
 @pytest.mark.asyncio
-async def test_bulk_node_flow_inherits_clients_prompt_library(monkeypatch):
-    marker = 'CUSTOM_BULK_NODES'
-    lib = create_prompt_library({'extract_nodes': {'extract_message': _marker_prompt(marker)}})
+async def test_bulk_combined_flow_inherits_clients_prompt_library():
+    marker = 'CUSTOM_BULK_COMBINED'
+    lib = create_prompt_library(
+        {'extract_nodes_and_edges': {'extract_message': _marker_prompt(marker)}}
+    )
     clients = _make_clients(lib)
     clients.llm_client.generate_response = AsyncMock(
         return_value={'extracted_entities': [], 'edges': []}
     )
-
-    captured = {}
-
-    async def fake_extract_nodes(clients_arg, *args, **kwargs):
-        captured['library'] = clients_arg.prompt_library
-        return [], {}
-
-    monkeypatch.setattr(
-        'graphiti_core.utils.bulk_utils.extract_nodes',
-        fake_extract_nodes,
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.bulk_utils.extract_edges',
-        AsyncMock(return_value=[]),
-    )
-
     episode = _make_episode()
 
-    # Prefer calling extract_nodes_and_edges_bulk if signature allows
-    with patch(
-        'graphiti_core.utils.bulk_utils.extract_nodes',
-        fake_extract_nodes,
-    ):
-        # Directly verify clients carry library into node extract path
-        await extract_nodes(clients, episode, previous_episodes=[])
-    assert clients.prompt_library is lib
+    await extract_nodes_and_edges_bulk(
+        clients,
+        [(episode, [])],
+        {('Entity', 'Entity'): []},
+    )
+
+    args, kwargs = clients.llm_client.generate_response.await_args
+    assert args[0][0].content.startswith(marker)
+    assert kwargs['prompt_name'] == 'extract_nodes_and_edges.extract_message'
 
 
 @pytest.mark.asyncio

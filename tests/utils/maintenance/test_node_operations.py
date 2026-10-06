@@ -163,14 +163,14 @@ async def test_resolve_nodes_exact_match_promotes_generic_candidate_type(monkeyp
     llm_generate.assert_not_awaited()
 
 
-def test_identity_type_for_node_uses_deepest_type_with_identity_properties():
+def test_identity_type_for_node_uses_label_with_identity_properties():
     node = EntityNode(name='Acme', group_id='group', labels=['Entity', 'Party', 'Company'])
     identity_properties = {'Party': ['party_id'], 'Company': ['company_id']}
 
     assert _identity_type_for_node(node, identity_properties) == 'Company'
 
 
-def test_identity_type_for_node_uses_root_type_when_only_root_has_identity_properties():
+def test_identity_type_for_node_uses_matching_label_when_other_labels_do_not_match():
     node = EntityNode(name='Acme', group_id='group', labels=['Entity', 'Party', 'Company'])
 
     assert _identity_type_for_node(node, {'Party': ['party_id']}) == 'Party'
@@ -180,11 +180,15 @@ def test_identity_type_for_node_uses_root_type_when_only_root_has_identity_prope
 async def test_resolve_nodes_identity_properties_match_before_llm(monkeypatch):
     clients, llm_generate = _make_clients()
 
+    clients.driver.graph_operations_interface = MagicMock()
     candidate = EntityNode(
         name='ACME',
         group_id='group',
         labels=['Entity', 'Company'],
         attributes={'domain': 'acme.example', 'size': 'enterprise'},
+    )
+    clients.driver.graph_operations_interface.node_get_by_attribute_values = AsyncMock(
+        return_value=[candidate]
     )
     extracted = EntityNode(
         name='ACME Incorporated',
@@ -202,7 +206,6 @@ async def test_resolve_nodes_identity_properties_match_before_llm(monkeypatch):
         [extracted],
         episode=_make_episode(),
         previous_episodes=[],
-        existing_nodes_override=[candidate],
         identity_properties={'Company': ['domain']},
     )
 
@@ -297,36 +300,6 @@ async def test_resolve_nodes_fuzzy_match(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_collect_candidate_nodes_dedupes_and_merges_override(monkeypatch):
-    clients, _ = _make_clients()
-
-    candidate = EntityNode(name='Alice', group_id='group', labels=['Entity'])
-    override_duplicate = EntityNode(
-        uuid=candidate.uuid,
-        name='Alice Alt',
-        group_id='group',
-        labels=['Entity'],
-    )
-    extracted = EntityNode(name='Alice', group_id='group', labels=['Entity'])
-
-    semantic_search_mock = AsyncMock(return_value=[[candidate]])
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
-        semantic_search_mock,
-    )
-
-    result = await _collect_candidate_nodes(
-        clients,
-        [extracted],
-        existing_nodes_override=[override_duplicate],
-    )
-
-    assert len(result) == 1
-    assert len(result[0]) == 1
-    assert result[0][0].uuid == candidate.uuid
-    semantic_search_mock.assert_awaited()
-
-
 @pytest.mark.asyncio
 async def test_collect_candidate_nodes_prepends_exact_name_candidates(monkeypatch):
     clients, _ = _make_clients()
@@ -349,7 +322,6 @@ async def test_collect_candidate_nodes_prepends_exact_name_candidates(monkeypatc
     result = await _collect_candidate_nodes(
         clients,
         [extracted],
-        existing_nodes_override=None,
     )
 
     assert len(result) == 1
