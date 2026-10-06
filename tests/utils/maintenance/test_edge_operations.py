@@ -1650,6 +1650,88 @@ async def test_resolve_extracted_edges_pair_scopes_duplicate_search(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_resolve_extracted_edges_merges_override_candidates(monkeypatch):
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+
+    async def immediate_gather(*aws, max_coroutines=None):
+        return [await aw for aw in aws]
+
+    monkeypatch.setattr(edge_ops, 'semaphore_gather', immediate_gather)
+    monkeypatch.setattr(edge_ops, 'search', AsyncMock(return_value=SearchResults()))
+
+    seen_related: list[list[EntityEdge]] = []
+
+    async def capture_resolve(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+        **kwargs,
+    ):
+        seen_related.append(related_edges)
+        return extracted_edge, [], None
+
+    monkeypatch.setattr(edge_ops, '_dedupe_extracted_edge', capture_resolve)
+
+    override = EntityEdge(
+        uuid='override_edge',
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='likes',
+        group_id='group_1',
+        fact='User likes yoga',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    extracted = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='likes',
+        group_id='group_1',
+        fact='User likes yoga',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    nodes = [
+        EntityNode(uuid='source_uuid', name='User', group_id='group_1', labels=['Entity']),
+        EntityNode(uuid='target_uuid', name='Yoga', group_id='group_1', labels=['Entity']),
+    ]
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Episode content',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    await resolve_extracted_edges(
+        clients=SimpleNamespace(
+            driver=MagicMock(),
+            llm_client=MagicMock(),
+            embedder=MagicMock(),
+            cross_encoder=MagicMock(),
+        ),
+        extracted_edges=[extracted],
+        episode=episode,
+        entities=nodes,
+        edge_types={},
+        edge_type_map={},
+        existing_edges_override=[override],
+    )
+
+    assert len(seen_related) == 1
+    assert [edge.uuid for edge in seen_related[0]] == ['override_edge']
+
+
+@pytest.mark.asyncio
 async def test_resolve_extracted_edges_reuses_fact_embedding_for_searches(monkeypatch):
     """Both per-edge searches must receive the precomputed fact embedding as
     query_vector, so the search pipeline never re-embeds the same text."""

@@ -505,7 +505,7 @@ class EntityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = self.name
+        text = self.name.replace('\n', ' ')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(
@@ -756,7 +756,7 @@ class CommunityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = self.name
+        text = self.name.replace('\n', ' ')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(

@@ -313,6 +313,11 @@ class GLiNER2Client(LLMClient):
                 response = await self._generate_response_with_retry(
                     messages, response_model, max_tokens, model_size
                 )
+
+                text = self._extract_text_from_messages(messages)
+                input_tokens = len(text) // 4
+                output_tokens = len(json.dumps(response)) // 4
+                self.token_tracker.record(prompt_name or 'unknown', input_tokens, output_tokens)
             except Exception as e:
                 span.set_status('error', str(e))
                 span.record_exception(e)

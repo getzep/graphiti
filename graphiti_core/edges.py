@@ -295,7 +295,7 @@ class EntityEdge(Edge):
     async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
 
-        text = self.fact
+        text = self.fact.replace('\n', ' ')
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()

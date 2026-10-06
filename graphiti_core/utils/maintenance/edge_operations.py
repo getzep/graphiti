@@ -428,6 +428,7 @@ async def resolve_extracted_edges(
     entities: list[EntityNode],
     edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
+    existing_edges_override: list[EntityEdge] | None = None,
     strict_edge_types: bool = False,
     invalidated_by: dict[str, list[str]] | None = None,
 ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
@@ -540,6 +541,19 @@ async def resolve_extracted_edges(
         [candidate for candidate in _same_pair_edges(extracted_edge, result.edges)]
         for extracted_edge, result in zip(extracted_edges, related_edges_results, strict=True)
     ]
+    if existing_edges_override:
+        override_by_pair: dict[tuple[str, str], list[EntityEdge]] = {}
+        for edge in existing_edges_override:
+            pair = (edge.source_node_uuid, edge.target_node_uuid)
+            override_by_pair.setdefault(pair, []).append(edge)
+
+        for extracted_edge, related_edges in zip(extracted_edges, related_edges_lists, strict=True):
+            pair = (extracted_edge.source_node_uuid, extracted_edge.target_node_uuid)
+            existing_uuids = {edge.uuid for edge in related_edges}
+            for edge in override_by_pair.get(pair, []):
+                if edge.group_id == extracted_edge.group_id and edge.uuid not in existing_uuids:
+                    related_edges.append(edge)
+                    existing_uuids.add(edge.uuid)
 
     edge_invalidation_candidate_results: list[SearchResults] = await semaphore_gather(
         *[
