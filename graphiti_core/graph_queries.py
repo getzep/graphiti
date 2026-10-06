@@ -95,27 +95,15 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
         return cast(
             list[LiteralString],
             [
-                f"""CALL db.idx.fulltext.createNodeIndex(
-                                                {{
-                                                    label: 'Episodic',
-                                                    stopwords: {stopwords_str}
-                                                }},
-                                                'content', 'source', 'source_description', 'group_id'
-                                                )""",
-                f"""CALL db.idx.fulltext.createNodeIndex(
-                                                {{
-                                                    label: 'Entity',
-                                                    stopwords: {stopwords_str}
-                                                }},
-                                                'name', 'summary', 'group_id'
-                                                )""",
-                f"""CALL db.idx.fulltext.createNodeIndex(
-                                                {{
-                                                    label: 'Community',
-                                                    stopwords: {stopwords_str}
-                                                }},
-                                                'name', 'group_id'
-                                                )""",
+                f"""CREATE FULLTEXT INDEX FOR (n:Episodic)
+                ON (n.content, n.source, n.source_description, n.group_id)
+                OPTIONS {{stopwords: {stopwords_str}}}""",
+                f"""CREATE FULLTEXT INDEX FOR (n:Entity)
+                ON (n.name, n.summary, n.group_id)
+                OPTIONS {{stopwords: {stopwords_str}}}""",
+                f"""CREATE FULLTEXT INDEX FOR (n:Community)
+                ON (n.name, n.group_id)
+                OPTIONS {{stopwords: {stopwords_str}}}""",
                 """CREATE FULLTEXT INDEX FOR ()-[e:RELATES_TO]-() ON (e.name, e.fact, e.group_id)""",
             ],
         )
