@@ -69,6 +69,32 @@ from graphiti_core.tracer import NoOpTracer, Tracer
 logger = logging.getLogger(__name__)
 
 
+def search_requires_query_vector(config: SearchConfig) -> bool:
+    """Return whether the given search config needs a query embedding.
+
+    A query vector is only required when some scope uses cosine-similarity
+    search or an MMR reranker. Text-only configs (e.g. fulltext + RRF) can be
+    served without embedding the query at all.
+    """
+    return bool(
+        (
+            config.edge_config
+            and EdgeSearchMethod.cosine_similarity in config.edge_config.search_methods
+        )
+        or (config.edge_config and EdgeReranker.mmr == config.edge_config.reranker)
+        or (
+            config.node_config
+            and NodeSearchMethod.cosine_similarity in config.node_config.search_methods
+        )
+        or (config.node_config and NodeReranker.mmr == config.node_config.reranker)
+        or (
+            config.community_config
+            and CommunitySearchMethod.cosine_similarity in config.community_config.search_methods
+        )
+        or (config.community_config and CommunityReranker.mmr == config.community_config.reranker)
+    )
+
+
 def _enum_value(value: Any) -> Any:
     return value.value if hasattr(value, 'value') else value
 
@@ -117,23 +143,7 @@ async def search(
     if query.strip() == '':
         return SearchResults()
 
-    if (
-        (
-            config.edge_config
-            and EdgeSearchMethod.cosine_similarity in config.edge_config.search_methods
-        )
-        or (config.edge_config and EdgeReranker.mmr == config.edge_config.reranker)
-        or (
-            config.node_config
-            and NodeSearchMethod.cosine_similarity in config.node_config.search_methods
-        )
-        or (config.node_config and NodeReranker.mmr == config.node_config.reranker)
-        or (
-            config.community_config
-            and CommunitySearchMethod.cosine_similarity in config.community_config.search_methods
-        )
-        or (config.community_config and CommunityReranker.mmr == config.community_config.reranker)
-    ):
+    if search_requires_query_vector(config):
         with _trace_phase(
             search_tracer,
             'search.embed_query_vector',
@@ -165,6 +175,7 @@ async def search(
             'limit': config.limit,
         },
     ) as span:
+        max_coroutines = getattr(clients, 'max_coroutines', None)
         (
             (edges, edge_reranker_scores),
             (nodes, node_reranker_scores),
@@ -184,6 +195,7 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
             node_search(
                 driver,
@@ -198,6 +210,7 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
             episode_search(
                 driver,
@@ -210,6 +223,7 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
             community_search(
                 driver,
@@ -221,7 +235,9 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
+            max_coroutines=max_coroutines,
         )
         span.add_attributes(
             {
@@ -263,6 +279,7 @@ async def edge_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[EntityEdge], list[float]]:
     if config is None:
         return [], []
@@ -321,7 +338,9 @@ async def edge_search(
                     'candidate_limit': 2 * limit,
                 },
             ) as method_span:
-                search_results = list(await semaphore_gather(*search_tasks))
+                search_results = list(
+                    await semaphore_gather(*search_tasks, max_coroutines=max_coroutines)
+                )
                 method_span.add_attributes(
                     {
                         'result_set_count': len(search_results),
@@ -474,6 +493,7 @@ async def node_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[EntityNode], list[float]]:
     if config is None:
         return [], []
@@ -530,7 +550,9 @@ async def node_search(
                     'candidate_limit': 2 * limit,
                 },
             ) as method_span:
-                search_results = list(await semaphore_gather(*search_tasks))
+                search_results = list(
+                    await semaphore_gather(*search_tasks, max_coroutines=max_coroutines)
+                )
                 method_span.add_attributes(
                     {
                         'result_set_count': len(search_results),
@@ -672,6 +694,7 @@ async def episode_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[EpisodicNode], list[float]]:
     if config is None:
         return [], []
@@ -695,7 +718,8 @@ async def episode_search(
                 await semaphore_gather(
                     *[
                         episode_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
-                    ]
+                    ],
+                    max_coroutines=max_coroutines,
                 )
             )
 
@@ -771,6 +795,7 @@ async def community_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[CommunityNode], list[float]]:
     if config is None:
         return [], []
@@ -797,7 +822,8 @@ async def community_search(
                         community_similarity_search(
                             driver, query_vector, group_ids, 2 * limit, config.sim_min_score
                         ),
-                    ]
+                    ],
+                    max_coroutines=max_coroutines,
                 )
             )
 

@@ -47,10 +47,14 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
     DedupResolutionState,
     _build_candidate_indexes,
+    _identity_key_for_node,
+    _identity_type_for_node,
     _normalize_string_exact,
     _promote_resolved_node,
+    _resolve_with_identity_properties,
     _resolve_with_similarity,
 )
+from graphiti_core.utils.maintenance.entity_type_hierarchy import most_specific_entity_type_name
 from graphiti_core.utils.text_utils import (
     MAX_SUMMARY_CHARS,
     concatenate_episodes,
@@ -98,7 +102,12 @@ async def extract_nodes(
     llm_client = clients.llm_client
 
     # Build entity types context
-    entity_types_context = _build_entity_types_context(entity_types)
+    entity_types_context = _filter_entity_types_context(
+        _build_entity_types_context(entity_types), excluded_entity_types
+    )
+    if not entity_types_context:
+        logger.debug('No entity types available for extraction after exclusions')
+        return [], {}
 
     # Build episode attribution instructions for multi-episode extraction
     episode_attribution = ''
@@ -186,10 +195,34 @@ def _build_entity_types_context(
     return entity_types_context
 
 
+def _filter_entity_types_context(
+    entity_types_context: list[dict],
+    excluded_entity_types: list[str] | None,
+) -> list[dict]:
+    """Remove excluded entity types from prompt context and keep IDs contiguous."""
+    if not excluded_entity_types:
+        return entity_types_context
+
+    excluded_type_names = set(excluded_entity_types)
+    filtered_context = [
+        entity_type
+        for entity_type in entity_types_context
+        if entity_type.get('entity_type_name') not in excluded_type_names
+    ]
+
+    return [
+        {
+            **entity_type,
+            'entity_type_id': entity_type_id,
+        }
+        for entity_type_id, entity_type in enumerate(filtered_context)
+    ]
+
+
 def _get_entity_type_description(
     labels: list[str], entity_types: dict[str, type[BaseModel]] | None
 ) -> str:
-    type_name = next((item for item in labels if item != 'Entity'), '')
+    type_name = most_specific_entity_type_name(labels, entity_types)
     type_model = entity_types.get(type_name) if entity_types is not None else None
     return (type_model.__doc__ if type_model is not None else None) or 'Default Entity Type'
 
@@ -420,11 +453,132 @@ async def _collect_candidate_nodes(
     clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
     existing_nodes_override: list[EntityNode] | None,
+    identity_properties: dict[str, list[str]] | None = None,
+    exclude_self_candidates: bool = False,
 ) -> list[list[EntityNode]]:
     """Search per extracted name and return ordered candidates for each extracted node."""
+    identity_results = await _collect_identity_property_candidate_nodes(
+        clients,
+        extracted_nodes,
+        identity_properties,
+    )
+    exact_name_results = await _collect_exact_name_candidate_nodes(clients, extracted_nodes)
     search_results = await _semantic_candidate_search(clients, extracted_nodes)
 
-    return [_merge_candidate_nodes(result, existing_nodes_override) for result in search_results]
+    candidates_by_node: list[list[EntityNode]] = []
+    for node, identity_result, exact_results, search_result in zip(
+        extracted_nodes,
+        identity_results,
+        exact_name_results,
+        search_results,
+        strict=True,
+    ):
+        candidates = _merge_candidate_nodes(
+            identity_result + exact_results + search_result,
+            existing_nodes_override,
+        )
+        if exclude_self_candidates:
+            candidates = [candidate for candidate in candidates if candidate.uuid != node.uuid]
+        candidates_by_node.append(candidates)
+    return candidates_by_node
+
+
+async def _collect_identity_property_candidate_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    identity_properties: dict[str, list[str]] | None,
+) -> list[list[EntityNode]]:
+    if not extracted_nodes:
+        return []
+    if not identity_properties:
+        return [[] for _ in extracted_nodes]
+
+    graph_operations = getattr(clients.driver, 'graph_operations_interface', None)
+    lookup = getattr(graph_operations, 'node_get_by_attribute_values', None)
+    if lookup is None:
+        return [[] for _ in extracted_nodes]
+
+    async def _lookup_node(node: EntityNode) -> list[EntityNode]:
+        identity_type = _identity_type_for_node(node, identity_properties)
+        identity_key = _identity_key_for_node(node, identity_properties)
+        if identity_type is None or identity_key is None:
+            return []
+
+        _, identity_values = identity_key
+        try:
+            return await lookup(
+                EntityNode,
+                clients.driver,
+                node.group_id,
+                dict(identity_values),
+                [identity_type],
+                NODE_DEDUP_CANDIDATE_LIMIT,
+            )
+        except NotImplementedError:
+            return []
+        except Exception:
+            logger.warning(
+                'Identity-property node candidate lookup failed; falling back',
+                extra={
+                    'node_uuid': node.uuid,
+                    'group_id': node.group_id,
+                    'identity_type': identity_type,
+                },
+                exc_info=True,
+            )
+            return []
+
+    return list(
+        await semaphore_gather(
+            *[_lookup_node(node) for node in extracted_nodes],
+            max_coroutines=getattr(clients, 'max_coroutines', None),
+        )
+    )
+
+
+async def _collect_exact_name_candidate_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+) -> list[list[EntityNode]]:
+    """Fetch durable exact-name candidates before embedding-based search."""
+    if not extracted_nodes:
+        return []
+
+    names = [node.name for node in extracted_nodes if node.name]
+    group_ids = [node.group_id for node in extracted_nodes if node.group_id]
+    if not names or not group_ids:
+        return [[] for _ in extracted_nodes]
+
+    try:
+        candidate_nodes = await EntityNode.get_by_names(clients.driver, names, group_ids)
+    except Exception:
+        logger.warning(
+            'Exact-name node candidate lookup failed; falling back to semantic search',
+            extra={
+                'extracted_node_count': len(extracted_nodes),
+                'group_count': len(set(group_ids)),
+            },
+            exc_info=True,
+        )
+        return [[] for _ in extracted_nodes]
+
+    candidates_by_group_and_name: dict[tuple[str, str], list[EntityNode]] = {}
+    for candidate in candidate_nodes:
+        name_key = _normalize_string_exact(candidate.name)
+        if not name_key:
+            continue
+        candidates_by_group_and_name.setdefault((candidate.group_id, name_key), []).append(
+            candidate
+        )
+
+    return [
+        list(
+            candidates_by_group_and_name.get(
+                (node.group_id, _normalize_string_exact(node.name)), []
+            )
+        )
+        for node in extracted_nodes
+    ]
 
 
 async def _semantic_candidate_search(
@@ -435,31 +589,46 @@ async def _semantic_candidate_search(
     if not extracted_nodes:
         return []
 
-    queries = [node.name.replace('\n', ' ') for node in extracted_nodes]
+    query_indices = [
+        index for index, node in enumerate(extracted_nodes) if node.name.replace('\n', ' ').strip()
+    ]
+    queries = [extracted_nodes[index].name.replace('\n', ' ') for index in query_indices]
+    if not queries:
+        return [[] for _ in extracted_nodes]
+
     try:
         query_vectors = await clients.embedder.create_batch(queries)
     except NotImplementedError:
         query_vectors = list(
             await semaphore_gather(
-                *[clients.embedder.create(input_data=[query]) for query in queries]
+                *[clients.embedder.create(input_data=[query]) for query in queries],
+                max_coroutines=getattr(clients, 'max_coroutines', None),
             )
         )
 
-    return list(
-        await semaphore_gather(
-            *[
-                node_similarity_search(
-                    clients.driver,
-                    query_vector,
-                    SearchFilters(),
-                    [node.group_id],
-                    NODE_DEDUP_CANDIDATE_LIMIT,
-                    NODE_DEDUP_COSINE_MIN_SCORE,
-                )
-                for node, query_vector in zip(extracted_nodes, query_vectors, strict=True)
-            ]
+    if len(query_vectors) != len(queries):
+        raise ValueError(
+            f'embedder returned {len(query_vectors)} vectors for {len(queries)} queries'
         )
+
+    search_results = await semaphore_gather(
+        *[
+            node_similarity_search(
+                clients.driver,
+                query_vector,
+                SearchFilters(),
+                [extracted_nodes[index].group_id],
+                NODE_DEDUP_CANDIDATE_LIMIT,
+                NODE_DEDUP_COSINE_MIN_SCORE,
+            )
+            for index, query_vector in zip(query_indices, query_vectors, strict=True)
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
+    results = [[] for _ in extracted_nodes]
+    for index, search_result in zip(query_indices, search_results, strict=True):
+        results[index] = search_result
+    return results
 
 
 def _commit_resolution(
@@ -563,6 +732,7 @@ async def _resolve_with_llm(
         ),
     }
 
+    dedupe_nodes_max_tokens = min(llm_client.max_tokens or 16384, 16384)
     llm_response = await generate_prompt_response(
         llm_client,
         'dedupe_nodes.nodes',
@@ -570,6 +740,7 @@ async def _resolve_with_llm(
         context,
         clients=clients,
         response_model=NodeResolutions,
+        max_tokens=dedupe_nodes_max_tokens,
     )
 
     node_resolutions: list[NodeDuplicate] = NodeResolutions(**llm_response).entity_resolutions
@@ -648,6 +819,8 @@ async def resolve_extracted_nodes(
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
     existing_nodes_override: list[EntityNode] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
+    exclude_self_candidates: bool = False,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup."""
     llm_client = clients.llm_client
@@ -655,6 +828,8 @@ async def resolve_extracted_nodes(
         clients,
         extracted_nodes,
         existing_nodes_override,
+        identity_properties,
+        exclude_self_candidates,
     )
 
     state = DedupResolutionState(
@@ -673,6 +848,17 @@ async def resolve_extracted_nodes(
         local_state = DedupResolutionState(
             resolved_nodes=[None], uuid_map={}, unresolved_indices=[]
         )
+        _resolve_with_identity_properties([node], indexes, local_state, identity_properties)
+        if local_state.resolved_nodes[0] is not None:
+            _commit_resolution(
+                state,
+                local_state.resolved_nodes[0],
+                local_state.uuid_map,
+                local_state.duplicate_pairs,
+                idx,
+            )
+            continue
+
         _resolve_with_similarity([node], indexes, local_state)
         if local_state.resolved_nodes[0] is not None:
             _commit_resolution(
@@ -741,6 +927,62 @@ def _build_edges_by_node(edges: list[EntityEdge] | None) -> dict[str, list[Entit
     return edges_by_node
 
 
+def _entity_type_for_node(
+    node: EntityNode,
+    entity_types: dict[str, type[BaseModel]] | None,
+) -> type[BaseModel] | None:
+    if entity_types is None:
+        return None
+    type_name = most_specific_entity_type_name(node.labels, entity_types)
+    return entity_types.get(type_name)
+
+
+async def extract_attributes_only_from_nodes(
+    clients: GraphitiClients,
+    nodes: list[EntityNode],
+    episode: EpisodicNode | list[EpisodicNode] | None = None,
+    previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+) -> list[EntityNode]:
+    if not nodes or not entity_types:
+        return nodes
+
+    extraction_inputs: list[tuple[EntityNode, type[BaseModel]]] = []
+    for node in nodes:
+        entity_type = _entity_type_for_node(node, entity_types)
+        if entity_type is None or len(entity_type.model_fields) == 0:
+            continue
+        extraction_inputs.append((node, entity_type))
+
+    if not extraction_inputs:
+        return nodes
+
+    attribute_results = await semaphore_gather(
+        *[
+            _extract_entity_attributes(
+                clients.llm_client,
+                node,
+                episode,
+                previous_episodes,
+                entity_type,
+            )
+            for node, entity_type in extraction_inputs
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
+    )
+
+    # _extract_entity_attributes returns the already-merged attribute dict
+    # (overlay of prior + cap-kept fields), so direct assignment is the merge.
+    for (node, _entity_type), attributes in zip(
+        extraction_inputs,
+        attribute_results,
+        strict=True,
+    ):
+        node.attributes = attributes
+
+    return nodes
+
+
 async def extract_attributes_from_nodes(
     clients: GraphitiClients,
     nodes: list[EntityNode],
@@ -751,6 +993,7 @@ async def extract_attributes_from_nodes(
     edges: list[EntityEdge] | None = None,
     skip_fact_appending: bool = False,
     include_type_descriptions: bool = False,
+    skip_attribute_extraction: bool = False,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -758,29 +1001,14 @@ async def extract_attributes_from_nodes(
     # Pre-build edges lookup for O(E + N) instead of O(N * E)
     edges_by_node = _build_edges_by_node(edges)
 
-    # Extract attributes in parallel (per-entity calls)
-    attribute_results: list[dict[str, Any]] = await semaphore_gather(
-        *[
-            _extract_entity_attributes(
-                llm_client,
-                node,
-                episode,
-                previous_episodes,
-                (
-                    entity_types.get(next((item for item in node.labels if item != 'Entity'), ''))
-                    if entity_types is not None
-                    else None
-                ),
-                clients=clients,
-            )
-            for node in nodes
-        ]
-    )
-
-    # _extract_entity_attributes returns the already-merged attribute dict
-    # (overlay of prior + cap-kept fields), so direct assignment is the merge.
-    for node, attributes in zip(nodes, attribute_results, strict=True):
-        node.attributes = attributes
+    if not skip_attribute_extraction:
+        await extract_attributes_only_from_nodes(
+            clients,
+            nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+        )
 
     # Extract summaries in batch
     await _extract_entity_summaries_batch(
@@ -793,6 +1021,7 @@ async def extract_attributes_from_nodes(
         skip_fact_appending=skip_fact_appending,
         entity_types=entity_types if include_type_descriptions else None,
         clients=clients,
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     await create_entity_node_embeddings(embedder, nodes)
@@ -837,7 +1066,6 @@ async def _extract_entity_attributes(
         group_id=node.group_id,
         attribute_extraction=True,
     )
-
     # Overlay merge: cap-dropped or LLM-omitted fields keep prior values.
     # See attribute_utils for the merge_mode contract; the edge path uses 'replace'.
     merged, _ = apply_capped_attributes(
@@ -869,6 +1097,7 @@ async def _extract_entity_summaries_batch(
     skip_fact_appending: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
     clients: GraphitiClients | None = None,
+    max_coroutines: int | None = None,
 ) -> None:
     """Extract summaries for multiple entities in batched LLM calls.
 
@@ -936,7 +1165,8 @@ async def _extract_entity_summaries_batch(
                 clients=clients,
             )
             for flight in node_flights
-        ]
+        ],
+        max_coroutines=max_coroutines,
     )
 
 

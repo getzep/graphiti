@@ -197,7 +197,7 @@ class GLiNER2Client(LLMClient):
         entities_dict = result.get('entities', {})
 
         for entity_type, entity_items in entities_dict.items():
-            entity_type_id = label_to_id.get(entity_type, 0)
+            entity_type_id = label_to_id.get(entity_type, label_to_id.get('Entity', 0))
             for item in entity_items:
                 # GLiNER2 returns strings or dicts (when include_confidence=True)
                 name = item.get('text', '') if isinstance(item, dict) else str(item)

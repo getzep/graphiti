@@ -34,7 +34,6 @@ from .token_tracker import TokenUsageTracker
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
-
 def get_extraction_language_instruction(group_id: str | None = None) -> str:
     """Returns instruction for language extraction behavior.
 
@@ -165,7 +164,7 @@ class LLMClient(ABC):
         # Create a unique cache key based on the messages and model
         message_str = json.dumps([m.model_dump() for m in messages], sort_keys=True)
         key_str = f'{model or self.model}:{message_str}'
-        return hashlib.md5(key_str.encode()).hexdigest()
+        return hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
 
     def _apply_attribute_extraction_preamble(
         self, messages: list[Message], attribute_extraction: bool

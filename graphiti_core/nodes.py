@@ -23,7 +23,7 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import (
@@ -31,6 +31,7 @@ from graphiti_core.driver.driver import (
     GraphProvider,
 )
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.embedder.canonical_text import canonical_node_name_text
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date, validate_node_labels
 from graphiti_core.models.nodes.node_db_queries import (
@@ -390,11 +391,11 @@ class EpisodicNode(Node):
         return episodes[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str], group_id: str | None = None):
         if driver.graph_operations_interface:
             try:
                 return await driver.graph_operations_interface.episodic_node_get_by_uuids(
-                    cls, driver, uuids
+                    cls, driver, uuids, group_id
                 )
             except NotImplementedError:
                 pass
@@ -505,7 +506,7 @@ class EntityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = self.name.replace('\n', ' ')
+        text = canonical_node_name_text(self.name)
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(
@@ -632,6 +633,46 @@ class EntityNode(Node):
         return nodes
 
     @classmethod
+    async def get_by_names(
+        cls,
+        driver: GraphDriver,
+        names: list[str],
+        group_ids: list[str],
+    ):
+        if not names or not group_ids:
+            return []
+
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.node_get_by_names(
+                    cls, driver, names, group_ids
+                )
+            except NotImplementedError:
+                pass
+
+        unique_names = sorted({name for name in names if name})
+        unique_group_ids = sorted({group_id for group_id in group_ids if group_id})
+        if not unique_names or not unique_group_ids:
+            return []
+
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Entity)
+            WHERE n.group_id IN $group_ids
+            AND n.name IN $names
+            RETURN
+            """
+            + get_entity_node_return_query(driver.provider),
+            names=unique_names,
+            group_ids=unique_group_ids,
+            routing_='r',
+        )
+
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
+
+        return nodes
+
+    @classmethod
     async def get_by_group_ids(
         cls,
         driver: GraphDriver,
@@ -716,7 +757,7 @@ class CommunityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = self.name.replace('\n', ' ')
+        text = canonical_node_name_text(self.name)
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(
@@ -870,10 +911,14 @@ class SagaNode(Node):
     last_episode_uuid: str | None = None
     last_summarized_at: datetime | None = None
     # Maximum ``valid_at`` (episode reference time) across all episodes covered
-    # by the most recent summary. ``last_summarized_at`` is wall-clock and is
-    # used as the watermark for the next incremental summarize run; this field
+    # by the most recent summary. ``last_summarized_at`` is the ingestion-time
+    # filter watermark for the next incremental summarize run; this field
     # carries the episode-time semantics for public/temporal consumers.
     last_summarized_episode_valid_at: datetime | None = None
+    _summary_episodes_fetched: int = PrivateAttr(default=0)
+    _summary_episodes_selected: int = PrivateAttr(default=0)
+    _summary_episodes_skipped: int = PrivateAttr(default=0)
+    _summary_selected_episode_bytes: int = PrivateAttr(default=0)
 
     async def save(self, driver: GraphDriver):
         if driver.graph_operations_interface:
@@ -1117,6 +1162,8 @@ async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[En
     if not filtered_nodes:
         return
 
-    name_embeddings = await embedder.create_batch([node.name for node in filtered_nodes])
+    name_embeddings = await embedder.create_batch(
+        [canonical_node_name_text(node.name) for node in filtered_nodes]
+    )
     for node, name_embedding in zip(filtered_nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding

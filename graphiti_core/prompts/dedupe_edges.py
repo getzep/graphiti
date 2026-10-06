@@ -46,12 +46,17 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are a fact deduplication assistant. '
-            'NEVER mark facts with key differences as duplicates.',
+            'NEVER mark facts as contradicted unless the new fact explicitly makes the old fact false.',
         ),
         Message(
             role='user',
             content=f"""
 NEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.
+
+Only mark a fact as contradicted when the NEW FACT and the existing fact cannot both be true.
+Do NOT treat additional activity, progress, status, or project-update facts as contradictions of role,
+ownership, responsibility, membership, or assignment facts. A person doing work on a project is
+compatible with that person remaining responsible for, owning, leading, or being the DRI for the project.
 
 IMPORTANT constraints:
 - duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)
@@ -78,8 +83,16 @@ EXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.
    - If no duplicates, return an empty list for duplicate_facts.
 
 2. CONTRADICTION DETECTION:
-   - Determine which facts the NEW FACT contradicts from either list.
-   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).
+   - Determine which facts the NEW FACT directly contradicts from either list.
+   - A contradiction requires explicit evidence that the old fact stopped being true or was replaced,
+     such as clear termination, replacement, transfer, or mutually exclusive current-state language.
+   - Do NOT infer contradiction from recency alone, episode dates, meeting dates, weekly snapshots,
+     section headings such as "updates" or "status changes", or a new event involving the same entities.
+   - Do NOT mark a role/ownership/responsibility/assignment fact as contradicted merely because the
+     NEW FACT describes work performed, updates shipped, documents created, progress made, blockers,
+     next steps, or collaboration involving the same person and project.
+   - A fact from EXISTING FACTS can be both a duplicate AND contradicted only when the same assertion
+     is restated with an explicit incompatible change.
    - Return all contradicted idx values in contradicted_facts.
    - If no contradictions, return an empty list for contradicted_facts.
 

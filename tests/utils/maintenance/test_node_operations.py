@@ -3,6 +3,7 @@ from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import BaseModel
 
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
@@ -14,6 +15,7 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _cached_shingles,
     _has_high_entropy,
     _hash_shingle,
+    _identity_type_for_node,
     _jaccard_similarity,
     _lsh_bands,
     _minhash_signature,
@@ -25,8 +27,10 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
 )
 from graphiti_core.utils.maintenance.node_operations import (
     _collect_candidate_nodes,
+    _collect_exact_name_candidate_nodes,
     _extract_entity_summaries_batch,
     _resolve_with_llm,
+    _semantic_candidate_search,
     extract_attributes_from_nodes,
     resolve_extracted_nodes,
 )
@@ -34,9 +38,12 @@ from graphiti_core.utils.maintenance.node_operations import (
 
 def _make_clients():
     driver = MagicMock()
+    driver.graph_operations_interface = None
+    driver.execute_query = AsyncMock(return_value=([], None, None))
     embedder = MagicMock()
     cross_encoder = MagicMock()
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_generate = AsyncMock()
     llm_client.generate_response = llm_generate
 
@@ -66,6 +73,46 @@ def _semantic_candidates(candidate_groups: list[list[EntityNode]]):
         return candidate_groups
 
     return fake_search
+
+
+@pytest.mark.asyncio
+async def test_semantic_candidate_search_skips_blank_names(monkeypatch):
+    clients, _ = _make_clients()
+    queries = []
+
+    async def create_batch(input_data):
+        queries.extend(input_data)
+        return [[0.1, 0.2, 0.3] for _ in input_data]
+
+    clients.embedder.create_batch = create_batch
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.node_similarity_search',
+        AsyncMock(return_value=[object()]),
+    )
+    nodes = [
+        EntityNode(name='Alice', group_id='group', labels=['Entity']),
+        EntityNode(name='', group_id='group', labels=['Entity']),
+        EntityNode(name='Bob', group_id='group', labels=['Entity']),
+    ]
+
+    result = await _semantic_candidate_search(clients, nodes)
+
+    assert len(result) == 3
+    assert result[1] == []
+    assert queries == ['Alice', 'Bob']
+
+
+@pytest.mark.asyncio
+async def test_semantic_candidate_search_raises_on_vector_count_mismatch():
+    clients, _ = _make_clients()
+    clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+    nodes = [
+        EntityNode(name='Alice', group_id='group', labels=['Entity']),
+        EntityNode(name='Bob', group_id='group', labels=['Entity']),
+    ]
+
+    with pytest.raises(ValueError, match='vectors'):
+        await _semantic_candidate_search(clients, nodes)
 
 
 @pytest.mark.asyncio
@@ -113,6 +160,60 @@ async def test_resolve_nodes_exact_match_promotes_generic_candidate_type(monkeyp
     assert set(resolved[0].labels) == {'Entity', 'Person'}
     assert set(candidate.labels) == {'Entity', 'Person'}
     assert uuid_map[extracted.uuid] == candidate.uuid
+    llm_generate.assert_not_awaited()
+
+
+def test_identity_type_for_node_uses_deepest_type_with_identity_properties():
+    node = EntityNode(name='Acme', group_id='group', labels=['Entity', 'Party', 'Company'])
+    identity_properties = {'Party': ['party_id'], 'Company': ['company_id']}
+
+    assert _identity_type_for_node(node, identity_properties) == 'Company'
+
+
+def test_identity_type_for_node_uses_root_type_when_only_root_has_identity_properties():
+    node = EntityNode(name='Acme', group_id='group', labels=['Entity', 'Party', 'Company'])
+
+    assert _identity_type_for_node(node, {'Party': ['party_id']}) == 'Party'
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_identity_properties_match_before_llm(monkeypatch):
+    clients, llm_generate = _make_clients()
+
+    candidate = EntityNode(
+        name='ACME',
+        group_id='group',
+        labels=['Entity', 'Company'],
+        attributes={'domain': 'acme.example', 'size': 'enterprise'},
+    )
+    extracted = EntityNode(
+        name='ACME Incorporated',
+        group_id='group',
+        labels=['Entity', 'Company'],
+        attributes={'domain': 'acme.example', 'size': None, 'region': 'us-west'},
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[]]),
+    )
+
+    resolved, uuid_map, duplicates = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+        existing_nodes_override=[candidate],
+        identity_properties={'Company': ['domain']},
+    )
+
+    assert resolved[0].uuid == candidate.uuid
+    assert resolved[0].attributes == {
+        'domain': 'acme.example',
+        'size': 'enterprise',
+        'region': 'us-west',
+    }
+    assert uuid_map[extracted.uuid] == candidate.uuid
+    assert duplicates == [(extracted, candidate)]
     llm_generate.assert_not_awaited()
 
 
@@ -224,6 +325,89 @@ async def test_collect_candidate_nodes_dedupes_and_merges_override(monkeypatch):
     assert len(result[0]) == 1
     assert result[0][0].uuid == candidate.uuid
     semantic_search_mock.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_collect_candidate_nodes_prepends_exact_name_candidates(monkeypatch):
+    clients, _ = _make_clients()
+
+    exact_candidate = EntityNode(name='Alice', group_id='group', labels=['Entity'])
+    semantic_candidate = EntityNode(name='Alice Smith', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='Alice', group_id='group', labels=['Entity'])
+
+    exact_lookup_mock = AsyncMock(return_value=[[exact_candidate]])
+    semantic_search_mock = AsyncMock(return_value=[[semantic_candidate]])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._collect_exact_name_candidate_nodes',
+        exact_lookup_mock,
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        semantic_search_mock,
+    )
+
+    result = await _collect_candidate_nodes(
+        clients,
+        [extracted],
+        existing_nodes_override=None,
+    )
+
+    assert len(result) == 1
+    assert [node.uuid for node in result[0]] == [exact_candidate.uuid, semantic_candidate.uuid]
+    exact_lookup_mock.assert_awaited_once()
+    semantic_search_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_collect_exact_name_candidate_nodes_scopes_by_group(monkeypatch):
+    clients, _ = _make_clients()
+
+    group_a_candidate = EntityNode(name='Alice', group_id='group-a', labels=['Entity'])
+    group_b_candidate = EntityNode(name='Alice', group_id='group-b', labels=['Entity'])
+    extracted_nodes = [
+        EntityNode(name='Alice', group_id='group-a', labels=['Entity']),
+        EntityNode(name='Alice', group_id='group-b', labels=['Entity']),
+    ]
+
+    get_by_names_mock = AsyncMock(return_value=[group_a_candidate, group_b_candidate])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.EntityNode.get_by_names',
+        get_by_names_mock,
+    )
+
+    result = await _collect_exact_name_candidate_nodes(clients, extracted_nodes)
+
+    assert result == [[group_a_candidate], [group_b_candidate]]
+    get_by_names_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_exact_name_lookup_handles_semantic_miss(monkeypatch):
+    clients, llm_generate = _make_clients()
+
+    candidate = EntityNode(name='Audrey', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='Audrey', group_id='group', labels=['Entity', 'Person'])
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._collect_exact_name_candidate_nodes',
+        AsyncMock(return_value=[[candidate]]),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[]]),
+    )
+
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    assert resolved[0].uuid == candidate.uuid
+    assert set(candidate.labels) == {'Entity', 'Person'}
+    assert uuid_map[extracted.uuid] == candidate.uuid
+    llm_generate.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -499,6 +683,7 @@ async def test_resolve_with_llm_candidate_attributes_cannot_overwrite_candidate_
     )
 
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={
             'entity_resolutions': [
@@ -555,6 +740,7 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
         }
 
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(side_effect=fake_generate_response)
 
     await _resolve_with_llm(
@@ -578,6 +764,48 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'client_max_tokens, expected_max_tokens',
+    [(32768, 16384), (4096, 4096), (None, 16384)],
+)
+async def test_resolve_with_llm_caps_completion_budget(
+    monkeypatch, client_max_tokens, expected_max_tokens
+):
+    extracted = EntityNode(name='Dizzy', group_id='group', labels=['Entity'])
+    candidate = EntityNode(name='Dizzy Gillespie', group_id='group', labels=['Entity'])
+
+    indexes = _build_candidate_indexes([candidate])
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[0])
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
+        lambda context: ['prompt'],
+    )
+
+    llm_client = MagicMock()
+    llm_client.max_tokens = client_max_tokens
+    llm_client.generate_response = AsyncMock(
+        return_value={
+            'entity_resolutions': [
+                {'id': 0, 'name': 'Dizzy Gillespie', 'duplicate_candidate_id': 0}
+            ]
+        }
+    )
+
+    await _resolve_with_llm(
+        llm_client,
+        [extracted],
+        indexes,
+        state,
+        episode=_make_episode(),
+        previous_episodes=[],
+        entity_types=None,
+    )
+
+    assert llm_client.generate_response.await_args.kwargs['max_tokens'] == expected_max_tokens
+
+
+@pytest.mark.asyncio
 async def test_resolve_with_llm_promotes_generic_candidate_type(monkeypatch):
     extracted = EntityNode(name='Audrey', group_id='group', labels=['Entity', 'Person'])
     candidate = EntityNode(name='Audrey', group_id='group', labels=['Entity'])
@@ -591,6 +819,7 @@ async def test_resolve_with_llm_promotes_generic_candidate_type(monkeypatch):
     )
 
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={
             'entity_resolutions': [
@@ -633,6 +862,7 @@ async def test_resolve_with_llm_ignores_out_of_range_relative_ids(monkeypatch, c
     )
 
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={
             'entity_resolutions': [
@@ -674,6 +904,7 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
     )
 
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={
             'entity_resolutions': [
@@ -719,6 +950,7 @@ async def test_resolve_with_llm_invalid_candidate_id_defaults_to_extracted(monke
     )
 
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={
             'entity_resolutions': [
@@ -750,6 +982,7 @@ async def test_resolve_with_llm_invalid_candidate_id_defaults_to_extracted(monke
 async def test_batch_summaries_short_summary_no_llm():
     """Test that short summaries are kept as-is without LLM call (optimization)."""
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={'summaries': [{'name': 'Test Node', 'summary': 'Generated summary'}]}
     )
@@ -776,6 +1009,7 @@ async def test_batch_summaries_short_summary_no_llm():
 async def test_batch_summaries_callback_skip_summary():
     """Test that summary is NOT regenerated when callback returns False."""
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={'summaries': [{'name': 'Test Node', 'summary': 'This should not be used'}]}
     )
@@ -806,6 +1040,7 @@ async def test_batch_summaries_callback_skip_summary():
 async def test_batch_summaries_selective_callback():
     """Test callback that selectively skips summaries based on node properties."""
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(return_value={'summaries': []})
 
     user_node = EntityNode(name='User', group_id='group', labels=['Entity', 'User'], summary='Old')
@@ -879,12 +1114,56 @@ async def test_extract_attributes_from_nodes_with_callback():
 
 
 @pytest.mark.asyncio
+async def test_extract_attributes_from_nodes_keeps_initial_nulls_from_response():
+    class Patient(BaseModel):
+        first_name: str | None = None
+        last_name: str | None = None
+        favorite_color: str | None = None
+
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'first_name': 'John',
+        'last_name': None,
+        'favorite_color': None,
+    }
+    clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    node = EntityNode(
+        name='John Smith',
+        group_id='group',
+        labels=['Entity', 'Patient'],
+        attributes={'last_name': 'Smith'},
+        summary='Existing summary',
+    )
+
+    async def skip_summary(_node: EntityNode) -> bool:
+        return False
+
+    results = await extract_attributes_from_nodes(
+        clients,
+        [node],
+        episode=_make_episode(),
+        previous_episodes=[],
+        entity_types={'Patient': Patient},
+        should_summarize_node=skip_summary,
+    )
+
+    assert results[0].attributes == {
+        'first_name': 'John',
+        'last_name': 'Smith',
+        'favorite_color': None,
+    }
+
+
+@pytest.mark.asyncio
 async def test_batch_summaries_calls_llm_for_long_summary():
     """Test that LLM is called when summary exceeds character limit."""
     from graphiti_core.edges import EntityEdge
     from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 
     llm_client = MagicMock()
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={'summaries': [{'name': 'Test Node', 'summary': 'Condensed summary'}]}
     )
@@ -922,12 +1201,6 @@ async def test_batch_summaries_calls_llm_for_long_summary():
 
 @pytest.mark.asyncio
 async def test_extract_attributes_preserves_prior_attributes_when_entity_types_none():
-    """Prior attributes survive when no entity types are supplied.
-
-    Mirrors the invariant `add_triplet` already enforces ("merge rather than replace",
-    see `test_add_triplet_empty_attributes_preserved`): an empty extraction result must
-    not clear attributes a previous typed pass stored on the node.
-    """
     clients, _ = _make_clients()
     clients.llm_client.generate_response = AsyncMock(return_value={'summaries': []})
     clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
@@ -954,13 +1227,6 @@ async def test_extract_attributes_preserves_prior_attributes_when_entity_types_n
 
 @pytest.mark.asyncio
 async def test_extract_attributes_preserves_prior_attributes_when_label_not_in_entity_types():
-    """Prior attributes survive when the node's label is absent from `entity_types`.
-
-    `entity_types.get(...)` resolves to None for any label not in the map, which takes the
-    same no-applicable-type path as `entity_types=None`.
-    """
-    from pydantic import BaseModel
-
     class Organization(BaseModel):
         industry: str | None = None
 

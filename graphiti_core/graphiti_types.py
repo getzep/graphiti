@@ -42,6 +42,7 @@ class GraphitiClients(BaseModel):
     tracer: Tracer
     prompt_library: Any = None
     llm_runtime: LLMRuntime | None = None
+    max_coroutines: int | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

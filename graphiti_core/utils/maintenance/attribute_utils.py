@@ -242,6 +242,15 @@ def apply_capped_attributes(
         entity_uuid=entity_uuid,
         group_id=group_id,
     )
+    # Structured-output clients may emit explicit nulls for fields where extraction
+    # found no value. Keep known non-null prior values in that case, but retain the
+    # null when there is no prior value so first extraction can materialize "unknown".
+    kept = {
+        field: prior_attributes[field]
+        if value is None and field in prior_attributes and prior_attributes[field] is not None
+        else value
+        for field, value in kept.items()
+    }
     if merge_mode == 'overlay':
         merged: dict[str, Any] = {**prior_attributes, **kept}
     elif merge_mode == 'replace':

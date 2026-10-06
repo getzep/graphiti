@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from time import time
 from uuid import uuid4
@@ -93,7 +95,10 @@ from graphiti_core.utils.maintenance.community_operations import (
     remove_communities,
     update_community,
 )
+from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
 from graphiti_core.utils.maintenance.edge_operations import (
+    _pair_search_filter,
+    _same_pair_edges,
     build_episodic_edges,
     extract_edges,
     resolve_extracted_edge,
@@ -109,11 +114,68 @@ from graphiti_core.utils.maintenance.node_operations import (
     resolve_extracted_nodes,
 )
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
-from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
+from graphiti_core.utils.text_utils import (
+    SAGA_SUMMARY_MAX_CHARS,
+    truncate_at_sentence,
+    truncate_utf8_to_bytes,
+)
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+# Episode text is packed under 100k characters. The assembled prompt adds the
+# existing summary (up to SAGA_SUMMARY_MAX_CHARS), template, and schema on top
+# of that, then shrinks until the full prompt is under 128 KiB. Request 8192
+# output tokens. Persist at most SAGA_SUMMARY_MAX_CHARS.
+SAGA_SUMMARY_MAX_EPISODE_CHARS = 100_000
+SAGA_SUMMARY_MAX_EPISODE_BYTES = SAGA_SUMMARY_MAX_EPISODE_CHARS
+SAGA_SUMMARY_MAX_PROMPT_BYTES = 128 * 1024
+MAX_SAGA_EPISODES_FOR_SUMMARY = 20
+SAGA_SUMMARY_MAX_TOKENS = 8192
+_SAGA_SUMMARY_SCHEMA_WRAPPER = '\n\nRespond with a JSON object in the following format:\n\n'
+
+
+def _saga_summary_messages_utf8_bytes(messages: list) -> int:
+    return sum(len(message.content.encode('utf-8')) for message in messages)
+
+
+def select_saga_summary_episodes(
+    episodes_data: list[tuple[str, datetime | None, datetime]],
+    max_episode_chars: int = SAGA_SUMMARY_MAX_EPISODE_CHARS,
+) -> tuple[list[tuple[str, datetime | None, datetime]], int, bool]:
+    """Select a contiguous ingestion-time episode batch using a character budget.
+
+    Packs oldest-first so last_summarized_at can advance through a backlog.
+    When the oldest episode alone exceeds the budget, truncate it rather than
+    skip, matching Go entity-summary behavior for a single oversized episode.
+    """
+    selected: list[tuple[str, datetime | None, datetime]] = []
+    selected_chars = 0
+    dropped = False
+
+    for content, valid_at, created_at in episodes_data:
+        content_chars = len(content)
+        if selected_chars + content_chars <= max_episode_chars:
+            selected.append((content, valid_at, created_at))
+            selected_chars += content_chars
+            continue
+
+        if not selected:
+            truncated = content[:max_episode_chars]
+            if truncated:
+                selected.append((truncated, valid_at, created_at))
+                selected_chars = len(truncated)
+            dropped = True
+            break
+
+        # Preserve chronological coherence for incremental summaries. Once the
+        # next episode does not fit, later episodes are deferred to a future run.
+        dropped = True
+        break
+
+    selected_bytes = sum(len(content.encode('utf-8')) for content, _, _ in selected)
+    return selected, selected_bytes, dropped
 
 
 class AddEpisodeResults(BaseModel):
@@ -186,8 +248,31 @@ class Graphiti:
             An instance of GraphDriver for database operations.
             If not provided, a default Neo4jDriver will be initialized.
         max_coroutines : int | None, optional
-            The maximum number of concurrent operations allowed. Overrides SEMAPHORE_LIMIT set in the environment.
-            If not set, the Graphiti default is used.
+            The maximum number of concurrent operations allowed at each
+            `semaphore_gather` call site across the Graphiti ingestion and search
+            paths. When set, this value is propagated to all internal
+            `semaphore_gather` calls via `GraphitiClients.max_coroutines`, making
+            this the recommended way to tune concurrency on a per-instance basis.
+            If not set, the value falls back to the `SEMAPHORE_LIMIT` environment
+            variable (if defined) or the built-in default
+            (`DEFAULT_SEMAPHORE_LIMIT`).
+
+            Note: this is a per-`semaphore_gather` cap, not a global cap on
+            in-flight coroutines. Each `semaphore_gather` call allocates its own
+            `asyncio.Semaphore`, so when a parent gather awaits child coroutines
+            that themselves contain a gather, the inner gathers each bound at
+            `max_coroutines` independently. For the search path that means the
+            inner per-scope dispatches (`edge_search`, `node_search`,
+            `community_search`) can together admit up to ~`scopes × max_coroutines`
+            in-flight tasks, where `scopes` is the number of search scopes
+            configured. Tune `max_coroutines` with that in mind when sizing for
+            tight LLM rate-limits.
+
+            Carve-out: when a `GraphDriver` implements
+            `graph_operations_interface.get_community_clusters`, that path is
+            serial inside the driver and does not honour `max_coroutines`.
+            Community-build concurrency outside the cluster lookup (LLM
+            summarization fan-out) is bounded as documented above.
         tracer : Tracer | None, optional
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
@@ -288,6 +373,7 @@ class Graphiti:
             tracer=self.tracer,
             prompt_library=self.prompt_library,
             llm_runtime=self.llm_runtime,
+            max_coroutines=self.max_coroutines,
         )
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
@@ -485,8 +571,8 @@ class Graphiti:
         saga_uuid: str,
         since: datetime | None = None,
         limit: int = 200,
-    ) -> list[tuple[str, datetime | None]] | None:
-        """Retrieve (content, valid_at) per episode for summarization, using IoC if available."""
+    ) -> list[tuple[str, datetime | None, datetime]] | None:
+        """Retrieve (content, valid_at, created_at) episodes, using IoC if available."""
         if self.driver.graph_operations_interface:
             try:
                 return await self.driver.graph_operations_interface.saga_get_episode_contents(
@@ -496,18 +582,36 @@ class Graphiti:
                 pass
         return None
 
-    async def summarize_saga(self, saga_id: str) -> SagaNode:
+    async def summarize_saga(
+        self,
+        saga_id: str,
+        rebuild: bool = False,
+        before_publish: Callable[[str], Awaitable[str]] | None = None,
+    ) -> SagaNode:
         """Incrementally summarize a saga using only new episodes since the last summary.
+
+        ``before_publish`` runs with the generated summary text immediately
+        before the saga node is saved and returns the text to publish. The
+        caller uses it to check the selected input episodes and to evaluate
+        the text against a content policy; an exception it raises stops the
+        publication and the node is not saved.
+
+        With ``rebuild=True`` the summary is regenerated from scratch: the
+        watermark filter is ignored (all surviving episodes are fetched) and
+        the existing summary is NOT fed back into the prompt. This is the
+        retention rebuild (abac spec-10 §6.2): after an episode the saga
+        summarized is deleted, the incremental path would carry the deleted
+        episode's content forward inside the old summary text, so the text is
+        discarded and rebuilt from the surviving contributors alone.
 
         Two watermarks are maintained on the saga node, with deliberately
         different semantics:
 
-        - ``last_summarized_at`` is wall-clock and is the *filter* watermark:
-          the next run picks up any episode whose ``created_at`` (ingestion
-          time) is greater than this value. Wall-clock is the right semantics
-          here because episode ``created_at`` is monotonic with processing
-          time, so a backfilled episode added today with ``valid_at`` in the
-          past is still picked up next run.
+        - ``last_summarized_at`` is the ingestion-time *filter* watermark:
+          the next run picks up any episode whose ``created_at`` is greater
+          than this value. It advances only to the latest episode actually
+          included in the summary prompt, so byte-budgeted episodes remain
+          reachable on subsequent runs.
         - ``last_summarized_episode_valid_at`` is the *temporal* watermark:
           the maximum ``valid_at`` (episode reference time) across the
           episodes covered by the current summary. Consumers asking "how
@@ -537,9 +641,16 @@ class Graphiti:
         """
         saga = await SagaNode.get_by_uuid(self.driver, saga_id)
 
-        # Fetch only episodes added since the last summary (or all if never summarized).
-        max_episodes = 200
-        since = saga.last_summarized_at
+        # Fetch only episodes added since the last summary (or all if never
+        # summarized, or on a rebuild). Cap the window to the same episode
+        # count node summaries use so a long thread or document cannot fill
+        # the model context window in one pass. Deferred episodes remain
+        # eligible because last_summarized_at advances only through this batch.
+        max_episodes = MAX_SAGA_EPISODES_FOR_SUMMARY
+        since = None if rebuild else saga.last_summarized_at
+        existing_summary = ''
+        if not rebuild:
+            existing_summary = truncate_at_sentence(saga.summary or '', SAGA_SUMMARY_MAX_CHARS)
 
         # Try IoC interface first, fall back to raw Cypher
         episodes_data = await self._saga_get_episode_contents(
@@ -550,9 +661,9 @@ class Graphiti:
                 records, _, _ = await self.driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
-                    WHERE e.created_at > $since
-                    RETURN e.content AS content, e.valid_at AS valid_at
-                    ORDER BY e.valid_at ASC, e.created_at ASC
+                    WHERE e.created_at IS NOT NULL AND e.created_at > $since
+                    RETURN e.content AS content, e.valid_at AS valid_at, e.created_at AS created_at
+                    ORDER BY e.created_at ASC, e.valid_at ASC
                     LIMIT $limit
                     """,
                     saga_uuid=saga_id,
@@ -564,61 +675,162 @@ class Graphiti:
                 records, _, _ = await self.driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
-                    RETURN e.content AS content, e.valid_at AS valid_at
-                    ORDER BY e.valid_at DESC, e.created_at DESC
+                    WHERE e.created_at IS NOT NULL
+                    RETURN e.content AS content, e.valid_at AS valid_at, e.created_at AS created_at
+                    ORDER BY e.created_at ASC, e.valid_at ASC
                     LIMIT $limit
                     """,
                     saga_uuid=saga_id,
                     limit=max_episodes,
                     routing_='r',
                 )
-                # Reverse to chronological order for the prompt
-                records = list(reversed(records))
-
             from graphiti_core.helpers import parse_db_date
 
-            episodes_data = [
-                (r['content'], parse_db_date(r.get('valid_at')))
-                for r in records
-                if r.get('content')
-            ]
+            episodes_data = []
+            for r in records:
+                content = r.get('content')
+                created_at = parse_db_date(r.get('created_at'))
+                if content and created_at is not None:
+                    episodes_data.append((content, parse_db_date(r.get('valid_at')), created_at))
 
         if not episodes_data:
+            saga._summary_episodes_fetched = 0
+            saga._summary_episodes_selected = 0
+            saga._summary_episodes_skipped = 0
+            saga._summary_selected_episode_bytes = 0
+            if rebuild:
+                # No surviving episodes: the old text (generated from episodes
+                # that have since been deleted) must not be kept, and an LLM
+                # call over nothing would only invent content. Clear it.
+                # The watermark is cleared, so that an episode that is not
+                # eligible yet (a pending policy state) is read by the next
+                # incremental run.
+                saga.summary = ''
+                saga.last_summarized_at = None
+                saga.last_summarized_episode_valid_at = None
+                await saga.save(self.driver)
+                logger.info(f'Rebuilt saga {saga_id} summary to empty: no surviving episodes')
+                return saga
             logger.info(f'No new episodes found for saga {saga_id}, skipping summary')
             return saga
 
-        episode_contents = [content for content, _ in episodes_data]
-        valid_ats = [valid_at for _, valid_at in episodes_data if valid_at is not None]
-
-        context = {
-            'saga_name': saga.name,
-            'existing_summary': saga.summary or '',
-            'episodes': episode_contents,
-        }
-
-        llm_response = await generate_prompt_response(
-            self.llm_client,
-            'summarize_sagas.summarize_saga',
-            prompt_library.summarize_sagas.summarize_saga,
-            context,
-            clients=self.clients,
-            response_model=SagaSummary,
+        total_episode_count = len(episodes_data)
+        episodes_data, selected_episode_bytes, episodes_dropped = select_saga_summary_episodes(
+            episodes_data, max_episode_chars=SAGA_SUMMARY_MAX_EPISODE_CHARS
         )
+        saga._summary_episodes_fetched = total_episode_count
+        saga._summary_episodes_selected = len(episodes_data)
+        saga._summary_episodes_skipped = total_episode_count - len(episodes_data)
+        saga._summary_selected_episode_bytes = selected_episode_bytes
+        if not episodes_data and not rebuild:
+            logger.info(f'No saga episode content fit the summary byte budget for saga {saga_id}')
+            return saga
+        if episodes_dropped:
+            logger.info(
+                'Saga summary episode payload constrained by byte budget',
+                extra={
+                    'saga_id': saga_id,
+                    'episodes_fetched': total_episode_count,
+                    'episodes_selected': len(episodes_data),
+                    'selected_episode_bytes': selected_episode_bytes,
+                    'max_episode_chars': SAGA_SUMMARY_MAX_EPISODE_CHARS,
+                    'max_prompt_bytes': SAGA_SUMMARY_MAX_PROMPT_BYTES,
+                    'episodes_dropped': episodes_dropped,
+                },
+            )
 
-        summary = llm_response.get('summary', '')
-        if len(summary) > MAX_SUMMARY_CHARS:
-            summary = summary[:MAX_SUMMARY_CHARS]
+        def _prompt_context(
+            selected: list[tuple[str, datetime | None, datetime]],
+        ) -> dict[str, object]:
+            prompt_episodes_data = sorted(
+                selected, key=lambda episode: (episode[1] or episode[2], episode[2])
+            )
+            return {
+                'saga_name': saga.name,
+                # A rebuild discards the prior text: it was generated from episodes
+                # that may since have been deleted, and feeding it back would carry
+                # their content into the new summary.
+                'existing_summary': existing_summary,
+                'episodes': [content for content, _, _ in prompt_episodes_data],
+            }
+
+        schema_reserve = len(_SAGA_SUMMARY_SCHEMA_WRAPPER.encode('utf-8')) + len(
+            json.dumps(SagaSummary.model_json_schema()).encode('utf-8')
+        )
+        while episodes_data:
+            context = _prompt_context(episodes_data)
+            prompt_bytes = (
+                _saga_summary_messages_utf8_bytes(
+                    prompt_library.summarize_sagas.summarize_saga(context)
+                )
+                + schema_reserve
+            )
+            if prompt_bytes <= SAGA_SUMMARY_MAX_PROMPT_BYTES:
+                break
+            if len(episodes_data) == 1:
+                content, valid_at, created_at = episodes_data[0]
+                over = prompt_bytes - SAGA_SUMMARY_MAX_PROMPT_BYTES
+                truncated = truncate_utf8_to_bytes(
+                    content, max(0, len(content.encode('utf-8')) - over)
+                )
+                episodes_data = [(truncated, valid_at, created_at)] if truncated else []
+                break
+            episodes_data = episodes_data[:-1]
+            episodes_dropped = True
+
+        saga._summary_episodes_selected = len(episodes_data)
+        saga._summary_episodes_skipped = total_episode_count - len(episodes_data)
+        saga._summary_selected_episode_bytes = sum(
+            len(content.encode('utf-8')) for content, _, _ in episodes_data
+        )
+        if not episodes_data and not rebuild:
+            logger.info(f'No saga episode content fit the summary byte budget for saga {saga_id}')
+            return saga
+        episode_contents = _prompt_context(episodes_data)['episodes'] if episodes_data else []
+        valid_ats = [valid_at for _, valid_at, _ in episodes_data if valid_at is not None]
+        summarized_created_ats = [created_at for _, _, created_at in episodes_data]
+
+        context = _prompt_context(episodes_data)
+
+        if rebuild and not episode_contents:
+            # Nothing survives to summarize; an LLM call over an empty episode
+            # list would only invent content. The saga keeps an empty summary
+            # until new episodes arrive.
+            summary = ''
+        else:
+            llm_response = await generate_prompt_response(
+                self.llm_client,
+                'summarize_sagas.summarize_saga',
+                prompt_library.summarize_sagas.summarize_saga,
+                context,
+                clients=self.clients,
+                response_model=SagaSummary,
+                max_tokens=SAGA_SUMMARY_MAX_TOKENS,
+            )
+
+            summary = llm_response.get('summary', '')
+            if len(summary) > SAGA_SUMMARY_MAX_CHARS:
+                summary = truncate_at_sentence(summary, SAGA_SUMMARY_MAX_CHARS)
+
+        if before_publish is not None:
+            summary = await before_publish(summary)
 
         saga.summary = summary
-        # Wall-clock watermark for the next-run filter: keeps backfilled
-        # episodes (valid_at in the past, created_at = now) reachable on
-        # subsequent runs.
-        saga.last_summarized_at = utc_now()
+        # Ingestion-time watermark for the next-run filter. Advance only
+        # through the episodes that were actually sent to the summary prompt so
+        # byte-budgeted later episodes remain reachable on subsequent runs. A
+        # rebuild that summarized nothing clears the watermark, so that an
+        # episode that becomes eligible later is read by the next run.
+        saga.last_summarized_at = max(summarized_created_ats) if summarized_created_ats else None
         # Episode-time watermark for public/temporal consumers: advance only
         # forward to the latest reference time we just summarized. If no
         # episode in this batch carried a valid_at, leave the previous value
-        # unchanged so the field never regresses.
-        if valid_ats:
+        # unchanged so the field never regresses -- except on a rebuild, where
+        # the summary now covers only the surviving episodes and the watermark
+        # must reflect them even if that moves it backward.
+        if rebuild:
+            saga.last_summarized_episode_valid_at = max(valid_ats) if valid_ats else None
+        elif valid_ats:
             new_episode_watermark = max(valid_ats)
             if (
                 saga.last_summarized_episode_valid_at is None
@@ -692,6 +904,56 @@ class Graphiti:
 
         return nodes, uuid_map, duplicates, node_episode_index_map
 
+    async def _merge_materialized_endpoint_nodes(
+        self,
+        materialized_nodes: list[EntityNode],
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+        entity_types: dict[str, type[BaseModel]] | None,
+        nodes: list[EntityNode],
+        uuid_map: dict[str, str],
+        clients: GraphitiClients | None = None,
+    ) -> None:
+        """Fold endpoints materialized by ``extract_edges`` into the resolved node set.
+
+        These names never went through node extraction, so they still have to be
+        deduplicated the way ordinary extracted nodes are. Nodes resolved for this
+        episode are not persisted yet and are therefore invisible to graph search,
+        so match against them by name first and send only the remainder through
+        ``resolve_extracted_nodes``. ``nodes`` and ``uuid_map`` are updated in place.
+        """
+        clients = clients or self.clients
+        nodes_by_name = {_normalize_string_exact(node.name): node for node in nodes}
+        known_uuids = {node.uuid for node in nodes}
+
+        unresolved: list[EntityNode] = []
+        for materialized_node in materialized_nodes:
+            if materialized_node.uuid in known_uuids:
+                continue
+            existing = nodes_by_name.get(_normalize_string_exact(materialized_node.name))
+            if existing is not None:
+                uuid_map[materialized_node.uuid] = existing.uuid
+                continue
+            unresolved.append(materialized_node)
+
+        if not unresolved:
+            return
+
+        resolved_nodes, materialized_uuid_map, _ = await resolve_extracted_nodes(
+            clients,
+            unresolved,
+            episode,
+            previous_episodes,
+            entity_types,
+        )
+        uuid_map.update(materialized_uuid_map)
+
+        for resolved_node in resolved_nodes:
+            if resolved_node.uuid in known_uuids:
+                continue
+            nodes.append(resolved_node)
+            known_uuids.add(resolved_node.uuid)
+
     async def _extract_and_resolve_edges(
         self,
         episode: EpisodicNode | list[EpisodicNode],
@@ -702,17 +964,12 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None,
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
+        strict_edge_types: bool = False,
         custom_extraction_instructions: str | None = None,
+        entity_types: dict[str, type[BaseModel]] | None = None,
         clients: GraphitiClients | None = None,
     ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode(s) and resolve against existing graph.
-
-        Parameters
-        ----------
-        clients : GraphitiClients | None
-            Optional request-scoped clients bundle. Defaults to ``self.clients``.
-            Callers pass a per-request bundle so concurrent calls for different
-            group_ids target the correct database (issue #1676).
 
         Returns
         -------
@@ -726,7 +983,7 @@ class Graphiti:
         episodes = episode if isinstance(episode, list) else [episode]
         primary_episode = episodes[0]
 
-        extracted_edges = await extract_edges(
+        extracted_edges, materialized_nodes = await extract_edges(
             clients,
             episode,
             extracted_nodes,
@@ -734,8 +991,23 @@ class Graphiti:
             edge_type_map,
             group_id,
             edge_types,
+            strict_edge_types,
             custom_extraction_instructions,
         )
+
+        # Merge only nodes that extract_edges newly materialized — never the full
+        # pre-resolution extracted_nodes list, which also contains deduped duplicates
+        # whose uuid_map remaps must be preserved for resolve_edge_pointers.
+        if materialized_nodes:
+            await self._merge_materialized_endpoint_nodes(
+                materialized_nodes,
+                primary_episode,
+                previous_episodes,
+                entity_types,
+                nodes,
+                uuid_map,
+                clients=clients,
+            )
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
@@ -869,6 +1141,7 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None,
         entity_types: dict[str, type[BaseModel]] | None,
         excluded_entity_types: list[str] | None,
+        strict_edge_types: bool = False,
         custom_extraction_instructions: str | None = None,
         clients: GraphitiClients | None = None,
     ) -> tuple[
@@ -886,6 +1159,7 @@ class Graphiti:
             edge_types=edge_types,
             entity_types=entity_types,
             excluded_entity_types=excluded_entity_types,
+            strict_edge_types=strict_edge_types,
             custom_extraction_instructions=custom_extraction_instructions,
         )
 
@@ -935,7 +1209,8 @@ class Graphiti:
                     entity_types,
                 )
                 for episode, previous_episodes in episode_context
-            ]
+            ],
+            max_coroutines=self.max_coroutines,
         )
 
         resolved_nodes: list[EntityNode] = []
@@ -968,7 +1243,8 @@ class Graphiti:
                     entity_types,
                 )
                 for episode, previous_episodes in episode_context
-            ]
+            ],
+            max_coroutines=self.max_coroutines,
         )
 
         final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
@@ -996,7 +1272,8 @@ class Graphiti:
                     edge_type_map,
                 )
                 for episode in episodes
-            ]
+            ],
+            max_coroutines=self.max_coroutines,
         )
 
         resolved_edges: list[EntityEdge] = []
@@ -1261,7 +1538,8 @@ class Graphiti:
                     edge_types,
                     nodes,
                     uuid_map,
-                    custom_extraction_instructions,
+                    custom_extraction_instructions=custom_extraction_instructions,
+                    entity_types=entity_types,
                     clients=clients,
                 )
 
@@ -1354,6 +1632,7 @@ class Graphiti:
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        strict_edge_types: bool = False,
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
     ) -> AddBulkEpisodeResults:
@@ -1377,6 +1656,9 @@ class Graphiti:
             Optional. A dictionary mapping edge type names to Pydantic models.
         edge_type_map : dict[tuple[str, str], list[str]] | None
             Optional. A mapping of (source_type, target_type) to allowed edge types.
+        strict_edge_types : bool
+            Optional. Whether to discard extracted edges that do not use one of the
+            provided edge_types.
         custom_extraction_instructions : str | None
             Optional. Custom extraction instructions string to be included in the
             extract entities and extract edges prompts. This allows for additional
@@ -1406,10 +1688,9 @@ class Graphiti:
         overwhelm system resources. Consider implementing rate limiting or chunking for
         very large batches of episodes.
 
-        Edge invalidation and date extraction (``valid_at`` / ``invalid_at``) are
-        performed in the bulk path as well: edges flow through ``extract_edges`` and
-        ``resolve_extracted_edges`` just like in ``add_episode``, and any invalidated
-        edges are persisted alongside the newly resolved ones.
+        Important: This method does not perform edge invalidation or date extraction steps.
+        If these operations are required, use the `add_episode` method instead for each
+        individual episode.
         """
         with self.tracer.start_span('add_episode_bulk') as bulk_span:
             bulk_span.add_attributes({'episode.count': len(bulk_episodes)})
@@ -1457,7 +1738,9 @@ class Graphiti:
                 )
 
                 # Get previous episode context for each episode
-                episode_context = await retrieve_previous_episodes_bulk(driver, episodes)
+                episode_context = await retrieve_previous_episodes_bulk(
+                    driver, episodes, max_coroutines=self.max_coroutines
+                )
 
                 # Extract and dedupe nodes and edges
                 (
@@ -1470,7 +1753,8 @@ class Graphiti:
                     edge_types,
                     entity_types,
                     excluded_entity_types,
-                    custom_extraction_instructions,
+                    strict_edge_types=strict_edge_types,
+                    custom_extraction_instructions=custom_extraction_instructions,
                     clients=clients,
                 )
 
@@ -1631,6 +1915,7 @@ class Graphiti:
             clients.llm_client,
             group_ids,
             clients=clients,
+            max_coroutines=self.max_coroutines,
         )
 
         await semaphore_gather(
@@ -1735,6 +2020,7 @@ class Graphiti:
         bfs_origin_node_uuids: list[str] | None = None,
         search_filter: SearchFilters | None = None,
         driver: GraphDriver | None = None,
+        query_vector: list[float] | None = None,
     ) -> SearchResults:
         """search_ (replaces _search) is our advanced search method that returns Graph objects (nodes and edges) rather
         than a list of facts. This endpoint allows the end user to utilize more advanced features such as filters and
@@ -1751,6 +2037,7 @@ class Graphiti:
             search_filter if search_filter is not None else SearchFilters(),
             center_node_uuid,
             bfs_origin_node_uuids,
+            query_vector=query_vector,
             driver=driver,
         )
 
@@ -1769,7 +2056,11 @@ class Graphiti:
         return SearchResults(edges=edges, nodes=nodes)
 
     async def add_triplet(
-        self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
+        self,
+        source_node: EntityNode,
+        edge: EntityEdge,
+        target_node: EntityNode,
+        episode: EpisodicNode | None = None,
     ) -> AddTripletResults:
         if source_node.name_embedding is None:
             await source_node.generate_name_embedding(self.embedder)
@@ -1840,19 +2131,24 @@ class Graphiti:
             # Edge doesn't exist yet, proceed normally
             pass
 
-        valid_edges = await EntityEdge.get_between_nodes(
-            self.driver, edge.source_node_uuid, edge.target_node_uuid
+        # Duplicate candidates: a hybrid search pre-filtered to edges between
+        # the pair's endpoints (either orientation) -- the backend ranks over
+        # the pair's edges only, never a graph-wide scan. The post-filter
+        # drops self-loops the {a,b}x{a,b} filter admits. Mirrors
+        # resolve_extracted_edges.
+        related_edges = _same_pair_edges(
+            edge,
+            (
+                await search(
+                    self.clients,
+                    edge.fact,
+                    group_ids=[edge.group_id],
+                    config=EDGE_HYBRID_SEARCH_RRF,
+                    search_filter=_pair_search_filter(edge),
+                    query_vector=edge.fact_embedding,
+                )
+            ).edges,
         )
-
-        related_edges = (
-            await search(
-                self.clients,
-                edge.fact,
-                group_ids=[edge.group_id],
-                config=EDGE_HYBRID_SEARCH_RRF,
-                search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
-            )
-        ).edges
         existing_edges = (
             await search(
                 self.clients,
@@ -1860,15 +2156,19 @@ class Graphiti:
                 group_ids=[edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
                 search_filter=SearchFilters(),
+                query_vector=edge.fact_embedding,
             )
         ).edges
+        # Keep edges that are already duplicate candidates out of the
+        # invalidation list so the LLM is not shown the same fact under two
+        # indices. Mirrors resolve_extracted_edges' overlap dedup.
+        related_uuids = {related_edge.uuid for related_edge in related_edges}
+        existing_edges = [e for e in existing_edges if e.uuid not in related_uuids]
 
-        resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
-            self.llm_client,
-            edge,
-            related_edges,
-            existing_edges,
-            EpisodicNode(
+        dedupe_episode = (
+            episode
+            if episode is not None
+            else EpisodicNode(
                 name='',
                 source=EpisodeType.text,
                 source_description='',
@@ -1876,7 +2176,14 @@ class Graphiti:
                 valid_at=edge.valid_at or utc_now(),
                 entity_edges=[],
                 group_id=edge.group_id,
-            ),
+            )
+        )
+        resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
+            self.llm_client,
+            edge,
+            related_edges,
+            existing_edges,
+            dedupe_episode,
             None,
             clients=self.clients,
         )

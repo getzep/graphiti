@@ -429,6 +429,9 @@ HARD RULES — violating any of these is a failure:
 6. NEVER infer attribute values from the entity's name, from related entities, from
    generic world knowledge, or from prior summaries. Only verbatim or directly normalized
    text from MESSAGES qualifies as a new value.
+   Exception: for name-part fields such as first_name, last_name, given_name, or family_name,
+   a full person name explicitly present in MESSAGES is sufficient evidence to extract the
+   corresponding part. Do not use ENTITY.name alone unless the same name also appears in MESSAGES.
 
 7. If MESSAGES contain no information about an attribute, leave the existing entity
    value unchanged. If the entity has no existing value, the field is null.
