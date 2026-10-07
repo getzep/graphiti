@@ -567,15 +567,23 @@ The Graphiti MCP server exposes the following tools:
 - `summarize_saga`: Generate or refresh the running summary of a saga's episodes.
 - `build_communities`: Detect entity communities and produce higher-level community summaries.
 - `get_episode_entities`: Trace provenance — the entities and facts created by specific episode UUIDs.
+  Accepts an optional `group_id`; defaults to the configured group.
 - `delete_entity_edge`: Delete an entity edge from the knowledge graph.
+  Accepts an optional `group_id`; defaults to the configured group.
 - `delete_episode`: Delete an episode and cascade-delete the entities/facts it solely created.
-- `get_entity_edge`: Get an entity edge by its UUID.
-- `get_episodes`: Get episodes for the requested groups. Explicit multiple FalkorDB
+  Accepts an optional `group_id`; defaults to the configured group.
+- `get_entity_edge`: Get an entity edge by its UUID. Accepts an optional `group_id`; defaults to
+  the configured group.
+- `get_episodes`: Get episodes for the requested groups (`group_ids`). Explicit multiple FalkorDB
   group IDs are read from their respective graphs and merged in descending UUID
   order, with `max_episodes` applied to the combined result. Duplicate group IDs
   are read once. UUID ordering is not chronological ordering.
 - `clear_graph`: Clear all data from the knowledge graph for the given group(s).
 - `get_status`: Get the status of the Graphiti MCP server and database connection.
+
+On FalkorDB, each `group_id` is stored in its own graph. Pass the same `group_id` that you used with
+`add_memory` when you read, delete, or clear data for that group. Without a `group_id`, tools use the
+server's configured default group.
 
 Custom entity types and edge (fact) types — including which edge types may connect which entity types —
 can be configured under the `graphiti` section of `config/config.yaml`. See the `entity_types`,

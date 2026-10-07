@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
 
@@ -140,3 +141,25 @@ versions: Versions = {
     'summarize_context': summarize_context,
     'summary_description': summary_description,
 }
+
+
+class SummarizeNodesPrompts(ABC):
+    @abstractmethod
+    def summarize_pair(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def summarize_context(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def summary_description(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultSummarizeNodesPrompts(SummarizeNodesPrompts):
+    def summarize_pair(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(summarize_pair(context))
+
+    def summarize_context(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(summarize_context(context))
+
+    def summary_description(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(summary_description(context))

@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 
 
@@ -307,3 +308,31 @@ versions: Versions = {
     'extract_timestamps': extract_timestamps,
     'extract_timestamps_batch': extract_timestamps_batch,
 }
+
+
+class ExtractEdgesPrompts(ABC):
+    @abstractmethod
+    def edge(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_timestamps(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_timestamps_batch(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultExtractEdgesPrompts(ExtractEdgesPrompts):
+    def edge(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(edge(context))
+
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_attributes(context))
+
+    def extract_timestamps(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_timestamps(context))
+
+    def extract_timestamps_batch(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_timestamps_batch(context))

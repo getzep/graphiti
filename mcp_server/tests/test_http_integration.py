@@ -17,7 +17,7 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
 
     # Import the streamable http client
     try:
-        from mcp.client.streamable_http import streamablehttp_client as http_client
+        from mcp.client.streamable_http import streamable_http_client as http_client
     except ImportError:
         print('❌ Streamable HTTP client not available in MCP SDK')
         return False

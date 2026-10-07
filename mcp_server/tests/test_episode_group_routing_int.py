@@ -35,7 +35,9 @@ def live_driver():
     # A synchronous fixture constructs outside the event loop, so no index task
     # starts. All subsequent scopes share this connection via with_database.
     driver = FalkorDriver(
-        falkor_db=FalkorDB.from_url(uri, socket_timeout=5, socket_connect_timeout=5),
+        falkor_db=FalkorDB.from_url(
+            uri, decode_responses=True, socket_timeout=5, socket_connect_timeout=5
+        ),
         database=f'mcprouting{uuid4().hex}',
     )
     assert driver._init_task is None
@@ -62,10 +64,11 @@ async def test_live_multigroup_read(monkeypatch, config, live_driver, base_is_gr
                 await scoped.execute_query(
                     'CREATE (e:Episodic {uuid: $uuid, group_id: $group_id, name: $uuid, '
                     'content: "body", source: "text", source_description: "routing test", '
-                    'entity_edges: [], created_at: "2026-01-01T00:00:00Z", '
+                    'entity_edges: [], created_at: $created_at, '
                     'valid_at: "2026-01-01T00:00:00Z"})',
                     uuid=uuid,
                     group_id=group,
+                    created_at=f'2026-01-{10 - int(uuid):02d}T00:00:00Z',
                 )
         if base_is_group:
             driver = driver.with_database(group_a)
@@ -81,7 +84,12 @@ async def test_live_multigroup_read(monkeypatch, config, live_driver, base_is_gr
             assert driver._database == expected_database
             assert driver._init_task is None
 
+        overflow = await server.get_episodes(group_ids=[group_b, group_a], max_episodes=4)
+        assert 'episodes' in overflow, overflow
+        assert [episode['uuid'] for episode in overflow['episodes']] == ['09', '08', '06', '05']
+
         empty = await server.get_episodes(group_ids=[group_a, group_b], max_episodes=0)
+        assert 'episodes' in empty, empty
         assert empty['episodes'] == []
         invalid = await server.get_episodes(group_ids=[group_a, group_b], max_episodes=-1)
         assert 'error' in invalid
@@ -89,7 +97,9 @@ async def test_live_multigroup_read(monkeypatch, config, live_driver, base_is_gr
         # No broad clear/delete: every graph name belongs to this invocation.
         from redis.exceptions import ResponseError
 
-        for graph in owned_graphs:
-            with suppress(ResponseError):  # A failure during setup may leave a graph absent.
-                await live_driver.client.select_graph(graph).delete()
-        await live_driver.close()
+        try:
+            for graph in owned_graphs:
+                with suppress(ResponseError):  # A failure during setup may leave a graph absent.
+                    await live_driver.client.select_graph(graph).delete()
+        finally:
+            await live_driver.close()
