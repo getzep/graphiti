@@ -29,7 +29,7 @@ from graphiti_core.prompts.lib import (
     get_prompt_builder,
     resolve_response_model,
 )
-from graphiti_core.prompts.models import PromptFunction
+from graphiti_core.prompts.models import Message, PromptFunction
 from graphiti_core.prompts.names import PromptName
 from graphiti_core.tracer import Tracer
 
@@ -96,6 +96,21 @@ def uses_prompt_routing(clients: GraphitiClients | None) -> bool:
     return isinstance(clients, GraphitiClients) and (
         clients.llm_runtime is not None or clients.prompt_library is not None
     )
+
+
+def resolve_prompt_messages(
+    prompt_name: PromptName,
+    legacy_prompt: PromptFunction,
+    context: dict[str, Any],
+    *,
+    clients: GraphitiClients | None = None,
+) -> list[Message]:
+    if clients is not None and clients.llm_runtime is not None:
+        model = clients.llm_runtime.resolve_model(prompt_name)
+        return clients.llm_runtime.resolve_builder(prompt_name, model)(context).as_messages()
+    if clients is not None and clients.prompt_library is not None:
+        return get_prompt_builder(clients.prompt_library, prompt_name)(context).as_messages()
+    return legacy_prompt(context)
 
 
 class GeneratePromptResponseKwargs(TypedDict, total=False):

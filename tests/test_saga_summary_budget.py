@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 
 from graphiti_core.graphiti import (
     MAX_SAGA_EPISODES_FOR_SUMMARY,
@@ -10,6 +11,8 @@ from graphiti_core.graphiti import (
 )
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import SagaNode
+from graphiti_core.prompts import create_prompt_library
+from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
 from graphiti_core.utils.text_utils import SAGA_SUMMARY_MAX_CHARS
 
 
@@ -245,3 +248,41 @@ async def test_saga_summary_prompt_stays_under_context_cap(monkeypatch):
     assert saga._summary_episodes_skipped > 0
     assert saga.last_summarized_at == _dt(saga._summary_episodes_selected)
     assert llm.max_tokens == SAGA_SUMMARY_MAX_TOKENS
+
+
+async def test_saga_summary_budget_uses_routed_prompt(monkeypatch):
+    monkeypatch.setattr('graphiti_core.graphiti.SAGA_SUMMARY_MAX_PROMPT_BYTES', 25_000)
+    episodes = [('x' * 4_000, _dt(index), _dt(index)) for index in range(1, 6)]
+
+    legacy_llm = _FakeLLMClient()
+    legacy_graphiti = Graphiti.__new__(Graphiti)
+    legacy_graphiti.driver = SimpleNamespace(
+        graph_operations_interface=_FakeGraphOperations(episodes=episodes)
+    )
+    legacy_graphiti.llm_client = legacy_llm
+    legacy_saga = await legacy_graphiti.summarize_saga('saga-1')
+
+    def padded_prompt(context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt(
+            system=SystemMessage(content='P' * 14_000),
+            user=UserMessage(content='\n---\n'.join(context['episodes'])),
+        )
+
+    library = create_prompt_library({'summarize_sagas': {'summarize_saga': padded_prompt}})
+    routed_llm = _FakeLLMClient()
+    routed_graphiti = Graphiti.__new__(Graphiti)
+    routed_graphiti.driver = SimpleNamespace(
+        graph_operations_interface=_FakeGraphOperations(episodes=episodes)
+    )
+    routed_graphiti.llm_client = routed_llm
+    routed_graphiti.clients = GraphitiClients.model_construct(
+        llm_client=routed_llm,
+        prompt_library=library,
+    )
+    routed_saga = await routed_graphiti.summarize_saga('saga-1')
+
+    assert routed_saga._summary_episodes_selected < legacy_saga._summary_episodes_selected
+    for llm in (legacy_llm, routed_llm):
+        prompt_bytes = sum(len(message.content.encode('utf-8')) for message in llm.messages)
+        assert prompt_bytes <= 25_000
+    assert routed_llm.messages[0].content.startswith('P' * 100)

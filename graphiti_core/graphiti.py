@@ -40,7 +40,11 @@ from graphiti_core.edges import (
 )
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
-from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
+from graphiti_core.graphiti_types import (
+    GraphitiClients,
+    generate_prompt_response,
+    resolve_prompt_messages,
+)
 from graphiti_core.helpers import (
     get_default_group_id,
     semaphore_gather,
@@ -721,11 +725,17 @@ class Graphiti:
         schema_reserve = len(_SAGA_SUMMARY_SCHEMA_WRAPPER.encode('utf-8')) + len(
             json.dumps(SagaSummary.model_json_schema()).encode('utf-8')
         )
+        saga_clients = getattr(self, 'clients', None)
         while episodes_data:
             context = _prompt_context(episodes_data)
             prompt_bytes = (
                 _saga_summary_messages_utf8_bytes(
-                    prompt_library.summarize_sagas.summarize_saga(context)
+                    resolve_prompt_messages(
+                        'summarize_sagas.summarize_saga',
+                        prompt_library.summarize_sagas.summarize_saga,
+                        context,
+                        clients=saga_clients,
+                    )
                 )
                 + schema_reserve
             )
@@ -760,7 +770,7 @@ class Graphiti:
             'summarize_sagas.summarize_saga',
             prompt_library.summarize_sagas.summarize_saga,
             context,
-            clients=self.clients,
+            clients=saga_clients,
             response_model=SagaSummary,
             max_tokens=SAGA_SUMMARY_MAX_TOKENS,
         )
