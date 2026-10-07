@@ -394,7 +394,7 @@ async def edge_search(
                     )
             elif config.reranker == EdgeReranker.cross_encoder:
                 search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
-                rrf_result_uuids, _ = rrf(search_result_uuids, min_score=reranker_min_score)
+                rrf_result_uuids, _ = rrf(search_result_uuids)
                 rrf_edges = [edge_uuid_map[uuid] for uuid in rrf_result_uuids][: 2 * limit]
                 fact_to_uuid_map = {edge.fact: edge.uuid for edge in rrf_edges}
                 with _trace_phase(
