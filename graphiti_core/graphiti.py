@@ -1100,6 +1100,7 @@ class Graphiti:
         excluded_entity_types: list[str] | None,
         strict_edge_types: bool = False,
         custom_extraction_instructions: str | None = None,
+        use_combined_extraction: bool = True,
         clients: GraphitiClients | None = None,
     ) -> tuple[
         dict[str, list[EntityNode]],
@@ -1118,6 +1119,7 @@ class Graphiti:
             excluded_entity_types=excluded_entity_types,
             strict_edge_types=strict_edge_types,
             custom_extraction_instructions=custom_extraction_instructions,
+            use_combined_extraction=use_combined_extraction,
         )
 
         # Dedupe extracted nodes in memory
@@ -1592,6 +1594,7 @@ class Graphiti:
         strict_edge_types: bool = False,
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
+        use_combined_extraction: bool = True,
     ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
@@ -1625,6 +1628,9 @@ class Graphiti:
             If a string is provided and a saga with this name already exists in the group, the episodes
             will be added to it. Otherwise, a new saga will be created. Sagas are connected to episodes
             via HAS_EPISODE edges, and consecutive episodes are linked via NEXT_EPISODE edges.
+        use_combined_extraction : bool
+            If True, use one combined node-and-edge LLM call per episode. If False, use separate
+            node and edge extraction.
 
         Returns
         -------
@@ -1712,6 +1718,7 @@ class Graphiti:
                     excluded_entity_types,
                     strict_edge_types=strict_edge_types,
                     custom_extraction_instructions=custom_extraction_instructions,
+                    use_combined_extraction=use_combined_extraction,
                     clients=clients,
                 )
 

@@ -268,7 +268,7 @@ async def extract_nodes_and_edges_bulk(
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
     custom_extraction_instructions: str | None = None,
-    use_combined_extraction: bool = False,
+    use_combined_extraction: bool = True,
     strict_edge_types: bool = False,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     if use_combined_extraction:

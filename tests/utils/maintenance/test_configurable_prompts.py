@@ -15,7 +15,7 @@ from graphiti_core.prompts.extract_edges import ExtractedEdges
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
 from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
 from graphiti_core.search.search_config import SearchResults
-from graphiti_core.utils.bulk_utils import extract_nodes_and_edges_bulk
+from graphiti_core.utils.bulk_utils import RawEpisode, extract_nodes_and_edges_bulk
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import community_operations as community_ops
 from graphiti_core.utils.maintenance import edge_operations as edge_ops
@@ -560,10 +560,64 @@ async def test_bulk_node_flow_inherits_clients_prompt_library(monkeypatch):
         clients,
         [(episode, [])],
         edge_type_map={},
+        use_combined_extraction=False,
     )
 
     assert clients.prompt_library is lib
     assert captured['library'] is lib
+
+
+@pytest.mark.asyncio
+async def test_add_episode_bulk_can_select_separate_extraction(monkeypatch):
+    clients = _make_clients()
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = clients.driver
+    graphiti.clients = clients
+    graphiti.tracer = MagicMock()
+    graphiti.max_coroutines = 2
+    graphiti._resolve_request_scope = MagicMock(
+        return_value=('group', clients.driver, clients)
+    )
+
+    async def retrieve_episodes(_driver, episodes, **_kwargs):
+        return [(episode, []) for episode in episodes]
+
+    extract_mock = AsyncMock(return_value=([], []))
+    monkeypatch.setattr('graphiti_core.graphiti.extract_nodes_and_edges_bulk', extract_mock)
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.add_nodes_and_edges_bulk',
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.retrieve_previous_episodes_bulk',
+        retrieve_episodes,
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.dedupe_nodes_bulk',
+        AsyncMock(return_value=({}, {})),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.dedupe_edges_bulk',
+        AsyncMock(return_value={}),
+    )
+    graphiti._resolve_nodes_and_edges_bulk = AsyncMock(return_value=([], [], [], {}))
+
+    await graphiti.add_episode_bulk(
+        [
+            RawEpisode(
+                name='episode',
+                content='Alice works at Acme',
+                source_description='test',
+                source=EpisodeType.message,
+                reference_time=utc_now(),
+            )
+        ],
+        group_id='group',
+        use_combined_extraction=False,
+    )
+
+    extract_mock.assert_awaited_once()
+    assert extract_mock.await_args.kwargs['use_combined_extraction'] is False
 
 
 @pytest.mark.asyncio

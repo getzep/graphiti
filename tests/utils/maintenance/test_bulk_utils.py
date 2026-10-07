@@ -521,6 +521,7 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_extrac
         [(episode, [])],
         edge_type_map={},
         custom_extraction_instructions=custom_instructions,
+        use_combined_extraction=False,
     )
 
     assert extract_nodes_calls == [custom_instructions]
@@ -573,6 +574,7 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_extrac
         edge_type_map=edge_type_map,
         edge_types=edge_types,
         custom_extraction_instructions=custom_instructions,
+        use_combined_extraction=False,
     )
 
     assert extract_edges_calls == [
@@ -581,8 +583,7 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_extrac
 
 
 @pytest.mark.asyncio
-async def test_extract_nodes_and_edges_bulk_custom_instructions_none_by_default(monkeypatch):
-    """Test that custom_extraction_instructions defaults to None when not provided."""
+async def test_extract_nodes_and_edges_bulk_defaults_to_combined_extraction(monkeypatch):
     clients = _make_clients()
     episode = _make_episode('1')
 
@@ -611,7 +612,6 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_none_by_default(
         clients,
         [(episode, [])],
         edge_type_map={},
-        use_combined_extraction=True,
     )
 
     assert len(extract_combined_calls) == 1
