@@ -790,16 +790,17 @@ async def community_search(
             'search.community_search.execute_methods',
             {'candidate_limit': 2 * limit},
         ):
-            search_results: list[list[CommunityNode]] = list(
-                await semaphore_gather(
-                    *[
-                        community_fulltext_search(driver, query, group_ids, 2 * limit),
-                        community_similarity_search(
-                            driver, query_vector, group_ids, 2 * limit, config.sim_min_score
-                        ),
-                    ]
+            search_tasks = []
+            if CommunitySearchMethod.bm25 in config.search_methods:
+                search_tasks.append(community_fulltext_search(driver, query, group_ids, 2 * limit))
+            if CommunitySearchMethod.cosine_similarity in config.search_methods:
+                search_tasks.append(
+                    community_similarity_search(
+                        driver, query_vector, group_ids, 2 * limit, config.sim_min_score
+                    )
                 )
-            )
+
+            search_results: list[list[CommunityNode]] = list(await semaphore_gather(*search_tasks))
 
         search_result_uuids = [
             [community.uuid for community in result] for result in search_results
