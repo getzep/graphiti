@@ -575,9 +575,7 @@ async def test_add_episode_bulk_can_select_separate_extraction(monkeypatch):
     graphiti.clients = clients
     graphiti.tracer = MagicMock()
     graphiti.max_coroutines = 2
-    graphiti._resolve_request_scope = MagicMock(
-        return_value=('group', clients.driver, clients)
-    )
+    graphiti._resolve_request_scope = MagicMock(return_value=('group', clients.driver, clients))
 
     async def retrieve_episodes(_driver, episodes, **_kwargs):
         return [(episode, []) for episode in episodes]

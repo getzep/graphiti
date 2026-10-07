@@ -301,6 +301,7 @@ async def extract_nodes_and_edges(
         )
 
     if extracted_edges:
+
         async def extract_group_timestamps(group: list[EntityEdge]) -> BatchEdgeTimestamps | None:
             facts_with_ref = [
                 {
