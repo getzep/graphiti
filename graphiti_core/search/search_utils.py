@@ -1904,6 +1904,11 @@ def maximal_marginal_relevance(
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
     min_score: float = -2.0,
 ) -> tuple[list[str], list[float]]:
+    """Greedily rank candidates against already selected results.
+
+    Scores are measured at selection time and returned in selection order.
+    Ties preserve candidate input order, including the initial tie when lambda is zero.
+    """
     start = time()
     query_array = np.array(query_vector)
     candidate_arrays: dict[str, NDArray] = {}
@@ -1923,20 +1928,32 @@ def maximal_marginal_relevance(
             similarity_matrix[i, j] = similarity
             similarity_matrix[j, i] = similarity
 
-    mmr_scores: dict[str, float] = {}
-    for i, uuid in enumerate(uuids):
-        max_sim = np.max(similarity_matrix[i, :])
-        mmr = mmr_lambda * np.dot(query_array, candidate_arrays[uuid]) + (mmr_lambda - 1) * max_sim
-        mmr_scores[uuid] = mmr
+    relevance = np.array([np.dot(query_array, candidate_arrays[uuid]) for uuid in uuids])
+    redundancy = np.zeros(len(uuids))
+    remaining = list(range(len(uuids)))
+    selected_uuids: list[str] = []
+    selected_scores: list[float] = []
 
-    uuids.sort(reverse=True, key=lambda c: mmr_scores[c])
+    while remaining:
+        scores = mmr_lambda * relevance[remaining] + (mmr_lambda - 1) * redundancy[remaining]
+        best = int(np.argmax(scores))
+        score = float(scores[best])
+        if not (score >= min_score):
+            break
+
+        selected = remaining.pop(best)
+        selected_uuids.append(uuids[selected])
+        selected_scores.append(score)
+        if len(selected_uuids) == 1:
+            # Negative similarities are valid: only the empty selection has zero redundancy.
+            redundancy = similarity_matrix[selected].copy()
+        else:
+            redundancy = np.maximum(redundancy, similarity_matrix[selected])
 
     end = time()
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
 
-    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score], [
-        mmr_scores[uuid] for uuid in uuids if mmr_scores[uuid] >= min_score
-    ]
+    return selected_uuids, selected_scores
 
 
 async def get_embeddings_for_nodes(
