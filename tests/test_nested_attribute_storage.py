@@ -25,6 +25,7 @@ import pytest
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
+from graphiti_core.utils.bulk_utils import add_nodes_and_edges_bulk_tx
 from graphiti_core.utils.datetime_utils import utc_now
 
 # A value the model extracted correctly; the source data really is nested.
@@ -129,4 +130,42 @@ async def test_entity_edge_save_never_sends_map_valued_property(provider, attrib
     await edge.save(driver)  # type: ignore[arg-type]
 
     edge_data = driver.captured.get('edge_data', driver.captured)
+    _assert_property_values_are_storable(edge_data)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', PROPERTY_SAFE_PROVIDERS)
+@pytest.mark.parametrize(
+    'attributes',
+    [LEGITIMATE_NESTED_ATTRIBUTE, SCHEMA_ECHO_ATTRIBUTE, NESTED_LIST_ATTRIBUTE],
+    ids=['legitimate_nested', 'schema_echo', 'nested_list'],
+)
+async def test_bulk_save_never_sends_map_valued_property(provider, attributes):
+    """The bulk transaction must apply the same storage policy as single saves."""
+    node = EntityNode(name='Alice', group_id='group', attributes=dict(attributes))
+    node.name_embedding = [0.1, 0.2]
+    edge = EntityEdge(
+        source_node_uuid=node.uuid,
+        target_node_uuid='target-uuid',
+        name='RELATES_TO',
+        group_id='group',
+        fact='a fact',
+        episodes=[],
+        created_at=utc_now(),
+        attributes=dict(attributes),
+    )
+    edge.fact_embedding = [0.1, 0.2]
+
+    class CaptureTransaction:
+        def __init__(self):
+            self.calls = []
+
+        async def run(self, query, **kwargs):
+            self.calls.append(kwargs)
+
+    tx = CaptureTransaction()
+    await add_nodes_and_edges_bulk_tx(tx, [], [], [node], [edge], None, _RecordingDriver(provider))  # type: ignore[arg-type]
+    node_data = next(call['nodes'][0] for call in tx.calls if 'nodes' in call)
+    edge_data = next(call['entity_edges'][0] for call in tx.calls if 'entity_edges' in call)
+    _assert_property_values_are_storable(node_data)
     _assert_property_values_are_storable(edge_data)
