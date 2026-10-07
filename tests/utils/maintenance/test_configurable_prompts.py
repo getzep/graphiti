@@ -330,6 +330,34 @@ async def test_extract_edge_attributes_use_injected_prompt_library():
 
 
 @pytest.mark.asyncio
+async def test_extract_node_attributes_use_injected_prompt_library(monkeypatch):
+    class Person(BaseModel):
+        city: str = Field(default='')
+
+    marker = 'CUSTOM_NODE_ATTRS'
+    lib = create_prompt_library({'extract_nodes': {'extract_attributes': _marker_prompt(marker)}})
+    clients = _make_clients(lib)
+    clients.llm_client.generate_response = AsyncMock(return_value={'city': 'Seattle'})
+    monkeypatch.setattr(node_ops, 'create_entity_node_embeddings', AsyncMock())
+
+    async def should_not_summarize(_node):
+        return False
+
+    await node_ops.extract_attributes_from_nodes(
+        clients,
+        [EntityNode(name='Alice', group_id='group', labels=['Entity', 'Person'])],
+        episode=_make_episode(),
+        entity_types={'Person': Person},
+        should_summarize_node=should_not_summarize,
+    )
+
+    args, kwargs = clients.llm_client.generate_response.await_args
+    assert args[0][0].content.startswith(marker)
+    assert kwargs['prompt_name'] == 'extract_nodes.extract_attributes'
+    assert kwargs['response_model'] is Person
+
+
+@pytest.mark.asyncio
 async def test_combined_extraction_uses_clients_prompt_library():
     marker = 'CUSTOM_COMBINED'
     lib = create_prompt_library(

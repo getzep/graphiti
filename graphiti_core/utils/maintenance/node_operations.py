@@ -963,6 +963,7 @@ async def extract_attributes_only_from_nodes(
                 episode,
                 previous_episodes,
                 entity_type,
+                clients=clients,
             )
             for node, entity_type in extraction_inputs
         ],
