@@ -6,7 +6,10 @@ from pydantic import BaseModel
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
-from graphiti_core.utils.maintenance.combined_extraction import extract_nodes_and_edges
+from graphiti_core.utils.maintenance.combined_extraction import (
+    TIMESTAMP_BATCH_SIZE,
+    extract_nodes_and_edges,
+)
 
 
 def _make_clients():
@@ -538,3 +541,47 @@ async def test_combined_extraction_omits_custom_instructions_block_when_empty():
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
     assert '<CUSTOM INSTRUCTIONS>' not in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_combined_extraction_dates_facts_in_groups():
+    fact_count = TIMESTAMP_BATCH_SIZE + 5
+    extract_response = {
+        'extracted_entities': [
+            {'name': f'Entity {i}', 'entity_type_id': 0} for i in range(fact_count + 1)
+        ],
+        'edges': [
+            {
+                'source_entity_name': f'Entity {i}',
+                'target_entity_name': f'Entity {i + 1}',
+                'relation_type': 'LINKS_TO',
+                'fact': f'Entity {i} links to Entity {i + 1}.',
+                'episode_indices': [0],
+            }
+            for i in range(fact_count)
+        ],
+    }
+    group_sizes: list[int] = []
+
+    async def generate(messages, **kwargs):
+        if kwargs['prompt_name'] != 'extract_edges.extract_timestamps_batch':
+            return extract_response
+        prompt = '\n'.join(message.content for message in messages)
+        size = sum(f'Entity {i} links to Entity' in prompt for i in range(fact_count))
+        group_sizes.append(size)
+        if len(group_sizes) == 1:
+            raise RuntimeError('batch timestamps failed')
+        return {'timestamps': [{'valid_at': '2024-01-01T00:00:00Z', 'invalid_at': None}] * size}
+
+    clients, llm_generate = _make_clients()
+    llm_generate.side_effect = generate
+
+    _nodes, edges, _ = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+    )
+
+    assert len(edges) == fact_count
+    assert sorted(group_sizes) == sorted([TIMESTAMP_BATCH_SIZE, TIMESTAMP_BATCH_SIZE, 5])
+    assert all(edge.valid_at is not None for edge in edges)

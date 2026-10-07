@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
@@ -39,6 +40,9 @@ from graphiti_core.utils.maintenance.temporal_edge_utils import apply_extracted_
 from graphiti_core.utils.text_utils import concatenate_episodes, concatenate_timeline
 
 logger = logging.getLogger(__name__)
+
+TIMESTAMP_BATCH_SIZE = 20
+TIMESTAMP_BATCH_ATTEMPTS = 2
 
 
 def _episode_uuids_for_fact(
@@ -297,34 +301,58 @@ async def extract_nodes_and_edges(
         )
 
     if extracted_edges:
-        facts_with_ref = [
-            {
-                'fact': edge.fact,
-                'reference_time': (
-                    edge.reference_time.isoformat() if edge.reference_time else 'unknown'
-                ),
-            }
-            for edge in extracted_edges
+        async def extract_group_timestamps(group: list[EntityEdge]) -> BatchEdgeTimestamps | None:
+            facts_with_ref = [
+                {
+                    'fact': edge.fact,
+                    'reference_time': (
+                        edge.reference_time.isoformat() if edge.reference_time else 'unknown'
+                    ),
+                }
+                for edge in group
+            ]
+            for attempt in range(1, TIMESTAMP_BATCH_ATTEMPTS + 1):
+                try:
+                    # Build the prompt again for each attempt because the LLM client edits messages.
+                    ts_response = await generate_prompt_response(
+                        llm_client,
+                        'extract_edges.extract_timestamps_batch',
+                        prompt_library.extract_edges.extract_timestamps_batch,
+                        {'facts': facts_with_ref},
+                        clients=clients,
+                        response_model=BatchEdgeTimestamps,
+                        model_size=ModelSize.small,
+                    )
+                    return BatchEdgeTimestamps(**ts_response)
+                except Exception:
+                    logger.warning(
+                        'Failed to extract batch timestamps for %d facts (attempt %d of %d)',
+                        len(group),
+                        attempt,
+                        TIMESTAMP_BATCH_ATTEMPTS,
+                        exc_info=True,
+                    )
+            return None
+
+        fact_groups = [
+            extracted_edges[i : i + TIMESTAMP_BATCH_SIZE]
+            for i in range(0, len(extracted_edges), TIMESTAMP_BATCH_SIZE)
         ]
-        try:
-            ts_response = await generate_prompt_response(
-                llm_client,
-                'extract_edges.extract_timestamps_batch',
-                prompt_library.extract_edges.extract_timestamps_batch,
-                {'facts': facts_with_ref},
-                clients=clients,
-                response_model=BatchEdgeTimestamps,
-                model_size=ModelSize.small,
-            )
-            batch_result = BatchEdgeTimestamps(**ts_response)
-            if len(batch_result.timestamps) != len(extracted_edges):
+        group_results = await semaphore_gather(
+            *(extract_group_timestamps(group) for group in fact_groups),
+            max_coroutines=clients.max_coroutines,
+        )
+        for group, batch_result in zip(fact_groups, group_results, strict=True):
+            if batch_result is None:
+                continue
+            if len(batch_result.timestamps) != len(group):
                 logger.warning(
                     'Batch timestamp count mismatch: got %d timestamps for %d facts',
                     len(batch_result.timestamps),
-                    len(extracted_edges),
+                    len(group),
                 )
-            batch_rows = batch_result.timestamps[: len(extracted_edges)]
-            for edge, timestamps in zip_longest(extracted_edges, batch_rows):
+            batch_rows = batch_result.timestamps[: len(group)]
+            for edge, timestamps in zip_longest(group, batch_rows):
                 if timestamps is not None:
                     apply_extracted_timestamps(
                         edge,
@@ -332,12 +360,6 @@ async def extract_nodes_and_edges(
                         timestamps.invalid_at,
                         edge.reference_time,
                     )
-        except Exception:
-            logger.warning(
-                'Failed to extract batch timestamps for %d facts',
-                len(extracted_edges),
-                exc_info=True,
-            )
 
     # --- Derive node episode attribution from edges and drop orphans ---
     # Each node inherits the episode indices of every edge it participates in.
