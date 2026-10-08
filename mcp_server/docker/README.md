@@ -47,24 +47,27 @@ FALKORDB_DATABASE=default_db  # Database name (default: default_db)
 #### Accessing Services
 
 - **FalkorDB (Redis):** redis://localhost:6379
-- **FalkorDB Web UI:** http://localhost:3000
-- **MCP Server:** http://localhost:8000
+- **FalkorDB Web UI:** <http://localhost:3000>
+- **MCP Server:** <http://localhost:8000>
 
 #### Data Management
 
 **Backup:**
+
 ```bash
 docker run --rm -v mcp_server_falkordb_data:/var/lib/falkordb/data -v $(pwd):/backup alpine \
   tar czf /backup/falkordb-backup.tar.gz -C /var/lib/falkordb/data .
 ```
 
 **Restore:**
+
 ```bash
 docker run --rm -v mcp_server_falkordb_data:/var/lib/falkordb/data -v $(pwd):/backup alpine \
   tar xzf /backup/falkordb-backup.tar.gz -C /var/lib/falkordb/data
 ```
 
 **Clear Data:**
+
 ```bash
 docker-compose down
 docker volume rm mcp_server_falkordb_data
@@ -72,6 +75,7 @@ docker-compose up
 ```
 
 #### Gotchas
+
 - Both FalkorDB and MCP server run in the same container
 - FalkorDB uses Redis persistence mechanisms (AOF/RDB)
 - Default configuration has no password - add one for production
@@ -98,15 +102,16 @@ USE_PARALLEL_RUNTIME=false  # Enterprise feature (default: false)
 
 #### Accessing Neo4j
 
-- **Web Interface:** http://localhost:7474
+- **Web Interface:** <http://localhost:7474>
 - **Bolt Protocol:** bolt://localhost:7687
-- **MCP Server:** http://localhost:8000
+- **MCP Server:** <http://localhost:8000>
 
 Default credentials: `neo4j` / `demodemo`
 
 #### Data Management
 
 **Backup:**
+
 ```bash
 # Backup both data and logs volumes
 docker run --rm -v docker_neo4j_data:/data -v $(pwd):/backup alpine \
@@ -116,6 +121,7 @@ docker run --rm -v docker_neo4j_logs:/logs -v $(pwd):/backup alpine \
 ```
 
 **Restore:**
+
 ```bash
 # Restore both volumes
 docker run --rm -v docker_neo4j_data:/data -v $(pwd):/backup alpine \
@@ -125,6 +131,7 @@ docker run --rm -v docker_neo4j_logs:/logs -v $(pwd):/backup alpine \
 ```
 
 **Clear Data:**
+
 ```bash
 docker-compose -f docker-compose-neo4j.yml down
 docker volume rm docker_neo4j_data docker_neo4j_logs
@@ -132,6 +139,7 @@ docker-compose -f docker-compose-neo4j.yml up
 ```
 
 #### Gotchas
+
 - Neo4j takes 30+ seconds to start up - wait for the health check
 - The web interface requires authentication even for local access
 - Memory heap is configured for 512MB initial, 1GB max
@@ -143,6 +151,7 @@ docker-compose -f docker-compose-neo4j.yml up
 To switch from FalkorDB to Neo4j (or vice versa):
 
 1. **Stop current setup:**
+
    ```bash
    docker-compose down  # Stop FalkorDB combined image
    # or
@@ -150,6 +159,7 @@ To switch from FalkorDB to Neo4j (or vice versa):
    ```
 
 2. **Start new database:**
+
    ```bash
    docker-compose up  # Start FalkorDB combined image
    # or
@@ -163,6 +173,7 @@ Note: Data is not automatically migrated between different database types. You'l
 ### Port Conflicts
 
 If port 8000 is already in use:
+
 ```bash
 # Find what's using the port
 lsof -i :8000
@@ -174,11 +185,13 @@ lsof -i :8000
 ### Container Won't Start
 
 1. Check logs:
+
    ```bash
    docker-compose logs graphiti-mcp
    ```
 
 2. Verify `.env` file exists and contains valid API keys:
+
    ```bash
    cat .env | grep API_KEY
    ```
@@ -188,31 +201,37 @@ lsof -i :8000
 ### Database Connection Issues
 
 **FalkorDB:**
+
 - Test Redis connectivity: `docker compose exec graphiti-falkordb redis-cli ping`
 - Check FalkorDB logs: `docker compose logs graphiti-falkordb`
 - Verify both services started: Look for "FalkorDB is ready!" and "Starting MCP server..." in logs
 
 **Neo4j:**
+
 - Wait for health check to pass (can take 30+ seconds)
 - Check Neo4j logs: `docker-compose -f docker-compose-neo4j.yml logs neo4j`
 - Verify credentials match environment variables
 
 **FalkorDB:**
+
 - Test Redis connectivity: `redis-cli -h localhost ping`
 
 ### Data Not Persisting
 
 1. Verify volumes are created:
+
    ```bash
    docker volume ls | grep docker_
    ```
 
 2. Check volume mounts in container:
+
    ```bash
    docker inspect graphiti-mcp | grep -A 5 Mounts
    ```
 
 3. Ensure proper shutdown:
+
    ```bash
    docker-compose down  # Not docker-compose down -v (which removes volumes)
    ```
@@ -220,11 +239,13 @@ lsof -i :8000
 ### Performance Issues
 
 **FalkorDB:**
+
 - Adjust `SEMAPHORE_LIMIT` environment variable
 - Monitor with: `docker stats graphiti-falkordb`
 - Check Redis memory: `docker compose exec graphiti-falkordb redis-cli info memory`
 
 **Neo4j:**
+
 - Increase heap memory in docker-compose-neo4j.yml
 - Adjust page cache size based on data size
 - Check query performance in Neo4j browser
@@ -234,6 +255,7 @@ lsof -i :8000
 ### Volumes
 
 Each database configuration uses named volumes for data persistence:
+
 - FalkorDB (combined): `falkordb_data`
 - Neo4j: `neo4j_data`, `neo4j_logs`
 
@@ -258,6 +280,7 @@ services:
 ## Configuration Files
 
 Each database has a dedicated configuration file in `../config/`:
+
 - `config-docker-falkordb-combined.yaml` - FalkorDB combined image configuration
 - `config-docker-neo4j.yaml` - Neo4j configuration
 

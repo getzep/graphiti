@@ -192,7 +192,7 @@ class FalkorEpisodeNodeOperations(EpisodeNodeOperations):
                         executor.clone(database=gid), [gid], limit, uuid_cursor
                     )
                     all_episodes.extend(partial)
-                all_episodes.sort(key=lambda e: e.uuid, reverse=True)
+                all_episodes.sort(key=lambda e: (e.created_at or ''), reverse=True)
                 if limit is not None:
                     all_episodes = all_episodes[:limit]
                 return all_episodes
@@ -210,7 +210,7 @@ class FalkorEpisodeNodeOperations(EpisodeNodeOperations):
             """
             + EPISODIC_NODE_RETURN
             + """
-            ORDER BY uuid DESC
+            ORDER BY created_at DESC, uuid DESC
             """
             + limit_clause
         )
