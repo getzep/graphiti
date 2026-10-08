@@ -1,3 +1,4 @@
+import tracemalloc
 from datetime import datetime, timezone
 from math import sqrt
 from types import SimpleNamespace
@@ -91,6 +92,27 @@ def test_candidate_magnitudes_do_not_change_ranking():
 
     assert uuids == ['best', 'diverse', 'duplicate']
     assert scores == pytest.approx([0.4, 0.06, -0.1])
+
+
+@pytest.mark.parametrize('min_score', [-2.0, 0.51])
+def test_mmr_workspace_stays_below_pairwise_matrix_size(min_score):
+    candidates = {str(index): [1.0, 0.0] for index in range(1024)}
+    was_tracing = tracemalloc.is_tracing()
+    if not was_tracing:
+        tracemalloc.start()
+    baseline, _ = tracemalloc.get_traced_memory()
+    tracemalloc.reset_peak()
+    try:
+        uuids, _ = maximal_marginal_relevance([1.0, 0.0], candidates, min_score=min_score)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        if not was_tracing:
+            tracemalloc.stop()
+
+    assert uuids == (list(candidates) if min_score < 0.5 else [])
+    # A 1024 x 1024 float64 matrix alone needs 8 MiB. Leave ample room for
+    # normalized two-dimensional vectors and linear ranking workspace.
+    assert peak - baseline < 4 * 1024 * 1024
 
 
 def _reference_mmr(query, candidates, weight, min_score):

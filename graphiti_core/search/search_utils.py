@@ -1908,6 +1908,7 @@ def maximal_marginal_relevance(
 
     Scores are measured at selection time and returned in selection order.
     Ties preserve candidate input order, including the initial tie when lambda is zero.
+    Redundancy updates use linear workspace without a pairwise similarity matrix.
     """
     start = time()
     query_array = np.array(query_vector)
@@ -1916,17 +1917,6 @@ def maximal_marginal_relevance(
         candidate_arrays[uuid] = normalize_l2(embedding)
 
     uuids: list[str] = list(candidate_arrays.keys())
-
-    similarity_matrix = np.zeros((len(uuids), len(uuids)))
-
-    for i, uuid_1 in enumerate(uuids):
-        for j, uuid_2 in enumerate(uuids[:i]):
-            u = candidate_arrays[uuid_1]
-            v = candidate_arrays[uuid_2]
-            similarity = np.dot(u, v)
-
-            similarity_matrix[i, j] = similarity
-            similarity_matrix[j, i] = similarity
 
     relevance = np.array([np.dot(query_array, candidate_arrays[uuid]) for uuid in uuids])
     redundancy = np.zeros(len(uuids))
@@ -1944,11 +1934,17 @@ def maximal_marginal_relevance(
         selected = remaining.pop(best)
         selected_uuids.append(uuids[selected])
         selected_scores.append(score)
+        similarities = np.array(
+            [
+                np.dot(candidate_arrays[uuids[index]], candidate_arrays[uuids[selected]])
+                for index in remaining
+            ]
+        )
         if len(selected_uuids) == 1:
             # Negative similarities are valid: only the empty selection has zero redundancy.
-            redundancy = similarity_matrix[selected].copy()
+            redundancy[remaining] = similarities
         else:
-            redundancy = np.maximum(redundancy, similarity_matrix[selected])
+            redundancy[remaining] = np.maximum(redundancy[remaining], similarities)
 
     end = time()
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
