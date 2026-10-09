@@ -221,7 +221,7 @@ def _encode_payload(state: str, questions: dict[str, dict[str, Any]]) -> str:
     return json.dumps({'state': state, 'questions': questions}, ensure_ascii=False)
 
 
-def clef_node_builder(default_builder):
+def _jev_node_builder(default_builder):
     """Render the default prompt and convert it to n6 questions."""
 
     def _builder(context: dict[str, Any]) -> ChatPrompt:
@@ -237,7 +237,7 @@ def clef_node_builder(default_builder):
     return _builder
 
 
-def clef_edge_builder(default_builder):
+def _jev_edge_builder(default_builder):
     """Render the default prompt and convert it to e2 questions."""
 
     def _builder(context: dict[str, Any]) -> ChatPrompt:
@@ -516,10 +516,10 @@ def jev_prompt_overrides(
     prompt_library = library if library is not None else default_chat_prompt_library
     return LLMPromptOverrides(
         dedupe_nodes=LLMPromptOverrides.DedupeNodes(
-            nodes=clef_node_builder(get_prompt_builder(prompt_library, 'dedupe_nodes.nodes'))
+            nodes=_jev_node_builder(get_prompt_builder(prompt_library, 'dedupe_nodes.nodes'))
         ),
         dedupe_edges=LLMPromptOverrides.DedupeEdges(
-            resolve_edge=clef_edge_builder(
+            resolve_edge=_jev_edge_builder(
                 get_prompt_builder(prompt_library, 'dedupe_edges.resolve_edge')
             )
         ),
