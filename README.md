@@ -697,6 +697,40 @@ that need a smaller model to that model explicitly. Legacy calls without
 GLiNER2 binds model objects at initialization. It does not support per-prompt
 model routing. See ``spec/llm-runtime.md`` for the runtime API.
 
+### Jev dedupe
+
+JevClient routes node dedupe and edge resolution to TypeSafe Jev. Set
+``JEV_API_KEY`` before you create the client. Duplicate and contradiction
+thresholds default to 0.8.
+
+Jev is a third-party hosted API from TypeSafe, so the dedupe prompt content
+goes to that API.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import (
+    JevClient,
+    LLMRuntime,
+    LLMTransport,
+    OpenAIClient,
+    PromptRoutes,
+    jev_prompt_overrides,
+)
+
+openai = LLMTransport(OpenAIClient(), models=['gpt-5.1'])
+jev = LLMTransport(JevClient(), models=['jev-latest'])
+jev_dedupe = jev.model('jev-latest', prompt_overrides=jev_prompt_overrides())
+
+runtime = LLMRuntime(
+    model=openai.model('gpt-5.1'),
+    routes=PromptRoutes(
+        dedupe_nodes=PromptRoutes.DedupeNodes(nodes=jev_dedupe),
+        dedupe_edges=PromptRoutes.DedupeEdges(resolve_edge=jev_dedupe),
+    ),
+)
+graphiti = Graphiti(..., llm_runtime=runtime)
+```
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
