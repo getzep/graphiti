@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, get_entity_node_from_record
+from graphiti_core.prompts.extract_nodes import ExtractedEntity
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
@@ -25,6 +27,7 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
 )
 from graphiti_core.utils.maintenance.node_operations import (
     _collect_candidate_nodes,
+    _create_entity_nodes,
     _extract_entity_summaries_batch,
     _resolve_with_llm,
     extract_attributes_from_nodes,
@@ -986,3 +989,32 @@ async def test_extract_attributes_preserves_prior_attributes_when_label_not_in_e
     )
 
     assert results[0].attributes == {'age': 30, 'city': 'New York'}
+
+
+def test_create_entity_nodes_sorts_labels():
+    extracted = ExtractedEntity(name='Paris', entity_type_id=0, episode_indices=[0])
+    nodes, _ = _create_entity_nodes(
+        [extracted],
+        [{'entity_type_name': 'Place'}],
+        None,
+        [_make_episode()],
+    )
+
+    assert nodes[0].labels == ['Entity', 'Place']
+
+
+def test_get_entity_node_from_record_sorts_labels():
+    record = {
+        'uuid': 'node-1',
+        'name': 'Paris',
+        'group_id': 'group',
+        'summary': '',
+        'created_at': '2024-01-01T00:00:00+00:00',
+        'attributes': {},
+        'labels': ['Place', 'Entity'],
+        'name_embedding': None,
+    }
+
+    node = get_entity_node_from_record(record, GraphProvider.NEO4J)
+
+    assert node.labels == ['Entity', 'Place']

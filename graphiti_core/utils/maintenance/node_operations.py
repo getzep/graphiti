@@ -322,7 +322,7 @@ def _create_entity_nodes(
             logger.debug(f'Excluding entity of type "{entity_type_name}"')
             continue
 
-        labels: list[str] = list({'Entity', str(entity_type_name)})
+        labels: list[str] = sorted({'Entity', str(entity_type_name)})
 
         new_node = EntityNode(
             name=extracted_entity.name,

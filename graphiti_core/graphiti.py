@@ -15,8 +15,10 @@ limitations under the License.
 """
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime
 from time import time
+from typing import Protocol, TypeVar
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -137,6 +139,21 @@ class AddBulkEpisodeResults(BaseModel):
 class AddTripletResults(BaseModel):
     nodes: list[EntityNode]
     edges: list[EntityEdge]
+
+
+class _HasUuid(Protocol):
+    uuid: str
+
+
+THasUuid = TypeVar('THasUuid', bound=_HasUuid)
+
+
+def _in_requested_uuid_order(
+    items: Sequence[THasUuid], requested_uuids: list[str]
+) -> list[THasUuid]:
+    """Return items in the caller-specified UUID order, dropping any that were not found."""
+    by_uuid = {item.uuid: item for item in items}
+    return [by_uuid[uuid] for uuid in requested_uuids if uuid in by_uuid]
 
 
 class Graphiti:
@@ -1194,17 +1211,21 @@ class Graphiti:
         with self.tracer.start_span('add_episode') as span:
             try:
                 # Retrieve previous episodes for context
-                previous_episodes = (
-                    await self.retrieve_episodes(
+                if previous_episode_uuids is None:
+                    previous_episodes = await self.retrieve_episodes(
                         reference_time,
                         last_n=RELEVANT_SCHEMA_LIMIT,
                         group_ids=[group_id],
                         source=source,
                         driver=driver,
                     )
-                    if previous_episode_uuids is None
-                    else await EpisodicNode.get_by_uuids(driver, previous_episode_uuids)
-                )
+                else:
+                    fetched_previous = await EpisodicNode.get_by_uuids(
+                        driver, previous_episode_uuids
+                    )
+                    previous_episodes = _in_requested_uuid_order(
+                        fetched_previous, previous_episode_uuids
+                    )
 
                 # Get or create episode
                 episode = (

@@ -1060,7 +1060,7 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
         attributes.pop('created_at', None)
         attributes.pop('labels', None)
 
-    labels = record.get('labels', [])
+    labels = sorted(record.get('labels', []))
     group_id = record.get('group_id')
     if 'Entity_' + group_id.replace('-', '') in labels:
         labels.remove('Entity_' + group_id.replace('-', ''))
