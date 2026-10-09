@@ -213,7 +213,7 @@ async def extract_edges(
         max_tokens=extract_edges_max_tokens,
         group_id=group_id or primary_episode.group_id,
     )
-    all_edges_data = ExtractedEdges(**llm_response).edges
+    all_edges_data = ExtractedEdges.model_validate(llm_response).edges
 
     # Validate entity names
     edges_data: list[ExtractedEdge] = []
