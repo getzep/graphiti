@@ -272,7 +272,12 @@ async def edge_fulltext_search(
             return []
     else:
         query = (
-            get_relationships_query('edge_name_and_fact', limit=limit, provider=driver.provider)
+            get_relationships_query(
+                'edge_name_and_fact',
+                limit=limit,
+                provider=driver.provider,
+                apply_index_limit=search_filter.invalid_at is None,
+            )
             + match_query
             + filter_query
             + """

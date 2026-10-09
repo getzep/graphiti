@@ -254,7 +254,12 @@ class Neo4jSearchOperations(SearchOperations):
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
         cypher = (
-            get_relationships_query('edge_name_and_fact', limit=limit, provider=GraphProvider.NEO4J)
+            get_relationships_query(
+                'edge_name_and_fact',
+                limit=limit,
+                provider=GraphProvider.NEO4J,
+                apply_index_limit=search_filter.invalid_at is None,
+            )
             + """
             YIELD relationship AS rel, score
             MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
