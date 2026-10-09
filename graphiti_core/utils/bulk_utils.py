@@ -48,10 +48,7 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _normalize_string_exact,
     _resolve_with_similarity,
 )
-from graphiti_core.utils.maintenance.edge_operations import (
-    extract_edges,
-    resolve_extracted_edge,
-)
+from graphiti_core.utils.maintenance.edge_operations import extract_edges, resolve_extracted_edge
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     retrieve_episodes,
@@ -108,7 +105,9 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: GraphDriver, episodes: list[EpisodicNode]
+    driver: GraphDriver,
+    episodes: list[EpisodicNode],
+    max_coroutines: int | None = None,
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -116,7 +115,8 @@ async def retrieve_previous_episodes_bulk(
                 driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN, group_ids=[episode.group_id]
             )
             for episode in episodes
-        ]
+        ],
+        max_coroutines=max_coroutines,
     )
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]] = [
         (episode, previous_episodes_list[i]) for i, episode in enumerate(episodes)
@@ -268,7 +268,8 @@ async def extract_nodes_and_edges_bulk(
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
     custom_extraction_instructions: str | None = None,
-    use_combined_extraction: bool = False,
+    use_combined_extraction: bool = True,
+    strict_edge_types: bool = False,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     if use_combined_extraction:
         return await _extract_nodes_and_edges_bulk_combined(
@@ -278,6 +279,7 @@ async def extract_nodes_and_edges_bulk(
             entity_types=entity_types,
             excluded_entity_types=excluded_entity_types,
             edge_types=edge_types,
+            strict_edge_types=strict_edge_types,
             custom_extraction_instructions=custom_extraction_instructions,
         )
 
@@ -288,6 +290,7 @@ async def extract_nodes_and_edges_bulk(
         entity_types=entity_types,
         excluded_entity_types=excluded_entity_types,
         edge_types=edge_types,
+        strict_edge_types=strict_edge_types,
         custom_extraction_instructions=custom_extraction_instructions,
     )
 
@@ -299,6 +302,7 @@ async def _extract_nodes_and_edges_bulk_combined(
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
+    strict_edge_types: bool = False,
     custom_extraction_instructions: str | None = None,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     """Combined extraction: single LLM call per episode for both nodes and edges."""
@@ -316,10 +320,12 @@ async def _extract_nodes_and_edges_bulk_combined(
                 excluded_entity_types=excluded_entity_types,
                 edge_type_map=edge_type_map,
                 edge_types=edge_types,
+                strict_edge_types=strict_edge_types,
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for episode, previous_episodes in episode_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     nodes_bulk = [nodes for nodes, _, _ in results]
@@ -334,9 +340,9 @@ async def _extract_nodes_and_edges_bulk_separate(
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
+    strict_edge_types: bool = False,
     custom_extraction_instructions: str | None = None,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
-    """Separate extraction: two sequential LLM calls per episode (legacy)."""
     extracted_results: list[tuple[list[EntityNode], dict[str, list[int]]]] = await semaphore_gather(
         *[
             extract_nodes(
@@ -348,11 +354,12 @@ async def _extract_nodes_and_edges_bulk_separate(
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for episode, previous_episodes in episode_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
     extracted_nodes_bulk = [nodes for nodes, _ in extracted_results]
 
-    extracted_edges_bulk: list[list[EntityEdge]] = await semaphore_gather(
+    edge_results: list[tuple[list[EntityEdge], list[EntityNode]]] = await semaphore_gather(
         *[
             extract_edges(
                 clients,
@@ -362,11 +369,18 @@ async def _extract_nodes_and_edges_bulk_separate(
                 edge_type_map=edge_type_map,
                 group_id=episode.group_id,
                 edge_types=edge_types,
+                strict_edge_types=strict_edge_types,
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for i, (episode, previous_episodes) in enumerate(episode_tuples)
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
+
+    extracted_edges_bulk: list[list[EntityEdge]] = []
+    for i, (edges, materialized_nodes) in enumerate(edge_results):
+        extracted_edges_bulk.append(edges)
+        extracted_nodes_bulk[i].extend(materialized_nodes)
 
     return extracted_nodes_bulk, extracted_edges_bulk
 
@@ -396,7 +410,8 @@ async def dedupe_nodes_bulk(
                 entity_types,
             )
             for i, nodes in enumerate(extracted_nodes)
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     episode_resolutions: list[tuple[str, list[EntityNode]]] = []
@@ -499,7 +514,8 @@ async def dedupe_edges_bulk(
 
     # generate embeddings
     await semaphore_gather(
-        *[create_entity_edge_embeddings(embedder, edges) for edges in extracted_edges]
+        *[create_entity_edge_embeddings(embedder, edges) for edges in extracted_edges],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # Find similar results
@@ -555,7 +571,8 @@ async def dedupe_edges_bulk(
                 **resolver_kwargs,
             )
             for episode, edge, candidates in dedupe_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # For now we won't track edge invalidation
@@ -626,11 +643,28 @@ def compress_uuid_map(duplicate_pairs: list[tuple[str, str]]) -> dict[str, str]:
 E = typing.TypeVar('E', bound=Edge)
 
 
-def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
+def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]) -> list[E]:
+    """Repoint edge endpoints through ``uuid_map``, dropping edges that collapse.
+
+    Endpoints are rewritten in place. The returned list omits edges whose two
+    endpoints were distinct before remapping and resolve to the same node —
+    dedup can map an endpoint onto the node that is already the other endpoint.
+    Extracted self-referencing edges (source already equals target) are kept.
+    Use the return value rather than the list passed in.
+    """
+    surviving: list[E] = []
     for edge in edges:
         source_uuid = edge.source_node_uuid
         target_uuid = edge.target_node_uuid
         edge.source_node_uuid = uuid_map.get(source_uuid, source_uuid)
         edge.target_node_uuid = uuid_map.get(target_uuid, target_uuid)
 
-    return edges
+        if source_uuid != target_uuid and edge.source_node_uuid == edge.target_node_uuid:
+            logger.info(
+                'Dropping self-edge for node %s (endpoints resolved to the same node)',
+                edge.source_node_uuid,
+            )
+            continue
+        surviving.append(edge)
+
+    return surviving
