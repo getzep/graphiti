@@ -40,6 +40,19 @@ class ResponseModel(BaseModel):
     foo: str
 
 
+class Nested(BaseModel):
+    label: str
+    note: str | None = None
+
+
+class NestedResponseModel(BaseModel):
+    """Mirrors the real extraction models: a list of nested objects, so a $defs entry."""
+
+    items: list[Nested]
+    indices: list[int] = []
+    mapping: dict[str, str] = {}
+
+
 def _messages() -> list[Message]:
     return [
         Message(role='system', content='system message'),
@@ -66,7 +79,36 @@ async def test_defaults_to_json_schema_response_format():
     response_format = completions.create_calls[0]['response_format']
     assert response_format['type'] == 'json_schema'
     assert response_format['json_schema']['name'] == 'ResponseModel'
-    assert response_format['json_schema']['schema'] == ResponseModel.model_json_schema()
+    # Conformed to OpenAI's strict subset: endpoints that translate chat.completions into
+    # the Responses API reject a schema without additionalProperties: false with a 400.
+    assert response_format['json_schema']['schema'] == {
+        **ResponseModel.model_json_schema(),
+        'additionalProperties': False,
+        'required': ['foo'],
+    }
+
+
+@pytest.mark.asyncio
+async def test_json_schema_is_conformed_recursively_and_non_destructively():
+    client, completions = _make_client()
+
+    await client.generate_response(_messages(), response_model=NestedResponseModel)
+
+    schema = completions.create_calls[0]['response_format']['json_schema']['schema']
+    # Nested $defs objects are conformed too, and every declared key becomes required
+    # (including the ones that carry defaults on the Pydantic model).
+    assert schema['additionalProperties'] is False
+    assert schema['required'] == ['items', 'indices', 'mapping']
+    nested = schema['$defs']['Nested']
+    assert nested['additionalProperties'] is False
+    assert nested['required'] == ['label', 'note']
+    # A nullable optional stays nullable — anyOf with a null branch is strict-subset safe.
+    assert {'type': 'null'} in nested['properties']['note']['anyOf']
+    # A free-form map keeps its value schema; forcing additionalProperties: false there
+    # would narrow it to "no keys allowed".
+    assert schema['properties']['mapping']['additionalProperties'] == {'type': 'string'}
+    # Pydantic caches model_json_schema(), so the transform must not mutate it in place.
+    assert 'additionalProperties' not in NestedResponseModel.model_json_schema()
 
 
 @pytest.mark.asyncio
