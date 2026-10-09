@@ -44,7 +44,7 @@ from graphiti_core.prompts.extract_edges import EdgeTimestamps, ExtractedEdges
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
-from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_filters import ComparisonOperator, DateFilter, SearchFilters
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.attribute_utils import apply_capped_attributes
 from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
@@ -329,6 +329,30 @@ async def extract_edges(
     return edges
 
 
+def invalidation_candidate_filter(
+    extracted_edge: EntityEdge, duplicate_candidates: list[EntityEdge]
+) -> SearchFilters:
+    """Restrict invalidation candidates to facts the resolved edge can affect.
+
+    The resolved edge is the extracted edge or one of its duplicate candidates, so its
+    ``valid_at`` is no earlier than the earliest of theirs. A fact that ended at or before
+    that time can neither be invalidated by the resolved edge nor end it (see
+    ``resolve_edge_contradictions``), so it would only take one of the limited search
+    results from a fact that is still open. Without ``valid_at`` on the extracted edge, its
+    timestamps may still be extracted later, so nothing is filtered.
+    """
+    if extracted_edge.valid_at is None:
+        return SearchFilters()
+    starts = [ensure_utc(edge.valid_at) for edge in [extracted_edge, *duplicate_candidates]]
+    cutoff = min(start for start in starts if start is not None)
+    return SearchFilters(
+        invalid_at=[
+            [DateFilter(comparison_operator=ComparisonOperator.is_null)],
+            [DateFilter(date=cutoff, comparison_operator=ComparisonOperator.greater_than)],
+        ]
+    )
+
+
 async def resolve_extracted_edges(
     clients: GraphitiClients,
     extracted_edges: list[EntityEdge],
@@ -418,9 +442,11 @@ async def resolve_extracted_edges(
                 extracted_edge.fact,
                 group_ids=[extracted_edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
-                search_filter=SearchFilters(),
+                search_filter=invalidation_candidate_filter(extracted_edge, related_edges),
             )
-            for extracted_edge in extracted_edges
+            for extracted_edge, related_edges in zip(
+                extracted_edges, related_edges_lists, strict=True
+            )
         ]
     )
 
