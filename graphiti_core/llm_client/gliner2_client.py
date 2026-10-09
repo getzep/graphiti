@@ -197,7 +197,7 @@ class GLiNER2Client(LLMClient):
         entities_dict = result.get('entities', {})
 
         for entity_type, entity_items in entities_dict.items():
-            entity_type_id = label_to_id.get(entity_type, 0)
+            entity_type_id = label_to_id.get(entity_type, label_to_id.get('Entity', 0))
             for item in entity_items:
                 # GLiNER2 returns strings or dicts (when include_confidence=True)
                 name = item.get('text', '') if isinstance(item, dict) else str(item)
@@ -314,15 +314,10 @@ class GLiNER2Client(LLMClient):
                     messages, response_model, max_tokens, model_size
                 )
 
-                # Approximate token usage (GLiNER2 doesn't report actual tokens)
                 text = self._extract_text_from_messages(messages)
                 input_tokens = len(text) // 4
                 output_tokens = len(json.dumps(response)) // 4
-                self.token_tracker.record(
-                    prompt_name or 'unknown',
-                    input_tokens,
-                    output_tokens,
-                )
+                self.token_tracker.record(prompt_name or 'unknown', input_tokens, output_tokens)
             except Exception as e:
                 span.set_status('error', str(e))
                 span.record_exception(e)
