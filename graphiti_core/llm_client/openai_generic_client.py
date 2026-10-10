@@ -62,7 +62,7 @@ class OpenAIGenericClient(LLMClient):
         config: LLMConfig | None = None,
         cache: bool = False,
         client: typing.Any = None,
-        max_tokens: int = 16384,
+        max_tokens: int | None = None,
         structured_output_mode: StructuredOutputMode = 'json_schema',
     ):
         """
@@ -72,7 +72,9 @@ class OpenAIGenericClient(LLMClient):
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
             cache (bool): Whether to use caching for responses. Defaults to False.
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
-            max_tokens (int): The maximum number of tokens to generate. Defaults to 16384 (16K) for better compatibility with local models.
+            max_tokens (int | None): The maximum number of tokens to generate. When None (the default),
+                the value from ``config.max_tokens`` is used. Pass an explicit integer to override the
+                config value for this instance.
             structured_output_mode (StructuredOutputMode): Whether to request structured
                 output via native ``json_schema`` (the default, uses constrained decoding)
                 or to fall back to ``json_object``. Set to ``'json_object'`` for providers
@@ -90,8 +92,8 @@ class OpenAIGenericClient(LLMClient):
 
         super().__init__(config, cache)
 
-        # Override max_tokens to support higher limits for local models
-        self.max_tokens = max_tokens
+        # Resolve max_tokens: constructor arg takes precedence, then config, then default.
+        self.max_tokens = max_tokens if max_tokens is not None else config.max_tokens
         self.structured_output_mode: StructuredOutputMode = structured_output_mode
 
         if client is None:
