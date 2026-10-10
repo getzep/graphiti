@@ -42,6 +42,17 @@ DEFAULT_EMBEDDING_MODEL = 'text-embedding-001'  # gemini-embedding-001 or text-e
 DEFAULT_BATCH_SIZE = 100
 
 
+def _as_contents(texts: list[str]) -> list[types.Content]:
+    """One Content per input text.
+
+    google-genai (>= 2.x) routes ``gemini-embedding-2`` through the generateContent
+    conversion, where a ``list[str]`` becomes a *single* multi-part Content and the API
+    returns one embedding for the whole batch. Wrapping each text in its own Content keeps
+    one request per input for every model.
+    """
+    return [types.Content(role='user', parts=[types.Part.from_text(text=text)]) for text in texts]
+
+
 class GeminiEmbedderConfig(EmbedderConfig):
     embedding_model: str = Field(default=DEFAULT_EMBEDDING_MODEL)
     api_key: str | None = None
@@ -98,10 +109,11 @@ class GeminiEmbedder(EmbedderClient):
         Returns:
             A list of floats representing the embedding vector.
         """
+        texts = [input_data] if isinstance(input_data, str) else [str(item) for item in input_data]
         # Generate embeddings
         result = await self.client.aio.models.embed_content(
             model=self.config.embedding_model or DEFAULT_EMBEDDING_MODEL,
-            contents=[input_data],  # type: ignore[arg-type]  # mypy fails on broad union type
+            contents=_as_contents(texts),  # type: ignore[arg-type]
             config=types.EmbedContentConfig(output_dimensionality=self.config.embedding_dim),
         )
 
@@ -137,7 +149,7 @@ class GeminiEmbedder(EmbedderClient):
                 # Generate embeddings for this batch
                 result = await self.client.aio.models.embed_content(
                     model=self.config.embedding_model or DEFAULT_EMBEDDING_MODEL,
-                    contents=batch,  # type: ignore[arg-type]  # mypy fails on broad union type
+                    contents=_as_contents(batch),  # type: ignore[arg-type]
                     config=types.EmbedContentConfig(
                         output_dimensionality=self.config.embedding_dim
                     ),
@@ -145,6 +157,11 @@ class GeminiEmbedder(EmbedderClient):
 
                 if not result.embeddings or len(result.embeddings) == 0:
                     raise Exception('No embeddings returned')
+                if len(result.embeddings) != len(batch):
+                    # Callers zip inputs and vectors positionally; never return a misaligned batch.
+                    raise ValueError(
+                        f'Expected {len(batch)} embeddings, got {len(result.embeddings)}'
+                    )
 
                 # Process embeddings from this batch
                 for embedding in result.embeddings:
@@ -163,7 +180,7 @@ class GeminiEmbedder(EmbedderClient):
                         # Process each item individually
                         result = await self.client.aio.models.embed_content(
                             model=self.config.embedding_model or DEFAULT_EMBEDDING_MODEL,
-                            contents=[item],  # type: ignore[arg-type]  # mypy fails on broad union type
+                            contents=_as_contents([item]),  # type: ignore[arg-type]
                             config=types.EmbedContentConfig(
                                 output_dimensionality=self.config.embedding_dim
                             ),
