@@ -58,7 +58,7 @@ class LLMConfig:
                                                                         This can be changed if using a different provider or a custom endpoint.
 
                 small_model (str, optional): The specific LLM model to use for generating responses of simpler prompts.
-                                                                Defaults to "gpt-4.1-nano".
+                                                                Defaults to "gpt-4.1-mini".
         """
         self.base_url = base_url
         self.api_key = api_key
