@@ -1047,6 +1047,9 @@ async def test_extract_edges_keeps_self_edges(monkeypatch):
         ('alice_uuid', 'alice_uuid', 'FEELS_HAPPY'),
     }
 
+    # Do not hard-cap max_tokens; the LLM client resolves the model budget.
+    assert 'max_tokens' not in mock_llm.generate_response.await_args.kwargs
+
 
 @pytest.mark.asyncio
 async def test_extract_edges_keeps_valid_edges_with_same_name_different_nodes(monkeypatch):
