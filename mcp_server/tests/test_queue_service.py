@@ -80,8 +80,9 @@ class _Item:
 class _FakeGraphitiClient:
     """Records the kwargs QueueService passes to Graphiti.add_episode.
 
-    Returns an object carrying the uuid the real client would have assigned, so the
-    success logging can be checked without a database.
+    Returns an object shaped like graphiti_core's AddEpisodeResults (the episode
+    node under `.episode`), carrying the uuid the real client would have assigned, so
+    the success logging can be checked without a database.
     """
 
     def __init__(self, uuid: str = 'server-assigned-uuid', error: BaseException | None = None):
@@ -95,7 +96,7 @@ class _FakeGraphitiClient:
         self.kwargs = kwargs
         if self.error is not None:
             raise self.error
-        return SimpleNamespace(uuid=self.uuid)
+        return SimpleNamespace(episode=SimpleNamespace(uuid=self.uuid))
 
 
 async def _drain(queue_service: QueueService, group_id: str, timeout: float = 5.0) -> None:

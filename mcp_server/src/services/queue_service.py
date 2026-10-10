@@ -365,7 +365,7 @@ class QueueService:
                 logger.info(f'Processing episode {log_label} for group {group_id}')
 
                 # Process the episode using the graphiti client
-                episode = await self._graphiti_client.add_episode(
+                result = await self._graphiti_client.add_episode(
                     name=name,
                     episode_body=content,
                     source_description=source_description,
@@ -392,7 +392,8 @@ class QueueService:
 
             # The client assigns the uuid when the caller did not supply one; log the
             # episode's own uuid so the success line correlates with the graph.
-            episode_uuid = getattr(episode, 'uuid', None)
+            # Graphiti.add_episode returns AddEpisodeResults, with the node at `.episode`.
+            episode_uuid = getattr(getattr(result, 'episode', None), 'uuid', None)
             queued_as = (
                 f' (queued as {log_label})' if episode_uuid and episode_uuid != log_label else ''
             )
