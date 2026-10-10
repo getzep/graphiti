@@ -17,6 +17,7 @@ limitations under the License.
 from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
+from .jev_client import JevClient, JevInputTooLongError, jev_prompt_overrides
 from .llm_runtime import LLMRuntime
 from .openai_client import OpenAIClient
 from .prompt_config import LLMModel, LLMPromptOverrides, LLMTransport, PromptRoutes
@@ -29,9 +30,12 @@ __all__ = [
     'LLMPromptOverrides',
     'LLMRuntime',
     'LLMTransport',
+    'JevClient',
+    'JevInputTooLongError',
     'OpenAIClient',
     'PromptRoutes',
     'RateLimitError',
     'TokenUsage',
     'TokenUsageTracker',
+    'jev_prompt_overrides',
 ]
