@@ -35,6 +35,7 @@ jobs:
           DISABLE_NEO4J: 1
           DISABLE_FALKORDB: 1
           DISABLE_KUZU: 1
+          DISABLE_ARCADEDB: 1
         run: |
           uv run pytest tests/ -m "not integration" \
             --ignore=tests/test_graphiti_int.py \
@@ -78,6 +79,12 @@ jobs:
             -e NEO4J_AUTH=neo4j/testpass \
             -e NEO4J_PLUGINS='["apoc"]' \
             neo4j:5.26-community
+          # ArcadeDB serves Bolt from a plugin that has to be enlisted at startup;
+          # it listens on 7687, while 2480 is the HTTP API used for full-text DDL.
+          docker run -d --name arcadedb --network host \
+            -e JAVA_OPTS="-Darcadedb.server.rootPassword=playwithdata \
+              -Darcadedb.server.plugins=Bolt:com.arcadedb.bolt.BoltProtocolPlugin" \
+            arcadedata/arcadedb:26.9.1
       - name: Install dependencies
         run: uv sync --all-extras
       - name: Wait for databases
@@ -96,6 +103,16 @@ jobs:
             if [ "$i" -eq 60 ]; then echo "neo4j did not become ready in 60s" >&2; docker logs neo4j; exit 1; fi
             sleep 1
           done
+          for i in $(seq 1 60); do
+            if curl -sf -u root:playwithdata http://127.0.0.1:2480/api/v1/server >/dev/null 2>&1; then
+              echo "arcadedb ready after ${i}s"; break
+            fi
+            if [ "$i" -eq 60 ]; then echo "arcadedb did not become ready in 60s" >&2; docker logs arcadedb; exit 1; fi
+            sleep 1
+          done
+          curl -sf -u root:playwithdata -X POST http://127.0.0.1:2480/api/v1/server \
+            -H 'Content-Type: application/json' \
+            -d '{"command":"create database graphiti"}'
       - name: Run database integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -104,6 +121,11 @@ jobs:
           NEO4J_PASSWORD: testpass
           FALKORDB_HOST: 127.0.0.1
           FALKORDB_PORT: 6379
+          ARCADEDB_URI: bolt://127.0.0.1:7687
+          ARCADEDB_USER: root
+          ARCADEDB_PASSWORD: playwithdata
+          ARCADEDB_DATABASE: graphiti
+          ARCADEDB_HTTP_URI: http://127.0.0.1:2480
           DISABLE_NEPTUNE: 1
         run: |
           uv run pytest \
@@ -112,4 +134,5 @@ jobs:
             tests/test_edge_int.py \
             tests/cross_encoder/test_bge_reranker_client_int.py \
             tests/driver/test_falkordb_driver.py \
+            tests/driver/test_arcadedb_driver.py \
             -m "not integration"
