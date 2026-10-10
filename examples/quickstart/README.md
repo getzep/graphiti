@@ -11,7 +11,7 @@ This example demonstrates the basic functionality of Graphiti, including:
 
 ## Prerequisites
 
-- Python 3.9+  
+- Python 3.10+  
 - OpenAI API key (set as `OPENAI_API_KEY` environment variable)  
 - **For Neo4j**:
   - Neo4j Desktop installed and running  
