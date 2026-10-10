@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 
 
@@ -162,3 +163,31 @@ versions: Versions = {
     'query_expansion': query_expansion,
     'eval_add_episode_results': eval_add_episode_results,
 }
+
+
+class EvalPrompts(ABC):
+    @abstractmethod
+    def query_expansion(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def qa_prompt(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def eval_prompt(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def eval_add_episode_results(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultEvalPrompts(EvalPrompts):
+    def query_expansion(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(query_expansion(context))
+
+    def qa_prompt(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(qa_prompt(context))
+
+    def eval_prompt(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(eval_prompt(context))
+
+    def eval_add_episode_results(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(eval_add_episode_results(context))

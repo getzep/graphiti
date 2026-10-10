@@ -1675,6 +1675,86 @@
       "created_at": "2026-09-30T08:02:10Z",
       "repoId": 840056306,
       "pullRequestNo": 1943
+    },
+    {
+      "name": "DeepanshuPal",
+      "email": "deepanshupal.dce@gmail.com",
+      "accountType": "personal",
+      "id": 40927968,
+      "comment_id": 5975786391,
+      "created_at": "2026-10-04T02:28:53Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1952
+    },
+    {
+      "name": "Ayoubhm07",
+      "email": "ayoub.hammoudi05@gmail.com",
+      "accountType": "personal",
+      "id": 61551920,
+      "comment_id": 5978633496,
+      "created_at": "2026-10-04T09:45:08Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1955
+    },
+    {
+      "name": "4ktLuffy",
+      "email": "henosd19@gmail.com",
+      "accountType": "personal",
+      "id": 146297264,
+      "comment_id": 5982694788,
+      "created_at": "2026-10-04T17:43:10Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1957
+    },
+    {
+      "name": "maskshell",
+      "email": "analyser@gmail.com",
+      "accountType": "personal",
+      "id": 5113279,
+      "comment_id": 5997020253,
+      "created_at": "2026-10-05T14:55:35Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1209
+    },
+    {
+      "name": "maribostashvili-93",
+      "email": "maribostashvili@gmail.com",
+      "accountType": "personal",
+      "id": 247189057,
+      "comment_id": 6001340904,
+      "created_at": "2026-10-05T19:14:33Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1960
+    },
+    {
+      "name": "DevChiniwala",
+      "email": "dev.chiniwala@gmail.com",
+      "accountType": "personal",
+      "id": 147787840,
+      "comment_id": 6043703095,
+      "created_at": "2026-10-07T17:56:33Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1973
+    },
+    {
+      "name": "ktz03",
+      "email": "2484593937@qq.com",
+      "accountType": "personal",
+      "id": 241894163,
+      "comment_id": 6073472268,
+      "created_at": "2026-10-09T03:11:20Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1983
+    },
+    {
+      "name": "akushonkamen",
+      "email": "akushonkamen@163.com",
+      "accountType": "personal",
+      "id": 74654766,
+      "comment_id": 6098965226,
+      "created_at": "2026-10-10T15:14:05Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1987
     }
   ]
 }

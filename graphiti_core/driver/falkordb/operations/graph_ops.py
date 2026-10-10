@@ -66,6 +66,7 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
         index_queries = range_indices + fulltext_indices
 
         # FalkorDB executes indices sequentially (catches "already indexed" in execute_query)
+        # Keep range indexes first; FalkorDB 6.x range lookups fail if fulltext indexes cover a property first.
         for query in index_queries:
             await executor.execute_query(query)
 
