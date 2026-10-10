@@ -119,6 +119,16 @@ class TestLLMClientReasoningEffort:
         assert isinstance(client, OpenAIClient)
         assert client.reasoning == 'minimal'
 
+    def test_configured_reasoning_effort_overrides_model_default(self):
+        """llm.reasoning_effort replaces the model-tied default."""
+        config = self._config('gpt-5-mini')
+        config.reasoning_effort = 'low'
+
+        client = LLMClientFactory.create(config)
+
+        assert isinstance(client, OpenAIClient)
+        assert client.reasoning == 'low'
+
 
 class TestReasoningEffortForModel:
     """The shared effort selector used by both the OpenAI and Azure branches."""
@@ -139,6 +149,21 @@ class TestReasoningEffortForModel:
     )
     def test_effort_selection(self, model, expected):
         assert reasoning_effort_for_model(model) == expected
+
+    @pytest.mark.parametrize(
+        ('model', 'configured', 'expected'),
+        [
+            ('gpt-5-mini', 'low', 'low'),
+            ('gpt-5.5', 'medium', 'medium'),
+            ('o3-mini', 'high', 'high'),
+            ('gpt-5-mini', None, 'minimal'),
+            ('gpt-5-mini', '', 'minimal'),
+            ('gpt-4.1', 'low', None),
+        ],
+    )
+    def test_configured_effort(self, model, configured, expected):
+        """A configured effort wins for reasoning models; others still get none."""
+        assert reasoning_effort_for_model(model, configured) == expected
 
 
 class TestAzureReasoningEffort:
@@ -166,3 +191,12 @@ class TestAzureReasoningEffort:
         client = LLMClientFactory.create(self._config('gpt-4.1'))
         assert isinstance(client, AzureOpenAILLMClient)
         assert client.reasoning is None
+
+    def test_azure_configured_reasoning_effort_overrides_model_default(self):
+        config = self._config('gpt-5-mini')
+        config.reasoning_effort = 'low'
+
+        client = LLMClientFactory.create(config)
+
+        assert isinstance(client, AzureOpenAILLMClient)
+        assert client.reasoning == 'low'
