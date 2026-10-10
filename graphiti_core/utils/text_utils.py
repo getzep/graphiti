@@ -25,6 +25,19 @@ if TYPE_CHECKING:
 # Maximum length for entity/community summaries
 MAX_SUMMARY_CHARS = 1000
 
+# Saga / thread summaries persist at most 4000 characters as a safety cap.
+SAGA_SUMMARY_MAX_CHARS = 4000
+
+
+def truncate_utf8_to_bytes(text: str, max_bytes: int) -> str:
+    """Truncate text to at most max_bytes without splitting a UTF-8 sequence."""
+    if max_bytes <= 0:
+        return ''
+    encoded = text.encode('utf-8')
+    if len(encoded) <= max_bytes:
+        return text
+    return encoded[:max_bytes].decode('utf-8', errors='ignore')
+
 
 def truncate_at_sentence(text: str, max_chars: int) -> str:
     """
@@ -72,4 +85,20 @@ def concatenate_episodes(episodes: list[EpisodicNode]) -> str:
     for i, ep in enumerate(episodes):
         timestamp = ep.valid_at.isoformat() if ep.valid_at else 'unknown'
         parts.append(f'[Episode {i}] (timestamp: {timestamp})\n{ep.content}')
+    return '\n\n'.join(parts)
+
+
+def concatenate_timeline(episodes: list[EpisodicNode], timeline: list[EpisodicNode]) -> str:
+    """Render ``timeline`` in order, numbering the members of ``episodes`` by their index in
+    ``episodes`` and marking every other episode as context only."""
+    index_by_uuid = {ep.uuid: i for i, ep in enumerate(episodes)}
+    parts: list[str] = []
+    for ep in timeline:
+        timestamp = ep.valid_at.isoformat() if ep.valid_at else 'unknown'
+        idx = index_by_uuid.get(ep.uuid)
+        if idx is None:
+            header = f'[CONTEXT EPISODE] (timestamp: {timestamp})'
+        else:
+            header = f'[Episode {idx}] (timestamp: {timestamp})'
+        parts.append(f'{header}\n{ep.content}')
     return '\n\n'.join(parts)

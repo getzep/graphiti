@@ -272,10 +272,15 @@ class EntityEdge(Edge):
         default=None, description='datetime of when the node was invalidated'
     )
     valid_at: datetime | None = Field(
-        default=None, description='datetime of when the fact became true'
+        default=None,
+        description=(
+            'datetime of when the fact became true; future-tense plans/promises use the '
+            'episode reference time rather than the future occurrence date'
+        ),
     )
     invalid_at: datetime | None = Field(
-        default=None, description='datetime of when the fact stopped being true'
+        default=None,
+        description='datetime of when the fact stopped being true; soft deadlines are not invalid_at',
     )
     reference_time: datetime | None = Field(
         default=None, description='reference timestamp from the episode that produced this edge'

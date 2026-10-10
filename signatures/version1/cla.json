@@ -1715,6 +1715,46 @@
       "created_at": "2026-10-05T14:55:35Z",
       "repoId": 840056306,
       "pullRequestNo": 1209
+    },
+    {
+      "name": "maribostashvili-93",
+      "email": "maribostashvili@gmail.com",
+      "accountType": "personal",
+      "id": 247189057,
+      "comment_id": 6001340904,
+      "created_at": "2026-10-05T19:14:33Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1960
+    },
+    {
+      "name": "DevChiniwala",
+      "email": "dev.chiniwala@gmail.com",
+      "accountType": "personal",
+      "id": 147787840,
+      "comment_id": 6043703095,
+      "created_at": "2026-10-07T17:56:33Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1973
+    },
+    {
+      "name": "ktz03",
+      "email": "2484593937@qq.com",
+      "accountType": "personal",
+      "id": 241894163,
+      "comment_id": 6073472268,
+      "created_at": "2026-10-09T03:11:20Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1983
+    },
+    {
+      "name": "akushonkamen",
+      "email": "akushonkamen@163.com",
+      "accountType": "personal",
+      "id": 74654766,
+      "comment_id": 6098965226,
+      "created_at": "2026-10-10T15:14:05Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1987
     }
   ]
 }
