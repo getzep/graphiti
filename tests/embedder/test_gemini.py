@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from embedder_fixtures import create_embedding_values
+from google.genai import types
 
 from graphiti_core.embedder.gemini import (
     DEFAULT_EMBEDDING_MODEL,
@@ -241,6 +242,50 @@ class TestGeminiEmbedderCreate:
 
 class TestGeminiEmbedderCreateBatch:
     """Tests for GeminiEmbedder create_batch method."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('invalid_index', [0, 1, 2])
+    @pytest.mark.parametrize('empty_values', [None, []])
+    @pytest.mark.parametrize('previous_batch', [False, True])
+    async def test_create_batch_discards_partial_results_before_fallback(
+        self,
+        mock_gemini_client: Any,
+        invalid_index: int,
+        empty_values: list[float] | None,
+        previous_batch: bool,
+    ) -> None:
+        """A failed batch must not leave its valid prefix ahead of fallback results."""
+        embedder = GeminiEmbedder(client=mock_gemini_client, batch_size=3)
+        inputs = ['first', 'second', 'third']
+        expected = [[1.0], [2.0], [3.0]]
+        values: list[list[float] | None] = [[10.0], [20.0], [30.0]]
+        values[invalid_index] = empty_values
+        replies = [
+            types.EmbedContentResponse(
+                embeddings=[types.ContentEmbedding(values=value) for value in values]
+            ),
+            *[
+                types.EmbedContentResponse(embeddings=[types.ContentEmbedding(values=value)])
+                for value in expected
+            ],
+        ]
+        if previous_batch:
+            earlier = [[4.0], [5.0], [6.0]]
+            inputs = ['earlier first', 'earlier second', 'earlier third', *inputs]
+            expected = [*earlier, *expected]
+            replies.insert(
+                0,
+                types.EmbedContentResponse(
+                    embeddings=[types.ContentEmbedding(values=value) for value in earlier]
+                ),
+            )
+        mock_gemini_client.aio.models.embed_content.side_effect = replies
+
+        result = await embedder.create_batch(inputs)
+
+        assert result == expected
+        assert len(result) == len(inputs)
+        assert mock_gemini_client.aio.models.embed_content.call_count == 4 + previous_batch
 
     @pytest.mark.asyncio
     async def test_create_batch_processes_multiple_inputs(
