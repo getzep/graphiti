@@ -452,7 +452,7 @@ class EpisodicNode(Node):
                 else EPISODIC_NODE_RETURN
             )
             + """
-            ORDER BY uuid DESC
+            ORDER BY created_at DESC, uuid DESC
             """
             + limit_query,
             group_ids=group_ids,
