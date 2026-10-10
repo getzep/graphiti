@@ -56,6 +56,8 @@ def entity_edge_from_record(record: Any) -> EntityEdge:
     attributes.pop('uuid', None)
     attributes.pop('source_node_uuid', None)
     attributes.pop('target_node_uuid', None)
+    attributes.pop('source_uuid', None)
+    attributes.pop('target_uuid', None)
     attributes.pop('fact', None)
     attributes.pop('fact_embedding', None)
     attributes.pop('name', None)
