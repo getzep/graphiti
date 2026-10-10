@@ -63,7 +63,11 @@ def _build_neo4j_fulltext_query(
     for f in group_ids_filter_list:
         group_ids_filter += f if not group_ids_filter else f' OR {f}'
 
-    group_ids_filter += ' AND ' if group_ids_filter else ''
+    # Wrap the OR-chain in parens before AND-ing the query terms. Without parens, Lucene's
+    # AND > OR precedence binds the terms to only the LAST group_id clause, so a multi-group
+    # full-text search collapses to that group alone. Parenthesizing applies the terms across
+    # all groups.
+    group_ids_filter = f'({group_ids_filter}) AND ' if group_ids_filter else ''
 
     lucene_query = lucene_sanitize(query)
     if len(lucene_query.split(' ')) + len(group_ids or '') >= max_query_length:
