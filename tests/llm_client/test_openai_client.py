@@ -3,8 +3,15 @@ from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel
 
-from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.llm_client.openai_base_client import DEFAULT_MODEL, DEFAULT_REASONING
+from graphiti_core.cross_encoder.openai_reranker_client import (
+    DEFAULT_MODEL as DEFAULT_RERANKER_MODEL,
+)
+from graphiti_core.llm_client.config import LLMConfig, ModelSize
+from graphiti_core.llm_client.openai_base_client import (
+    DEFAULT_MODEL,
+    DEFAULT_REASONING,
+    DEFAULT_SMALL_MODEL,
+)
 from graphiti_core.llm_client.openai_client import OpenAIClient
 
 
@@ -54,6 +61,9 @@ def test_default_model_and_reasoning_sentinel():
         # gpt-5.5 -> reasoning off; the dated snapshot must match the prefix too
         ('gpt-5.5', 'auto', 'none'),
         ('gpt-5.5-2026-04-23', 'auto', 'none'),
+        # gpt-5.6 rejects 'minimal', so it also needs reasoning disabled by default
+        ('gpt-5.6-luna', 'auto', 'none'),
+        ('gpt-5.6-terra', 'auto', 'none'),
         # every other model: 'minimal' (cheapest tier, prior default) — NOT None,
         # so non-gpt-5.5 reasoning models don't regress to the API's medium default
         ('gpt-5', 'auto', 'minimal'),
@@ -76,6 +86,17 @@ def test_default_model_for_size_is_gpt_5_5():
     from graphiti_core.llm_client.config import ModelSize
 
     assert client._get_model_for_size(ModelSize.medium) == 'gpt-5.5'
+
+
+def test_default_small_model_avoids_deprecated_gpt_4_1_nano():
+    client = OpenAIClient(config=LLMConfig(), client=DummyOpenAIClient())
+
+    assert DEFAULT_SMALL_MODEL == 'gpt-4.1-mini'
+    assert client._get_model_for_size(ModelSize.small) == 'gpt-4.1-mini'
+
+
+def test_default_reranker_model_avoids_deprecated_gpt_4_1_nano():
+    assert DEFAULT_RERANKER_MODEL == 'gpt-4.1-mini'
 
 
 @pytest.mark.asyncio

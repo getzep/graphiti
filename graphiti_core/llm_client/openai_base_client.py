@@ -32,7 +32,7 @@ from .errors import RateLimitError, RefusalError
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gpt-5.5'
-DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
+DEFAULT_SMALL_MODEL = 'gpt-4.1-mini'
 # 'auto' is a sentinel meaning "pick a reasoning effort based on the model"
 # (resolved by _resolve_reasoning_effort); it is never sent to the API.
 DEFAULT_REASONING = 'auto'
@@ -128,11 +128,12 @@ class BaseOpenAIClient(LLMClient):
 
         The sentinel ``'auto'`` (the default) is resolved per-model:
 
-        * The ``gpt-5.5`` family uses ``'none'`` — reasoning off, the cheapest and
+        * The ``gpt-5.5`` and ``gpt-5.6`` families use ``'none'`` — reasoning off, the cheapest and
           fastest setting, which gives comparable extraction quality at far lower
-          cost and latency for Graphiti's structured-output workload. (Matched by
-          prefix; a future ``gpt-5.6``/``gpt-6`` falls through to the branch below
-          until added here, since newer snapshots may not accept ``'none'``.)
+          cost and latency for Graphiti's structured-output workload. The ``gpt-5.6``
+          family rejects ``'minimal'``. (Matched by prefix; a future ``gpt-6`` falls
+          through to the branch below until added here, since newer snapshots may
+          not accept ``'none'``.)
         * Every other model uses ``'minimal'`` — the cheapest broadly-supported
           reasoning tier and the long-standing default. Returning ``'minimal'``
           (rather than omitting the parameter) is deliberate: it keeps non-gpt-5.5
@@ -146,7 +147,7 @@ class BaseOpenAIClient(LLMClient):
         """
         if reasoning != 'auto':
             return reasoning
-        if model.startswith('gpt-5.5'):
+        if model.startswith(('gpt-5.5', 'gpt-5.6')):
             return 'none'
         return 'minimal'
 
