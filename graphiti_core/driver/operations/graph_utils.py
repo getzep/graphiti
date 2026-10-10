@@ -14,9 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
+import random
 from collections import defaultdict
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+MAX_ITERATIONS = 500
 
 
 class Neighbor(BaseModel):
@@ -24,18 +30,21 @@ class Neighbor(BaseModel):
     edge_count: int
 
 
-def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
+def label_propagation(projection: dict[str, list[Neighbor]], seed: int = 0) -> list[list[str]]:
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
-        no_change = True
-        new_community_map: dict[str, int] = {}
+    rng = random.Random(seed)
 
-        for uuid, neighbors in projection.items():
+    for _ in range(MAX_ITERATIONS):
+        no_change = True
+        node_order = list(projection.keys())
+        rng.shuffle(node_order)
+
+        for uuid in node_order:
             curr_community = community_map[uuid]
 
             community_candidates: dict[int, int] = defaultdict(int)
-            for neighbor in neighbors:
+            for neighbor in projection[uuid]:
                 community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
             community_lst = [
                 (count, community) for community, count in community_candidates.items()
@@ -48,15 +57,18 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             else:
                 new_community = max(community_candidate, curr_community)
 
-            new_community_map[uuid] = new_community
-
             if new_community != curr_community:
+                community_map[uuid] = new_community
                 no_change = False
 
         if no_change:
             break
-
-        community_map = new_community_map
+    else:
+        logger.warning(
+            'Label propagation did not converge within %d iterations; '
+            'using best-effort communities',
+            MAX_ITERATIONS,
+        )
 
     community_cluster_map: dict[int, list[str]] = defaultdict(list)
     for uuid, community in community_map.items():
