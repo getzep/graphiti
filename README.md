@@ -157,7 +157,7 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
-  Serverless collection (serves as the full text search backend) / Kuzu 0.11.2 (**deprecated**, see below)
+  Serverless collection (serves as the full text search backend) / Kuzu 0.11.3 (**deprecated**, see below)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -257,7 +257,7 @@ pip install graphiti-core[neptune]
 Graphiti's ingestion pipelines are designed for high concurrency. By default, concurrency is set low to avoid LLM
 Provider 429 Rate Limit Errors. If you find Graphiti slow, please increase concurrency as described below.
 
-Concurrency controlled by the `SEMAPHORE_LIMIT` environment variable. By default, `SEMAPHORE_LIMIT` is set to `10`
+Concurrency controlled by the `SEMAPHORE_LIMIT` environment variable. By default, `SEMAPHORE_LIMIT` is set to `20`
 concurrent operations to help prevent `429` rate limit errors from your LLM provider. If you encounter such errors, try
 lowering this value.
 
@@ -341,8 +341,8 @@ must be set.
 
 Database names are configured directly in the driver constructors:
 
-- **Neo4j**: Database name defaults to `neo4j` (hardcoded in Neo4jDriver)
-- **FalkorDB**: Database name defaults to `default_db` (hardcoded in FalkorDriver)
+- **Neo4j**: Database name defaults to `neo4j` (driver default, configurable via the `database` parameter)
+- **FalkorDB**: Database name defaults to `default_db` (driver default, configurable via the `database` parameter)
 
 As of v0.17.0, if you need to customize your database configuration, you can instantiate a database driver and pass it
 to the Graphiti constructor using the `graph_driver` parameter.
