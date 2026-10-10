@@ -169,9 +169,35 @@ llm:
   # Optional for OpenAI-compatible providers: "json_schema" (default) or "json_object"
   structured_output_mode: "json_schema"
 
+reranker:
+  # "auto" infers from the LLM, then embedder, then falls back to local BGE.
+  # Or select "openai", "azure_openai", "gemini", or "bge" explicitly.
+  provider: "auto"
+  # Optional API-backed reranker model override. Omit to use the client's default.
+  model: null
+
+graphiti:
+  # Select the search recipe independently for facts and nodes.
+  # Options: "rrf" (default) or "cross_encoder".
+  fact_reranker: "rrf"
+  node_reranker: "rrf"
+
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
 ```
+
+An explicit API-backed reranker reuses credentials from the matching `llm.providers` or
+`embedder.providers` entry, even when that provider is not selected for the LLM or embedder. For
+example, `reranker.provider: "gemini"` uses the configured Gemini API key. Set
+`RERANKER_PROVIDER` and, optionally, `RERANKER_MODEL` when using the shipped `config.yaml`.
+For direct environment-based configuration, use `RERANKER__PROVIDER` and `RERANKER__MODEL`.
+
+The MCP search tools use RRF by default. Set `graphiti.fact_reranker` or
+`graphiti.node_reranker` to `"cross_encoder"` to make `search_memory_facts` or `search_nodes`
+use the configured cross encoder. A centered search still uses node-distance reranking because
+that recipe is what gives `center_node_uuid` its ranking effect. With the shipped `config.yaml`,
+the corresponding environment variables are `FACT_RERANKER` and `NODE_RERANKER`; direct nested
+configuration uses `GRAPHITI__FACT_RERANKER` and `GRAPHITI__NODE_RERANKER`.
 
 ### Using Ollama for Local LLM
 
