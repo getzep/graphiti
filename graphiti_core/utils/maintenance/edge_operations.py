@@ -1007,7 +1007,7 @@ async def _dedupe_extracted_edge(
         resolved_edge = related_edges[duplicate_fact_id]
         break
 
-    if duplicate_fact_ids and episode is not None:
+    if duplicate_fact_ids and episode is not None and episode.uuid not in resolved_edge.episodes:
         resolved_edge.episodes.append(episode.uuid)
 
     # Process contradicted facts (continuous indexing across both lists)
