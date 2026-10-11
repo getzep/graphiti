@@ -108,8 +108,15 @@ class BaseOpenAIClient(LLMClient):
                 openai_messages.append({'role': 'system', 'content': m.content})
         return openai_messages
 
-    def _get_model_for_size(self, model_size: ModelSize) -> str:
+    def _get_model_for_size(
+        self,
+        model_size: ModelSize,
+        *,
+        model: str | None = None,
+    ) -> str:
         """Get the appropriate model name based on the requested size."""
+        if model is not None:
+            return model
         if model_size == ModelSize.small:
             return self.small_model or DEFAULT_SMALL_MODEL
         else:
@@ -188,6 +195,8 @@ class BaseOpenAIClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Generate a response using the appropriate client implementation.
 
@@ -195,12 +204,12 @@ class BaseOpenAIClient(LLMClient):
             tuple: (response_dict, input_tokens, output_tokens)
         """
         openai_messages = self._convert_messages_to_openai_format(messages)
-        model = self._get_model_for_size(model_size)
+        resolved_model = self._get_model_for_size(model_size, model=model)
 
         try:
             if response_model:
                 response = await self._create_structured_completion(
-                    model=model,
+                    model=resolved_model,
                     messages=openai_messages,
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
@@ -211,7 +220,7 @@ class BaseOpenAIClient(LLMClient):
                 return self._handle_structured_response(response)
             else:
                 response = await self._create_completion(
-                    model=model,
+                    model=resolved_model,
                     messages=openai_messages,
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
@@ -248,6 +257,7 @@ class BaseOpenAIClient(LLMClient):
         prompt_name: str | None = None,
         *,
         attribute_extraction: bool = False,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
         """Generate a response with retry logic and error handling.
 
@@ -281,7 +291,11 @@ class BaseOpenAIClient(LLMClient):
             while retry_count <= self.MAX_RETRIES:
                 try:
                     response, input_tokens, output_tokens = await self._generate_response(
-                        messages, response_model, max_tokens, model_size
+                        messages,
+                        response_model,
+                        max_tokens,
+                        model_size,
+                        model=model,
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens

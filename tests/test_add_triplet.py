@@ -20,10 +20,12 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge
+from graphiti_core.errors import EdgeNotFoundError
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import EntityNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from tests.helpers_test import group_id
 
 pytest_plugins = ('pytest_asyncio', 'tests.helpers_test')
@@ -850,3 +852,170 @@ async def test_add_triplet_edge_uuid_with_same_nodes_updates_edge(
         # The edge should keep the same UUID (update allowed)
         result_edge = result.edges[0]
         assert result_edge.uuid == existing_edge.uuid
+
+
+@pytest.mark.asyncio
+async def test_add_triplet_passes_caller_episode_to_edge_dedupe(
+    mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
+    graph_driver = Mock()
+    graph_driver.__class__ = GraphDriver
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    now = datetime.now()
+    source = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Person'],
+        created_at=now,
+        summary='',
+        attributes={},
+        name_embedding=[0.1],
+    )
+    target = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Person'],
+        created_at=now,
+        summary='',
+        attributes={},
+        name_embedding=[0.1],
+    )
+    edge = EntityEdge(
+        source_node_uuid=source.uuid,
+        target_node_uuid=target.uuid,
+        name='WORKS_WITH',
+        fact='Alice works with Bob',
+        group_id=group_id,
+        created_at=now,
+        valid_at=now,
+        fact_embedding=[0.1],
+    )
+    shadow = EpisodicNode(
+        name='fact_triple_x',
+        group_id=group_id,
+        source=EpisodeType.fact_triple,
+        source_description='Shadow episode',
+        content='Alice works with Bob',
+        valid_at=now,
+        created_at=now,
+    )
+
+    with (
+        patch(
+            'graphiti_core.graphiti.EntityNode.get_by_uuid',
+            new=AsyncMock(side_effect=[source, target]),
+        ),
+        patch(
+            'graphiti_core.graphiti.EntityEdge.get_by_uuid',
+            new=AsyncMock(side_effect=EdgeNotFoundError(edge.uuid)),
+        ),
+        patch(
+            'graphiti_core.graphiti.search',
+            new=AsyncMock(return_value=Mock(edges=[])),
+        ),
+        patch(
+            'graphiti_core.graphiti.resolve_extracted_edge',
+            new=AsyncMock(return_value=(edge, [], [])),
+        ) as mock_resolve_edge,
+        patch(
+            'graphiti_core.graphiti.create_entity_edge_embeddings',
+            new=AsyncMock(),
+        ),
+        patch(
+            'graphiti_core.graphiti.create_entity_node_embeddings',
+            new=AsyncMock(),
+        ),
+        patch(
+            'graphiti_core.graphiti.add_nodes_and_edges_bulk',
+            new=AsyncMock(),
+        ),
+    ):
+        await graphiti.add_triplet(source, edge, target, episode=shadow)
+
+    assert mock_resolve_edge.await_args.args[4] is shadow
+
+
+@pytest.mark.asyncio
+async def test_add_triplet_builds_dedupe_episode_when_caller_omits_it(
+    mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
+    graph_driver = Mock()
+    graph_driver.__class__ = GraphDriver
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    now = datetime.now()
+    source = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Person'],
+        created_at=now,
+        summary='',
+        attributes={},
+        name_embedding=[0.1],
+    )
+    target = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Person'],
+        created_at=now,
+        summary='',
+        attributes={},
+        name_embedding=[0.1],
+    )
+    edge = EntityEdge(
+        source_node_uuid=source.uuid,
+        target_node_uuid=target.uuid,
+        name='WORKS_WITH',
+        fact='Alice works with Bob',
+        group_id=group_id,
+        created_at=now,
+        valid_at=now,
+        fact_embedding=[0.1],
+    )
+
+    with (
+        patch(
+            'graphiti_core.graphiti.EntityNode.get_by_uuid',
+            new=AsyncMock(side_effect=[source, target]),
+        ),
+        patch(
+            'graphiti_core.graphiti.EntityEdge.get_by_uuid',
+            new=AsyncMock(side_effect=EdgeNotFoundError(edge.uuid)),
+        ),
+        patch(
+            'graphiti_core.graphiti.search',
+            new=AsyncMock(return_value=Mock(edges=[])),
+        ),
+        patch(
+            'graphiti_core.graphiti.resolve_extracted_edge',
+            new=AsyncMock(return_value=(edge, [], [])),
+        ) as mock_resolve_edge,
+        patch(
+            'graphiti_core.graphiti.create_entity_edge_embeddings',
+            new=AsyncMock(),
+        ),
+        patch(
+            'graphiti_core.graphiti.create_entity_node_embeddings',
+            new=AsyncMock(),
+        ),
+        patch(
+            'graphiti_core.graphiti.add_nodes_and_edges_bulk',
+            new=AsyncMock(),
+        ),
+    ):
+        await graphiti.add_triplet(source, edge, target)
+
+    passed = mock_resolve_edge.await_args.args[4]
+    assert isinstance(passed, EpisodicNode)
+    assert passed.group_id == group_id
+    assert passed.valid_at == edge.valid_at
+    assert passed.uuid != ''

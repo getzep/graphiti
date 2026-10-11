@@ -25,6 +25,7 @@ from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
     _extract_entity_summaries_batch,
+    _filter_entity_types_context,
     _truncate_type_description,
     extract_nodes,
 )
@@ -133,7 +134,7 @@ class TestExtractNodesSmallInput:
 
     @pytest.mark.asyncio
     async def test_excludes_entity_types(self, monkeypatch):
-        """Excluded entity types should not appear in results."""
+        """Excluded entity types should not be included in the extraction prompt."""
         clients, llm_generate = _make_clients()
 
         from pydantic import BaseModel
@@ -145,7 +146,6 @@ class TestExtractNodesSmallInput:
 
         llm_generate.return_value = {
             'extracted_entities': [
-                {'name': 'Alice', 'entity_type_id': 1},  # User (excluded)
                 {'name': 'Project X', 'entity_type_id': 0},  # Entity
             ]
         }
@@ -160,9 +160,64 @@ class TestExtractNodesSmallInput:
             excluded_entity_types=['User'],
         )
 
-        # Alice should be excluded
         assert len(nodes) == 1
         assert nodes[0].name == 'Project X'
+        prompt_text = '\n'.join(message.content for message in llm_generate.call_args.args[0])
+        assert "'entity_type_name': 'User'" not in prompt_text
+
+    @pytest.mark.asyncio
+    async def test_excluding_default_entity_remaps_custom_type_to_zero(self, monkeypatch):
+        """Strict ontology should let custom types use id 0 after Entity is removed."""
+        clients, llm_generate = _make_clients()
+
+        from pydantic import BaseModel
+
+        class Company(BaseModel):
+            """A named business or organization."""
+
+            pass
+
+        llm_generate.return_value = {
+            'extracted_entities': [
+                {'name': 'Acme Robotics', 'entity_type_id': 0},
+            ]
+        }
+
+        episode = _make_episode(content='Acme Robotics announced the Atlas launch.')
+
+        nodes, _ = await extract_nodes(
+            clients,
+            episode,
+            previous_episodes=[],
+            entity_types={'Company': Company},
+            excluded_entity_types=['Entity'],
+        )
+
+        assert len(nodes) == 1
+        assert nodes[0].name == 'Acme Robotics'
+        assert set(nodes[0].labels) == {'Entity', 'Company'}
+        prompt_text = '\n'.join(message.content for message in llm_generate.call_args.args[0])
+        assert "'entity_type_name': 'Entity'" not in prompt_text
+        assert "'entity_type_id': 0" in prompt_text
+        assert "'entity_type_name': 'Company'" in prompt_text
+
+    @pytest.mark.asyncio
+    async def test_excluding_all_entity_types_skips_llm(self, monkeypatch):
+        """No allowed entity types means there is nothing to extract."""
+        clients, llm_generate = _make_clients()
+
+        episode = _make_episode(content='Acme Robotics announced the Atlas launch.')
+
+        nodes, node_episode_index_map = await extract_nodes(
+            clients,
+            episode,
+            previous_episodes=[],
+            excluded_entity_types=['Entity'],
+        )
+
+        assert nodes == []
+        assert node_episode_index_map == {}
+        llm_generate.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_filters_empty_names(self, monkeypatch):
@@ -306,6 +361,37 @@ class TestBuildEntityTypesContext:
         assert context[1]['entity_type_id'] == 1
         assert context[2]['entity_type_name'] == 'Organization'
         assert context[2]['entity_type_id'] == 2
+
+    def test_filter_excluded_entity_types_remaps_ids(self):
+        """Filtered type contexts should expose contiguous IDs to the LLM."""
+        from pydantic import BaseModel
+
+        class Person(BaseModel):
+            """A human person."""
+
+            pass
+
+        class Organization(BaseModel):
+            """A business or organization."""
+
+            pass
+
+        context = _build_entity_types_context(
+            {
+                'Person': Person,
+                'Organization': Organization,
+            }
+        )
+
+        filtered_context = _filter_entity_types_context(context, ['Entity', 'Person'])
+
+        assert filtered_context == [
+            {
+                'entity_type_id': 0,
+                'entity_type_name': 'Organization',
+                'entity_type_description': 'A business or organization.',
+            }
+        ]
 
 
 def _make_entity_node(
