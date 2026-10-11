@@ -405,6 +405,19 @@ extraction or embedding leaves nothing behind and the episode can be replayed as
 `uuid` when replaying unless the record came from re-processing an existing episode. In Docker,
 point this at a mounted volume so the file survives container restarts.
 
+- The file is created with mode `0600` because records contain full episode bodies.
+- Entity and edge types are recorded by name only; replay assumes those types are still
+  configured on the server.
+- Appends are serialised within one server process. Give each server process its own
+  `EPISODE_DEAD_LETTER_PATH`.
+- A 429 caused by an exhausted daily or billing quota looks the same as a per-minute limit,
+  so it is retried on the same schedule before the episode is dead-lettered.
+- `OpenAIGenericClient` already retries rate limits internally; for it the two retry
+  schedules stack, so failures take longer to reach the dead-letter file.
+- `GeminiEmbedder.create_batch` falls back to one request per item when a batch fails, so a
+  rate-limited batch costs at most one extra request (the first per-item 429 is re-raised)
+  before the backoff starts.
+
 ### Docker Deployment
 
 The Graphiti MCP server can be deployed using Docker with your choice of database backend. The Dockerfile uses `uv` for package management, ensuring consistent dependency installation.

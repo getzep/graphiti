@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 DEFAULT_DEAD_LETTER_PATH = 'episode_dead_letter.jsonl'
 
 
+def _edge_type_map_names(edge_type_map: Any) -> list[dict[str, Any]] | None:
+    """Return an edge type map as JSON-friendly ``{source, target, edge_types}`` rows."""
+    if not edge_type_map:
+        return None
+    return [
+        {'source': str(pair[0]), 'target': str(pair[1]), 'edge_types': sorted(map(str, names))}
+        for pair, names in sorted(edge_type_map.items(), key=lambda item: tuple(map(str, item[0])))
+    ]
+
+
 def _type_names(types: Any) -> list[str] | None:
     """Return the names of a mapping/list of entity or edge types, for logging."""
     if not types:
@@ -57,7 +67,9 @@ class QueueService:
 
         def _append() -> None:
             self._dead_letter_path.parent.mkdir(parents=True, exist_ok=True)
-            with self._dead_letter_path.open('a', encoding='utf-8') as f:
+            # Records hold full episode bodies, so create the file owner-only (0o600).
+            fd = os.open(self._dead_letter_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            with os.fdopen(fd, 'a', encoding='utf-8') as f:
                 f.write(line)
 
         try:
@@ -256,6 +268,7 @@ class QueueService:
                         'saga_previous_episode_uuid': saga_previous_episode_uuid,
                         'entity_types': _type_names(entity_types),
                         'edge_types': _type_names(edge_types),
+                        'edge_type_map': _edge_type_map_names(edge_type_map),
                     }
                 )
                 raise

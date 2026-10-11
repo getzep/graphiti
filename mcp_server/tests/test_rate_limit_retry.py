@@ -147,6 +147,8 @@ class TestIsRateLimitError:
             ValueError('No embeddings returned from Gemini API'),
             ClientError(400, 'INVALID_ARGUMENT', 'bad request'),
             Exception('episode 429 not found'),
+            Exception('connection pool resource_exhausted'),
+            MemoryError('RESOURCE_EXHAUSTED: out of memory'),
         ],
     )
     def test_ignores_other_errors(self, exc):
@@ -249,15 +251,15 @@ class TestLLMRateLimitRetry:
             FlakyLLMClient(failures=2), RateLimitRetryPolicy(), sleep=sleep
         )
 
-        result = await client.generate_response(
-            [Message(role='system', content='sys'), Message(role='user', content='hi')],
-            group_id='g1',
-        )
+        messages = [Message(role='system', content='sys'), Message(role='user', content='hi')]
+        result = await client.generate_response(messages, group_id='g1')
 
         assert result == {'answer': 42, 'kwargs': {'group_id': 'g1'}}
         assert sleep.delays == [10.0, 30.0]
         # Every attempt sees the original two messages, not the previous attempt's additions.
         assert client.seen == [['sys', 'hi']] * 3  # type: ignore[attr-defined]
+        # The caller's list is not left mutated by the failed attempts.
+        assert [m.content for m in messages] == ['sys', 'hi']
 
     async def test_keeps_client_type_and_installs_once(self):
         client = FlakyLLMClient(failures=0)
@@ -301,7 +303,13 @@ class TestQueueDeadLetter:
         queue = QueueService(dead_letter_path=dead_letter)
         await queue.initialize(client)
 
-        await self._run_one(queue, 'g1', saga='trip', excluded_entity_types=['Topic'])
+        await self._run_one(
+            queue,
+            'g1',
+            saga='trip',
+            excluded_entity_types=['Topic'],
+            edge_type_map={('Person', 'Place'): ['VISITED', 'LIVES_IN']},
+        )
 
         records = [json.loads(line) for line in dead_letter.read_text().splitlines()]
         assert len(records) == 1
@@ -315,6 +323,11 @@ class TestQueueDeadLetter:
         assert record['excluded_entity_types'] == ['Topic']
         assert record['rate_limited'] is True
         assert record['error_type'] == 'ClientError'
+        assert record['edge_type_map'] == [
+            {'source': 'Person', 'target': 'Place', 'edge_types': ['LIVES_IN', 'VISITED']}
+        ]
+        # Records hold episode bodies, so the file is owner-only.
+        assert dead_letter.stat().st_mode & 0o777 == 0o600
         # The episode is attempted once: retries happen at the provider-call level.
         assert client.add_episode.await_count == 1
 

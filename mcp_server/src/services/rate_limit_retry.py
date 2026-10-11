@@ -6,6 +6,10 @@ and ``GeminiEmbedder`` has no retry at all. Inside the MCP server a single 429 d
 background ingestion therefore propagates out of ``Graphiti.add_episode`` and the queued
 episode is lost.
 
+HTTP 429 / ``RESOURCE_EXHAUSTED`` is also returned for exhausted daily or billing quotas,
+which waiting will not fix. Those cannot be told apart from per-minute limits, so they use
+the same schedule and then fall through to the dead-letter file.
+
 The retry is applied at the provider-call level (one embedding request, one LLM
 request) rather than by re-running ``add_episode``. A provider call has no side
 effects on the graph, so repeating it is idempotent; re-running a half-finished
@@ -117,10 +121,10 @@ def is_rate_limit_error(exc: BaseException) -> bool:
         status = getattr(current, 'status', None)
         if isinstance(status, str) and status.upper() == 'RESOURCE_EXHAUSTED':
             return True
+        # Untyped errors: require an explicit 429 next to a rate-limit marker, so messages
+        # such as "connection pool resource_exhausted" are not mistaken for rate limits.
         message = str(current).lower()
         if '429' in message and any(marker in message for marker in _RATE_LIMIT_MARKERS):
-            return True
-        if 'resource_exhausted' in message:
             return True
         current = current.__cause__ or current.__context__
         depth += 1
@@ -218,8 +222,12 @@ def add_llm_rate_limit_retry(
     attributes such as ``model``, ``token_tracker`` and ``tracer`` keep working.
 
     Provider clients append correction messages to ``messages`` during their own
-    validation retries, so each rate-limit retry gets a fresh copy of the messages as
-    they were before the first attempt.
+    validation retries, so each attempt gets a fresh copy of the messages as they were
+    when the call was made.
+
+    Clients that go through ``LLMClient._generate_response_with_retry`` (for example
+    ``OpenAIGenericClient``) already retry ``RateLimitError`` with tenacity; for those the
+    two schedules stack and an episode can wait considerably longer before it is dead-lettered.
     """
     if getattr(llm_client, '_rate_limit_retry_installed', False):
         return llm_client
@@ -231,13 +239,11 @@ def add_llm_rate_limit_retry(
     @functools.wraps(original)
     async def generate_response(messages, *args, **kwargs):
         snapshot = copy.deepcopy(messages)
-        attempts = 0
 
         async def call():
-            nonlocal attempts
-            attempts += 1
-            msgs = messages if attempts == 1 else copy.deepcopy(snapshot)
-            return await original(msgs, *args, **kwargs)
+            # Every attempt, including the first, works on its own copy, so a failed
+            # attempt never leaves the caller's list half-mutated.
+            return await original(copy.deepcopy(snapshot), *args, **kwargs)
 
         return await retry_on_rate_limit(call, policy=policy, operation=operation, sleep=sleep)
 
