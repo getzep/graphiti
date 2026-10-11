@@ -255,6 +255,8 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
 - `USE_AZURE_AD`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
+- `RATE_LIMIT_MAX_RETRIES`, `RATE_LIMIT_RETRY_BASE_DELAY`, `RATE_LIMIT_RETRY_MULTIPLIER`, `RATE_LIMIT_RETRY_MAX_DELAY`: Backoff for rate-limited LLM and embedder calls (defaults `3`, `10`, `3`, `300`: retries after 10s, 30s, 90s)
+- `EPISODE_DEAD_LETTER_PATH`: JSONL file that records episodes that failed to process (default `episode_dead_letter.jsonl` in the working directory)
 
 You can set these variables in a `.env` file in the project directory.
 
@@ -385,6 +387,23 @@ Set this in your `.env` file:
 ```bash
 SEMAPHORE_LIMIT=10  # Adjust based on your LLM provider tier
 ```
+
+#### Retries and the dead-letter file
+
+Background ingestion retries LLM and embedder calls that fail with a rate-limit error
+(HTTP 429, `RESOURCE_EXHAUSTED`, or a provider `RateLimitError`) with exponential backoff:
+by default 3 retries after 10s, 30s and 90s. Only the single provider request is repeated,
+never the whole episode, so a retry has no side effects on the graph. Tune it with
+`RATE_LIMIT_MAX_RETRIES`, `RATE_LIMIT_RETRY_BASE_DELAY`, `RATE_LIMIT_RETRY_MULTIPLIER` and
+`RATE_LIMIT_RETRY_MAX_DELAY` (`RATE_LIMIT_MAX_RETRIES=0` turns retrying off).
+
+If an episode still fails, the server logs `EPISODE DROPPED` and appends the episode payload
+(group, name, body, source, reference time, error) as one JSON line to
+`EPISODE_DEAD_LETTER_PATH`, so it can be replayed with `add_memory`. `add_episode` writes the
+episode and its extracted nodes and edges in one step at the end, so a failure during
+extraction or embedding leaves nothing behind and the episode can be replayed as is. Leave out
+`uuid` when replaying unless the record came from re-processing an existing episode. In Docker,
+point this at a mounted volume so the file survives container restarts.
 
 ### Docker Deployment
 
