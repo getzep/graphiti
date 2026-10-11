@@ -158,17 +158,23 @@ class Neo4jDriver(GraphDriver):
                 raise
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
-        # Check if database_ is provided in kwargs.
-        # If not populated, set the value to retain backwards compatibility
         params = kwargs.pop('params', None)
         if params is None:
             params = {}
-        params.setdefault('database_', self._database)
+        # Route via Neo4j's database_ kwarg; an explicit override wins (including None,
+        # which lets the server resolve the home database), else the driver default.
+        database = kwargs.pop('database_') if 'database_' in kwargs else self._database
 
         try:
-            result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
+            result = await self.client.execute_query(
+                cypher_query_, parameters_=params, database_=database, **kwargs
+            )
         except Exception as e:
-            logger.error(f'Error executing Neo4j query: {e}\n{cypher_query_}\n{params}')
+            # Log parameter names only; values may contain sensitive data.
+            logger.error(
+                f'Error executing Neo4j query: {e}\n{cypher_query_}\n'
+                f'parameter keys: {sorted([*params, *kwargs])}'
+            )
             raise
 
         return result
@@ -189,9 +195,7 @@ class Neo4jDriver(GraphDriver):
         await self.client.close()
 
     def delete_all_indexes(self) -> Coroutine:
-        return self.client.execute_query(
-            'CALL db.indexes() YIELD name DROP INDEX name',
-        )
+        return self.execute_query('CALL db.indexes() YIELD name DROP INDEX name')
 
     async def _execute_index_query(self, query: LiteralString) -> EagerResult | None:
         """Execute an index creation query, ignoring 'index already exists' errors.

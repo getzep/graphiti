@@ -65,6 +65,12 @@ def test_non_string_fields_pass_through():
     assert dropped == set()
 
 
+def test_null_field_passes_through_cap():
+    kept, dropped = cap_string_attributes({'industry': None}, _Person)
+    assert kept == {'industry': None}
+    assert dropped == set()
+
+
 def test_list_with_one_overlong_element_drops_field():
     bleed = 'x' * (DEFAULT_ATTRIBUTE_MAX_LENGTH + 1)
     response = {'aliases': ['Sammy', bleed, 'Sam R.']}
@@ -140,7 +146,7 @@ def test_logs_info_on_drop_with_uuid_and_group_id_no_pii(caplog):
 
 def test_log_aggregate_trigger_reports_aggregate_length_and_cap(caplog):
     """When list-aggregate fires, length= must be the total (not max element)
-    and cap= must be the aggregate cap, so DataDog operators see the breach
+    and cap= must be the aggregate cap, so logs show the breach
     directly instead of the misleading length=under-cap cap=per-item view."""
     item = 'x' * (DEFAULT_ATTRIBUTE_MAX_LENGTH - 1)
     items = [item] * (LIST_TOTAL_LENGTH_MULTIPLIER + 2)
@@ -237,6 +243,14 @@ def test_apply_overlay_legitimate_update_passes_through():
     assert dropped == set()
 
 
+def test_apply_overlay_preserves_prior_non_null_for_extracted_nulls():
+    prior = {'phones': '415-555-0142'}
+    llm = {'phones': None, 'industry': None}
+    merged, dropped = apply_capped_attributes(llm, _Person, prior, merge_mode='overlay')
+    assert merged == {'phones': '415-555-0142', 'industry': None}
+    assert dropped == set()
+
+
 def test_apply_replace_clears_omitted_but_preserves_dropped():
     prior = {'phones': '415-555-0142', 'industry': 'Software'}
     bleed = 'x' * (DEFAULT_ATTRIBUTE_MAX_LENGTH + 1)
@@ -253,4 +267,12 @@ def test_apply_replace_legitimate_update_replaces_prior_and_clears_omitted():
     merged, dropped = apply_capped_attributes(llm, _Person, prior, merge_mode='replace')
     # phones was omitted by the LLM → cleared per replace semantics.
     assert merged == {'industry': 'SaaS'}
+    assert dropped == set()
+
+
+def test_apply_replace_preserves_prior_non_null_for_extracted_nulls():
+    prior = {'phones': '415-555-0142', 'description': 'prior'}
+    llm = {'phones': None, 'industry': None}
+    merged, dropped = apply_capped_attributes(llm, _Person, prior, merge_mode='replace')
+    assert merged == {'phones': '415-555-0142', 'industry': None}
     assert dropped == set()

@@ -249,7 +249,7 @@ async def test_end_to_end_add_search_delete_clear():
             assert isinstance(status, dict) and status.get('status') == 'ok', f'status: {status}'
 
             # 6. Delete the episode, then clear the test group.
-            deleted = await client.call('delete_episode', {'uuid': episode_uuid})
+            deleted = await client.call('delete_episode', {'uuid': episode_uuid, 'group_id': group})
             assert isinstance(deleted, dict) and 'message' in deleted, f'delete_episode: {deleted}'
 
             cleared = await client.call('clear_graph', {'group_ids': [group]})
