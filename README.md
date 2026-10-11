@@ -609,6 +609,94 @@ When using smaller or local models:
 - Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
   servers and some providers have limited concurrency.
 
+## Configurable Prompts
+
+Graphiti lets you override LLM prompt builders per client instance. Override callables must return
+``ChatPrompt`` (system + user). Response schemas are fixed and not overridable:
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.prompts import ChatPrompt, SystemMessage, UserMessage, create_prompt_library
+
+def custom_extract_message(context: dict) -> ChatPrompt:
+    return ChatPrompt(
+        system=SystemMessage(content='Extract entities for my domain.'),
+        user=UserMessage(content=str(context.get('episode_content', ''))),
+    )
+
+prompt_library = create_prompt_library({
+    'extract_nodes': {
+        'extract_message': custom_extract_message,
+    },
+})
+
+graphiti = Graphiti(..., prompt_library=prompt_library)
+```
+
+Unspecified prompts keep the built-in defaults. Returning ``list[Message]`` from an override raises
+``TypeError`` — migrate with ``return ChatPrompt(system=..., user=...)``. Unicode handling is applied
+via ``ChatPrompt.as_messages()``.
+
+The package-level ``prompt_library`` keeps the existing ``list[Message]`` API.
+The opt-in prompt customization API uses ``ChatPromptLibrary`` and
+``DefaultChatPromptLibrary``.
+
+For per-prompt routing across providers, pass an opt-in ``llm_runtime``. Create
+one ``LLMTransport`` for each provider client. Each ``LLMModel`` binds a provider
+model ID to one transport. An unrouted prompt uses the default model.
+``llm_runtime`` cannot be combined with ``llm_client`` or ``prompt_library``.
+Response schemas stay fixed. You can configure prompt text and model routes:
+
+```python
+from typing import Literal
+
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.anthropic_client import AnthropicClient
+from graphiti_core.llm_client import (
+    LLMRuntime,
+    LLMTransport,
+    OpenAIClient,
+    PromptRoutes,
+)
+
+OpenAIModels = Literal['gpt-5.1', 'gpt-5-nano']
+openai = LLMTransport[OpenAIModels](
+    OpenAIClient(),
+    models=['gpt-5.1', 'gpt-5-nano'],
+)
+
+AnthropicModels = Literal['claude-sonnet-4-5', 'claude-haiku-4-5']
+anthropic = LLMTransport[AnthropicModels](
+    AnthropicClient(),
+    models=['claude-sonnet-4-5', 'claude-haiku-4-5'],
+)
+
+main = openai.model('gpt-5.1')
+nano = openai.model('gpt-5-nano')
+haiku = anthropic.model('claude-haiku-4-5')
+runtime = LLMRuntime(
+    model=main,
+    routes=PromptRoutes(
+        extract_nodes=PromptRoutes.ExtractNodes(extract_attributes=nano),
+        dedupe_edges=PromptRoutes.DedupeEdges(
+            resolve_edge=haiku,
+        ),
+    ),
+)
+
+graphiti = Graphiti(..., llm_runtime=runtime)
+```
+
+``LLMModel`` does not have a ``small_id`` field. The runtime passes
+``model_size`` for legacy compatibility, but this value does not select a
+smaller model. The selected model ID controls provider calls. A routed prompt
+uses that model ID. An unrouted prompt uses the default model ID. Route prompts
+that need a smaller model to that model explicitly. Legacy calls without
+``llm_runtime`` retain ``LLMConfig.small_model`` behavior.
+
+GLiNER2 binds model objects at initialization. It does not support per-prompt
+model routing. See ``spec/llm-runtime.md`` for the runtime API.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
