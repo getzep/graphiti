@@ -7,7 +7,11 @@ from graphiti_core.cross_encoder.openai_reranker_client import (
     DEFAULT_MODEL as DEFAULT_RERANKER_MODEL,
 )
 from graphiti_core.llm_client.config import LLMConfig, ModelSize
-from graphiti_core.llm_client.openai_base_client import DEFAULT_MODEL, DEFAULT_REASONING
+from graphiti_core.llm_client.openai_base_client import (
+    DEFAULT_MODEL,
+    DEFAULT_REASONING,
+    BaseOpenAIClient,
+)
 from graphiti_core.llm_client.openai_client import OpenAIClient
 
 
@@ -80,6 +84,24 @@ def test_resolve_reasoning_effort(model, reasoning, expected):
     assert OpenAIClient._resolve_reasoning_effort(model, reasoning) == expected
 
 
+@pytest.mark.parametrize(
+    ('model', 'expected'),
+    [
+        ('gpt-5', True),
+        ('gpt-5-nano', True),
+        ('gpt-5.5', True),
+        ('gpt-6-luna', True),
+        ('gpt-6.1-sol', True),
+        ('o1', True),
+        ('o3-mini', True),
+        ('gpt-4.1-mini', False),
+        ('gpt-4o-mini', False),
+    ],
+)
+def test_is_reasoning_model(model, expected):
+    assert BaseOpenAIClient._is_reasoning_model(model) is expected
+
+
 def test_default_model_for_size_is_gpt_5_5():
     client = OpenAIClient(config=LLMConfig(), client=DummyOpenAIClient())
 
@@ -119,6 +141,36 @@ async def test_gpt_5_5_structured_completion_sends_none_effort_and_no_temperatur
     # 'auto' resolves to 'none' for gpt-5.5
     assert call_args['reasoning'] == {'effort': 'none'}
     assert call_args['text'] == {'verbosity': 'low'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('model', 'expected_effort'),
+    [
+        ('gpt-6-luna', 'none'),
+        ('gpt-4.1-mini', None),
+    ],
+)
+async def test_structured_completion_uses_reasoning_fields_for_model(model, expected_effort):
+    dummy = DummyOpenAIClient()
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+
+    await client._create_structured_completion(
+        model=model,
+        messages=[],
+        temperature=0.5,
+        max_tokens=64,
+        response_model=DummyResponseModel,
+        reasoning='auto',
+    )
+
+    call_args = dummy.responses.parse_calls[0]
+    if expected_effort is None:
+        assert 'reasoning' not in call_args
+        assert call_args['temperature'] == 0.5
+    else:
+        assert call_args['reasoning'] == {'effort': expected_effort}
+        assert 'temperature' not in call_args
 
 
 @pytest.mark.asyncio

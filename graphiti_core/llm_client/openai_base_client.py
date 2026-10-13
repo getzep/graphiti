@@ -124,6 +124,14 @@ class BaseOpenAIClient(LLMClient):
             return self.model or DEFAULT_MODEL
 
     @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """Return True for o1/o3 models and GPT models with major version 5 or later."""
+        if model.startswith(('o1', 'o3')):
+            return True
+        version = re.match(r'gpt-(\d+)', model)
+        return version is not None and int(version.group(1)) >= 5
+
+    @staticmethod
     def _resolve_reasoning_effort(model: str, reasoning: str | None) -> str | None:
         """Resolve the reasoning effort to send for a reasoning model.
 

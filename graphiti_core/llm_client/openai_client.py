@@ -73,10 +73,8 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a structured completion using OpenAI's beta parse API."""
-        # Reasoning models (gpt-5 family) don't support temperature
-        is_reasoning_model = (
-            model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
-        )
+        # Reasoning models (GPT-5+ and o1/o3) don't support temperature.
+        is_reasoning_model = self._is_reasoning_model(model)
 
         request_kwargs = {
             'model': model,
@@ -115,10 +113,8 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
-        # Reasoning models (gpt-5 family, o1, o3) reject temperature.
-        is_reasoning_model = (
-            model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
-        )
+        # Reasoning models (GPT-5+ and o1/o3) reject temperature.
+        is_reasoning_model = self._is_reasoning_model(model)
 
         request_kwargs: dict[str, typing.Any] = {
             'model': model,

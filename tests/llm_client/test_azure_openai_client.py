@@ -56,6 +56,10 @@ class DummyResponseModel(BaseModel):
     foo: str
 
 
+def test_gpt_6_supports_reasoning_features():
+    assert AzureOpenAILLMClient._supports_reasoning_features('gpt-6-luna')
+
+
 @pytest.mark.asyncio
 async def test_structured_completion_strips_reasoning_for_unsupported_models():
     dummy_client = DummyAzureClient()
