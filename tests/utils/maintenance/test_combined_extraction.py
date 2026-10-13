@@ -5,6 +5,10 @@ from pydantic import BaseModel
 
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.prompts.extract_nodes_and_edges import (
+    _build_extract_user_prompt,
+    extract_message,
+)
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.combined_extraction import (
     TIMESTAMP_BATCH_SIZE,
@@ -254,8 +258,11 @@ async def test_combined_extraction_keeps_edge_when_both_endpoints_present():
     assert all(set(node.labels) == {'Entity'} for node in nodes)
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
-    assert 'Every edge endpoint must also appear as an entity' in prompt_text
-    assert 'version 2.18.1' in prompt_text
+    assert (
+        'source_entity_name and target_entity_name must be names from extracted_entities'
+        in prompt_text
+    )
+    assert 'If an endpoint is a value such as a version, add it as an entity.' in prompt_text
 
 
 @pytest.mark.asyncio
@@ -440,7 +447,7 @@ async def test_combined_extraction_renders_timeline_with_context_turns():
     episode_1 = prompt_text.index('[Episode 1]')
     assert episode_0 < context < episode_1
     assert 'ignored assistant turn' in prompt_text
-    assert '[CONTEXT EPISODE] are NOT' in prompt_text
+    assert '[CONTEXT EPISODE] are not numbered episodes' in prompt_text
     assert 'PREVIOUS MESSAGES and [CONTEXT EPISODE] messages to resolve' in prompt_text
     assert 'CONTEXT EPISODES:' not in prompt_text
 
@@ -523,6 +530,80 @@ async def test_combined_extraction_renders_custom_instructions_after_fact_types(
     assert 'the CUSTOM INSTRUCTION wins' in prompt_text
     assert prompt_text.index('</FACT TYPES>') < prompt_text.index('<CUSTOM INSTRUCTIONS>')
     assert prompt_text.index('<CUSTOM INSTRUCTIONS>') < prompt_text.index('<PREVIOUS MESSAGES>')
+
+
+def test_combined_extraction_data_sections_match_previous_render() -> None:
+    context = {
+        'entity_types': (
+            "[{'entity_type_id': 0, 'entity_type_name': 'Person', "
+            "'entity_type_description': 'A person.'}]"
+        ),
+        'edge_types': [
+            {
+                'fact_type_name': 'WORKS_AT',
+                'fact_type_description': 'A person works for an organization.',
+            }
+        ],
+        'custom_extraction_instructions': 'Keep ownership facts.',
+        'previous_episodes': ['Alice joined Acme on Monday.'],
+        'episode_content': '[Episode 0]\nAlice now leads the billing team.',
+    }
+    previous_data_sections = """<ENTITY TYPES>
+[{'entity_type_id': 0, 'entity_type_name': 'Person', 'entity_type_description': 'A person.'}]
+</ENTITY TYPES>
+
+<FACT TYPES>
+[{"fact_type_name": "WORKS_AT", "fact_type_description": "A person works for an organization."}]
+</FACT TYPES>
+RELATION TYPE RULES:
+- When a relationship matches a FACT TYPE, use that fact_type_name as the relation_type.
+- If no FACT TYPE fits, derive a relation_type in SCREAMING_SNAKE_CASE
+  (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).
+
+
+<CUSTOM INSTRUCTIONS>
+Keep ownership facts.
+</CUSTOM INSTRUCTIONS>
+CUSTOM INSTRUCTION RULES:
+- CUSTOM INSTRUCTIONS come from the owner of this graph. Apply them. When a CUSTOM INSTRUCTION conflicts with a rule above, the CUSTOM INSTRUCTION wins.
+
+<PREVIOUS MESSAGES>
+["Alice joined Acme on Monday."]
+</PREVIOUS MESSAGES>
+
+<CURRENT MESSAGES>
+[Episode 0]
+Alice now leads the billing team.
+</CURRENT MESSAGES>
+"""
+
+    prompt = _build_extract_user_prompt(context)
+
+    assert prompt[prompt.index('<ENTITY TYPES>') :] == previous_data_sections
+
+
+def test_combined_extraction_uses_c2_system_and_instruction_text() -> None:
+    context = {
+        'entity_types': '[]',
+        'previous_episodes': [],
+        'episode_content': 'Alice works for Acme.',
+    }
+
+    system, user = extract_message(context)
+
+    assert system.content == (
+        'You build the long-term memory of an AI agent. From each conversation you extract the '
+        'entities and the relationship facts that the agent will need later to answer questions, '
+        'personalize responses, and continue work. The original conversation will not be available '
+        'later: only your entities and facts will remain, so each fact must stand alone.'
+    )
+    assert user.content.startswith(
+        '# Goal\nTurn CURRENT MESSAGES into a knowledge graph: a list of entities and a list of '
+        'facts (edges) between them.'
+    )
+    assert '# What good output looks like' in user.content
+    assert 'ENTITY RULES:' not in user.content
+    assert 'FACT RULES:' not in user.content
 
 
 @pytest.mark.asyncio
