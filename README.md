@@ -703,8 +703,13 @@ JevClient routes node dedupe and edge resolution to TypeSafe Jev. Set
 ``JEV_API_KEY`` before you create the client. Duplicate and contradiction
 thresholds default to 0.8.
 
-Jev is a third-party hosted API from TypeSafe, so the dedupe prompt content
-goes to that API.
+Jev is a decision model. It answers typed questions with probabilities. It
+does not generate text. Use a general LLM as the default model. Route only
+``dedupe_nodes.nodes`` and ``dedupe_edges.resolve_edge`` to Jev. Do not use Jev
+for extraction, summaries, or other generation tasks.
+
+TypeSafe hosts the Jev API. Graphiti sends dedupe prompt content to TypeSafe.
+See the [FalkorDB Jev dedupe example](examples/jev/) for a runnable example.
 
 ```python
 from graphiti_core import Graphiti
@@ -717,12 +722,12 @@ from graphiti_core.llm_client import (
     jev_prompt_overrides,
 )
 
-openai = LLMTransport(OpenAIClient(), models=['gpt-5.1'])
+openai = LLMTransport(OpenAIClient(), models=['gpt-6-luna'])
 jev = LLMTransport(JevClient(), models=['jev-latest'])
 jev_dedupe = jev.model('jev-latest', prompt_overrides=jev_prompt_overrides())
 
 runtime = LLMRuntime(
-    model=openai.model('gpt-5.1'),
+    model=openai.model('gpt-6-luna'),
     routes=PromptRoutes(
         dedupe_nodes=PromptRoutes.DedupeNodes(nodes=jev_dedupe),
         dedupe_edges=PromptRoutes.DedupeEdges(resolve_edge=jev_dedupe),

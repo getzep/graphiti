@@ -29,6 +29,7 @@ uses the same SystemOne protocol and the same two prompts:
 - Exports from `graphiti_core.llm_client`.
 - Unit tests with a mocked HTTP transport.
 - A README section next to the `LLMRuntime` section.
+- A runnable FalkorDB example in `examples/jev/`.
 
 ### 2.2. Out of scope
 
@@ -58,12 +59,12 @@ from graphiti_core.llm_client import (
     jev_prompt_overrides,
 )
 
-openai = LLMTransport(OpenAIClient(), models=['gpt-5.1'])
+openai = LLMTransport(OpenAIClient(), models=['gpt-6-luna'])
 jev = LLMTransport(JevClient(), models=['jev-latest'])
 jev_dedupe = jev.model('jev-latest', prompt_overrides=jev_prompt_overrides())
 
 runtime = LLMRuntime(
-    model=openai.model('gpt-5.1'),
+    model=openai.model('gpt-6-luna'),
     routes=PromptRoutes(
         dedupe_nodes=PromptRoutes.DedupeNodes(nodes=jev_dedupe),
         dedupe_edges=PromptRoutes.DedupeEdges(resolve_edge=jev_dedupe),
@@ -71,6 +72,11 @@ runtime = LLMRuntime(
 )
 graphiti = Graphiti(..., llm_runtime=runtime)
 ```
+
+Jev is a decision model. It answers typed questions with probabilities. It
+does not generate text. Use a general LLM as the default model. Route only
+`dedupe_nodes.nodes` and `dedupe_edges.resolve_edge` to Jev. Do not use Jev for
+extraction, summaries, or other generation tasks.
 
 `add_episode` and `add_episode_bulk` both use the route, because both call
 the dedupe prompts with the runtime clients.
