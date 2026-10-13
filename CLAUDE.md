@@ -142,7 +142,6 @@ The codebase supports multiple LLM providers but works best with services suppor
 - **GPT-4.1 Family** (Standard models):
   - `gpt-4.1` - Full capability model
   - `gpt-4.1-mini` - Efficient model for most tasks
-  - `gpt-4.1-nano` - Lightweight model
 - **Legacy Models** (Still supported):
   - `gpt-4o` - Previous generation flagship
   - `gpt-4o-mini` - Previous generation efficient

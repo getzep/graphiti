@@ -3,7 +3,10 @@ from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel
 
-from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.cross_encoder.openai_reranker_client import (
+    DEFAULT_MODEL as DEFAULT_RERANKER_MODEL,
+)
+from graphiti_core.llm_client.config import LLMConfig, ModelSize
 from graphiti_core.llm_client.openai_base_client import DEFAULT_MODEL, DEFAULT_REASONING
 from graphiti_core.llm_client.openai_client import OpenAIClient
 
@@ -51,14 +54,20 @@ def test_default_model_and_reasoning_sentinel():
 @pytest.mark.parametrize(
     ('model', 'reasoning', 'expected'),
     [
-        # gpt-5.5 -> reasoning off; the dated snapshot must match the prefix too
+        # GPT 5.1+ and later major versions use 'none'.
+        ('gpt-5.1', 'auto', 'none'),
+        ('gpt-5.4-mini', 'auto', 'none'),
         ('gpt-5.5', 'auto', 'none'),
         ('gpt-5.5-2026-04-23', 'auto', 'none'),
-        # every other model: 'minimal' (cheapest tier, prior default) — NOT None,
-        # so non-gpt-5.5 reasoning models don't regress to the API's medium default
+        ('gpt-5.6-luna', 'auto', 'none'),
+        ('gpt-6-luna', 'auto', 'none'),
+        ('gpt-6.1-sol', 'auto', 'none'),
+        # The original GPT-5 family and o-series models use 'minimal'.
         ('gpt-5', 'auto', 'minimal'),
-        ('gpt-5.4-mini', 'auto', 'minimal'),
-        ('o1', 'auto', 'minimal'),
+        ('gpt-5-mini', 'auto', 'minimal'),
+        ('gpt-5-nano', 'auto', 'minimal'),
+        ('gpt-5-2025-08-07', 'auto', 'minimal'),
+        ('o3', 'auto', 'minimal'),
         # non-reasoning model: value is ignored by the caller (not a reasoning model)
         ('gpt-4.1', 'auto', 'minimal'),
         # explicit values always pass through unchanged
@@ -73,9 +82,18 @@ def test_resolve_reasoning_effort(model, reasoning, expected):
 
 def test_default_model_for_size_is_gpt_5_5():
     client = OpenAIClient(config=LLMConfig(), client=DummyOpenAIClient())
-    from graphiti_core.llm_client.config import ModelSize
 
     assert client._get_model_for_size(ModelSize.medium) == 'gpt-5.5'
+
+
+def test_default_small_model_for_size_is_gpt_4_1_mini():
+    client = OpenAIClient(config=LLMConfig(), client=DummyOpenAIClient())
+
+    assert client._get_model_for_size(ModelSize.small) == 'gpt-4.1-mini'
+
+
+def test_default_reranker_model_is_gpt_4_1_mini():
+    assert DEFAULT_RERANKER_MODEL == 'gpt-4.1-mini'
 
 
 @pytest.mark.asyncio
@@ -164,9 +182,8 @@ async def test_empty_string_reasoning_is_not_sent():
 
 
 @pytest.mark.asyncio
-async def test_non_5_5_reasoning_model_defaults_to_minimal_not_api_default():
-    # Regression guard: non-gpt-5.5 reasoning models must keep the cheap 'minimal'
-    # effort (the prior default), not fall through to the API's medium default.
+async def test_original_gpt_5_family_defaults_to_minimal():
+    # Regression guard: original GPT-5 models keep the 'minimal' effort.
     dummy = DummyOpenAIClient()
     client = OpenAIClient(config=LLMConfig(), client=dummy)
 
