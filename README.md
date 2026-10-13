@@ -700,8 +700,8 @@ model routing. See ``spec/llm-runtime.md`` for the runtime API.
 ### Jev dedupe
 
 JevClient routes node dedupe and edge resolution to TypeSafe Jev. Set
-``JEV_API_KEY`` before you create the client. Duplicate and contradiction
-thresholds default to 0.8.
+``JEV_API_KEY`` before you create the client. The duplicate threshold defaults
+to 0.7. The contradiction threshold defaults to 0.8.
 
 Jev is a decision model. It answers typed questions with probabilities. It
 does not generate text. Use a general LLM as the default model. Route only
@@ -735,6 +735,16 @@ runtime = LLMRuntime(
 )
 graphiti = Graphiti(..., llm_runtime=runtime)
 ```
+
+### OpenAI Decisions dedupe
+
+``OpenAIDecisionsClient`` routes node dedupe and edge resolution to the OpenAI
+Decisions API. Use a general LLM as the default model. A decision model
+answers typed questions with probabilities and does not generate text. Do not
+use it for extraction, summaries, or other generation tasks.
+
+See the [OpenAI Decisions FalkorDB example](examples/openai_decisions/) for a
+runnable example.
 
 ## Documentation
 

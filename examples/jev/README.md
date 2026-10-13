@@ -43,10 +43,17 @@ Graphiti sends dedupe prompt content to TypeSafe.
 
 ## Expected output
 
-The final edge list will show Alice's billing-platform fact with
-`invalid_at=2025-01-10T00:00:00+00:00` and an `expired_at` value. It will show
-Priya's replacement fact as active. The final node list will show one Alice
-Chen entity.
+One run showed Alice's billing-platform fact with
+`invalid_at=2025-01-10T00:00:00+00:00` and an `expired_at` value. Priya's
+replacement fact was active. The contradiction probability was `0.89` for
+Alice's fact and `0.04` for the Acme fact. The run made 2
+`dedupe_nodes.nodes` calls and 3 `dedupe_edges.resolve_edge` calls. The final
+node list showed one Alice Chen entity.
+
+Extraction output can change between runs. If the model does not extract
+Alice's billing-platform fact, or if it writes the change as a separate
+termination fact, Alice's fact stays active. The current Graphiti contradiction
+rule uses only the new fact's `valid_at` value.
 
 ## Run the example
 

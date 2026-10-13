@@ -111,7 +111,9 @@ def test_jev_prompt_overrides_build_n6_and_e2_questions():
         set(question['criteria']) == {'true', 'false'}
         for question in edge_payload['questions'].values()
     )
-    assert 'identical factual information' in edge_payload['questions']['dup0']['instructions']
+    assert (
+        'already state all of the information' in edge_payload['questions']['dup0']['instructions']
+    )
     assert 'directly contradict' in edge_payload['questions']['con1']['instructions']
 
 
@@ -159,8 +161,8 @@ async def test_edge_thresholds_include_values_at_the_boundary(client_factory):
             200,
             json={
                 'answers': {
-                    'dup0': {'noul': 0.79},
-                    'dup1': {'noul': 0.8},
+                    'dup0': {'noul': 0.69},
+                    'dup1': {'noul': 0.7},
                     'con0': {'noul': 0.79},
                     'con1': {'noul': 0.8},
                 }

@@ -25,7 +25,9 @@ uses the same SystemOne protocol and the same two prompts:
 ### 2.1. In scope
 
 - `graphiti_core/llm_client/jev_client.py` with `JevClient`,
-  `jev_prompt_overrides()`, and the question builders and answer mappers.
+  `jev_prompt_overrides()`, and the Jev request handling.
+- `graphiti_core/llm_client/decision_prompts.py` with the shared question
+  builders and answer mappers.
 - Exports from `graphiti_core.llm_client`.
 - Unit tests with a mocked HTTP transport.
 - A README section next to the `LLMRuntime` section.
@@ -121,7 +123,15 @@ message into one state document and a set of questions. The builder returns a
   each EXISTING FACT and one `noul` contradiction question for each fact in
   both lists.
 
-The rule text and the question text are the Clef 27B text with no change.
+The shared module uses the Zep n6/e2 decision prompts. The node rules and node
+question use the Zep text. The edge contradiction rules and contradiction
+question use the Zep text.
+
+The duplicate rules classify an existing fact as a duplicate when it states
+all information in the new fact, even when the existing fact has more detail.
+A new fact that adds information is not a duplicate. The edge duplicate
+question uses the Zep wording. The payload includes `instructions`, `state`,
+and `questions`. The `instructions` value is an empty string.
 
 ## 7. Answer mapping
 
@@ -130,7 +140,8 @@ The rule text and the question text are the Clef 27B text with no change.
 | `dedupe_nodes.nodes` | `NodeResolutions` | The most probable option for each entity. `none` gives `duplicate_candidate_id=-1`. |
 | `dedupe_edges.resolve_edge` | `EdgeDuplicate` | `duplicate_facts`: probability >= `duplicate_threshold`. `contradicted_facts`: probability >= `contradiction_threshold`. |
 
-The thresholds are `JevClient` constructor arguments. Both defaults are 0.8.
+The thresholds are `JevClient` constructor arguments. The duplicate threshold
+defaults to 0.7. The contradiction threshold defaults to 0.8.
 
 ## 8. Client behavior
 
