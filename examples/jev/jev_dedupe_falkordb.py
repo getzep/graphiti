@@ -116,12 +116,19 @@ async def main(falkor_driver: FalkorDriver, group_id: str):
             },
             {
                 'content': (
-                    'On January 7, Alice Chen became a senior engineer at Acme. '
-                    'On January 10, she left Acme and joined Globex as a software engineer. '
-                    'She continues to manage the customer billing platform.'
+                    'Alice Chen manages the customer billing platform. '
+                    'She is the only person who manages it.'
+                ),
+                'reference_time': datetime(2025, 1, 7, tzinfo=timezone.utc),
+                'description': 'Alice Chen manages the customer billing platform',
+            },
+            {
+                'content': (
+                    'Priya Patel took over the customer billing platform from Alice Chen. '
+                    'Priya now manages it instead of Alice.'
                 ),
                 'reference_time': datetime(2025, 1, 10, tzinfo=timezone.utc),
-                'description': 'Alice Chen joins Globex',
+                'description': 'Priya Patel takes over the billing platform',
             },
         ]
 

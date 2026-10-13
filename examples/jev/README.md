@@ -2,8 +2,9 @@
 
 This example routes node deduplication and edge resolution to Jev. OpenAI
 `gpt-6-luna` handles extraction, summaries, and all other prompts. The example
-adds three episodes in order. The episodes show a name variant, a repeated
-fact, and a change from Acme to Globex.
+adds four episodes in order. The episodes show a name variant, a repeated
+fact, and a transfer of responsibility for the customer billing platform from
+Alice Chen to Priya Patel.
 
 ## Prerequisites
 
@@ -39,6 +40,13 @@ extraction, summaries, or other generation tasks.
 
 The example uses the default OpenAI embedder. TypeSafe hosts the Jev API.
 Graphiti sends dedupe prompt content to TypeSafe.
+
+## Expected output
+
+The final edge list will show Alice's billing-platform fact with
+`invalid_at=2025-01-10T00:00:00+00:00` and an `expired_at` value. It will show
+Priya's replacement fact as active. The final node list will show one Alice
+Chen entity.
 
 ## Run the example
 
