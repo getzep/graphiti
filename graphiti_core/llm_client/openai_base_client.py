@@ -32,8 +32,8 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-5.5'
-DEFAULT_SMALL_MODEL = 'gpt-4.1-mini'
+DEFAULT_MODEL = 'gpt-6-luna'
+DEFAULT_SMALL_MODEL = 'gpt-6-luna'
 # 'auto' is a sentinel meaning "pick a reasoning effort based on the model"
 # (resolved by _resolve_reasoning_effort); it is never sent to the API.
 DEFAULT_REASONING = 'auto'
@@ -130,6 +130,15 @@ class BaseOpenAIClient(LLMClient):
             return True
         version = re.match(r'gpt-(\d+)', model)
         return version is not None and int(version.group(1)) >= 5
+
+    @staticmethod
+    def _prompt_cache_options(model: str) -> dict[str, str] | None:
+        """gpt-6 writes prompts of 1,024+ tokens by default at 1.25x the input rate.
+
+        Explicit mode without a breakpoint writes nothing. Other models reject the
+        prompt_cache_options field.
+        """
+        return {'mode': 'explicit'} if model.startswith('gpt-6') else None
 
     @staticmethod
     def _resolve_reasoning_effort(model: str, reasoning: str | None) -> str | None:

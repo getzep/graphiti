@@ -86,10 +86,8 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ steps.openai.outputs.access-token }}
           FALKORDB_URI: redis://localhost:6379
-          # gpt-5.5 is the server's runtime default, but it requires a key/account
-          # with fast gpt-5.5 access; CI pins a lighter, broadly-available model so
-          # the live test stays fast and reliable. It exercises the same pipeline.
-          MODEL_NAME: gpt-4.1-mini
+          # Use the gpt-6-luna model for the live pipeline.
+          MODEL_NAME: gpt-6-luna
           # Raise episode/LLM-call concurrency so the live episode processes quickly.
           SEMAPHORE_LIMIT: "20"
         # pytest exits 5 when no tests are collected. The legitimate case is a fork

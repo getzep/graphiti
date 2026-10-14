@@ -136,6 +136,8 @@ The codebase supports multiple LLM providers but works best with services suppor
 #### Current LLM Models (as of November 2025)
 
 **OpenAI Models:**
+- **GPT-6 Family** (Reasoning models):
+  - `gpt-6-luna` - Default OpenAI model; Graphiti sends reasoning effort `none` and turns off prompt caching
 - **GPT-5 Family** (Reasoning models, require temperature=0):
   - `gpt-5-mini` - Fast reasoning model
   - `gpt-5-nano` - Smallest reasoning model
@@ -169,7 +171,7 @@ The codebase supports multiple LLM providers but works best with services suppor
   - `gemini-1.5-pro` - Production-stable flagship
   - `gemini-1.5-flash` - Production-stable efficient
 
-**Note**: Model names like `gpt-5-mini`, `gpt-4.1`, and `gpt-4.1-mini` used in this codebase are valid OpenAI model identifiers. The GPT-5 family are reasoning models that require `temperature=0` (automatically handled in the code).
+**Note**: OpenAI model names depend on the configured endpoint. Graphiti sends reasoning effort `none` for GPT-5.1+ and GPT-6 models. Graphiti turns off prompt caching for `gpt-6-luna`.
 
 ### MCP Server Usage Guidelines
 

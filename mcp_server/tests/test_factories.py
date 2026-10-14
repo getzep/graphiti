@@ -75,6 +75,9 @@ class TestLLMClientFactoryRouting:
         assert isinstance(client, OpenAIClient)
         assert not isinstance(client, OpenAIGenericClient)
 
+    def test_llm_config_defaults_to_gpt_6_luna(self):
+        assert LLMConfig().model == 'gpt-6-luna'
+
     def test_ollama_uses_generic_client(self):
         client = LLMClientFactory.create(self._config('http://localhost:11434/v1'))
         assert isinstance(client, OpenAIGenericClient)
@@ -108,7 +111,7 @@ class TestLLMClientReasoningEffort:
         )
 
     def test_gpt_5_5_uses_reasoning_none(self):
-        """gpt-5.5 (the default) runs with reasoning off."""
+        """gpt-5.5 runs with reasoning off."""
         client = LLMClientFactory.create(self._config('gpt-5.5'))
         assert isinstance(client, OpenAIClient)
         assert client.reasoning == 'none'

@@ -28,6 +28,7 @@ from .client import CrossEncoderClient
 
 logger = logging.getLogger(__name__)
 
+# gpt-6-luna rejects max_tokens and logit_bias, so the logprob reranker uses a non-reasoning model.
 DEFAULT_MODEL = 'gpt-4.1-mini'
 
 

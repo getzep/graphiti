@@ -51,7 +51,7 @@ class DummyResponseModel(BaseModel):
 
 
 def test_default_model_and_reasoning_sentinel():
-    assert DEFAULT_MODEL == 'gpt-5.5'
+    assert DEFAULT_MODEL == 'gpt-6-luna'
     assert DEFAULT_REASONING == 'auto'
 
 
@@ -102,16 +102,11 @@ def test_is_reasoning_model(model, expected):
     assert BaseOpenAIClient._is_reasoning_model(model) is expected
 
 
-def test_default_model_for_size_is_gpt_5_5():
+def test_default_model_for_size_is_gpt_6_luna():
     client = OpenAIClient(config=LLMConfig(), client=DummyOpenAIClient())
 
-    assert client._get_model_for_size(ModelSize.medium) == 'gpt-5.5'
-
-
-def test_default_small_model_for_size_is_gpt_4_1_mini():
-    client = OpenAIClient(config=LLMConfig(), client=DummyOpenAIClient())
-
-    assert client._get_model_for_size(ModelSize.small) == 'gpt-4.1-mini'
+    assert client._get_model_for_size(ModelSize.medium) == 'gpt-6-luna'
+    assert client._get_model_for_size(ModelSize.small) == 'gpt-6-luna'
 
 
 def test_default_reranker_model_is_gpt_4_1_mini():
@@ -141,6 +136,7 @@ async def test_gpt_5_5_structured_completion_sends_none_effort_and_no_temperatur
     # 'auto' resolves to 'none' for gpt-5.5
     assert call_args['reasoning'] == {'effort': 'none'}
     assert call_args['text'] == {'verbosity': 'low'}
+    assert 'extra_body' not in call_args
 
 
 @pytest.mark.asyncio
@@ -148,6 +144,7 @@ async def test_gpt_5_5_structured_completion_sends_none_effort_and_no_temperatur
     ('model', 'expected_effort'),
     [
         ('gpt-6-luna', 'none'),
+        ('gpt-5.5', 'none'),
         ('gpt-4.1-mini', None),
     ],
 )
@@ -168,9 +165,14 @@ async def test_structured_completion_uses_reasoning_fields_for_model(model, expe
     if expected_effort is None:
         assert 'reasoning' not in call_args
         assert call_args['temperature'] == 0.5
+        assert 'extra_body' not in call_args
     else:
         assert call_args['reasoning'] == {'effort': expected_effort}
         assert 'temperature' not in call_args
+        if model == 'gpt-6-luna':
+            assert call_args['extra_body'] == {'prompt_cache_options': {'mode': 'explicit'}}
+        else:
+            assert 'extra_body' not in call_args
 
 
 @pytest.mark.asyncio
@@ -255,14 +257,22 @@ async def test_original_gpt_5_family_defaults_to_minimal():
 
 
 @pytest.mark.asyncio
-async def test_create_completion_omits_temperature_for_reasoning_model():
-    # The JSON-object fallback path must not send temperature (not even None) to
-    # a reasoning model.
+@pytest.mark.parametrize(
+    ('model', 'expected_token_limit', 'expected_extra_body'),
+    [
+        ('gpt-6-luna', 'max_completion_tokens', {'prompt_cache_options': {'mode': 'explicit'}}),
+        ('gpt-5.5', 'max_tokens', None),
+        ('gpt-4.1-mini', 'max_tokens', None),
+    ],
+)
+async def test_create_completion_model_specific_options(
+    model, expected_token_limit, expected_extra_body
+):
     dummy = DummyOpenAIClient()
     client = OpenAIClient(config=LLMConfig(), client=dummy)
 
     await client._create_completion(
-        model='gpt-5.5',
+        model=model,
         messages=[],
         temperature=0.5,
         max_tokens=64,
@@ -270,8 +280,20 @@ async def test_create_completion_omits_temperature_for_reasoning_model():
 
     assert len(dummy.chat.completions.create_calls) == 1
     call_args = dummy.chat.completions.create_calls[0]
-    assert 'temperature' not in call_args
+    if model == 'gpt-4.1-mini':
+        assert call_args['temperature'] == 0.5
+    else:
+        assert 'temperature' not in call_args
     assert call_args['response_format'] == {'type': 'json_object'}
+    assert expected_token_limit in call_args
+    other_token_limit = (
+        'max_tokens' if expected_token_limit == 'max_completion_tokens' else 'max_completion_tokens'
+    )
+    assert other_token_limit not in call_args
+    if expected_extra_body is None:
+        assert 'extra_body' not in call_args
+    else:
+        assert call_args['extra_body'] == expected_extra_body
 
 
 @pytest.mark.asyncio
