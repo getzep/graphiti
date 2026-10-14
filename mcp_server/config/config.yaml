@@ -17,6 +17,9 @@ llm:
   # Use json_object for OpenAI-compatible providers that accept json_schema
   # but do not reliably enforce the requested Pydantic schema.
   structured_output_mode: ${LLM_STRUCTURED_OUTPUT_MODE:json_schema}
+  # OpenAI/Azure reasoning models only (o1, o3, gpt-5*). Unset keeps the model default
+  # ('none' for gpt-5.5, 'minimal' otherwise). Accepted values vary by model.
+  reasoning_effort: ${LLM_REASONING_EFFORT:}
   
   providers:
     openai:

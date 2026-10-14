@@ -10,6 +10,9 @@ llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
   model: ${MODEL_NAME:gpt-5.5}
   max_tokens: 4096
+  # OpenAI/Azure reasoning models only (o1, o3, gpt-5*). Unset keeps the model default
+  # ('none' for gpt-5.5, 'minimal' otherwise). Accepted values vary by model.
+  reasoning_effort: ${LLM_REASONING_EFFORT:}
 
   providers:
     openai:

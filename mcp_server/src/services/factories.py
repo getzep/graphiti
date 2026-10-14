@@ -108,17 +108,20 @@ def is_non_openai_provider(base_url: str | None) -> bool:
     return not any(domain in base_url for domain in openai_domains)
 
 
-def reasoning_effort_for_model(model: str) -> str | None:
+def reasoning_effort_for_model(model: str, configured: str | None = None) -> str | None:
     """Reasoning effort to send for a reasoning model, or None if not one.
 
     Reasoning models (o1, o3, gpt-5 family) need an effort; non-reasoning models
-    must not receive one. gpt-5.5 runs with reasoning off ('none') for lower
-    cost/latency (comparable extraction quality); earlier reasoning models keep
-    the cheapest broadly-supported tier ('minimal'). Shared by the OpenAI and
-    Azure OpenAI factory branches so both providers select effort identically.
+    must not receive one. A configured effort (``llm.reasoning_effort``) wins.
+    Otherwise gpt-5.5 runs with reasoning off ('none') for lower cost/latency
+    (comparable extraction quality); earlier reasoning models keep the cheapest
+    broadly-supported tier ('minimal'). Shared by the OpenAI and Azure OpenAI
+    factory branches so both providers select effort identically.
     """
     if not model.startswith(('o1', 'o3', 'gpt-5')):
         return None
+    if configured:
+        return configured
     return 'none' if model.startswith('gpt-5.5') else 'minimal'
 
 
@@ -172,7 +175,7 @@ class LLMClientFactory:
                 else:
                     # Use OpenAIClient for official OpenAI API (supports Responses API).
                     # Reasoning models get a reasoning effort; others must not.
-                    effort = reasoning_effort_for_model(config.model)
+                    effort = reasoning_effort_for_model(config.model, config.reasoning_effort)
                     if effort is not None:
                         return OpenAIClient(config=llm_config, reasoning=effort, verbosity='low')
                     return OpenAIClient(config=llm_config)
@@ -225,7 +228,7 @@ class LLMClientFactory:
 
                 # Apply the same model-tied reasoning effort as the OpenAI branch
                 # (e.g. a gpt-5.5 Azure deployment runs with reasoning off).
-                effort = reasoning_effort_for_model(config.model)
+                effort = reasoning_effort_for_model(config.model, config.reasoning_effort)
                 return AzureOpenAILLMClient(
                     azure_client=azure_client,
                     config=llm_config,
