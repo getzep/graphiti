@@ -12,11 +12,13 @@ on:
     paths:
       - "mcp_server/**"
       - ".github/workflows/mcp-server-tests.yml"
+      - ".github/actions/openai-workload-identity/**"
   pull_request:
     branches: [main]
     paths:
       - "mcp_server/**"
       - ".github/workflows/mcp-server-tests.yml"
+      - ".github/actions/openai-workload-identity/**"
 
 permissions:
   contents: read
@@ -69,6 +71,9 @@ jobs:
         id: openai
         # Short-lived token for the OpenAI service account mapped to this repo's
         # `development` environment. Runs right before the tests so the token is fresh.
+        # GitHub already gives fork PRs a read-only id-token; this check also stops a
+        # fork PR when the repo sends write tokens to fork workflows.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: ./.github/actions/openai-workload-identity
         with:
           identity-provider-id: ${{ vars.OPENAI_IDENTITY_PROVIDER_ID }}
