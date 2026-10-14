@@ -1,0 +1,73 @@
+name: OpenAI workload identity token
+description: >
+  Exchanges the job's GitHub OIDC token for a short-lived OpenAI access token
+  (OpenAI workload identity federation) and returns it as the `access-token`
+  output; pass it to the test step as OPENAI_API_KEY. Soft-skips when the job
+  has no OIDC token (fork PRs) or when the identity IDs are empty: the output is
+  then empty, so the live suites skip themselves as before.
+
+inputs:
+  identity-provider-id:
+    description: OpenAI workload identity provider ID.
+    required: false
+    default: ''
+  service-account-id:
+    description: OpenAI service account ID that the provider mapping selects.
+    required: false
+    default: ''
+  audience:
+    description: OIDC audience; must match the audience on the OpenAI provider.
+    required: false
+    default: https://api.openai.com/v1
+
+outputs:
+  access-token:
+    description: OpenAI access token (masked), or empty when the step skipped.
+    value: ${{ steps.exchange.outputs.access-token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Exchange GitHub OIDC token for an OpenAI access token
+      id: exchange
+      shell: bash
+      env:
+        IDENTITY_PROVIDER_ID: ${{ inputs['identity-provider-id'] }}
+        SERVICE_ACCOUNT_ID: ${{ inputs['service-account-id'] }}
+        AUDIENCE: ${{ inputs.audience }}
+      run: |
+        set -euo pipefail
+        if [ -z "$IDENTITY_PROVIDER_ID" ] || [ -z "$SERVICE_ACCOUNT_ID" ]; then
+          echo '::notice::OPENAI_IDENTITY_PROVIDER_ID or OPENAI_SERVICE_ACCOUNT_ID is not set; no OpenAI token, live tests will skip.'
+          exit 0
+        fi
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo '::notice::No GitHub OIDC token for this job (fork PR); no OpenAI token, live tests will skip.'
+          exit 0
+        fi
+
+        audience_param=$(jq -rn --arg a "$AUDIENCE" '$a | @uri')
+        oidc_token=$(curl -sSf \
+          -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience_param}" | jq -r '.value')
+        echo "::add-mask::${oidc_token}"
+
+        if ! response=$(curl -sS --fail-with-body https://auth.openai.com/oauth/token \
+          --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+          --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:jwt' \
+          --data-urlencode "subject_token=${oidc_token}" \
+          --data-urlencode "identity_provider_id=${IDENTITY_PROVIDER_ID}" \
+          --data-urlencode "service_account_id=${SERVICE_ACCOUNT_ID}"); then
+          # The error body holds no token, only the OpenAI error.
+          echo "::error::OpenAI token exchange failed: ${response}"
+          exit 1
+        fi
+
+        access_token=$(jq -r '.access_token // empty' <<<"$response")
+        if [ -z "$access_token" ]; then
+          echo '::error::OpenAI token exchange returned no access_token.'
+          exit 1
+        fi
+        echo "::add-mask::${access_token}"
+        echo "OpenAI access token issued; expires_in=$(jq -r '.expires_in' <<<"$response")s"
+        echo "access-token=${access_token}" >> "$GITHUB_OUTPUT"
