@@ -264,6 +264,12 @@ All third-party integrations must be optional dependencies to keep the core libr
    ]
    ```
 
+   Exception: do not add a package that installs PyTorch (for example
+   `sentence-transformers`) to the dev extra. CI installs the dev extra in the
+   unit-test and type-check jobs, and PyTorch with its CUDA wheels is
+   approximately 2.8 GB. Make the tests of such an integration skip when the
+   package is not installed (`pytest.importorskip`).
+
 2. **Use TYPE_CHECKING pattern**: In your integration module, import dependencies conditionally:
    ```python
    from typing import TYPE_CHECKING
