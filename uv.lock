@@ -1138,8 +1138,6 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-xdist" },
     { name = "ruff" },
-    { name = "sentence-transformers" },
-    { name = "transformers" },
     { name = "voyageai" },
 ]
 falkordb = [
@@ -1224,10 +1222,8 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "redis", marker = "python_full_version >= '3.12' and extra == 'falkordblite'", specifier = "<9" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
-    { name = "sentence-transformers", marker = "extra == 'dev'", specifier = ">=3.2.1" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.2.1" },
     { name = "tenacity", specifier = ">=9.0.0" },
-    { name = "transformers", marker = "extra == 'dev'", specifier = ">=4.45.2" },
     { name = "voyageai", marker = "extra == 'dev'", specifier = ">=0.2.3" },
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
