@@ -2,9 +2,10 @@ name: MCP Server Tests
 
 # Live end-to-end tests for the Graphiti MCP server against FalkorDB (the default
 # database) and a real OpenAI model. Runs on PRs and pushes to main that touch the
-# MCP server. The OpenAI key comes from the `development` GitHub environment; fork
-# PRs receive no secrets, so the suite skips itself there (the test module skips
-# when OPENAI_API_KEY is unset).
+# MCP server. OpenAI access uses workload identity federation:
+# the job exchanges its GitHub OIDC token for a short-lived OpenAI token (IDs in
+# the `development` environment variables). Fork PRs get no OIDC token, so the
+# suite skips itself there (the test module skips when OPENAI_API_KEY is unset).
 on:
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # OpenAI workload identity federation
 
 # Cancel superseded runs on the same ref so repeated pushes don't keep paying for
 # real OpenAI calls.
@@ -63,10 +65,18 @@ jobs:
             if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
             sleep 1
           done
+      - name: Get OpenAI access token (workload identity)
+        id: openai
+        # Short-lived token for the OpenAI service account mapped to this repo's
+        # `development` environment. Runs right before the tests so the token is fresh.
+        uses: ./.github/actions/openai-workload-identity
+        with:
+          identity-provider-id: ${{ vars.OPENAI_IDENTITY_PROVIDER_ID }}
+          service-account-id: ${{ vars.OPENAI_SERVICE_ACCOUNT_ID }}
       - name: Run live MCP integration tests
         working-directory: mcp_server
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ steps.openai.outputs.access-token }}
           FALKORDB_URI: redis://localhost:6379
           # gpt-5.5 is the server's runtime default, but it requires a key/account
           # with fast gpt-5.5 access; CI pins a lighter, broadly-available model so

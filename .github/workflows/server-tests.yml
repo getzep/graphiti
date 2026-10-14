@@ -3,10 +3,11 @@ name: Server Tests
 # Live end-to-end regression tests for the Graphiti graph_service (REST API)
 # against FalkorDB and a real OpenAI model. Spawns the FastAPI server as a
 # subprocess and exercises the public API end to end (ingest -> async process ->
-# search -> delete). Runs on PRs and pushes to main that touch the server. The
-# OpenAI key comes from the `development` GitHub environment; fork PRs receive no
-# secrets, so the suite skips itself there (the test module skips when
-# OPENAI_API_KEY is unset).
+# search -> delete). Runs on PRs and pushes to main that touch the server. OpenAI
+# access uses workload identity federation: the job exchanges its GitHub OIDC
+# token for a short-lived OpenAI token (IDs in the `development` environment
+# variables). Fork PRs get no OIDC token, so the suite skips itself there (the
+# test module skips when OPENAI_API_KEY is unset).
 on:
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # OpenAI workload identity federation
 
 # Cancel superseded runs on the same ref so repeated pushes don't keep paying for
 # real OpenAI calls.
@@ -65,10 +67,18 @@ jobs:
             if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
             sleep 1
           done
+      - name: Get OpenAI access token (workload identity)
+        id: openai
+        # Short-lived token for the OpenAI service account mapped to this repo's
+        # `development` environment. Runs right before the tests so the token is fresh.
+        uses: ./.github/actions/openai-workload-identity
+        with:
+          identity-provider-id: ${{ vars.OPENAI_IDENTITY_PROVIDER_ID }}
+          service-account-id: ${{ vars.OPENAI_SERVICE_ACCOUNT_ID }}
       - name: Run live server integration tests
         working-directory: server
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ steps.openai.outputs.access-token }}
           DB_BACKEND: falkordb
           FALKORDB_HOST: localhost
           FALKORDB_PORT: "6379"
