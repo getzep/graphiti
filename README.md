@@ -697,6 +697,55 @@ that need a smaller model to that model explicitly. Legacy calls without
 GLiNER2 binds model objects at initialization. It does not support per-prompt
 model routing. See ``spec/llm-runtime.md`` for the runtime API.
 
+### Jev dedupe
+
+JevClient routes node dedupe and edge resolution to TypeSafe Jev. Set
+``JEV_API_KEY`` before you create the client. The duplicate threshold defaults
+to 0.7. The contradiction threshold defaults to 0.8.
+
+Jev is a decision model. It answers typed questions with probabilities. It
+does not generate text. Use a general LLM as the default model. Route only
+``dedupe_nodes.nodes`` and ``dedupe_edges.resolve_edge`` to Jev. Do not use Jev
+for extraction, summaries, or other generation tasks.
+
+TypeSafe hosts the Jev API. Graphiti sends dedupe prompt content to TypeSafe.
+See the [FalkorDB Jev dedupe example](examples/jev/) for a runnable example.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import (
+    JevClient,
+    LLMRuntime,
+    LLMTransport,
+    OpenAIClient,
+    PromptRoutes,
+    jev_prompt_overrides,
+)
+
+openai = LLMTransport(OpenAIClient(), models=['gpt-6-luna'])
+jev = LLMTransport(JevClient(), models=['jev-latest'])
+jev_dedupe = jev.model('jev-latest', prompt_overrides=jev_prompt_overrides())
+
+runtime = LLMRuntime(
+    model=openai.model('gpt-6-luna'),
+    routes=PromptRoutes(
+        dedupe_nodes=PromptRoutes.DedupeNodes(nodes=jev_dedupe),
+        dedupe_edges=PromptRoutes.DedupeEdges(resolve_edge=jev_dedupe),
+    ),
+)
+graphiti = Graphiti(..., llm_runtime=runtime)
+```
+
+### OpenAI Decisions dedupe
+
+``OpenAIDecisionsClient`` routes node dedupe and edge resolution to the OpenAI
+Decisions API. Use a general LLM as the default model. A decision model
+answers typed questions with probabilities and does not generate text. Do not
+use it for extraction, summaries, or other generation tasks.
+
+See the [OpenAI Decisions FalkorDB example](examples/openai_decisions/) for a
+runnable example.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
