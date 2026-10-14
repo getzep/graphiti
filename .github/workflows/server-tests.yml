@@ -56,7 +56,10 @@ jobs:
         # Run the database on the host network rather than a `services:` block: on
         # the depot-ubuntu runner pool bridge-network NAT silently drops packets to
         # published service-container ports. Readiness is checked via `docker exec`.
-        run: docker run -d --name falkordb --network host falkordb/falkordb:latest
+        # The released graphiti-core (PyPI) that this suite installs uses the
+        # pre-6.x fulltext index form (#1963 fixed main). Remove the pin after
+        # the lock file uses a release that includes #1963.
+        run: docker run -d --name falkordb --network host falkordb/falkordb:v4.20.7
       - name: Install dependencies
         working-directory: server
         run: uv sync --extra dev
