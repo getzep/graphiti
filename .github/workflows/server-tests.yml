@@ -3,24 +3,28 @@ name: Server Tests
 # Live end-to-end regression tests for the Graphiti graph_service (REST API)
 # against FalkorDB and a real OpenAI model. Spawns the FastAPI server as a
 # subprocess and exercises the public API end to end (ingest -> async process ->
-# search -> delete). Runs on PRs and pushes to main that touch the server. The
-# OpenAI key comes from the `development` GitHub environment; fork PRs receive no
-# secrets, so the suite skips itself there (the test module skips when
-# OPENAI_API_KEY is unset).
+# search -> delete). Runs on PRs and pushes to main that touch the server. OpenAI
+# access uses workload identity federation: the job exchanges its GitHub OIDC
+# token for a short-lived OpenAI token (IDs in the `development` environment
+# variables). Fork PRs get no OIDC token, so the suite skips itself there (the
+# test module skips when OPENAI_API_KEY is unset).
 on:
   push:
     branches: [main]
     paths:
       - "server/**"
       - ".github/workflows/server-tests.yml"
+      - ".github/actions/openai-workload-identity/**"
   pull_request:
     branches: [main]
     paths:
       - "server/**"
       - ".github/workflows/server-tests.yml"
+      - ".github/actions/openai-workload-identity/**"
 
 permissions:
   contents: read
+  id-token: write # OpenAI workload identity federation
 
 # Cancel superseded runs on the same ref so repeated pushes don't keep paying for
 # real OpenAI calls.
@@ -52,7 +56,10 @@ jobs:
         # Run the database on the host network rather than a `services:` block: on
         # the depot-ubuntu runner pool bridge-network NAT silently drops packets to
         # published service-container ports. Readiness is checked via `docker exec`.
-        run: docker run -d --name falkordb --network host falkordb/falkordb:latest
+        # The released graphiti-core (PyPI) that this suite installs uses the
+        # pre-6.x fulltext index form (#1963 fixed main). Remove the pin after
+        # the lock file uses a release that includes #1963.
+        run: docker run -d --name falkordb --network host falkordb/falkordb:v4.20.7
       - name: Install dependencies
         working-directory: server
         run: uv sync --extra dev
@@ -65,10 +72,21 @@ jobs:
             if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
             sleep 1
           done
+      - name: Get OpenAI access token (workload identity)
+        id: openai
+        # Short-lived token for the OpenAI service account mapped to this repo's
+        # `development` environment. Runs right before the tests so the token is fresh.
+        # GitHub already gives fork PRs a read-only id-token; this check also stops a
+        # fork PR when the repo sends write tokens to fork workflows.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: ./.github/actions/openai-workload-identity
+        with:
+          identity-provider-id: ${{ vars.OPENAI_IDENTITY_PROVIDER_ID }}
+          service-account-id: ${{ vars.OPENAI_SERVICE_ACCOUNT_ID }}
       - name: Run live server integration tests
         working-directory: server
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ steps.openai.outputs.access-token }}
           DB_BACKEND: falkordb
           FALKORDB_HOST: localhost
           FALKORDB_PORT: "6379"
