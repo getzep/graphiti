@@ -107,7 +107,7 @@ The server can be configured using a `config.yaml` file, environment variables, 
 The MCP server comes with sensible defaults:
 - **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
 - **Database**: FalkorDB (combined in single container with MCP server)
-- **LLM**: OpenAI with model gpt-5.5
+- **LLM**: OpenAI with model gpt-6-luna
 - **Embedder**: OpenAI text-embedding-3-small
 
 ### Database Configuration
@@ -165,7 +165,7 @@ server:
 
 llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
-  model: "gpt-5.5"  # Default model
+  model: "gpt-6-luna"  # Default model
   # Optional for OpenAI-compatible providers: "json_schema" (default) or "json_object"
   structured_output_mode: "json_schema"
 
@@ -272,7 +272,7 @@ This starts a single container with:
 - HTTP transport on `http://localhost:8000/mcp/`
 - FalkorDB graph database on `localhost:6379`
 - FalkorDB web UI on `http://localhost:3000`
-- OpenAI LLM with gpt-5.5 model
+- OpenAI LLM with gpt-6-luna model
 
 ### Running with Neo4j
 
@@ -533,7 +533,7 @@ To use the Graphiti MCP server with other MCP-compatible clients, configure it t
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password",
         "OPENAI_API_KEY": "sk-XXXXXXXX",
-        "MODEL_NAME": "gpt-5.5"
+        "MODEL_NAME": "gpt-6-luna"
       }
     }
   }

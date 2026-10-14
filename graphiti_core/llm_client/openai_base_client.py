@@ -16,6 +16,7 @@ limitations under the License.
 
 import json
 import logging
+import re
 import typing
 from abc import abstractmethod
 from typing import Any, ClassVar
@@ -31,8 +32,8 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-5.5'
-DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
+DEFAULT_MODEL = 'gpt-6-luna'
+DEFAULT_SMALL_MODEL = 'gpt-6-luna'
 # 'auto' is a sentinel meaning "pick a reasoning effort based on the model"
 # (resolved by _resolve_reasoning_effort); it is never sent to the API.
 DEFAULT_REASONING = 'auto'
@@ -123,31 +124,38 @@ class BaseOpenAIClient(LLMClient):
             return self.model or DEFAULT_MODEL
 
     @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """Return True for o1/o3 models and GPT models with major version 5 or later."""
+        if model.startswith(('o1', 'o3')):
+            return True
+        version = re.match(r'gpt-(\d+)', model)
+        return version is not None and int(version.group(1)) >= 5
+
+    @staticmethod
+    def _prompt_cache_options(model: str) -> dict[str, str] | None:
+        """gpt-6 writes prompts of 1,024+ tokens by default at 1.25x the input rate.
+
+        Explicit mode without a breakpoint writes nothing. Other models reject the
+        prompt_cache_options field.
+        """
+        return {'mode': 'explicit'} if model.startswith('gpt-6') else None
+
+    @staticmethod
     def _resolve_reasoning_effort(model: str, reasoning: str | None) -> str | None:
         """Resolve the reasoning effort to send for a reasoning model.
 
-        The sentinel ``'auto'`` (the default) is resolved per-model:
-
-        * The ``gpt-5.5`` family uses ``'none'`` — reasoning off, the cheapest and
-          fastest setting, which gives comparable extraction quality at far lower
-          cost and latency for Graphiti's structured-output workload. (Matched by
-          prefix; a future ``gpt-5.6``/``gpt-6`` falls through to the branch below
-          until added here, since newer snapshots may not accept ``'none'``.)
-        * Every other model uses ``'minimal'`` — the cheapest broadly-supported
-          reasoning tier and the long-standing default. Returning ``'minimal'``
-          (rather than omitting the parameter) is deliberate: it keeps non-gpt-5.5
-          reasoning models from silently jumping to the API's more expensive
-          default effort. Models whose lowest valid tier differs (e.g.
-          ``gpt-5.4-mini`` requires ``'low'``) should set ``reasoning=`` explicitly.
-
-        Any non-sentinel value (including ``None``) is returned unchanged, so an
-        explicit caller override always wins. The result is only sent for
-        reasoning models — non-reasoning models ignore it.
+        Auto selects ``'none'`` for GPT 5.1+ and later major versions. It selects
+        ``'minimal'`` otherwise. Explicit values, including ``None``, pass through
+        unchanged.
         """
         if reasoning != 'auto':
             return reasoning
-        if model.startswith('gpt-5.5'):
-            return 'none'
+        version = re.match(r'gpt-(\d+)(?:\.(\d+))?', model)
+        if version is not None:
+            major = int(version.group(1))
+            minor = version.group(2)
+            if major > 5 or (major == 5 and minor is not None and int(minor) >= 1):
+                return 'none'
         return 'minimal'
 
     def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
