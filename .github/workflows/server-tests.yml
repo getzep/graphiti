@@ -56,13 +56,25 @@ jobs:
         # Run the database on the host network rather than a `services:` block: on
         # the depot-ubuntu runner pool bridge-network NAT silently drops packets to
         # published service-container ports. Readiness is checked via `docker exec`.
-        # The released graphiti-core (PyPI) that this suite installs uses the
-        # pre-6.x fulltext index form (#1963 fixed main). Remove the pin after
-        # the lock file uses a release that includes #1963.
-        run: docker run -d --name falkordb --network host falkordb/falkordb:v4.20.7
+        run: docker run -d --name falkordb --network host falkordb/falkordb:latest
       - name: Install dependencies
         working-directory: server
         run: uv sync --extra dev
+      # Test this checkout, not PyPI graphiti-core from uv.lock; UV_NO_SYNC keeps uv run from reverting it.
+      - name: Install checkout graphiti-core
+        working-directory: server
+        run: uv pip install -e "..[falkordb]"
+      - name: Verify checkout graphiti-core
+        working-directory: server
+        env:
+          UV_NO_SYNC: "1"
+        run: >-
+          uv run --no-sync python -c "import graphiti_core, importlib.metadata, pathlib, sys;
+          path = pathlib.Path(graphiti_core.__file__).resolve();
+          root = pathlib.Path('$GITHUB_WORKSPACE/graphiti_core').resolve();
+          print('graphiti_core.__file__=' + str(path));
+          print('graphiti-core version=' + importlib.metadata.version('graphiti-core'));
+          sys.exit(0 if path.is_relative_to(root) else 1)"
       - name: Wait for FalkorDB
         run: |
           for i in $(seq 1 30); do
@@ -90,6 +102,7 @@ jobs:
           DB_BACKEND: falkordb
           FALKORDB_HOST: localhost
           FALKORDB_PORT: "6379"
+          UV_NO_SYNC: "1"
           # Use the gpt-6-luna model for the live pipeline.
           MODEL_NAME: gpt-6-luna
           # Raise episode/LLM-call concurrency so the live episode processes quickly.
