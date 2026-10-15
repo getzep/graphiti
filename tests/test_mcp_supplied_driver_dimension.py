@@ -12,6 +12,7 @@ import pytest
 
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.search.search_filters import SearchFilters
 
@@ -88,13 +89,14 @@ async def test_mcp_supplied_driver_dimension_reaches_index_initialization_and_se
 
     monkeypatch.setattr(Neo4jDriver, 'build_indices_and_constraints', build_indices)
     service = namespace['GraphitiService'](config)
+    driver_dimensions = EMBEDDING_DIM if azure else dimensions
     if azure and vector_index:
         with pytest.raises(ValueError, match='AzureOpenAIEmbedderClient.*embedding_dim'):
             await service.initialize()
         assert service.client is None
         # Only the caller-owned driver's initial task can have been scheduled.
         await asyncio.sleep(0)
-        assert initialized_dimensions == [(dimensions, True)]
+        assert initialized_dimensions == [(driver_dimensions, True)]
         return
     await service.initialize()
     graphiti = service.client
@@ -102,9 +104,12 @@ async def test_mcp_supplied_driver_dimension_reaches_index_initialization_and_se
     await driver._init_task
 
     assert graphiti.embedder is embedder
-    assert driver.embedding_dim == dimensions
+    assert driver.embedding_dim == driver_dimensions
     assert driver.use_vector_index is vector_index
-    assert initialized_dimensions == [(dimensions, vector_index), (dimensions, vector_index)]
+    assert initialized_dimensions == [
+        (driver_dimensions, vector_index),
+        (driver_dimensions, vector_index),
+    ]
 
     execute_query = AsyncMock(return_value=([], None, None))
     monkeypatch.setattr(driver, 'execute_query', execute_query)

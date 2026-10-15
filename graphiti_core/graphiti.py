@@ -18,6 +18,7 @@ import json
 import logging
 from datetime import datetime
 from time import time
+from typing import Any, cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -353,26 +354,23 @@ class Graphiti:
         )
         embedding_dim = EMBEDDING_DIM
         if vector_index_enabled:
-            try:
-                declared_dim = getattr(
-                    getattr(self.embedder, 'config', None), 'embedding_dim', None
-                )
-            except Exception:
-                if graph_driver is not None:
-                    raise
-                # An unreadable owned embedder declaration is also an invalid opt-in.
-                declared_dim = None
             embedder_name = type(self.embedder).__name__
+            declaration_error = (
+                f'{embedder_name} must declare a positive integer config.embedding_dim '
+                'to use Neo4j vector indexing; disable the vector-index opt-in or use '
+                'an embedder that declares embedding_dim.'
+            )
+            try:
+                # Read directly so even AttributeError from a property is chained.
+                declared_dim = cast(Any, self.embedder).config.embedding_dim
+            except Exception as exc:
+                raise ValueError(declaration_error) from exc
             if (
                 not isinstance(declared_dim, int)
                 or isinstance(declared_dim, bool)
                 or declared_dim <= 0
             ):
-                raise ValueError(
-                    f'{embedder_name} must declare a positive integer config.embedding_dim '
-                    'to use Neo4j vector indexing; disable the vector-index opt-in or use '
-                    'an embedder that declares embedding_dim.'
-                )
+                raise ValueError(declaration_error)
             driver_dim = getattr(graph_driver, 'embedding_dim', None)
             if graph_driver is not None and declared_dim != driver_dim:
                 raise ValueError(

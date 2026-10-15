@@ -60,9 +60,16 @@ class TestUseVectorIndexEnvVar:
         assert _make_driver(embedding_dim=1024).embedding_dim == 1024
 
     @pytest.mark.parametrize('embedding_dim', [1.5, True, 0, -1])
-    def test_embedding_dim_rejects_invalid_values_without_vector_index(self, embedding_dim):
-        with pytest.raises(ValueError, match='embedding_dim must be a positive integer'):
-            _make_driver(embedding_dim=embedding_dim, use_vector_index=False)
+    @pytest.mark.parametrize('use_vector_index', [False, True])
+    def test_embedding_dim_validation_only_with_vector_index(self, embedding_dim, use_vector_index):
+        if use_vector_index:
+            with pytest.raises(ValueError, match='embedding_dim must be a positive integer'):
+                _make_driver(embedding_dim=embedding_dim, use_vector_index=True)
+        else:
+            assert (
+                _make_driver(embedding_dim=embedding_dim, use_vector_index=False).embedding_dim
+                is embedding_dim
+            )
 
     @pytest.mark.parametrize('embedding_dim', [4097, 8192])
     @pytest.mark.parametrize('use_vector_index', [False, None])

@@ -295,12 +295,29 @@ class GraphitiService:
                     # For neo4j, create a Neo4jDriver instance directly
                     from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
+                    # Factories may resolve provider defaults differently from the raw
+                    # config (e.g. Gemini dimensions=0 means 768). Undeclared or
+                    # unreadable dimensions leave the driver default intact; Graphiti
+                    # enforces the embedder contract only when vector indexing is on.
+                    embedding_options = {}
+                    try:
+                        declared_dim = getattr(
+                            getattr(embedder_client, 'config', None), 'embedding_dim', None
+                        )
+                    except Exception:
+                        declared_dim = None
+                    if (
+                        isinstance(declared_dim, int)
+                        and not isinstance(declared_dim, bool)
+                        and declared_dim > 0
+                    ):
+                        embedding_options['embedding_dim'] = declared_dim
                     neo4j_driver = Neo4jDriver(
                         uri=db_config['uri'],
                         user=db_config['user'],
                         password=db_config['password'],
                         database=db_config['database'],
-                        embedding_dim=self.config.embedder.dimensions,
+                        **embedding_options,
                     )
 
                     self.client = Graphiti(
