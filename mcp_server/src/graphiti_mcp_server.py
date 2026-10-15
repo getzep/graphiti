@@ -300,6 +300,7 @@ class GraphitiService:
                         user=db_config['user'],
                         password=db_config['password'],
                         database=db_config['database'],
+                        embedding_dim=self.config.embedder.dimensions,
                     )
 
                     self.client = Graphiti(
