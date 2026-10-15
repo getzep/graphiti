@@ -219,9 +219,9 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
-        use_vector_index: bool | None = None,
         prompt_library: ChatPromptLibrary | None = None,
         llm_runtime: LLMRuntime | None = None,
+        use_vector_index: bool | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -282,9 +282,6 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
-        use_vector_index : bool | None, optional
-            Enable Neo4j vector-index search when Graphiti constructs its default
-            Neo4j driver. If omitted, the Neo4j environment fallback is used.
         prompt_library : ChatPromptLibrary | None, optional
             An instance-scoped prompt library used for all LLM prompt construction.
             If not provided, Graphiti uses its legacy module-level prompt functions.
@@ -301,6 +298,9 @@ class Graphiti:
             on the runtime path. Route lightweight prompts to a smaller model.
             GLiNER2 does not support per-prompt routing. Cannot be combined
             with ``llm_client`` or ``prompt_library``.
+        use_vector_index : bool | None, optional
+            Enable Neo4j vector-index search when Graphiti constructs its default
+            Neo4j driver. If omitted, the Neo4j environment fallback is used.
 
         Returns
         -------
