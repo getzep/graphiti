@@ -862,7 +862,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.30.2"
+version = "0.31.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "neo4j" },
@@ -873,9 +873,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/a1/3e0fe119b6f3116ef7671ae1b2d98ef70655ac634d9914e748b5f97ecacb/graphiti_core-0.30.2.tar.gz", hash = "sha256:b8ac6999705d350ebb53d799505d49b76f5d74c20265a09df4094645b5d8ada9", size = 6978112, upload-time = "2026-09-08T20:39:14.59Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/ec/9f7edbf73461bd3943424db7e2203a35108f68e4e1ceaf42541ce8705849/graphiti_core-0.31.1.tar.gz", hash = "sha256:a9c7d7161d1b8c14815054c9dfe149269167d84d2a1c02a778db84fd9bacf01e", size = 7136011, upload-time = "2026-10-15T15:02:56.43Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/19/7ee37826a9dff81eb4d242a785c4ca76d2d510528dd52fc7dd10fb45d9cd/graphiti_core-0.30.2-py3-none-any.whl", hash = "sha256:97674a49514130db175faecf23221ce9338240be3cbe13a7e23e5a5033892b9f", size = 363163, upload-time = "2026-09-08T20:39:12.422Z" },
+    { url = "https://files.pythonhosted.org/packages/41/2c/06be156070793924c0e9d50649c6e323afdc82ffb18de2c2fb44fa1f6284/graphiti_core-0.31.1-py3-none-any.whl", hash = "sha256:fc0292df207c1c8a680bb27d036f54bc8f397ae4985453ec19eeca98d588f076", size = 402212, upload-time = "2026-10-15T15:02:54.146Z" },
 ]
 
 [package.optional-dependencies]
@@ -1358,7 +1358,7 @@ wheels = [
 
 [[package]]
 name = "mcp-server"
-version = "1.1.0"
+version = "1.1.1"
 source = { virtual = "." }
 dependencies = [
     { name = "graphiti-core", extra = ["falkordb"] },
@@ -1399,7 +1399,7 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.107.1" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.25.3" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=2.8.0" },
-    { name = "graphiti-core", extras = ["falkordb"], specifier = ">=0.30.2" },
+    { name = "graphiti-core", extras = ["falkordb"], specifier = ">=0.31.1" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=1.2.0" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "openai", specifier = ">=2.41.0" },
