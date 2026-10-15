@@ -78,6 +78,13 @@ def _env_use_vector_index() -> bool:
     return os.environ.get(USE_VECTOR_INDEX_ENV_VAR, '').strip().lower() in _TRUTHY
 
 
+def _validate_embedding_dim(embedding_dim: int) -> None:
+    if not isinstance(embedding_dim, int) or isinstance(embedding_dim, bool) or embedding_dim <= 0:
+        raise ValueError('embedding_dim must be a positive integer')
+    if embedding_dim > 4096:
+        raise ValueError('embedding_dim must not exceed 4096 when vector indexing is enabled')
+
+
 class Neo4jDriver(GraphDriver):
     provider = GraphProvider.NEO4J
     default_group_id: str = ''
@@ -104,16 +111,7 @@ class Neo4jDriver(GraphDriver):
         # Exact search does not consume this dimension. On opt-out retain any
         # supplied value verbatim (None still selects the default), without validation.
         if use_vector_index:
-            if (
-                not isinstance(embedding_dim, int)
-                or isinstance(embedding_dim, bool)
-                or embedding_dim <= 0
-            ):
-                raise ValueError('embedding_dim must be a positive integer')
-            if embedding_dim > 4096:
-                raise ValueError(
-                    'embedding_dim must not exceed 4096 when vector indexing is enabled'
-                )
+            _validate_embedding_dim(embedding_dim)
         self.embedding_dim = embedding_dim
         self.use_vector_index = use_vector_index
 
@@ -258,6 +256,12 @@ class Neo4jDriver(GraphDriver):
     async def build_indices_and_constraints(
         self, delete_existing: bool = False, build_vector_indices: bool | None = None
     ):
+        if build_vector_indices is None:
+            build_vector_indices = self.use_vector_index
+        if build_vector_indices:
+            # Validate before any DDL, including deletion of existing indexes.
+            _validate_embedding_dim(self.embedding_dim)
+
         if delete_existing:
             await self.delete_all_indexes()
 
@@ -266,9 +270,6 @@ class Neo4jDriver(GraphDriver):
         fulltext_indices: list[LiteralString] = get_fulltext_indices(self.provider)
 
         index_queries: list[LiteralString] = range_indices + fulltext_indices
-
-        if build_vector_indices is None:
-            build_vector_indices = self.use_vector_index
 
         if build_vector_indices:
             # Opt-in: populating a vector index over an existing large graph is a

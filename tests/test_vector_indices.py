@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from unittest.mock import AsyncMock
+import asyncio
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -22,6 +23,8 @@ from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.graph_queries import (
     VECTOR_INDEX_OVERFETCH_FACTOR,
+    get_fulltext_indices,
+    get_range_indices,
     get_vector_indices,
     get_vector_similarity_query,
     use_vector_index,
@@ -179,6 +182,87 @@ class TestNeo4jDriverVectorIndexWiring:
         assert get_vector_indices(GraphProvider.NEO4J, embedding_dim=768) == [
             query for query in queries if 'CREATE VECTOR INDEX' in query
         ]
+
+    @pytest.mark.parametrize('embedding_dim', [0, -1, False, 'auto', [], 8192])
+    @pytest.mark.parametrize('delete_existing', [False, True])
+    def test_explicit_build_validates_before_any_ddl(self, embedding_dim, delete_existing):
+        # Construct outside an event loop so no automatic index task can run.
+        with patch('graphiti_core.driver.neo4j_driver.AsyncGraphDatabase.driver'):
+            driver = Neo4jDriver(
+                'bolt://unused', None, None, embedding_dim=embedding_dim, use_vector_index=False
+            )
+        driver._execute_index_query = AsyncMock()
+        driver.execute_query = AsyncMock()
+        driver.delete_all_indexes = AsyncMock()
+
+        message = (
+            'embedding_dim must not exceed 4096 when vector indexing is enabled'
+            if embedding_dim == 8192
+            else 'embedding_dim must be a positive integer'
+        )
+        with pytest.raises(ValueError, match=f'^{message}$'):
+            asyncio.run(
+                driver.build_indices_and_constraints(
+                    delete_existing=delete_existing, build_vector_indices=True
+                )
+            )
+
+        driver._execute_index_query.assert_not_awaited()
+        driver.execute_query.assert_not_awaited()
+        driver.delete_all_indexes.assert_not_awaited()
+
+    @pytest.mark.parametrize('delete_existing', [False, True])
+    def test_explicit_build_accepts_valid_dimension_after_optout(self, delete_existing):
+        with patch('graphiti_core.driver.neo4j_driver.AsyncGraphDatabase.driver'):
+            driver = Neo4jDriver(
+                'bolt://unused', None, None, embedding_dim=1024, use_vector_index=False
+            )
+        driver._execute_index_query = AsyncMock()
+        driver.delete_all_indexes = AsyncMock()
+
+        asyncio.run(
+            driver.build_indices_and_constraints(
+                delete_existing=delete_existing, build_vector_indices=True
+            )
+        )
+
+        queries = [call.args[0] for call in driver._execute_index_query.await_args_list]
+        assert queries == (
+            get_range_indices(GraphProvider.NEO4J)
+            + get_fulltext_indices(GraphProvider.NEO4J)
+            + get_vector_indices(GraphProvider.NEO4J, embedding_dim=1024)
+        )
+        assert sum('CREATE VECTOR INDEX' in query for query in queries) == 3
+        assert driver.delete_all_indexes.await_count == int(delete_existing)
+        assert driver.use_vector_index is False
+
+    @pytest.mark.parametrize('embedding_dim', [0, -1, False, 'auto', [], 8192])
+    @pytest.mark.parametrize('build_vector_indices', [None, False])
+    def test_optout_build_keeps_invalid_dimension_unused(self, embedding_dim, build_vector_indices):
+        with patch('graphiti_core.driver.neo4j_driver.AsyncGraphDatabase.driver'):
+            driver = Neo4jDriver(
+                'bolt://unused', None, None, embedding_dim=embedding_dim, use_vector_index=False
+            )
+        driver._execute_index_query = AsyncMock()
+        options = {} if build_vector_indices is None else {'build_vector_indices': False}
+
+        asyncio.run(driver.build_indices_and_constraints(**options))
+
+        assert driver.embedding_dim is embedding_dim
+        assert [call.args[0] for call in driver._execute_index_query.await_args_list] == (
+            get_range_indices(GraphProvider.NEO4J) + get_fulltext_indices(GraphProvider.NEO4J)
+        )
+
+    @pytest.mark.parametrize('build_vector_indices', [None, False])
+    def test_optout_build_does_not_read_dimension(self, build_vector_indices):
+        driver = Neo4jDriver.__new__(Neo4jDriver)
+        driver.use_vector_index = False
+        driver._execute_index_query = AsyncMock()
+        # No embedding_dim attribute: even reading it would raise AttributeError.
+        asyncio.run(driver.build_indices_and_constraints(build_vector_indices=build_vector_indices))
+        assert [call.args[0] for call in driver._execute_index_query.await_args_list] == (
+            get_range_indices(GraphProvider.NEO4J) + get_fulltext_indices(GraphProvider.NEO4J)
+        )
 
     def test_embedding_dim_is_configurable_not_hardcoded(self):
         import inspect
