@@ -351,8 +351,17 @@ class Graphiti:
             else getattr(graph_driver, 'provider', None) == GraphProvider.NEO4J
             and getattr(graph_driver, 'use_vector_index', False)
         )
+        embedding_dim = EMBEDDING_DIM
         if vector_index_enabled:
-            declared_dim = getattr(getattr(self.embedder, 'config', None), 'embedding_dim', None)
+            try:
+                declared_dim = getattr(
+                    getattr(self.embedder, 'config', None), 'embedding_dim', None
+                )
+            except Exception:
+                if graph_driver is not None:
+                    raise
+                # An unreadable owned embedder declaration is also an invalid opt-in.
+                declared_dim = None
             embedder_name = type(self.embedder).__name__
             if (
                 not isinstance(declared_dim, int)
@@ -371,13 +380,12 @@ class Graphiti:
                     f'Neo4j driver.embedding_dim ({driver_dim}); configure '
                     'matching dimensions or disable the vector-index opt-in.'
                 )
+            embedding_dim = declared_dim
 
         if graph_driver is not None:
             self.driver = graph_driver
         else:
             assert uri is not None  # Narrowed by the validation above.
-            embedder_config = getattr(self.embedder, 'config', None)
-            embedding_dim = getattr(embedder_config, 'embedding_dim', EMBEDDING_DIM)
             self.driver = Neo4jDriver(
                 uri,
                 user,

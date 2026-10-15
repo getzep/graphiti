@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.graphiti import Graphiti
 
@@ -125,7 +126,7 @@ class TestUseVectorIndexEnvVar:
             use_vector_index=use_vector_index,
         )
 
-        assert graphiti.driver.embedding_dim == 8192
+        assert graphiti.driver.embedding_dim == EMBEDDING_DIM
         assert graphiti.driver.use_vector_index is False
 
     def test_embedding_dim_ignores_disconnected_malformed_env(self, monkeypatch):

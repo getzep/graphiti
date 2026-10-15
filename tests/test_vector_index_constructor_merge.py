@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.prompts import create_prompt_library
 
@@ -44,7 +45,11 @@ def test_vector_driver_keeps_prompt_runtime_and_concurrency_wiring(
 
     embedder_factory.assert_called_once_with()
     driver_factory.assert_called_once_with(
-        'bolt://unused', 'neo4j', 'unused', embedding_dim=768, use_vector_index=use_vector_index
+        'bolt://unused',
+        'neo4j',
+        'unused',
+        embedding_dim=768 if use_vector_index else EMBEDDING_DIM,
+        use_vector_index=use_vector_index,
     )
     assert graphiti.embedder is embedder
     assert graphiti.llm_client is llm

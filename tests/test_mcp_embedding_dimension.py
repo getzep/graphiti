@@ -4,10 +4,11 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.graphiti import Graphiti
 
 
-def test_mcp_factory_dimension_reaches_default_driver_without_vector_index(monkeypatch):
+def test_mcp_factory_preserves_embedder_dimension_and_default_optout_driver(monkeypatch):
     schema = ModuleType('config.schema')
     schema.DatabaseConfig = SimpleNamespace
     schema.EmbedderConfig = SimpleNamespace
@@ -50,5 +51,6 @@ def test_mcp_factory_dimension_reaches_default_driver_without_vector_index(monke
         cross_encoder=SimpleNamespace(),
     )
 
-    assert graphiti.driver.embedding_dim == 8192
+    assert graphiti.embedder.config.embedding_dim == 8192
+    assert graphiti.driver.embedding_dim == EMBEDDING_DIM
     assert graphiti.driver.use_vector_index is False
