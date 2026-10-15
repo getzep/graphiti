@@ -2,23 +2,27 @@ name: MCP Server Tests
 
 # Live end-to-end tests for the Graphiti MCP server against FalkorDB (the default
 # database) and a real OpenAI model. Runs on PRs and pushes to main that touch the
-# MCP server. The OpenAI key comes from the `development` GitHub environment; fork
-# PRs receive no secrets, so the suite skips itself there (the test module skips
-# when OPENAI_API_KEY is unset).
+# MCP server. OpenAI access uses workload identity federation:
+# the job exchanges its GitHub OIDC token for a short-lived OpenAI token (IDs in
+# the `development` environment variables). Fork PRs get no OIDC token, so the
+# suite skips itself there (the test module skips when OPENAI_API_KEY is unset).
 on:
   push:
     branches: [main]
     paths:
       - "mcp_server/**"
       - ".github/workflows/mcp-server-tests.yml"
+      - ".github/actions/openai-workload-identity/**"
   pull_request:
     branches: [main]
     paths:
       - "mcp_server/**"
       - ".github/workflows/mcp-server-tests.yml"
+      - ".github/actions/openai-workload-identity/**"
 
 permissions:
   contents: read
+  id-token: write # OpenAI workload identity federation
 
 # Cancel superseded runs on the same ref so repeated pushes don't keep paying for
 # real OpenAI calls.
@@ -54,6 +58,21 @@ jobs:
       - name: Install dependencies
         working-directory: mcp_server
         run: uv sync
+      # Test this checkout, not PyPI graphiti-core from uv.lock; UV_NO_SYNC keeps uv run from reverting it.
+      - name: Install checkout graphiti-core
+        working-directory: mcp_server
+        run: uv pip install -e "..[falkordb]"
+      - name: Verify checkout graphiti-core
+        working-directory: mcp_server
+        env:
+          UV_NO_SYNC: "1"
+        run: >-
+          uv run --no-sync python -c "import graphiti_core, importlib.metadata, pathlib, sys;
+          path = pathlib.Path(graphiti_core.__file__).resolve();
+          root = pathlib.Path('$GITHUB_WORKSPACE/graphiti_core').resolve();
+          print('graphiti_core.__file__=' + str(path));
+          print('graphiti-core version=' + importlib.metadata.version('graphiti-core'));
+          sys.exit(0 if path.is_relative_to(root) else 1)"
       - name: Wait for FalkorDB
         run: |
           for i in $(seq 1 30); do
@@ -63,15 +82,25 @@ jobs:
             if [ "$i" -eq 30 ]; then echo "falkordb did not become ready in 30s" >&2; docker logs falkordb; exit 1; fi
             sleep 1
           done
+      - name: Get OpenAI access token (workload identity)
+        id: openai
+        # Short-lived token for the OpenAI service account mapped to this repo's
+        # `development` environment. Runs right before the tests so the token is fresh.
+        # GitHub already gives fork PRs a read-only id-token; this check also stops a
+        # fork PR when the repo sends write tokens to fork workflows.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: ./.github/actions/openai-workload-identity
+        with:
+          identity-provider-id: ${{ vars.OPENAI_IDENTITY_PROVIDER_ID }}
+          service-account-id: ${{ vars.OPENAI_SERVICE_ACCOUNT_ID }}
       - name: Run live MCP integration tests
         working-directory: mcp_server
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ steps.openai.outputs.access-token }}
           FALKORDB_URI: redis://localhost:6379
-          # gpt-5.5 is the server's runtime default, but it requires a key/account
-          # with fast gpt-5.5 access; CI pins a lighter, broadly-available model so
-          # the live test stays fast and reliable. It exercises the same pipeline.
-          MODEL_NAME: gpt-4.1-mini
+          UV_NO_SYNC: "1"
+          # Use the gpt-6-luna model for the live pipeline.
+          MODEL_NAME: gpt-6-luna
           # Raise episode/LLM-call concurrency so the live episode processes quickly.
           SEMAPHORE_LIMIT: "20"
         # pytest exits 5 when no tests are collected. The legitimate case is a fork

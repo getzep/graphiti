@@ -147,7 +147,7 @@ class LLMConfig(BaseModel):
     """LLM configuration."""
 
     provider: str = Field(default='openai', description='LLM provider')
-    model: str = Field(default='gpt-5.5', description='Model name')
+    model: str = Field(default='gpt-6-luna', description='Model name')
     temperature: float | None = Field(
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )
