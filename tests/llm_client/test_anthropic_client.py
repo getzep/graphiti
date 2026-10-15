@@ -250,6 +250,50 @@ class TestAnthropicClientGenerateResponse:
         assert mock_async_anthropic.messages.create.call_count == 2
         assert result['test_field'] == 'correct_value'
 
+    @pytest.mark.asyncio
+    async def test_generate_response_retry_does_not_mutate_caller_messages(
+        self, anthropic_client, mock_async_anthropic
+    ):
+        """Test retry prompts are added only to the client's cloned messages."""
+        content_item1 = MagicMock()
+        content_item1.type = 'tool_use'
+        content_item1.input = {'wrong_field': 'wrong_value'}
+
+        content_item2 = MagicMock()
+        content_item2.type = 'tool_use'
+        content_item2.input = {'test_field': 'correct_value'}
+
+        mock_response1 = MagicMock()
+        mock_response1.content = [content_item1]
+
+        mock_response2 = MagicMock()
+        mock_response2.content = [content_item2]
+
+        mock_async_anthropic.messages.create.side_effect = [mock_response1, mock_response2]
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        original = [message.model_dump() for message in messages]
+
+        result = await anthropic_client.generate_response(
+            messages,
+            response_model=ResponseModel,
+            attribute_extraction=True,
+        )
+
+        assert result['test_field'] == 'correct_value'
+        assert [message.model_dump() for message in messages] == original
+        assert len(messages) == 2
+        first_call = mock_async_anthropic.messages.create.call_args_list[0].kwargs
+        second_call = mock_async_anthropic.messages.create.call_args_list[1].kwargs
+        assert 'ATTRIBUTE EXTRACTION:' in first_call['system']
+        assert first_call['messages'] == [{'role': 'user', 'content': 'User message'}]
+        assert len(second_call['messages']) == 2
+        assert second_call['messages'][0] == {'role': 'user', 'content': 'User message'}
+        assert 'The previous response was invalid' in second_call['messages'][1]['content']
+
 
 if __name__ == '__main__':
     pytest.main(['-v', 'test_anthropic_client.py'])
