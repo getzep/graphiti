@@ -11,14 +11,16 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
+from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.search.search_filters import SearchFilters
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('azure', [False, True])
 @pytest.mark.parametrize(('dimensions', 'vector_index'), [(1536, True), (768, True), (8192, False)])
 async def test_mcp_supplied_driver_dimension_reaches_index_initialization_and_search(
-    monkeypatch, dimensions, vector_index
+    monkeypatch, dimensions, vector_index, azure
 ):
     # Execute the actual service class, not a duplicate constructor or the default-driver path.
     # Exclude module-level MCP setup, dotenv loading and optional server dependencies.
@@ -29,7 +31,11 @@ async def test_mcp_supplied_driver_dimension_reaches_index_initialization_and_se
         for node in tree.body
         if isinstance(node, ast.ClassDef) and node.name == 'GraphitiService'
     )
-    embedder = SimpleNamespace(config=SimpleNamespace(embedding_dim=dimensions))
+    embedder = (
+        AzureOpenAIEmbedderClient(Mock())
+        if azure
+        else SimpleNamespace(config=SimpleNamespace(embedding_dim=dimensions))
+    )
     config = SimpleNamespace(
         llm=SimpleNamespace(provider='mock', model='mock'),
         embedder=SimpleNamespace(provider='mock', dimensions=dimensions),
@@ -82,6 +88,14 @@ async def test_mcp_supplied_driver_dimension_reaches_index_initialization_and_se
 
     monkeypatch.setattr(Neo4jDriver, 'build_indices_and_constraints', build_indices)
     service = namespace['GraphitiService'](config)
+    if azure and vector_index:
+        with pytest.raises(ValueError, match='AzureOpenAIEmbedderClient.*embedding_dim'):
+            await service.initialize()
+        assert service.client is None
+        # Only the caller-owned driver's initial task can have been scheduled.
+        await asyncio.sleep(0)
+        assert initialized_dimensions == [(dimensions, True)]
+        return
     await service.initialize()
     graphiti = service.client
     driver = graphiti.driver

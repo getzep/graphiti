@@ -27,8 +27,8 @@ from typing_extensions import LiteralString
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.decorators import handle_multiple_group_ids
-from graphiti_core.driver.driver import GraphDriver
-from graphiti_core.driver.neo4j_driver import Neo4jDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.neo4j_driver import Neo4jDriver, _env_use_vector_index
 from graphiti_core.edges import (
     CommunityEdge,
     Edge,
@@ -301,6 +301,11 @@ class Graphiti:
         use_vector_index : bool | None, optional
             Enable Neo4j vector-index search when Graphiti constructs its default
             Neo4j driver. If omitted, the Neo4j environment fallback is used.
+            Vector indexing requires a positive integer ``embedder.config.embedding_dim``;
+            Azure and custom embedders without it cannot opt in yet. Supplied Neo4j
+            drivers with vector indexing enabled must use the same dimension as the
+            embedder. Invalid opt-in configurations raise ``ValueError`` here;
+            opt-out behavior is unchanged.
 
         Returns
         -------
@@ -337,6 +342,35 @@ class Graphiti:
             self.embedder = embedder
         else:
             self.embedder = OpenAIEmbedder()
+
+        # Validate opt-in configurations before constructing a driver, which can
+        # schedule index DDL immediately. Supplied drivers own their opt-in flag.
+        vector_index_enabled = (
+            (_env_use_vector_index() if use_vector_index is None else use_vector_index)
+            if graph_driver is None
+            else getattr(graph_driver, 'provider', None) == GraphProvider.NEO4J
+            and getattr(graph_driver, 'use_vector_index', False)
+        )
+        if vector_index_enabled:
+            declared_dim = getattr(getattr(self.embedder, 'config', None), 'embedding_dim', None)
+            embedder_name = type(self.embedder).__name__
+            if (
+                not isinstance(declared_dim, int)
+                or isinstance(declared_dim, bool)
+                or declared_dim <= 0
+            ):
+                raise ValueError(
+                    f'{embedder_name} must declare a positive integer config.embedding_dim '
+                    'to use Neo4j vector indexing; disable the vector-index opt-in or use '
+                    'an embedder that declares embedding_dim.'
+                )
+            driver_dim = getattr(graph_driver, 'embedding_dim', None)
+            if graph_driver is not None and declared_dim != driver_dim:
+                raise ValueError(
+                    f'{embedder_name} config.embedding_dim ({declared_dim}) does not match '
+                    f'Neo4j driver.embedding_dim ({driver_dim}); configure '
+                    'matching dimensions or disable the vector-index opt-in.'
+                )
 
         if graph_driver is not None:
             self.driver = graph_driver

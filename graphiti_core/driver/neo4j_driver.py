@@ -71,9 +71,9 @@ USE_VECTOR_INDEX_ENV_VAR = 'GRAPHITI_NEO4J_USE_VECTOR_INDEX'
 def _env_use_vector_index() -> bool:
     """Read the vector-index opt-in from the environment.
 
-    Deployments that build Graphiti indirectly (e.g. the MCP server, which passes
-    uri/user/password to Graphiti and never constructs Neo4jDriver itself) have no
-    way to supply the constructor argument, so expose the same switch as config.
+    Deployments that build Graphiti or Neo4jDriver indirectly (e.g. the MCP
+    server) can use this switch instead of a constructor argument. Graphiti
+    requires a declared embedder dimension when vector indexing is enabled.
     """
     return os.environ.get(USE_VECTOR_INDEX_ENV_VAR, '').strip().lower() in _TRUTHY
 
