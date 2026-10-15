@@ -52,7 +52,7 @@ load_dotenv()
 
 ENTITY_INDEX_NAME = os.environ.get('ENTITY_INDEX_NAME', 'entities')
 EPISODE_INDEX_NAME = os.environ.get('EPISODE_INDEX_NAME', 'episodes')
-COMMUNITY_INDEX_NAME = os.environ.get('COMMUNITY_INDEX_NAME', 'communities')
+COMMUNITY_INDEX_NAME = os.environ.get('COMMUNITY_INDEX_NAME', 'community_name')
 ENTITY_EDGE_INDEX_NAME = os.environ.get('ENTITY_EDGE_INDEX_NAME', 'entity_edges')
 
 
