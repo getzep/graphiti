@@ -103,8 +103,8 @@ async def build_graph(
 
 
 async def build_baseline_graph(multi_session_count: int, session_length: int):
-    # Use gpt-4.1-mini for graph building baseline
-    llm_client = OpenAIClient(config=LLMConfig(model='gpt-4.1-mini'))
+    # Use gpt-6-luna for the graph building baseline
+    llm_client = OpenAIClient(config=LLMConfig(model='gpt-6-luna'))
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
 
     add_episode_results, _ = await build_graph(
@@ -124,7 +124,7 @@ async def build_baseline_graph(multi_session_count: int, session_length: int):
 
 async def eval_graph(multi_session_count: int, session_length: int, llm_client=None) -> float:
     if llm_client is None:
-        llm_client = OpenAIClient(config=LLMConfig(model='gpt-4.1-mini'))
+        llm_client = OpenAIClient(config=LLMConfig(model='gpt-6-luna'))
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
     with open('baseline_graph_results.json') as file:
         baseline_results_raw = json.load(file)
