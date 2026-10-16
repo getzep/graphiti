@@ -20,7 +20,10 @@ import logging
 import typing
 from abc import ABC, abstractmethod
 
-import httpx
+try:
+    import httpx
+except ImportError:  # openai>=3 depends on httpx2 instead of httpx (#1893)
+    import httpx2 as httpx
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
