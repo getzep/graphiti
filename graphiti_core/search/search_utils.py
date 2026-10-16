@@ -1904,8 +1904,12 @@ def maximal_marginal_relevance(
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
     min_score: float = -2.0,
 ) -> tuple[list[str], list[float]]:
+    """Rerank candidates using normalized embeddings for both relevance and diversity."""
     start = time()
     query_array = np.array(query_vector)
+    # Leave a zero query unchanged to avoid dividing by its zero norm.
+    if np.any(query_array):
+        query_array = normalize_l2(query_vector)
     candidate_arrays: dict[str, NDArray] = {}
     for uuid, embedding in candidates.items():
         candidate_arrays[uuid] = normalize_l2(embedding)
