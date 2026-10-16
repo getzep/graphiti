@@ -130,7 +130,7 @@ frequently changing data. Graphiti addresses these challenges by providing:
   for enterprise workloads.
 
 <p align="center">
-    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">
+    <img src="images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">
 </p>
 
 ## Graphiti vs. GraphRAG
