@@ -16,6 +16,7 @@ limitations under the License.
 
 # Running tests: pytest -xvs tests/llm_client/test_anthropic_client.py
 
+import inspect
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -249,6 +250,101 @@ class TestAnthropicClientGenerateResponse:
         # Should have called create twice due to retry
         assert mock_async_anthropic.messages.create.call_count == 2
         assert result['test_field'] == 'correct_value'
+
+
+def _tool_use_response() -> MagicMock:
+    """Build a mocked Anthropic response holding a single tool_use block."""
+    content_item = MagicMock()
+    content_item.type = 'tool_use'
+    content_item.input = {'test_field': 'test_value'}
+    response = MagicMock()
+    response.content = [content_item]
+    return response
+
+
+class TestAnthropicClientTemperature:
+    """anthropic 1.0 removed the temperature keyword from messages.create; the API still takes it."""
+
+    messages = [
+        Message(role='system', content='System message'),
+        Message(role='user', content='User message'),
+    ]
+
+    @pytest.mark.asyncio
+    async def test_temperature_uses_extra_body_when_the_keyword_is_gone(
+        self, anthropic_client, mock_async_anthropic
+    ):
+        """An SDK without the temperature keyword gets the same request field through extra_body."""
+        received = {}
+
+        async def create(
+            *, system, max_tokens, messages, model, tools, tool_choice, extra_body=None
+        ):
+            received['extra_body'] = extra_body
+            return _tool_use_response()
+
+        mock_async_anthropic.messages.create = create
+
+        result = await anthropic_client.generate_response(
+            messages=self.messages, response_model=ResponseModel
+        )
+
+        assert result['test_field'] == 'test_value'
+        assert received['extra_body'] == {'temperature': 0.5}
+
+    @pytest.mark.asyncio
+    async def test_temperature_stays_a_keyword_when_the_sdk_accepts_it(
+        self, anthropic_client, mock_async_anthropic
+    ):
+        """An SDK that still has the temperature keyword is called exactly as before."""
+        received = {}
+
+        async def create(
+            *,
+            system,
+            max_tokens,
+            temperature,
+            messages,
+            model,
+            tools,
+            tool_choice,
+            extra_body=None,
+        ):
+            received['temperature'] = temperature
+            received['extra_body'] = extra_body
+            return _tool_use_response()
+
+        mock_async_anthropic.messages.create = create
+
+        await anthropic_client.generate_response(
+            messages=self.messages, response_model=ResponseModel
+        )
+
+        assert received == {'temperature': 0.5, 'extra_body': None}
+
+    @pytest.mark.asyncio
+    async def test_request_binds_to_the_installed_sdk_signature(
+        self, anthropic_client, mock_async_anthropic
+    ):
+        """The request must be callable on whichever anthropic version is installed."""
+        # A mock accepts any keyword, so bind the request against the real SDK signature.
+        from anthropic.resources.messages import AsyncMessages
+
+        unbound = inspect.signature(AsyncMessages.create)
+        sdk_signature = unbound.replace(parameters=list(unbound.parameters.values())[1:])
+
+        async def create(**kwargs):
+            sdk_signature.bind(**kwargs)
+            return _tool_use_response()
+
+        create.__signature__ = sdk_signature  # type: ignore[attr-defined]
+        mock_async_anthropic.messages.create = create
+
+        result = await anthropic_client.generate_response(
+            messages=self.messages, response_model=ResponseModel
+        )
+
+        assert result['test_field'] == 'test_value'
 
 
 if __name__ == '__main__':
