@@ -1,8 +1,10 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
+from graphiti_core import graphiti as graphiti_module
 from graphiti_core.edges import EntityEdge
+from graphiti_core.graphiti import Graphiti
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils import bulk_utils
@@ -664,3 +666,38 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
 
     for call in extract_combined_calls:
         assert call['custom_extraction_instructions'] == custom_instructions
+
+
+@pytest.mark.asyncio
+async def test_graphiti_bulk_forwards_combined_extraction(monkeypatch):
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.clients = Mock()
+    calls: list[bool] = []
+
+    async def mock_extract(
+        *args: object,
+        use_combined_extraction: bool,
+        **kwargs: object,
+    ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
+        calls.append(use_combined_extraction)
+        return [], []
+
+    async def mock_dedupe(
+        *args: object,
+    ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
+        return {}, {}
+
+    monkeypatch.setattr(graphiti_module, 'extract_nodes_and_edges_bulk', mock_extract)
+    monkeypatch.setattr(graphiti_module, 'dedupe_nodes_bulk', mock_dedupe)
+
+    await graphiti._extract_and_dedupe_nodes_bulk(
+        [],
+        {},
+        None,
+        None,
+        None,
+        use_combined_extraction=False,
+    )
+    await graphiti._extract_and_dedupe_nodes_bulk([], {}, None, None, None)
+
+    assert calls == [False, True]
