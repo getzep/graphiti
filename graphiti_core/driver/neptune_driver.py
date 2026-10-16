@@ -68,7 +68,7 @@ aoss_indices = [
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'summary': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'text', 'fields': {'keyword': {'type': 'keyword'}}},
                 }
             }
         },
@@ -84,7 +84,7 @@ aoss_indices = [
                 'properties': {
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'text', 'fields': {'keyword': {'type': 'keyword'}}},
                 }
             }
         },
@@ -102,7 +102,7 @@ aoss_indices = [
                     'content': {'type': 'text'},
                     'source': {'type': 'text'},
                     'source_description': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'text', 'fields': {'keyword': {'type': 'keyword'}}},
                 }
             }
         },
@@ -124,7 +124,7 @@ aoss_indices = [
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'fact': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'text', 'fields': {'keyword': {'type': 'keyword'}}},
                 }
             }
         },
@@ -339,12 +339,29 @@ class NeptuneDriver(GraphDriver):
             await self.delete_aoss_indices()
         await self.create_aoss_indices()
 
-    def run_aoss_query(self, name: str, query_text: str, limit: int = 10) -> dict[str, Any]:
+    def run_aoss_query(
+        self,
+        name: str,
+        query_text: str,
+        limit: int = 10,
+        group_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
         for index in aoss_indices:
             if name.lower() == index['index_name']:
-                index['query']['query']['multi_match']['query'] = query_text
-                query = {'size': limit, 'query': index['query']}
-                resp = self.aoss_client.search(body=query['query'], index=index['index_name'])
+                fields = index['query']['query']['multi_match']['fields']
+                multi_match_query = {'multi_match': {'query': query_text, 'fields': fields}}
+                if group_ids:
+                    es_query: dict[str, Any] = {
+                        'bool': {
+                            'must': multi_match_query,
+                            'filter': {'terms': {'group_id.keyword': group_ids}},
+                        }
+                    }
+                else:
+                    es_query = multi_match_query
+                resp = self.aoss_client.search(
+                    body={'size': limit, 'query': es_query}, index=index['index_name']
+                )
                 return resp
         return {}
 
