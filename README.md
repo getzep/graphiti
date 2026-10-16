@@ -1,3 +1,6 @@
+> **Fork notice.** This is a ReDevOps fork of [getzep/graphiti](https://github.com/getzep/graphiti) based on upstream commit `526dcad` (2026-07-09). Local delta: 2 commits (G1 source hydration: 5 files, +296/-2; see [FORK_NOTES.md](FORK_NOTES.md)). Sync status on 2026-10-15: 2 ahead, 138 behind upstream `main`.
+> Everything below is upstream's README; versions, tags and badges are inherited and may not reflect this fork. See [PROVENANCE.md](PROVENANCE.md). Licence: Apache-2.0 retained.
+
 <p align="center">
   <a href="https://www.getzep.com/">
     <img src="https://github.com/user-attachments/assets/119c5682-9654-4257-8922-56b7cb8ffd73" width="150" alt="Zep Logo">
