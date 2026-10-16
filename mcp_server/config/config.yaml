@@ -21,6 +21,8 @@ llm:
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
+      # Alternatively, load the key from a mounted secret file. Do not set both fields.
+      # api_key_file: /run/secrets/openai_api_key
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
@@ -53,6 +55,8 @@ embedder:
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
+      # Alternatively, load the key from a mounted secret file. Do not set both fields.
+      # api_key_file: /run/secrets/openai_api_key
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       

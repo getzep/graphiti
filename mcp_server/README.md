@@ -173,6 +173,32 @@ database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
 ```
 
+### Loading API Keys from Files
+
+Every LLM and embedder provider supports `api_key_file` as an alternative to
+`api_key`. The file is read once when the configuration is loaded, which works
+with Docker or Kubernetes secrets without placing the credential in the
+environment or directly in `config.yaml`:
+
+```yaml
+llm:
+  provider: "openai"
+  providers:
+    openai:
+      api_key_file: /run/secrets/openai_api_key
+
+embedder:
+  provider: "openai"
+  providers:
+    openai:
+      api_key_file: ${OPENAI_API_KEY_FILE}
+```
+
+File paths may use the same `${VAR_NAME}` expansion as other configuration
+values. Trailing newlines are removed from the file contents. Configure only
+one of `api_key` and `api_key_file`; missing, unreadable, or empty key files
+cause configuration loading to fail.
+
 ### Using Ollama for Local LLM
 
 To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint:
