@@ -574,7 +574,10 @@ The Graphiti MCP server exposes the following tools:
   Accepts an optional `group_id`; defaults to the configured group.
 - `get_entity_edge`: Get an entity edge by its UUID. Accepts an optional `group_id`; defaults to
   the configured group.
-- `get_episodes`: Get the most recent episodes for one or more groups (`group_ids`).
+- `get_episodes`: Get episodes for the requested groups (`group_ids`). Explicit multiple FalkorDB
+  group IDs are read from their respective graphs and merged in descending UUID
+  order, with `max_episodes` applied to the combined result. Duplicate group IDs
+  are read once. UUID ordering is not chronological ordering.
 - `clear_graph`: Clear all data from the knowledge graph for the given group(s).
 - `get_status`: Get the status of the Graphiti MCP server and database connection.
 
