@@ -898,8 +898,12 @@ async def episode_fulltext_search(
     filter_params: dict[str, Any] = {}
     group_filter_query: LiteralString = ''
     if group_ids is not None:
-        group_filter_query += '\nAND e.group_id IN $group_ids'
+        group_filter_query = 'WHERE e.group_id IN $group_ids'
         filter_params['group_ids'] = group_ids
+
+    yield_query = 'YIELD node AS e, score'
+    if driver.provider == GraphProvider.KUZU:
+        yield_query = 'WITH node AS e, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('episode_content', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
@@ -939,10 +943,9 @@ async def episode_fulltext_search(
     else:
         query = (
             get_nodes_query('episode_content', '$query', limit=limit, provider=driver.provider)
+            + yield_query
             + """
-            YIELD node AS episode, score
-            MATCH (e:Episodic)
-            WHERE e.uuid = episode.uuid
+            WITH e, score
             """
             + group_filter_query
             + """
