@@ -4,7 +4,7 @@ services:
     build:
       context: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test:
         [
@@ -69,7 +69,7 @@ services:
       context: .
     profiles: ["falkordb"]
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     depends_on:
       falkordb:
         condition: service_healthy

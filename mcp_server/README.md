@@ -11,6 +11,9 @@ This is an experimental Model Context Protocol (MCP) server implementation for G
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
 graph capabilities.
 
+To expose the server on all interfaces, pass `--host 0.0.0.0` or set `server.host`, or change the host-side port
+mapping in Docker Compose; the server has no authentication.
+
 ## Features
 
 The Graphiti MCP server provides comprehensive knowledge graph capabilities:

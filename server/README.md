@@ -2,6 +2,9 @@
 
 Graph service is a fast api server implementing the [graphiti](https://github.com/getzep/graphiti) package.
 
+To expose the server on all interfaces, run Uvicorn with `--host 0.0.0.0` or change the host-side port mapping in
+Docker Compose; the server has no authentication.
+
 ## Container Releases
 
 The FastAPI server container is automatically built and published to Docker Hub when a `v*.*.*` tag is pushed (the same tags that publish `graphiti-core` to PyPI).
@@ -49,7 +52,7 @@ Only stable releases are built automatically (pre-release versions are skipped).
       graph:
          image: zepai/graphiti:latest
          ports:
-            - "8000:8000"
+            - "127.0.0.1:8000:8000"
          
          environment:
             - OPENAI_API_KEY=${OPENAI_API_KEY}
