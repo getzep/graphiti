@@ -617,6 +617,9 @@ async def node_fulltext_search(
                                 UNWIND $ids as i
                                 MATCH (n:Entity)
                                 WHERE n.uuid=i.id
+                                """
+                + (' AND ' + ' AND '.join(filter_queries) if filter_queries else '')
+                + """
                                 RETURN
                                 """
                 + get_entity_node_return_query(driver.provider)
@@ -909,10 +912,14 @@ async def episode_fulltext_search(
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
             # Match the edge ides and return the values
-            query = """
+            query = (
+                """
                 UNWIND $ids as i
                 MATCH (e:Episodic)
-                WHERE e.uuid=i.uuid
+                WHERE e.uuid=i.id
+                """
+                + group_filter_query
+                + """
             RETURN
                     e.content AS content,
                     e.created_at AS created_at,
@@ -925,7 +932,8 @@ async def episode_fulltext_search(
                     e.entity_edges AS entity_edges
                 ORDER BY i.score DESC
                 LIMIT $limit
-            """
+                """
+            )
             records, _, _ = await driver.execute_query(
                 query,
                 ids=input_ids,
@@ -1002,10 +1010,14 @@ async def community_fulltext_search(
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
             # Match the edge ides and return the values
-            query = """
+            query = (
+                """
                 UNWIND $ids as i
                 MATCH (comm:Community)
                 WHERE comm.uuid=i.id
+                """
+                + ('\nAND comm.group_id IN $group_ids' if group_ids is not None else '')
+                + """
                 RETURN
                     comm.uuid AS uuid,
                     comm.group_id AS group_id,
@@ -1015,7 +1027,8 @@ async def community_fulltext_search(
                     [x IN split(comm.name_embedding, ",") | toFloat(x)]AS name_embedding
                 ORDER BY i.score DESC
                 LIMIT $limit
-            """
+                """
+            )
             records, _, _ = await driver.execute_query(
                 query,
                 ids=input_ids,
