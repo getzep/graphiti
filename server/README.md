@@ -2,6 +2,8 @@
 
 Graph service is a fast api server implementing the [graphiti](https://github.com/getzep/graphiti) package.
 
+> **Security:** This server is a reference implementation. The server has no authentication or authorization, and any caller can read, change, or delete all graph data. Do not expose the server to an untrusted network. For more information, see the [security policy scope](../SECURITY.md#scope).
+
 To expose the server on all interfaces, run Uvicorn with `--host 0.0.0.0` or change the host-side port mapping in
 Docker Compose; the server has no authentication.
 

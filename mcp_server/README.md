@@ -7,6 +7,8 @@ coherent, queryable graph. The framework supports incremental data updates, effi
 queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI
 applications.
 
+> **Security:** This server is a reference implementation. The server has no authentication or authorization, and any caller can read, change, or delete all graph data. Do not expose the server to an untrusted network. For more information, see the [security policy scope](../SECURITY.md#scope).
+
 This is an experimental Model Context Protocol (MCP) server implementation for Graphiti. The MCP server exposes
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
 graph capabilities.
