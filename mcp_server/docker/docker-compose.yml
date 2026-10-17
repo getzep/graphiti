@@ -26,9 +26,9 @@ services:
       - falkordb_data:/var/lib/falkordb/data
       - mcp_logs:/var/log/graphiti
     ports:
-      - "6379:6379"  # FalkorDB/Redis
-      - "3000:3000"  # FalkorDB web UI
-      - "8000:8000"  # MCP server HTTP
+      - "127.0.0.1:6379:6379"  # FalkorDB/Redis
+      - "127.0.0.1:3000:3000"  # FalkorDB web UI
+      - "127.0.0.1:8000:8000"  # MCP server HTTP
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 10s

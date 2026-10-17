@@ -9,7 +9,7 @@ from pathlib import Path
 # Add the current directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from config.schema import GraphitiConfig
+from config.schema import GraphitiConfig, ServerConfig
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 
 
@@ -200,9 +200,13 @@ def test_cli_override():
     default_config = GraphitiConfig()
     default_config.apply_cli_overrides(MinimalArgs())
 
-    assert default_config.server.host == '0.0.0.0', 'Default host should be preserved'
+    assert default_config.server.host == '127.0.0.1', 'Default host should be preserved'
     assert default_config.server.port == 8000, 'Default port should be preserved'
     print('✓ Defaults preserved when CLI flags are omitted')
+
+
+def test_server_config_default_host():
+    assert ServerConfig().host == '127.0.0.1'
 
 
 async def main():
