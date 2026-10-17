@@ -1762,13 +1762,21 @@ class Graphiti:
                 # Resolved pointers for episodic edges
                 resolved_episodic_edges = resolve_edge_pointers(episodic_edges, final_uuid_map)
 
+                edges_to_save = resolved_edges + invalidated_edges
+                for episode in episodes:
+                    episode.entity_edges = list(
+                        dict.fromkeys(
+                            edge.uuid for edge in edges_to_save if episode.uuid in edge.episodes
+                        )
+                    )
+
                 # save data to KG
                 await add_nodes_and_edges_bulk(
                     driver,
                     episodes,
                     resolved_episodic_edges,
                     final_hydrated_nodes,
-                    resolved_edges + invalidated_edges,
+                    edges_to_save,
                     clients.embedder,
                 )
 
