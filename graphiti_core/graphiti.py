@@ -112,6 +112,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
+    _extract_entity_summaries_batch,
     extract_attributes_from_nodes,
     extract_nodes,
     resolve_extracted_nodes,
@@ -135,6 +136,7 @@ SAGA_SUMMARY_MAX_EPISODE_CHARS = 100_000
 SAGA_SUMMARY_MAX_EPISODE_BYTES = SAGA_SUMMARY_MAX_EPISODE_CHARS
 SAGA_SUMMARY_MAX_PROMPT_BYTES = 128 * 1024
 MAX_SAGA_EPISODES_FOR_SUMMARY = 20
+SUMMARY_REBUILD_EPISODE_LIMIT = 10
 SAGA_SUMMARY_MAX_TOKENS = 8192
 _SAGA_SUMMARY_SCHEMA_WRAPPER = '\n\nRespond with a JSON object in the following format:\n\n'
 
@@ -2191,11 +2193,41 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
+        deleted_node_uuids = {node.uuid for node in nodes_to_delete}
+        surviving_nodes = [node for node in nodes if node.uuid not in deleted_node_uuids]
+
+        async def rebuild_node_summary(node: EntityNode) -> None:
+            episodes = await EpisodicNode.get_by_entity_node_uuid(self.driver, node.uuid)
+            remaining_episodes = sorted(
+                [remaining for remaining in episodes if remaining.uuid != episode.uuid],
+                key=lambda remaining: remaining.valid_at or remaining.created_at,
+            )[-SUMMARY_REBUILD_EPISODE_LIMIT:]
+            node.summary = ''
+            await _extract_entity_summaries_batch(
+                self.llm_client,
+                [node],
+                remaining_episodes,
+                None,
+                None,
+                {},
+                skip_fact_appending=True,
+                clients=self.clients,
+            )
+
+        # Rebuild summaries before writes so a failed model call leaves the graph unchanged.
+        await semaphore_gather(
+            *[rebuild_node_summary(node) for node in surviving_nodes],
+            max_coroutines=self.max_coroutines,
+        )
+
         for edge in edges_to_update:
             await edge.load_fact_embedding(self.driver)
             await edge.save(self.driver)
 
         await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
+        for node in surviving_nodes:
+            await node.load_name_embedding(self.driver)
+            await node.save(self.driver)
         await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
 
         await episode.delete(self.driver)

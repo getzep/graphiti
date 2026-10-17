@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import numpy as np
 import pytest
@@ -459,6 +459,14 @@ async def test_remove_episode_keeps_restated_fact(
     mock_cross_encoder_client,
     remove_first_episode_first,
 ):
+    mock_llm_client.generate_response = AsyncMock(
+        return_value={
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice summary'},
+                {'name': 'Bob', 'summary': 'Bob summary'},
+            ]
+        }
+    )
     graphiti = Graphiti(
         graph_driver=graph_driver,
         llm_client=mock_llm_client,
@@ -561,6 +569,243 @@ async def test_remove_episode_keeps_restated_fact(
         await get_node_count(graph_driver, [episode_to_remove_second.uuid, alice.uuid, bob.uuid])
         == 0
     )
+
+
+@pytest.mark.asyncio
+async def test_remove_episode_rebuilds_summary_from_remaining_episodes(
+    graph_driver,
+    mock_llm_client,
+    mock_embedder,
+    mock_cross_encoder_client,
+):
+    mock_llm_client.generate_response = AsyncMock(
+        return_value={
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice works on the pilot project.'},
+            ]
+        }
+    )
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now()
+    episode1 = EpisodicNode(
+        name='episode1',
+        group_id=group_id,
+        labels=[],
+        created_at=now - timedelta(days=1),
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice mentioned OLD_MARKER and spoke with Bob.',
+        valid_at=now - timedelta(days=1),
+    )
+    episode2 = EpisodicNode(
+        name='episode2',
+        group_id=group_id,
+        labels=[],
+        created_at=now,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice works on the pilot project with Carol.',
+        valid_at=now,
+    )
+    alice = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Alice has marker OLD_MARKER\nAlice works on the pilot project.',
+    )
+    bob = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Bob summary',
+    )
+    carol = EntityNode(
+        name='Carol',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Carol summary',
+    )
+    await alice.generate_name_embedding(mock_embedder)
+    await bob.generate_name_embedding(mock_embedder)
+    carol.name_embedding = [0.3] * 384
+
+    edge1 = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='has_marker',
+        fact='Alice has marker OLD_MARKER',
+        episodes=[episode1.uuid],
+        valid_at=now - timedelta(days=1),
+        group_id=group_id,
+    )
+    edge2 = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=carol.uuid,
+        created_at=now,
+        name='works_on',
+        fact='Alice works on the pilot project',
+        episodes=[episode2.uuid],
+        valid_at=now,
+        group_id=group_id,
+    )
+    edge1.fact_embedding = [0.1] * 384
+    edge2.fact_embedding = [0.2] * 384
+    episode1.entity_edges = [edge1.uuid]
+    episode2.entity_edges = [edge2.uuid]
+    mention_edges = [
+        EpisodicEdge(
+            source_node_uuid=episode.uuid,
+            target_node_uuid=node.uuid,
+            created_at=now,
+            group_id=group_id,
+        )
+        for episode, nodes in [(episode1, [alice, bob]), (episode2, [alice, carol])]
+        for node in nodes
+    ]
+
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [episode1, episode2],
+        mention_edges,
+        [alice, bob, carol],
+        [edge1, edge2],
+        mock_embedder,
+    )
+    await alice.load_name_embedding(graph_driver)
+    alice_name_embedding = alice.name_embedding
+
+    await graphiti.remove_episode(episode1.uuid)
+
+    mock_llm_client.generate_response.assert_awaited_once()
+    messages = mock_llm_client.generate_response.await_args.args[0]
+    prompt_text = '\n'.join(message.content for message in messages)
+    assert episode2.content in prompt_text
+    assert 'OLD_MARKER' not in prompt_text
+
+    retrieved_alice = await EntityNode.get_by_uuid(graph_driver, alice.uuid)
+    await retrieved_alice.load_name_embedding(graph_driver)
+    assert retrieved_alice.summary == 'Alice works on the pilot project.'
+    assert retrieved_alice.name_embedding == alice_name_embedding
+    assert await get_node_count(graph_driver, [bob.uuid]) == 0
+    assert await get_edge_count(graph_driver, [edge1.uuid]) == 0
+    assert await get_node_count(graph_driver, [carol.uuid]) == 1
+    assert await get_edge_count(graph_driver, [edge2.uuid]) == 1
+
+
+@pytest.mark.asyncio
+async def test_remove_episode_keeps_graph_unchanged_when_summary_rebuild_fails(
+    graph_driver,
+    mock_llm_client,
+    mock_embedder,
+    mock_cross_encoder_client,
+):
+    mock_llm_client.generate_response = AsyncMock(side_effect=RuntimeError('summary failure'))
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now()
+    episode1 = EpisodicNode(
+        name='episode1',
+        group_id=group_id,
+        labels=[],
+        created_at=now,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice mentioned OLD_MARKER and spoke with Bob.',
+        valid_at=now,
+    )
+    episode2 = EpisodicNode(
+        name='episode2',
+        group_id=group_id,
+        labels=[],
+        created_at=now,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice works on the pilot project with Bob.',
+        valid_at=now,
+    )
+    alice = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Alice has marker OLD_MARKER',
+    )
+    bob = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Bob summary',
+    )
+    await alice.generate_name_embedding(mock_embedder)
+    await bob.generate_name_embedding(mock_embedder)
+    edge1 = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='has_marker',
+        fact='Alice has marker OLD_MARKER',
+        episodes=[episode1.uuid],
+        valid_at=now,
+        group_id=group_id,
+    )
+    edge2 = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='works_on',
+        fact='Alice works on the pilot project',
+        episodes=[episode2.uuid],
+        valid_at=now,
+        group_id=group_id,
+    )
+    edge1.fact_embedding = [0.1] * 384
+    edge2.fact_embedding = [0.2] * 384
+    episode1.entity_edges = [edge1.uuid]
+    episode2.entity_edges = [edge2.uuid]
+    mention_edges = [
+        EpisodicEdge(
+            source_node_uuid=episode.uuid,
+            target_node_uuid=node.uuid,
+            created_at=now,
+            group_id=group_id,
+        )
+        for episode, nodes in [(episode1, [alice, bob]), (episode2, [alice, bob])]
+        for node in nodes
+    ]
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [episode1, episode2],
+        mention_edges,
+        [alice, bob],
+        [edge1, edge2],
+        mock_embedder,
+    )
+
+    with pytest.raises(RuntimeError, match='summary failure'):
+        await graphiti.remove_episode(episode1.uuid)
+
+    assert await get_node_count(graph_driver, [episode1.uuid, episode2.uuid, bob.uuid]) == 3
+    assert await get_edge_count(graph_driver, [edge1.uuid]) == 1
+    retrieved_alice = await EntityNode.get_by_uuid(graph_driver, alice.uuid)
+    assert retrieved_alice.summary == 'Alice has marker OLD_MARKER'
 
 
 @pytest.mark.asyncio
