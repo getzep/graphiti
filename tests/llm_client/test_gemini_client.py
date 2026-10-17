@@ -271,7 +271,7 @@ class TestGeminiClientGenerateResponse:
 
         # Call method and check exception - should exhaust retries
         messages = [Message(role='user', content='Test message')]
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception, match='Failed to parse structured response'):
             await gemini_client.generate_response(messages, response_model=ResponseModel)
 
         # Should have called generate_content MAX_RETRIES times (2 attempts total)
@@ -363,6 +363,19 @@ class TestGeminiClientGenerateResponse:
 
         # Should have exhausted retries due to empty response (2 attempts total)
         assert mock_gemini_client.aio.models.generate_content.call_count == GeminiClient.MAX_RETRIES
+
+    @pytest.mark.asyncio
+    async def test_generic_error_preserves_original_message(
+        self, gemini_client, mock_gemini_client
+    ):
+        """Non-rate-limit errors must keep the original message when re-raised."""
+        mock_gemini_client.aio.models.generate_content.side_effect = Exception(
+            'Unterminated string starting at: line 1 column 43665'
+        )
+
+        messages = [Message(role='user', content='Test message')]
+        with pytest.raises(Exception, match='Unterminated string starting at: line 1 column 43665'):
+            await gemini_client.generate_response(messages)
 
     @pytest.mark.asyncio
     async def test_custom_max_tokens(self, gemini_client, mock_gemini_client):
