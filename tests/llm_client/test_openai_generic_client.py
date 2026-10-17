@@ -6,23 +6,30 @@ import pytest
 from pydantic import BaseModel
 
 from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
+from graphiti_core.llm_client.errors import (
+    EmptyResponseError,
+    OutputTruncatedError,
+    RateLimitError,
+)
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.prompts.models import Message
 
 
 class DummyChatCompletions:
-    def __init__(self, content: str = '{}', error: Exception | None = None):
+    def __init__(
+        self, content: str = '{}', error: Exception | None = None, finish_reason: str = 'stop'
+    ):
         self.create_calls: list[dict] = []
         self._content = content
         self._error = error
+        self._finish_reason = finish_reason
 
     async def create(self, **kwargs):
         self.create_calls.append(kwargs)
         if self._error is not None:
             raise self._error
         message = SimpleNamespace(content=self._content)
-        choice = SimpleNamespace(message=message)
+        choice = SimpleNamespace(message=message, finish_reason=self._finish_reason)
         return SimpleNamespace(choices=[choice])
 
 
@@ -47,8 +54,13 @@ def _messages() -> list[Message]:
     ]
 
 
-def _make_client(content: str = '{"foo": "bar"}', error: Exception | None = None, **kwargs):
-    completions = DummyChatCompletions(content=content, error=error)
+def _make_client(
+    content: str = '{"foo": "bar"}',
+    error: Exception | None = None,
+    finish_reason: str = 'stop',
+    **kwargs,
+):
+    completions = DummyChatCompletions(content=content, error=error, finish_reason=finish_reason)
     client = OpenAIGenericClient(
         config=LLMConfig(api_key='test', model='test-model'),
         client=DummyClient(completions),
@@ -168,3 +180,33 @@ async def test_non_retryable_error_is_not_retried():
         await client.generate_response(_messages(), response_model=ResponseModel)
 
     assert len(completions.create_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_truncated_output_raises_output_truncated_error():
+    # A response cut off at max_tokens is incomplete JSON. It must surface as a truncation,
+    # not as a JSONDecodeError that reads like a malformed response (#1922).
+    client, _ = _make_client(content='{"foo": "ba', finish_reason='length')
+
+    with pytest.raises(OutputTruncatedError) as exc_info:
+        await client._generate_response(_messages(), response_model=ResponseModel, max_tokens=50)
+
+    assert exc_info.value.max_tokens == 50
+
+
+@pytest.mark.asyncio
+async def test_empty_output_cut_off_at_max_tokens_is_reported_as_truncation():
+    # A model that spends the whole budget before writing the answer (e.g. on reasoning)
+    # returns an empty body with finish_reason='length'; the cause is the token limit.
+    client, _ = _make_client(content='', finish_reason='length')
+
+    with pytest.raises(OutputTruncatedError):
+        await client._generate_response(_messages(), response_model=ResponseModel, max_tokens=50)
+
+
+def test_output_truncated_error_is_retryable():
+    # Sampling varies between attempts, so a retry often completes within the limit;
+    # truncation stays retryable rather than failing on the first attempt.
+    from graphiti_core.llm_client.client import is_server_or_retry_error
+
+    assert is_server_or_retry_error(OutputTruncatedError(max_tokens=50)) is True
