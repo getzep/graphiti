@@ -114,6 +114,17 @@ class GraphDriver(QueryExecutor, ABC):
     def delete_all_indexes(self) -> Coroutine:
         raise NotImplementedError()
 
+    @property
+    def single_graph_mode(self) -> bool:
+        """Whether all group_ids share one graph with property-based filtering.
+
+        Single-graph drivers can answer cross-group queries in a single call
+        (one group_id property filter). Multi-graph drivers store each group in
+        its own graph/database and need one query per group via
+        clone(database=group_id).
+        """
+        return False
+
     def with_database(self, database: str) -> GraphDriver:
         """
         Returns a shallow copy of this driver with a different default database.
