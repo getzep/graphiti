@@ -252,43 +252,24 @@ class NeptuneDriver(GraphDriver):
                 if isinstance(v, datetime.datetime):
                     params[k] = v.isoformat()
                 elif isinstance(v, list):
-                    has_datetime_items = False
+                    is_datetime_list = bool(v) and all(
+                        isinstance(item, datetime.datetime) for item in v
+                    )
+                    if is_datetime_list:
+                        datetime_list = (
+                            '[' + ', '.join(f'datetime("{item.isoformat()}")' for item in v) + ']'
+                        )
+                        query = re.sub(
+                            r'\$' + re.escape(k) + r'\b',
+                            lambda _, replacement=datetime_list: replacement,
+                            str(query),
+                        )
+
                     for i, item in enumerate(v):
                         if isinstance(item, datetime.datetime):
                             v[i] = item.isoformat()
-                            has_datetime_items = True
                         if isinstance(item, dict):
                             query = self._sanitize_parameters(query, v[i])
-
-                    if has_datetime_items:
-                        query = re.sub(
-                            r'\$' + re.escape(k) + r'\b',
-                            lambda _, replacement=f'datetime(${k})': replacement,
-                            str(query),
-                        )
-                    elif any(isinstance(item, str) and 'T' in item for item in v):
-                        try:
-                            datetime_values = [
-                                datetime.datetime.fromisoformat(item)
-                                for item in v
-                                if isinstance(item, str)
-                            ]
-                        except ValueError:
-                            datetime_values = []
-
-                        if len(datetime_values) == len(v):
-                            datetime_list = (
-                                '['
-                                + ', '.join(
-                                    f'datetime("{item.isoformat()}")' for item in datetime_values
-                                )
-                                + ']'
-                            )
-                            query = re.sub(
-                                r'\$' + re.escape(k) + r'\b',
-                                lambda _, replacement=datetime_list: replacement,
-                                str(query),
-                            )
                 elif isinstance(v, dict):
                     query = self._sanitize_parameters(query, v)
             return query

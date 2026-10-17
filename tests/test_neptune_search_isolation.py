@@ -1,5 +1,22 @@
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import datetime
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,7 +41,7 @@ class StubNeptuneDriver:
 
     def __init__(self):
         self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.aoss_calls: list[tuple[str, list[dict[str, str]]]] = []
+        self.save_to_aoss = MagicMock(return_value=1)
 
     def run_aoss_query(self, index_name: str, query: str, limit: int = 10):
         return {
@@ -37,9 +54,6 @@ class StubNeptuneDriver:
     async def execute_query(self, cypher_query: str, **params: Any):
         self.calls.append((cypher_query, params))
         return [], None, None
-
-    async def save_to_aoss(self, index_name: str, data: list[dict[str, str]]):
-        self.aoss_calls.append((index_name, data))
 
 
 @pytest.mark.asyncio
@@ -180,19 +194,29 @@ def test_neptune_parameter_sanitizer_keeps_edge_type_values_bound():
     assert params['edge_types'] == ['WORKS_AT']
 
 
-def test_neptune_parameter_sanitizer_inlines_parsed_datetime_strings():
+def test_neptune_parameter_sanitizer_keeps_iso_datetime_strings_bound():
     driver = NeptuneDriver.__new__(NeptuneDriver)
     query = 'MATCH (n) WHERE n.created_at IN $created_at RETURN n'
     params = {'created_at': ['2026-01-01T00:00:00+00:00']}
 
     sanitized_query = driver._sanitize_parameters(query, params)
 
-    assert sanitized_query == (
-        'MATCH (n) WHERE n.created_at IN [datetime("2026-01-01T00:00:00+00:00")] RETURN n'
-    )
+    assert sanitized_query == query
+    assert params['created_at'] == ['2026-01-01T00:00:00+00:00']
 
 
-def test_neptune_parameter_sanitizer_wraps_datetime_list_once():
+def test_neptune_parameter_sanitizer_keeps_iso_datetime_group_ids_bound():
+    driver = NeptuneDriver.__new__(NeptuneDriver)
+    query = 'MATCH (n) WHERE n.group_id IN $group_ids RETURN n'
+    params = {'group_ids': ['2024-01-01T00:00:00']}
+
+    sanitized_query = driver._sanitize_parameters(query, params)
+
+    assert sanitized_query == query
+    assert params['group_ids'] == ['2024-01-01T00:00:00']
+
+
+def test_neptune_parameter_sanitizer_inlines_datetime_list_once():
     driver = NeptuneDriver.__new__(NeptuneDriver)
     values = [
         datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
@@ -203,7 +227,11 @@ def test_neptune_parameter_sanitizer_wraps_datetime_list_once():
 
     sanitized_query = driver._sanitize_parameters(query, params)
 
-    assert sanitized_query == 'MATCH (n) WHERE n.created_at IN datetime($created_at) RETURN n'
+    assert sanitized_query == (
+        'MATCH (n) WHERE n.created_at IN '
+        '[datetime("2026-01-01T00:00:00+00:00"), datetime("2026-01-02T00:00:00+00:00")] RETURN n'
+    )
+    assert 'datetime($created_at)' not in sanitized_query
     assert params['created_at'] == [value.isoformat() for value in values]
 
 
@@ -214,10 +242,9 @@ def test_neptune_parameter_sanitizer_matches_full_parameter_names():
 
     sanitized_query = driver._sanitize_parameters(query, params)
 
-    assert sanitized_query == (
-        'MATCH (n) WHERE n.uuid = $id AND n.uuid IN '
-        '[datetime("2026-01-01T00:00:00+00:00")] RETURN n'
-    )
+    assert sanitized_query == query
+    assert params['id'] == 'node-uuid'
+    assert params['ids'] == ['2026-01-01T00:00:00+00:00']
 
 
 @pytest.mark.asyncio
@@ -227,4 +254,7 @@ async def test_community_node_save_uses_community_name_index():
 
     await community.save(driver)  # type: ignore[arg-type]
 
-    assert driver.aoss_calls[0][0] == 'community_name'
+    driver.save_to_aoss.assert_called_once_with(
+        'community_name', [{'name': 'community', 'uuid': 'community-uuid', 'group_id': 'group-a'}]
+    )
+    assert len(driver.calls) == 1
