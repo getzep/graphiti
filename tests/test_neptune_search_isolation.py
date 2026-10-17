@@ -1,3 +1,4 @@
+import datetime
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ from graphiti_core.nodes import CommunityNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import (
     community_fulltext_search,
+    edge_fulltext_search,
     episode_fulltext_search,
     node_fulltext_search,
 )
@@ -110,6 +112,51 @@ async def test_neptune_search_operations_fulltext_filters_group_ids(
         assert 'e.uuid=i.uuid' not in query
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('search_layer', ['legacy', 'staged'])
+@pytest.mark.parametrize('group_ids', [None, ['group-a']])
+async def test_neptune_edge_fulltext_search_filters_and_matches_uuid(search_layer, group_ids):
+    driver = StubNeptuneDriver()
+    executor = StubNeptuneDriver()
+    search_ops = NeptuneSearchOperations(driver)  # type: ignore[arg-type]
+    search_filter = SearchFilters(edge_types=['WORKS_AT'], edge_uuids=['edge-uuid'])
+
+    if search_layer == 'legacy':
+        await edge_fulltext_search(
+            driver,
+            'query',
+            search_filter,
+            group_ids=group_ids,
+        )  # type: ignore[arg-type]
+        cypher, params = driver.calls[0]
+        assert 'UNWIND $ids as i' in cypher
+        assert 'WHERE e.uuid = i.id' in cypher
+        assert 'WITH e, i.score AS score, n, m' in cypher
+    else:
+        await search_ops.edge_fulltext_search(
+            executor,
+            'query',
+            search_filter,
+            group_ids=group_ids,
+        )  # type: ignore[arg-type]
+        cypher, params = executor.calls[0]
+        assert 'UNWIND $ids as id' in cypher
+        assert 'WHERE e.uuid = id.id' in cypher
+
+    assert cypher.count('WHERE') == 1
+    assert 'e.name in $edge_types' in cypher
+    assert 'e.uuid in $edge_uuids' in cypher
+    assert params['ids'][0]['id'] == 'result-uuid'
+    assert params['edge_types'] == ['WORKS_AT']
+    assert params['edge_uuids'] == ['edge-uuid']
+    if group_ids is None:
+        assert '$group_ids' not in cypher
+        assert 'group_ids' not in params
+    else:
+        assert 'e.group_id IN $group_ids' in cypher
+        assert params['group_ids'] == group_ids
+
+
 def test_neptune_parameter_sanitizer_keeps_malicious_edge_types_bound():
     driver = NeptuneDriver.__new__(NeptuneDriver)
     query = 'MATCH (e) WHERE e.name IN $edge_types RETURN e'
@@ -143,6 +190,21 @@ def test_neptune_parameter_sanitizer_inlines_parsed_datetime_strings():
     assert sanitized_query == (
         'MATCH (n) WHERE n.created_at IN [datetime("2026-01-01T00:00:00+00:00")] RETURN n'
     )
+
+
+def test_neptune_parameter_sanitizer_wraps_datetime_list_once():
+    driver = NeptuneDriver.__new__(NeptuneDriver)
+    values = [
+        datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+        datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc),
+    ]
+    query = 'MATCH (n) WHERE n.created_at IN $created_at RETURN n'
+    params = {'created_at': values.copy()}
+
+    sanitized_query = driver._sanitize_parameters(query, params)
+
+    assert sanitized_query == 'MATCH (n) WHERE n.created_at IN datetime($created_at) RETURN n'
+    assert params['created_at'] == [value.isoformat() for value in values]
 
 
 def test_neptune_parameter_sanitizer_matches_full_parameter_names():

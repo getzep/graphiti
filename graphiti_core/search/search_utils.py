@@ -243,21 +243,19 @@ async def edge_fulltext_search(
             # Match the edge ids and return the values
             query = (
                 """
-                                UNWIND $ids as id
-                                MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                                WHERE e.group_id IN $group_ids 
-                                AND id(e)=id 
-                                """
-                + filter_query
+                UNWIND $ids as i
+                MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+                WHERE e.uuid = i.id
+                """
+                + (' AND ' + ' AND '.join(filter_queries) if filter_queries else '')
                 + """
-                AND id(e)=id
-                WITH e, id.score as score, startNode(e) AS n, endNode(e) AS m
+                WITH e, i.score AS score, n, m
                 RETURN
                 """
                 + get_entity_edge_return_query(GraphProvider.NEPTUNE)
                 + """
                 ORDER BY score DESC LIMIT $limit
-                            """
+                """
             )
 
             records, _, _ = await driver.execute_query(

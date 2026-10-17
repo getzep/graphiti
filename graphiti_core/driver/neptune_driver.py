@@ -256,18 +256,17 @@ class NeptuneDriver(GraphDriver):
                     for i, item in enumerate(v):
                         if isinstance(item, datetime.datetime):
                             v[i] = item.isoformat()
-                            query = re.sub(
-                                r'\$' + re.escape(k) + r'\b',
-                                lambda _, replacement=f'datetime(${k})': replacement,
-                                str(query),
-                            )
                             has_datetime_items = True
                         if isinstance(item, dict):
                             query = self._sanitize_parameters(query, v[i])
 
-                    if not has_datetime_items and any(
-                        isinstance(item, str) and 'T' in item for item in v
-                    ):
+                    if has_datetime_items:
+                        query = re.sub(
+                            r'\$' + re.escape(k) + r'\b',
+                            lambda _, replacement=f'datetime(${k})': replacement,
+                            str(query),
+                        )
+                    elif any(isinstance(item, str) and 'T' in item for item in v):
                         try:
                             datetime_values = [
                                 datetime.datetime.fromisoformat(item)
