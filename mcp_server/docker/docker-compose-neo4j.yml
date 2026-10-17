@@ -2,8 +2,8 @@ services:
   neo4j:
     image: neo4j:5.26.0
     ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
+      - "127.0.0.1:7474:7474" # HTTP
+      - "127.0.0.1:7687:7687" # Bolt
     environment:
       - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-demodemo}
       - NEO4J_server_memory_heap_initial__size=512m
