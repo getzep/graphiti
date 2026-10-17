@@ -451,8 +451,13 @@ async def test_remove_episode(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('remove_first_episode_first', [True, False])
 async def test_remove_episode_keeps_restated_fact(
-    graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
+    graph_driver,
+    mock_llm_client,
+    mock_embedder,
+    mock_cross_encoder_client,
+    remove_first_episode_first,
 ):
     graphiti = Graphiti(
         graph_driver=graph_driver,
@@ -535,18 +540,27 @@ async def test_remove_episode_keeps_restated_fact(
         mock_embedder,
     )
 
-    await graphiti.remove_episode(episode1.uuid)
+    episode_to_remove_first = episode1 if remove_first_episode_first else episode2
+    episode_to_remove_second = episode2 if remove_first_episode_first else episode1
+
+    await graphiti.remove_episode(episode_to_remove_first.uuid)
 
     surviving_edge = await EntityEdge.get_by_uuid(graph_driver, edge.uuid)
     await surviving_edge.load_fact_embedding(graph_driver)
-    assert surviving_edge.episodes == [episode2.uuid]
+    assert surviving_edge.episodes == [episode_to_remove_second.uuid]
     assert np.allclose(surviving_edge.fact_embedding, fact_embedding)
-    assert await get_node_count(graph_driver, [episode1.uuid, alice.uuid, bob.uuid]) == 2
+    assert (
+        await get_node_count(graph_driver, [episode_to_remove_first.uuid, alice.uuid, bob.uuid])
+        == 2
+    )
 
-    await graphiti.remove_episode(episode2.uuid)
+    await graphiti.remove_episode(episode_to_remove_second.uuid)
 
     assert await get_edge_count(graph_driver, [edge.uuid]) == 0
-    assert await get_node_count(graph_driver, [episode2.uuid, alice.uuid, bob.uuid]) == 0
+    assert (
+        await get_node_count(graph_driver, [episode_to_remove_second.uuid, alice.uuid, bob.uuid])
+        == 0
+    )
 
 
 @pytest.mark.asyncio
