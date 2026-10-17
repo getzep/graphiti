@@ -159,6 +159,67 @@ async def test_resolve_extracted_edge_exact_fact_short_circuit(
     mock_llm_client.generate_response.assert_not_called()
 
 
+@pytest.mark.parametrize('exact_match', [True, False])
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_merges_episode_provenance(exact_match, mock_llm_client):
+    episode = EpisodicNode(
+        uuid='episode_2',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='test',
+        content='Episode content',
+        valid_at=datetime.now(timezone.utc),
+    )
+    extracted_edge = EntityEdge(
+        uuid='extracted-edge',
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='test_edge',
+        group_id='group_1',
+        fact='Related fact' if exact_match else 'Extracted fact',
+        episodes=['episode_1', 'episode_2'],
+        created_at=datetime.now(timezone.utc),
+    )
+    existing_edge = EntityEdge(
+        uuid='existing-edge',
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='test_edge',
+        group_id='group_1',
+        fact='Related fact',
+        episodes=['episode_0'],
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+
+    if not exact_match:
+        mock_llm_client.generate_response.return_value = {
+            'duplicate_facts': [0],
+            'contradicted_facts': [],
+        }
+
+    resolved_edge, _, _ = await resolve_extracted_edge(
+        mock_llm_client,
+        extracted_edge,
+        [existing_edge],
+        [],
+        episode,
+        edge_type_candidates=None,
+    )
+    assert resolved_edge is existing_edge
+    assert resolved_edge.episodes == ['episode_0', 'episode_1', 'episode_2']
+
+    resolved_edge, _, _ = await resolve_extracted_edge(
+        mock_llm_client,
+        extracted_edge,
+        [existing_edge],
+        [],
+        episode,
+        edge_type_candidates=None,
+    )
+    assert resolved_edge.episodes == ['episode_0', 'episode_1', 'episode_2']
+
+
 @pytest.mark.asyncio
 async def test_resolve_extracted_edge_keeps_caller_attributes_without_schema(
     mock_llm_client,

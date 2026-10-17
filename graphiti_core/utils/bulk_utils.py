@@ -589,6 +589,15 @@ async def dedupe_edges_bulk(
         edge.uuid: edge for edges in extracted_edges for edge in edges
     }
 
+    for edges in extracted_edges:
+        for edge in edges:
+            canonical_uuid = compressed_map.get(edge.uuid, edge.uuid)
+            if canonical_uuid != edge.uuid:
+                canonical_edge = edge_uuid_map[canonical_uuid]
+                for episode_uuid in edge.episodes:
+                    if episode_uuid not in canonical_edge.episodes:
+                        canonical_edge.episodes.append(episode_uuid)
+
     edges_by_episode: dict[str, list[EntityEdge]] = {}
     for i, edges in enumerate(extracted_edges):
         episode = episode_tuples[i][0]
