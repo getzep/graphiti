@@ -258,7 +258,9 @@ class GraphitiService:
             # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
             # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
             # Reranker setup errors must remain fatal rather than silently restoring that default.
-            cross_encoder_client = CrossEncoderFactory.create(self.config.llm, self.config.embedder)
+            cross_encoder_client = CrossEncoderFactory.create(
+                self.config.llm, self.config.embedder, self.config.reranker
+            )
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
@@ -579,15 +581,21 @@ async def search_nodes(
 
         # center_node_uuid is only honored by the node_distance reranker, so select
         # that recipe when a center node is given (mirroring core's Graphiti.search);
-        # otherwise use RRF.
+        # otherwise use the configured node recipe.
         from graphiti_core.search.search_config_recipes import (
+            NODE_HYBRID_SEARCH_CROSS_ENCODER,
             NODE_HYBRID_SEARCH_NODE_DISTANCE,
             NODE_HYBRID_SEARCH_RRF,
         )
 
-        node_config = (
-            NODE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else NODE_HYBRID_SEARCH_RRF
+        node_recipe = (
+            NODE_HYBRID_SEARCH_NODE_DISTANCE
+            if center_node_uuid
+            else NODE_HYBRID_SEARCH_CROSS_ENCODER
+            if config.graphiti.node_reranker == 'cross_encoder'
+            else NODE_HYBRID_SEARCH_RRF
         )
+        node_config = node_recipe.model_copy(update={'limit': max_nodes})
         results = await client.search_(
             query=query,
             config=node_config,
@@ -673,13 +681,28 @@ async def search_memory_facts(
             else []
         )
 
-        relevant_edges = await client.search(
+        from graphiti_core.search.search_config_recipes import (
+            EDGE_HYBRID_SEARCH_CROSS_ENCODER,
+            EDGE_HYBRID_SEARCH_NODE_DISTANCE,
+            EDGE_HYBRID_SEARCH_RRF,
+        )
+
+        edge_recipe = (
+            EDGE_HYBRID_SEARCH_NODE_DISTANCE
+            if center_node_uuid
+            else EDGE_HYBRID_SEARCH_CROSS_ENCODER
+            if config.graphiti.fact_reranker == 'cross_encoder'
+            else EDGE_HYBRID_SEARCH_RRF
+        )
+        edge_config = edge_recipe.model_copy(update={'limit': max_facts})
+        results = await client.search_(
             group_ids=effective_group_ids,
             query=query,
-            num_results=max_facts,
+            config=edge_config,
             center_node_uuid=center_node_uuid,
             search_filter=search_filter,
         )
+        relevant_edges = results.edges
 
         if not relevant_edges:
             return FactSearchResponse(message='No relevant facts found', facts=[])

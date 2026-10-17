@@ -181,6 +181,18 @@ class EmbedderConfig(BaseModel):
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
 
 
+class RerankerConfig(BaseModel):
+    """Cross-encoder reranker configuration."""
+
+    provider: Literal['auto', 'openai', 'azure_openai', 'gemini', 'bge'] = Field(
+        default='auto', description='Reranker provider'
+    )
+    model: str | None = Field(
+        default=None,
+        description='Optional model override for API-backed rerankers',
+    )
+
+
 class Neo4jProviderConfig(BaseModel):
     """Neo4j provider configuration."""
 
@@ -261,6 +273,12 @@ class GraphitiAppConfig(BaseModel):
     group_id: str = Field(default='main', description='Group ID')
     episode_id_prefix: str | None = Field(default='', description='Episode ID prefix')
     user_id: str = Field(default='mcp_user', description='User ID')
+    fact_reranker: Literal['rrf', 'cross_encoder'] = Field(
+        default='rrf', description='Reranking strategy used by search_memory_facts'
+    )
+    node_reranker: Literal['rrf', 'cross_encoder'] = Field(
+        default='rrf', description='Reranking strategy used by search_nodes'
+    )
     entity_types: list[EntityTypeConfig] = Field(default_factory=list)
     edge_types: list[EdgeTypeConfig] = Field(default_factory=list)
     edge_type_map: list[EdgeTypeMapEntry] = Field(default_factory=list)
@@ -277,6 +295,7 @@ class GraphitiConfig(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 
