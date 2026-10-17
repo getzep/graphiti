@@ -451,6 +451,105 @@ async def test_remove_episode(
 
 
 @pytest.mark.asyncio
+async def test_remove_episode_keeps_restated_fact(
+    graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now()
+    episode1 = EpisodicNode(
+        name='episode1',
+        group_id=group_id,
+        labels=[],
+        created_at=now,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice likes Bob',
+        valid_at=now,
+    )
+    episode2 = EpisodicNode(
+        name='episode2',
+        group_id=group_id,
+        labels=[],
+        created_at=now,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice likes Bob',
+        valid_at=now,
+    )
+    alice = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Alice summary',
+    )
+    bob = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Bob summary',
+    )
+    await alice.generate_name_embedding(mock_embedder)
+    await bob.generate_name_embedding(mock_embedder)
+
+    edge = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='likes',
+        fact='Alice likes Bob',
+        episodes=[episode1.uuid, episode2.uuid],
+        valid_at=now,
+        group_id=group_id,
+    )
+    await edge.generate_embedding(mock_embedder)
+    fact_embedding = edge.fact_embedding
+
+    episode1.entity_edges = [edge.uuid]
+    episode2.entity_edges = [edge.uuid]
+    mention_edges = [
+        EpisodicEdge(
+            source_node_uuid=episode.uuid,
+            target_node_uuid=node.uuid,
+            created_at=now,
+            group_id=group_id,
+        )
+        for episode in [episode1, episode2]
+        for node in [alice, bob]
+    ]
+
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [episode1, episode2],
+        mention_edges,
+        [alice, bob],
+        [edge],
+        mock_embedder,
+    )
+
+    await graphiti.remove_episode(episode1.uuid)
+
+    surviving_edge = await EntityEdge.get_by_uuid(graph_driver, edge.uuid)
+    await surviving_edge.load_fact_embedding(graph_driver)
+    assert surviving_edge.episodes == [episode2.uuid]
+    assert np.allclose(surviving_edge.fact_embedding, fact_embedding)
+    assert await get_node_count(graph_driver, [episode1.uuid, alice.uuid, bob.uuid]) == 2
+
+    await graphiti.remove_episode(episode2.uuid)
+
+    assert await get_edge_count(graph_driver, [edge.uuid]) == 0
+    assert await get_node_count(graph_driver, [episode2.uuid, alice.uuid, bob.uuid]) == 0
+
+
+@pytest.mark.asyncio
 async def test_graphiti_retrieve_episodes(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
 ):

@@ -2168,11 +2168,16 @@ class Graphiti:
         # Find edges mentioned by the episode
         edges = await EntityEdge.get_by_uuids(self.driver, episode.entity_edges)
 
-        # We should only delete edges created by the episode
+        # Keep edges that other episodes also support.
         edges_to_delete: list[EntityEdge] = []
+        edges_to_update: list[EntityEdge] = []
         for edge in edges:
-            if edge.episodes and edge.episodes[0] == episode.uuid:
-                edges_to_delete.append(edge)
+            if episode.uuid in edge.episodes:
+                edge.episodes = [uuid for uuid in edge.episodes if uuid != episode.uuid]
+                if edge.episodes:
+                    edges_to_update.append(edge)
+                else:
+                    edges_to_delete.append(edge)
 
         # Find nodes mentioned by the episode
         nodes = await get_mentioned_nodes(self.driver, [episode])
@@ -2185,6 +2190,10 @@ class Graphiti:
             for record in records:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
+
+        for edge in edges_to_update:
+            await edge.load_fact_embedding(self.driver)
+            await edge.save(self.driver)
 
         await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
         await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
