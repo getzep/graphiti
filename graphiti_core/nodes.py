@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import (
+    COMMUNITY_INDEX_NAME,
     GraphDriver,
     GraphProvider,
 )
@@ -736,8 +737,8 @@ class CommunityNode(Node):
                 pass
 
         if driver.provider == GraphProvider.NEPTUNE:
-            await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'communities',
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                COMMUNITY_INDEX_NAME,
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
         result = await driver.execute_query(
