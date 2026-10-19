@@ -1442,11 +1442,19 @@ class Graphiti:
                     else await EpisodicNode.get_by_uuids(driver, previous_episode_uuids)
                 )
 
-                # Get or create episode
-                episode = (
-                    await EpisodicNode.get_by_uuid(driver, uuid)
-                    if uuid is not None
-                    else EpisodicNode(
+                # Get or create episode. When a uuid is supplied, reuse the
+                # existing episode if present, otherwise create a new one with
+                # that uuid (issue #2019).
+                episode = None
+                if uuid is not None:
+                    try:
+                        episode = await EpisodicNode.get_by_uuid(driver, uuid)
+                    except NodeNotFoundError:
+                        episode = None
+
+                if episode is None:
+                    episode = EpisodicNode(
+                        uuid=uuid or str(uuid4()),
                         name=name,
                         group_id=group_id,
                         labels=[],
@@ -1456,7 +1464,6 @@ class Graphiti:
                         created_at=now,
                         valid_at=reference_time,
                     )
-                )
 
                 # Create default edge type map
                 edge_type_map_default = (
