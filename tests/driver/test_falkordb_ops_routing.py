@@ -10,7 +10,7 @@ The tests use a ``spec=GraphDriver`` mock, so they need no live FalkorDB and run
 in CI regardless of whether the ``falkordb`` package is installed.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -117,3 +117,35 @@ async def test_get_by_group_ids_empty_group_ids_does_not_route():
 
     base.clone.assert_not_called()
     base.execute_query.assert_awaited_once()
+
+
+async def test_falkor_driver_wires_graph_operations_interface():
+    """The driver must expose a non-None interface so classmethods dispatch to ops."""
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    with patch.object(FalkorDriver, 'build_indices_and_constraints', new=AsyncMock()):
+        driver = FalkorDriver(falkor_db=MagicMock())
+    assert driver.graph_operations_interface is not None
+
+
+async def test_episodic_get_by_group_ids_classmethod_routes_via_interface():
+    """EpisodicNode.get_by_group_ids must reach the Falkor ops routing path.
+
+    Regression for the interface never being wired: the classmethod's
+    ``if driver.graph_operations_interface`` branch was always skipped, so
+    non-default groups returned [].
+    """
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+    from graphiti_core.nodes import EpisodicNode
+
+    with patch.object(FalkorDriver, 'build_indices_and_constraints', new=AsyncMock()):
+        driver = FalkorDriver(falkor_db=MagicMock())
+    base, child = _make_falkor_driver()
+    driver.clone = base.clone
+    driver.execute_query = base.execute_query
+
+    await EpisodicNode.get_by_group_ids(driver, ['tenant_b'], limit=10)
+
+    base.clone.assert_called_once_with(database='tenant_b')
+    child.execute_query.assert_awaited_once()
+    base.execute_query.assert_not_called()
