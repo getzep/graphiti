@@ -307,9 +307,36 @@ You can use Docker Compose to quickly start the required services:
 
   This will start the FalkorDB Docker service and related components.
 
-## MCP Server
+## Reference MCP and REST servers
 
-The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server
+The `mcp_server` and `server` directories contain reference implementations of an MCP server and a REST server. These
+servers show how to put Graphiti behind a protocol. These servers are not production deployments.
+
+> [!WARNING]
+> The reference servers have no authentication, no authorization, and no prompt-injection protection. These omissions
+> are intentional. Do not expose the reference servers to an untrusted network.
+
+The reference servers have these limits:
+
+- The servers do not authenticate callers. Any caller can read, change, or delete data in any `group_id`.
+- The servers do not detect or block prompt injection. The servers send episode content and tool input to the
+  configured LLM without a filter.
+- The example Docker Compose files use default database credentials.
+
+Security reports about these limits are out of scope. Pull requests that add authentication, authorization, or
+prompt-injection filters to the reference servers are also out of scope. For more information, see the
+[security policy scope](SECURITY.md#scope).
+
+For a production deployment, use one of these options:
+
+- Use the `graphiti-core` library in your own service. Your service must supply authentication, authorization, tenant
+  isolation, and input controls.
+- Use [Zep](https://www.getzep.com), the managed context platform that is built on Graphiti. Zep is available as a
+  managed service or in your own cloud (BYOC). For a comparison, see [Zep vs Graphiti](#zep-vs-graphiti).
+
+### MCP Server
+
+The `mcp_server` directory contains a reference Model Context Protocol (MCP) server for Graphiti. This server
 allows AI assistants to interact with Graphiti's context graph capabilities through the MCP protocol.
 
 Key features of the MCP server include:
@@ -325,9 +352,9 @@ workflows.
 
 For detailed setup instructions and usage examples, see the [MCP server README](mcp_server/README.md).
 
-## REST Service
+### REST Service
 
-The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+The `server` directory contains a reference REST service for the Graphiti API. The service uses FastAPI.
 
 Please see the [server README](server/README.md) for more information.
 

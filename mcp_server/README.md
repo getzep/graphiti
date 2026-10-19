@@ -7,7 +7,7 @@ coherent, queryable graph. The framework supports incremental data updates, effi
 queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI
 applications.
 
-> **Security:** This server is a reference implementation. The server has no authentication or authorization, and any caller can read, change, or delete all graph data. Do not expose the server to an untrusted network. For more information, see the [security policy scope](../SECURITY.md#scope).
+> **Security:** This server is a reference implementation. Do not use the server as a production deployment. The server has no authentication, no authorization, and no prompt-injection protection. These omissions are intentional. Any caller can read, change, or delete all graph data. Do not expose the server to an untrusted network. For production options, see [Reference MCP and REST servers](../README.md#reference-mcp-and-rest-servers). For the security scope, see the [security policy scope](../SECURITY.md#scope).
 
 This is an experimental Model Context Protocol (MCP) server implementation for Graphiti. The MCP server exposes
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
@@ -133,7 +133,7 @@ database:
 
 #### Neo4j
 
-For production use or when you need a full-featured graph database, Neo4j is recommended:
+When you need a full-featured graph database, Neo4j is recommended:
 
 ```yaml
 database:
