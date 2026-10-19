@@ -902,6 +902,11 @@ async def _dedupe_extracted_edge(
     """
     resolver_kwargs = {'clients': clients} if clients is not None else {}
 
+    def append_episode_provenance(resolved_edge: EntityEdge) -> None:
+        for episode_uuid in [*extracted_edge.episodes, episode.uuid]:
+            if episode_uuid not in resolved_edge.episodes:
+                resolved_edge.episodes.append(episode_uuid)
+
     # Nothing to compare against, so there is no duplicate and nothing to contradict.
     if len(related_edges) == 0 and len(existing_edges) == 0:
         # Still extract custom attributes and timestamps even when no dedup needed
@@ -946,8 +951,7 @@ async def _dedupe_extracted_edge(
             and _normalize_string_exact(edge.fact) == normalized_fact
         ):
             resolved = edge
-            if episode is not None and episode.uuid not in resolved.episodes:
-                resolved.episodes.append(episode.uuid)
+            append_episode_provenance(resolved)
             return resolved, [], None
 
     start = time()
@@ -1007,8 +1011,8 @@ async def _dedupe_extracted_edge(
         resolved_edge = related_edges[duplicate_fact_id]
         break
 
-    if duplicate_fact_ids and episode is not None:
-        resolved_edge.episodes.append(episode.uuid)
+    if duplicate_fact_ids:
+        append_episode_provenance(resolved_edge)
 
     # Process contradicted facts (continuous indexing across both lists)
     contradicted_facts: list[int] = response_object.contradicted_facts

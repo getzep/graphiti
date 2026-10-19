@@ -619,6 +619,119 @@ async def test_add_episode_bulk_can_select_separate_extraction(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_add_episode_bulk_records_supported_edge_uuids(monkeypatch):
+    clients = _make_clients()
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = clients.driver
+    graphiti.clients = clients
+    graphiti.tracer = MagicMock()
+    graphiti.max_coroutines = 2
+    graphiti._resolve_request_scope = MagicMock(return_value=('group', clients.driver, clients))
+
+    async def retrieve_episodes(_driver, episodes, **_kwargs):
+        return [(episode, []) for episode in episodes]
+
+    edges = {}
+
+    async def dedupe_edges(_clients, _extracted, episode_context, *_args):
+        first_episode, second_episode = [episode for episode, _ in episode_context]
+        shared_edge = EntityEdge(
+            uuid='shared-edge',
+            source_node_uuid='alice',
+            target_node_uuid='bob',
+            name='likes',
+            group_id='group',
+            fact='Alice likes Bob',
+            episodes=[first_episode.uuid, second_episode.uuid],
+            created_at=utc_now(),
+        )
+        first_edge = EntityEdge(
+            uuid='first-edge',
+            source_node_uuid='alice',
+            target_node_uuid='carol',
+            name='knows',
+            group_id='group',
+            fact='Alice knows Carol',
+            episodes=[first_episode.uuid],
+            created_at=utc_now(),
+        )
+        second_edge = EntityEdge(
+            uuid='second-edge',
+            source_node_uuid='alice',
+            target_node_uuid='dave',
+            name='works_with',
+            group_id='group',
+            fact='Alice works with Dave',
+            episodes=[second_episode.uuid],
+            created_at=utc_now(),
+        )
+        edges.update(
+            shared=shared_edge,
+            first=first_edge,
+            second=second_edge,
+        )
+        return {
+            first_episode.uuid: [shared_edge, first_edge],
+            second_episode.uuid: [shared_edge, second_edge],
+        }
+
+    async def resolve_edges(*_args, **_kwargs):
+        return (
+            [],
+            [edges['shared'], edges['first'], edges['shared']],
+            [edges['second']],
+            {},
+        )
+
+    saved_batches = []
+
+    async def save_bulk(*args, **kwargs):
+        saved_batches.append(args[1] if args else kwargs['episodic_nodes'])
+
+    extract_mock = AsyncMock(return_value=([], []))
+    monkeypatch.setattr('graphiti_core.graphiti.extract_nodes_and_edges_bulk', extract_mock)
+    monkeypatch.setattr('graphiti_core.graphiti.add_nodes_and_edges_bulk', save_bulk)
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.retrieve_previous_episodes_bulk',
+        retrieve_episodes,
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.dedupe_nodes_bulk',
+        AsyncMock(return_value=({}, {})),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.dedupe_edges_bulk',
+        dedupe_edges,
+    )
+    graphiti._resolve_nodes_and_edges_bulk = AsyncMock(side_effect=resolve_edges)
+
+    await graphiti.add_episode_bulk(
+        [
+            RawEpisode(
+                name='episode1',
+                content='Alice likes Bob and knows Carol',
+                source_description='test',
+                source=EpisodeType.message,
+                reference_time=utc_now(),
+            ),
+            RawEpisode(
+                name='episode2',
+                content='Alice likes Bob and works with Dave',
+                source_description='test',
+                source=EpisodeType.message,
+                reference_time=utc_now(),
+            ),
+        ],
+        group_id='group',
+    )
+
+    saved_episodes = {episode.uuid: episode for episode in saved_batches[-1]}
+    first_episode, second_episode = saved_batches[-1]
+    assert saved_episodes[first_episode.uuid].entity_edges == ['shared-edge', 'first-edge']
+    assert saved_episodes[second_episode.uuid].entity_edges == ['shared-edge', 'second-edge']
+
+
+@pytest.mark.asyncio
 async def test_bulk_edge_flow_inherits_clients_prompt_library():
     # Covered by clients.prompt_library being passed into extract_edges
     await test_extract_edges_uses_clients_prompt_library()
