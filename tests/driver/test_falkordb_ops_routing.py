@@ -10,6 +10,7 @@ The tests use a ``spec=GraphDriver`` mock, so they need no live FalkorDB and run
 in CI regardless of whether the ``falkordb`` package is installed.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -39,6 +40,16 @@ def _make_falkor_driver(execute_return=None):
     base.execute_query = AsyncMock(return_value=execute_return or ([], None, None))
     base.clone = MagicMock(return_value=child)
     return base, child
+
+
+def _wired_falkor_driver():
+    """FalkorDriver with the graph-operations facade, no live database."""
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    with patch.object(FalkorDriver, 'build_indices_and_constraints', new=AsyncMock()):
+        driver = FalkorDriver(falkor_db=MagicMock())
+    driver.execute_query = AsyncMock(return_value=([], None, None))
+    return driver
 
 
 async def test_episode_get_by_group_ids_single_group_routes_to_its_graph():
@@ -172,3 +183,70 @@ async def test_unmapped_facade_hooks_raise_not_implemented():
         hook = getattr(interface, name)
         with pytest.raises(NotImplementedError):
             await hook()
+
+
+async def test_remove_communities_falls_back_to_graph_ops():
+    from graphiti_core.utils.maintenance.community_operations import remove_communities
+
+    driver = _wired_falkor_driver()
+    driver.graph_ops.remove_communities = AsyncMock()
+
+    await remove_communities(driver, group_ids=['group_a'])
+
+    driver.graph_ops.remove_communities.assert_awaited_once_with(driver, group_ids=['group_a'])
+    driver.execute_query.assert_not_awaited()
+
+
+async def test_entity_node_get_by_names_falls_back_to_query():
+    from graphiti_core.nodes import EntityNode
+
+    driver = _wired_falkor_driver()
+
+    result = await EntityNode.get_by_names(driver, ['Alice'], ['group_a'])
+
+    driver.execute_query.assert_awaited_once()
+    assert result == []
+
+
+async def test_saga_hooks_fall_back_to_query_and_none_sentinel():
+    from graphiti_core.graphiti import Graphiti
+
+    driver = _wired_falkor_driver()
+    driver.execute_query = AsyncMock(return_value=([{'uuid': 'ep-prev'}], None, None))
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = driver
+
+    previous = await graphiti._saga_get_previous_episode_uuid('saga-1', 'ep-now')
+    assert previous == 'ep-prev'
+    driver.execute_query.assert_awaited_once()
+    query = driver.execute_query.await_args.args[0]
+    assert 'HAS_EPISODE' in query
+
+    driver.execute_query.reset_mock()
+    sentinel = await graphiti._saga_get_episode_contents('saga-1')
+    assert sentinel is None
+    driver.execute_query.assert_not_awaited()
+
+
+async def test_summarize_saga_uses_query_fallback_when_interface_returns_none():
+    from graphiti_core.graphiti import Graphiti
+    from graphiti_core.nodes import SagaNode
+
+    driver = _wired_falkor_driver()
+    saga = SagaNode(
+        uuid='saga-1',
+        name='s',
+        group_id='g',
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = driver
+
+    with patch.object(SagaNode, 'get_by_uuid', new=AsyncMock(return_value=saga)):
+        result = await graphiti.summarize_saga('saga-1')
+
+    driver.execute_query.assert_awaited_once()
+    query = driver.execute_query.await_args.args[0]
+    assert 'HAS_EPISODE' in query
+    assert result is saga
+    assert saga._summary_episodes_fetched == 0

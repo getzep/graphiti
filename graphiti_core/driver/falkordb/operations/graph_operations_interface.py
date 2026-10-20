@@ -125,6 +125,13 @@ _PARAM_ALIASES: dict[str, str] = {
 }
 
 
+def _not_implemented_hook(name: str) -> Any:
+    async def _not_implemented(*args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError(name)
+
+    return _not_implemented
+
+
 def _make_adapter(interface_method: Any, ops_method: Any) -> Any:
     """Build an async callable that forwards interface args to an ops method."""
     # ``interface_method`` is fetched off the class, so it is an unbound
@@ -171,20 +178,14 @@ class FalkorGraphOperationsInterface:
         if target is None:
             # Absent from the map: raise on call so callers' NotImplementedError
             # fallbacks (query / graph_ops) still run.
-            async def _not_implemented(*args: Any, **kwargs: Any) -> Any:
-                raise NotImplementedError(name)
-
-            return _not_implemented
+            return _not_implemented_hook(name)
 
         ops_attr, ops_method_name = target
         ops = getattr(self._driver, ops_attr)
         ops_method = getattr(ops, ops_method_name, None)
         if ops_method is None:
             # Not implemented for FalkorDB: raise so callers fall back to raw Cypher.
-            async def _not_implemented(*args: Any, **kwargs: Any) -> Any:
-                raise NotImplementedError(name)
-
-            return _not_implemented
+            return _not_implemented_hook(name)
 
         interface_method = getattr(GraphOperationsInterface, name)
         return _make_adapter(interface_method, ops_method)
