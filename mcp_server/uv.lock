@@ -1358,7 +1358,7 @@ wheels = [
 
 [[package]]
 name = "mcp-server"
-version = "1.1.1"
+version = "1.1.2"
 source = { virtual = "." }
 dependencies = [
     { name = "graphiti-core", extra = ["falkordb"] },
