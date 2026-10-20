@@ -376,6 +376,72 @@ async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_dedupe_edges_bulk_merges_episode_provenance_for_duplicates(monkeypatch):
+    clients = _make_clients()
+    episode_one = _make_episode('1')
+    episode_two = _make_episode('2')
+
+    async def mock_create_embeddings(embedder, edges):
+        for edge in edges:
+            edge.fact_embedding = [0.1, 0.2, 0.3]
+
+    async def mock_resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+        custom_edge_type_names=None,
+    ):
+        duplicates = [
+            related
+            for related in related_edges
+            if related.uuid != extracted_edge.uuid and related.fact == extracted_edge.fact
+        ]
+        return extracted_edge, [], duplicates
+
+    monkeypatch.setattr(bulk_utils, 'create_entity_edge_embeddings', mock_create_embeddings)
+    monkeypatch.setattr(bulk_utils, 'resolve_extracted_edge', mock_resolve_extracted_edge)
+
+    edge_one = EntityEdge(
+        uuid='edge-a',
+        name='recommends',
+        fact='Assistant recommends yoga',
+        group_id='group',
+        source_node_uuid='assistant',
+        target_node_uuid='yoga',
+        created_at=utc_now(),
+        episodes=[episode_one.uuid],
+    )
+    edge_two = EntityEdge(
+        uuid='edge-b',
+        name='recommends',
+        fact='Assistant recommends yoga',
+        group_id='group',
+        source_node_uuid='assistant',
+        target_node_uuid='yoga',
+        created_at=utc_now(),
+        episodes=[episode_two.uuid],
+    )
+
+    edges_by_episode = await bulk_utils.dedupe_edges_bulk(
+        clients,
+        [[edge_one], [edge_two]],
+        [(episode_one, []), (episode_two, [])],
+        [],
+        {},
+        {},
+    )
+
+    canonical_edge_one = edges_by_episode[episode_one.uuid][0]
+    canonical_edge_two = edges_by_episode[episode_two.uuid][0]
+    assert canonical_edge_one is canonical_edge_two
+    assert canonical_edge_one.uuid == 'edge-a'
+    assert canonical_edge_one.episodes == [episode_one.uuid, episode_two.uuid]
+
+
+@pytest.mark.asyncio
 async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_combined_extractor(
     monkeypatch,
 ):
