@@ -49,10 +49,10 @@ from graphiti_core.driver.falkordb.operations.entity_edge_ops import FalkorEntit
 from graphiti_core.driver.falkordb.operations.entity_node_ops import FalkorEntityNodeOperations
 from graphiti_core.driver.falkordb.operations.episode_node_ops import FalkorEpisodeNodeOperations
 from graphiti_core.driver.falkordb.operations.episodic_edge_ops import FalkorEpisodicEdgeOperations
-from graphiti_core.driver.falkordb.operations.graph_ops import FalkorGraphMaintenanceOperations
 from graphiti_core.driver.falkordb.operations.graph_operations_interface import (
     FalkorGraphOperationsInterface,
 )
+from graphiti_core.driver.falkordb.operations.graph_ops import FalkorGraphMaintenanceOperations
 from graphiti_core.driver.falkordb.operations.has_episode_edge_ops import (
     FalkorHasEpisodeEdgeOperations,
 )

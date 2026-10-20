@@ -134,9 +134,7 @@ def _make_adapter(interface_method: Any, ops_method: Any) -> Any:
     interface_signature = inspect.signature(interface_method)
     interface_params = list(interface_signature.parameters.values())
     if interface_params and interface_params[0].name == 'self':
-        interface_signature = interface_signature.replace(
-            parameters=interface_params[1:]
-        )
+        interface_signature = interface_signature.replace(parameters=interface_params[1:])
     ops_params = inspect.signature(ops_method).parameters
 
     async def adapter(*args: Any, **kwargs: Any) -> Any:
@@ -171,7 +169,12 @@ class FalkorGraphOperationsInterface:
     def __getattr__(self, name: str) -> Any:
         target = _METHOD_MAP.get(name)
         if target is None:
-            raise AttributeError(name)
+            # Absent from the map: raise on call so callers' NotImplementedError
+            # fallbacks (query / graph_ops) still run.
+            async def _not_implemented(*args: Any, **kwargs: Any) -> Any:
+                raise NotImplementedError(name)
+
+            return _not_implemented
 
         ops_attr, ops_method_name = target
         ops = getattr(self._driver, ops_attr)

@@ -149,3 +149,26 @@ async def test_episodic_get_by_group_ids_classmethod_routes_via_interface():
     base.clone.assert_called_once_with(database='tenant_b')
     child.execute_query.assert_awaited_once()
     base.execute_query.assert_not_called()
+
+
+async def test_unmapped_facade_hooks_raise_not_implemented():
+    """Unsupported hooks must raise NotImplementedError so caller fallbacks run.
+
+    ``remove_communities``, ``node_get_by_names``, and the two saga hooks are
+    absent from ``_METHOD_MAP``. Raising AttributeError on attribute access
+    skipped the callers' ``except NotImplementedError`` fallbacks.
+    """
+    from graphiti_core.driver.falkordb.operations.graph_operations_interface import (
+        FalkorGraphOperationsInterface,
+    )
+
+    interface = FalkorGraphOperationsInterface(driver=MagicMock())
+    for name in (
+        'remove_communities',
+        'node_get_by_names',
+        'saga_get_previous_episode_uuid',
+        'saga_get_episode_contents',
+    ):
+        hook = getattr(interface, name)
+        with pytest.raises(NotImplementedError):
+            await hook()
