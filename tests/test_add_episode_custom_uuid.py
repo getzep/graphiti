@@ -60,7 +60,9 @@ class FakeDriver(GraphDriver):
     def delete_all_indexes(self):  # pragma: no cover
         raise NotImplementedError
 
-    async def build_indices_and_constraints(self, delete_existing: bool = False):  # pragma: no cover
+    async def build_indices_and_constraints(
+        self, delete_existing: bool = False
+    ):  # pragma: no cover
         raise NotImplementedError
 
 
