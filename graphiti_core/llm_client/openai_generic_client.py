@@ -143,6 +143,8 @@ class OpenAIGenericClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
@@ -153,7 +155,7 @@ class OpenAIGenericClient(LLMClient):
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
             response = await self.client.chat.completions.create(
-                model=self.model or DEFAULT_MODEL,
+                model=model or self.model or DEFAULT_MODEL,
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=max_tokens,
@@ -183,6 +185,7 @@ class OpenAIGenericClient(LLMClient):
         prompt_name: str | None = None,
         *,
         attribute_extraction: bool = False,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
         self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
@@ -220,7 +223,11 @@ class OpenAIGenericClient(LLMClient):
                 # retry mechanism (same pattern as Gliner2Client); the old hand-rolled
                 # re-prompt loop is intentionally not reinstated.
                 return await self._generate_response_with_retry(
-                    messages, response_model, max_tokens=max_tokens, model_size=model_size
+                    messages,
+                    response_model,
+                    max_tokens=max_tokens,
+                    model_size=model_size,
+                    model=model,
                 )
             except Exception as e:
                 span.set_status('error', str(e))

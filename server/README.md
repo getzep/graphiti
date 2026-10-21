@@ -2,21 +2,26 @@
 
 Graph service is a fast api server implementing the [graphiti](https://github.com/getzep/graphiti) package.
 
+> **Security:** This server is a reference implementation. Do not use the server as a production deployment. The server has no authentication, no authorization, and no prompt-injection protection. These omissions are intentional. Any caller can read, change, or delete all graph data. Do not expose the server to an untrusted network. For production options, see [Reference MCP and REST servers](../README.md#reference-mcp-and-rest-servers). For the security scope, see the [security policy scope](../SECURITY.md#scope).
+
+To expose the server on all interfaces, run Uvicorn with `--host 0.0.0.0` or change the host-side port mapping in
+Docker Compose; the server has no authentication.
+
 ## Container Releases
 
-The FastAPI server container is automatically built and published to Docker Hub when a new `graphiti-core` version is released to PyPI.
+The FastAPI server container is automatically built and published to Docker Hub when a `v*.*.*` tag is pushed (the same tags that publish `graphiti-core` to PyPI).
 
 **Image:** `zepai/graphiti`
 
 **Available tags:**
 - `latest` - Latest stable release
-- `0.22.1` - Specific version (matches graphiti-core version)
+- `0.30.2` - Specific version (matches graphiti-core version)
 
 **Platforms:** linux/amd64, linux/arm64
 
 The automated release workflow:
-1. Triggers when `graphiti-core` PyPI release completes
-2. Waits for PyPI package availability
+1. Triggers on `v*.*.*` tag pushes (and can be run manually via `workflow_dispatch`)
+2. Waits for that `graphiti-core` version to be available on PyPI
 3. Builds multi-platform Docker image
 4. Tags with version number and `latest`
 5. Pushes to Docker Hub
@@ -49,7 +54,7 @@ Only stable releases are built automatically (pre-release versions are skipped).
       graph:
          image: zepai/graphiti:latest
          ports:
-            - "8000:8000"
+            - "127.0.0.1:8000:8000"
          
          environment:
             - OPENAI_API_KEY=${OPENAI_API_KEY}

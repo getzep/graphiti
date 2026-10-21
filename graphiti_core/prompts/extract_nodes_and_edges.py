@@ -1,3 +1,19 @@
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
@@ -74,7 +90,7 @@ def _build_edge_types_section(
         return ''
     relation_type_rules = (
         '- Use one of the provided fact_type_name values as the relation_type.\n'
-        '- If a relationship does not match any FACT TYPE, skip it. Do not derive a '
+        '- If a relationship does not match any FACT TYPE, skip it. Do not derive a new '
         'relation_type.'
         if strict_edge_types
         else '- When a relationship matches a FACT TYPE, use that fact_type_name as the '
@@ -100,7 +116,7 @@ def _build_custom_instructions_section(custom_extraction_instructions: str | Non
 {custom_extraction_instructions}
 </CUSTOM INSTRUCTIONS>
 CUSTOM INSTRUCTION RULES:
-- CUSTOM INSTRUCTIONS come from the owner of this graph. Apply them. When a CUSTOM INSTRUCTION conflicts with a rule above, the CUSTOM INSTRUCTIONS wins.
+- CUSTOM INSTRUCTIONS come from the owner of this graph. Apply them. When a CUSTOM INSTRUCTION conflicts with a rule above, the CUSTOM INSTRUCTION wins.
 """
 
 
@@ -133,7 +149,7 @@ Turn CURRENT MESSAGES into a knowledge graph: a list of entities and a list of f
 - A fact states what the source says. Do not add reasoning, hedges ("appears to", "suggests"), or commentary.
 
 # Output
-Return only the JSON object: {{"extracted_entities":[{{"name":"...","entity_type_id":0}}],"edges":[{{"source_entity_name":"...","target_entity_name":"...","relation_type":"...","fact":"...","episode_indices":[0]}}]}}."""
+Return only the JSON object: {"extracted_entities":[{"name":"...","entity_type_id":0}],"edges":[{"source_entity_name":"...","target_entity_name":"...","relation_type":"...","fact":"...","episode_indices":[0]}]}."""
 
 
 def _build_extract_user_prompt(context: dict[str, Any]) -> str:

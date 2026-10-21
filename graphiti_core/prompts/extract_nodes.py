@@ -1,3 +1,19 @@
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
@@ -251,7 +267,7 @@ Guidelines:
 <EXAMPLE>
 JSON: {{"user": "Jordan Lee", "company": "Acme Corp", "role": "engineer", "start_date": "2024-01-15", "location": "Denver", "active": true}}
 Good extractions: "Jordan Lee" (Person), "Acme Corp" (Organization), "Denver" (Location)
-Do NOT extract: "engineer" (role, not an entity), "start_date" (date), "active": true (field value)
+Do NOT extract: "engineer" (role, not an entity), "2024-01-15" (date), "true" (field value)
 </EXAMPLE>
 
 <EXAMPLE>
@@ -306,7 +322,7 @@ Only extract entities specific enough to be uniquely identifiable — ask: "Coul
 Guidelines:
 1. Extract named entities and specific, concrete things.
 2. Do not create nodes for relationships or actions.
-3. Do NOT extract dates, times or other temporal information.
+3. Do not create nodes for temporal information like dates, times or years.
 4. Be explicit in node names, using full names and avoiding abbreviations.
 5. Always use the most specific form from the text (e.g., "road cycling" not "cycling",
    "wool coat" not "coat"). Include qualifying context when it's clear from the text.
@@ -396,7 +412,7 @@ HARD RULES — violating any of these is a failure:
 
 2. NEVER write reasoning, justification, or commentary into any field. Specifically:
    - NEVER include parenthetical explanations like "(implied by ...)", "(Context: ...)",
-     "(not explicitly stated ...)".
+     "(not explicitly stated ...)", "(based on ...)".
    - NEVER include first-person or deliberative phrases like "I should...", "However...",
      "Sticking to...", "Since no...", "the instruction is to...", "must be kept...",
      "if no value is present...".
@@ -410,7 +426,7 @@ HARD RULES — violating any of these is a failure:
 
 4. The literal strings "null", "N/A", "Not specified", "unknown", "none", "not provided",
    or any sentence describing absence are NOT valid values. If no value is supported by
-   MESSAGES, set the field to null (or omit it) — do NOT write a sentence.
+   MESSAGES, set the field to null (or omit it) — do not write a sentence.
 
 5. Each attribute value must be a short, well-formed instance of the type the field
    describes (a phone number, an industry name, a URL, a postal address). If you cannot
@@ -494,7 +510,9 @@ def _entity_type_descriptions_section(context: dict[str, Any]) -> str:
 <ENTITY_TYPE_DESCRIPTIONS>
 {to_prompt_json(descriptions)}
 </ENTITY_TYPE_DESCRIPTIONS>
-When an entity's type appears in ENTITY_TYPE_DESCRIPTIONS, use the description to decide which facts are \nmost relevant to that entity type. NEVER mention the entity type, type description, or classification \nitself.
+When an entity's type appears in ENTITY_TYPE_DESCRIPTIONS, use the description to decide which facts are \
+most relevant to that entity type. NEVER mention the entity type, type description, or classification \
+in the summary text itself.
 """
 
 
@@ -564,8 +582,8 @@ over meta phrasing.
 describing that it was said.
 - Use communication verbs only when the act of speaking, asking, sharing, presenting, \
 announcing, or telling is itself the important fact.
-- NEVER manufacture pattern language from a single occurrence. A single mention can support a \
-fact, but not a trend, habit, or preference unless the text states that directly.
+- NEVER manufacture pattern language from a single occurrence. A single mention can support a fact, \
+but not a trend, habit, or preference unless the text states that directly.
 - If the evidence is insufficient or ambiguous, omit the claim.
 - NEVER mention the source material or summarization process.
 - NEVER mention episodes, messages, prompts, summaries, memory, graphs, nodes, labels, node types, \
@@ -578,7 +596,7 @@ ontology, schema, or categorization.
 "referenced", "indicated", or "reported". State the fact directly instead of describing how it \
 was communicated.
 - NEVER begin the summary with "A ", "An ", or "This is". If the entity's name starts with \
-"The "(e.g. "The Washington Post"), that is acceptable; otherwise NEVER lead with "The ". \
+"The" (e.g. "The Washington Post"), that is acceptable; otherwise NEVER lead with "The ". \
 Lead with the entity's name or a concrete fact.
 - When newer episode text conflicts with older summary content, prefer the newer explicit fact.
 - If the new episodes add no durable fact, return the existing summary unchanged.
@@ -587,11 +605,14 @@ Lead with the entity's name or a concrete fact.
 - Return only the summary text.
 
 <EXAMPLES>
-Input: {{"name": "Jordan Lee", "existing_summary": "Jordan Lee works at Belmont Arts Center.", \
-"episodes": [{{"content": "Mina: Jordan Lee presented a ceramics workshop at Belmont Arts Center on \
-March 3, 2026. The workshop had 24 attendees focused on wheel-thrown bowls.\nOwen: After that I\n    session, Jordan announced a second April workshop for returning students."}}, {{"content": "Mina: Jordan\n    shared that the new kiln room opened last month and that Jordan now supervises two studio assistants."}}, {{"content": "Owen: Jordan still teaches beginner ceramics on Wednesday evenings."}}]}}
+Input: {"name": "Jordan Lee", "existing_summary": "Jordan Lee works at Belmont Arts Center.", \
+"episodes": [{"content": "Mina: Jordan Lee presented a ceramics workshop at Belmont Arts Center on \
+March 3, 2025. The workshop had 24 attendees and focused on wheel-thrown bowls.\\nOwen: After the \
+session, Jordan announced a second April workshop for returning students."}, {"content": "Mina: Jordan \
+shared that the new kiln room opened last month and that Jordan now supervises two studio assistants.\\n\
+Owen: Jordan still teaches beginner ceramics on Wednesday evenings."}]}
 GOOD: "Jordan Lee works at Belmont Arts Center. Jordan presented a ceramics workshop there on March 3, \
-2026 for 24 attendees focused on wheel-thrown bowls, and later announced a second April workshop for \
+2025 for 24 attendees focused on wheel-thrown bowls, and later announced a second April workshop for \
 returning students. Jordan supervises two studio assistants, teaches beginner ceramics on Wednesday \
 evenings, and works out of the new kiln room that opened the previous month."
 BAD: "Jordan Lee seems interested in ceramics. Jordan mentioned teaching and was described as busy at \

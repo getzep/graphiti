@@ -102,3 +102,38 @@ async def test_non_falkor_single_group_id_is_passthrough():
     assert driver.clone_calls == []
     assert host.seen_drivers == [None]
     assert result == ["q:None:['tenant']"]
+
+
+@pytest.mark.asyncio
+async def test_falkor_multi_group_ids_with_positional_driver():
+    """A positional `driver` must not collide with the injected keyword (#1758).
+
+    The multi-group branch pops `group_ids` from its original positional slot
+    and re-invokes `func` with the shifted positional args plus `driver` as a
+    keyword — which raised `TypeError: got multiple values for argument
+    'driver'` whenever the caller also passed `driver` positionally."""
+    driver = _FakeDriver('reggraph')
+    host = _Host(driver)
+
+    result = await host.search('q', ['a', 'b'], driver)
+
+    assert driver.clone_calls == ['a', 'b']
+    assert host.clients.driver is driver
+    assert set(host.seen_drivers) == {'a', 'b'}
+    assert sorted(result) == ["q:a:['a']", "q:b:['b']"]
+
+
+@pytest.mark.asyncio
+async def test_falkor_multi_group_ids_with_positional_group_ids_and_kwarg_driver():
+    """`group_ids` positional with `driver` as a keyword: the wrapper must keep
+    serving positional `group_ids` after the positional-slot pop is replaced by
+    name-based binding."""
+    driver = _FakeDriver('reggraph')
+    host = _Host(driver)
+
+    result = await host.search('q', ['a', 'b'], driver=driver)
+
+    assert driver.clone_calls == ['a', 'b']
+    assert host.clients.driver is driver
+    assert set(host.seen_drivers) == {'a', 'b'}
+    assert sorted(result) == ["q:a:['a']", "q:b:['b']"]
