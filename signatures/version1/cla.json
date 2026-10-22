@@ -1725,6 +1725,146 @@
       "created_at": "2026-10-05T19:14:33Z",
       "repoId": 840056306,
       "pullRequestNo": 1960
+    },
+    {
+      "name": "DevChiniwala",
+      "email": "dev.chiniwala@gmail.com",
+      "accountType": "personal",
+      "id": 147787840,
+      "comment_id": 6043703095,
+      "created_at": "2026-10-07T17:56:33Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1973
+    },
+    {
+      "name": "ktz03",
+      "email": "2484593937@qq.com",
+      "accountType": "personal",
+      "id": 241894163,
+      "comment_id": 6073472268,
+      "created_at": "2026-10-09T03:11:20Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1983
+    },
+    {
+      "name": "akushonkamen",
+      "email": "akushonkamen@163.com",
+      "accountType": "personal",
+      "id": 74654766,
+      "comment_id": 6098965226,
+      "created_at": "2026-10-10T15:14:05Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1987
+    },
+    {
+      "name": "davenicoll",
+      "email": "vqozib0d4@relay.firefox.com",
+      "accountType": "personal",
+      "id": 690117,
+      "comment_id": 6113612713,
+      "created_at": "2026-10-11T20:50:48Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1992
+    },
+    {
+      "name": "IlyaKhalafi",
+      "email": "ilyakhalafi@yahoo.com",
+      "accountType": "personal",
+      "id": 80855937,
+      "comment_id": 6137511905,
+      "created_at": "2026-10-13T03:25:40Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1994
+    },
+    {
+      "name": "ajinb",
+      "email": "ajinbaby007@gmail.com",
+      "accountType": "personal",
+      "id": 23273987,
+      "comment_id": 6162486062,
+      "created_at": "2026-10-14T06:38:13Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2005
+    },
+    {
+      "name": "tonydzi",
+      "email": "dzyatkovskiy.a2@gmail.com",
+      "accountType": "personal",
+      "id": 194927794,
+      "comment_id": 6181413086,
+      "created_at": "2026-10-15T00:19:06Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1810
+    },
+    {
+      "name": "meet987654",
+      "email": "meetprajapatid0207@gmail.com",
+      "accountType": "personal",
+      "id": 160616727,
+      "comment_id": 6196310018,
+      "created_at": "2026-10-15T15:53:43Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2015
+    },
+    {
+      "name": "CahreeMyrick",
+      "email": "cmyrick1@umbc.edu",
+      "accountType": "personal",
+      "id": 175462742,
+      "comment_id": 6199978827,
+      "created_at": "2026-10-15T18:59:52Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2017
+    },
+    {
+      "name": "basnijholt",
+      "email": "bas@nijho.lt",
+      "accountType": "personal",
+      "id": 6897215,
+      "comment_id": 6236940603,
+      "created_at": "2026-10-17T16:46:16Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2022
+    },
+    {
+      "name": "CRYPTONIKAV",
+      "email": "cryptonikav@users.noreply.github.com",
+      "accountType": "personal",
+      "id": 29835619,
+      "comment_id": 6256896338,
+      "created_at": "2026-10-19T00:11:08Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2018
+    },
+    {
+      "name": "SiyuanChenToDo",
+      "email": "2637427015@qq.com",
+      "accountType": "personal",
+      "id": 162816969,
+      "comment_id": 6284428774,
+      "created_at": "2026-10-20T05:54:48Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2040
+    },
+    {
+      "name": "Hakeem-Hannoon",
+      "email": "hakeemhannoon@gmail.com",
+      "accountType": "personal",
+      "id": 196990761,
+      "comment_id": 6298019219,
+      "created_at": "2026-10-20T18:21:19Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2048
+    },
+    {
+      "name": "pcbeingused333",
+      "email": "alex.castillog33@gmail.com",
+      "accountType": "personal",
+      "id": 82875882,
+      "comment_id": 6306747622,
+      "created_at": "2026-10-21T02:47:09Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2050
     }
   ]
 }

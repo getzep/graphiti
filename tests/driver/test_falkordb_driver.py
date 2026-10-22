@@ -17,11 +17,13 @@ limitations under the License.
 import os
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.falkordb.operations.graph_ops import FalkorGraphMaintenanceOperations
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
@@ -125,6 +127,58 @@ class TestFalkorDriver:
 
             mock_logger.info.assert_called_once()
             assert result is None
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_execute_query_handles_stopwords_already_set_error(self):
+        mock_graph = MagicMock()
+        mock_graph.query = AsyncMock(
+            side_effect=Exception(
+                "Can not override index configuration: Stopwords are already set for label 'Entity'"
+            )
+        )
+        self.mock_client.select_graph.return_value = mock_graph
+
+        with patch('graphiti_core.driver.falkordb_driver.logger') as mock_logger:
+            result = await self.driver.execute_query('CREATE FULLTEXT INDEX ...')
+
+            mock_logger.info.assert_called_once()
+            assert result is None
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_falkordb_fulltext_indices_use_ddl_form(self):
+        queries = get_fulltext_indices(GraphProvider.FALKORDB)
+
+        assert all('db.idx.fulltext.createNodeIndex' not in query for query in queries)
+        assert all(query.strip().startswith('CREATE FULLTEXT INDEX') for query in queries)
+        assert all('OPTIONS {stopwords:' in query for query in queries[:3])
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_build_indices_creates_range_before_fulltext(self):
+        with patch.object(self.driver, 'execute_query', new_callable=AsyncMock) as mock_execute:
+            await self.driver.build_indices_and_constraints()
+
+        assert mock_execute.await_args_list == [
+            call(query)
+            for query in get_range_indices(GraphProvider.FALKORDB)
+            + get_fulltext_indices(GraphProvider.FALKORDB)
+        ]
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_graph_maintenance_builds_range_before_fulltext(self):
+        executor = MagicMock()
+        executor.execute_query = AsyncMock()
+        operations = FalkorGraphMaintenanceOperations()
+
+        await operations.build_indices_and_constraints(executor)
+
+        assert executor.execute_query.await_args_list == [
+            call(query)
+            for query in get_range_indices(GraphProvider.FALKORDB)
+            + get_fulltext_indices(GraphProvider.FALKORDB)
+        ]
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')

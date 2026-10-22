@@ -114,7 +114,7 @@ async def retrieve_episodes(
                 else EPISODIC_NODE_RETURN
             )
             + """
-            ORDER BY e.valid_at DESC
+            ORDER BY e.valid_at DESC, e.created_at DESC
             LIMIT $num_episodes
             """,
             saga_name=saga,
@@ -152,7 +152,7 @@ async def retrieve_episodes(
             else EPISODIC_NODE_RETURN
         )
         + """
-        ORDER BY e.valid_at DESC
+        ORDER BY e.valid_at DESC, e.created_at DESC
         LIMIT $num_episodes
         """
     )

@@ -245,7 +245,7 @@ class FalkorDriver(GraphDriver):
         try:
             result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
         except Exception as e:
-            if 'already indexed' in str(e):
+            if 'already indexed' in str(e) or 'Stopwords are already set' in str(e):
                 # check if index already exists
                 logger.info(f'Index already exists: {e}')
                 return None
@@ -324,7 +324,10 @@ class FalkorDriver(GraphDriver):
     async def build_indices_and_constraints(self, delete_existing=False):
         if delete_existing:
             await self.delete_all_indexes()
-        index_queries = get_range_indices(self.provider) + get_fulltext_indices(self.provider)
+        range_indices = get_range_indices(self.provider)
+        fulltext_indices = get_fulltext_indices(self.provider)
+        # Keep range indexes first; FalkorDB 6.x range lookups fail if fulltext indexes cover a property first.
+        index_queries = range_indices + fulltext_indices
         for query in index_queries:
             await self.execute_query(query)
 

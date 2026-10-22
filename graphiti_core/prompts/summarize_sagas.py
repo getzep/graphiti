@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 
 
 class SagaSummary(BaseModel):
@@ -137,3 +138,13 @@ mentioned switching from Jira to Linear."
 versions: Versions = {
     'summarize_saga': summarize_saga,
 }
+
+
+class SummarizeSagasPrompts(ABC):
+    @abstractmethod
+    def summarize_saga(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultSummarizeSagasPrompts(SummarizeSagasPrompts):
+    def summarize_saga(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(summarize_saga(context))
