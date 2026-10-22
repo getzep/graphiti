@@ -1,0 +1,84 @@
+name: Feature
+description: Propose new functionality or an improvement to existing behavior
+title: "[Feature] "
+labels:
+  - feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the user problem. Please read
+        [Proposing a feature](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#proposing-a-feature)
+        before you file.
+
+        **Do not open an implementation pull request yet.** Feature work needs a discussion with
+        the Graphiti team on this issue and explicit approval (`rfc-approved`) first. A feature
+        PR opened without that approval is flagged, not reviewed, and is closed after 14 days
+        if the gap is still there. A correctly approved, linked PR is not auto-closed.
+
+        Use this issue as the design discussion. Fill in proposal, alternatives, and impact,
+        especially for a new driver, model provider, public API, major architecture change, or
+        a change likely over 500 lines.
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and did not find an existing proposal.
+          required: true
+        - label: I read the [contributing guide](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md#proposing-a-feature) and will not open a feature pull request until the Graphiti team has discussed this issue and added `rfc-approved`.
+          required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - graphiti-core
+        - MCP server
+        - REST server
+        - Documentation or examples
+        - CI, Docker, or release
+        - Multiple components
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Select large if this adds a driver, provider, API, architecture change, or likely exceeds 500 lines.
+      options:
+        - Small improvement to existing behavior
+        - Large feature requiring design approval
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What are you trying to accomplish, and what is blocking you today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the behavior or capability that would solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed design
+      description: Required for large features. Describe the public API, data flow, and important implementation choices.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Required for large features. Include existing workarounds and why they are insufficient.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Compatibility and operational impact
+      description: Required for large features. Cover breaking changes, migrations, dependencies, performance, and deployment impact.

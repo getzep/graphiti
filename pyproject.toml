@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.30.2"
+version = "0.31.2"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -17,7 +17,8 @@ dependencies = [
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
-    "posthog>=3.0.0"
+    "posthog>=3.0.0",
+    "certifi>=2026.10.19",
 ]
 
 [project.urls]
@@ -55,8 +56,6 @@ dev = [
     "langchain-anthropic>=0.2.4",
     "langsmith>=0.1.108",
     "langchain-openai>=0.2.6",
-    "sentence-transformers>=3.2.1",
-    "transformers>=4.45.2",
     "voyageai>=0.2.3",
     "pytest>=8.3.3",
     "pytest-asyncio>=0.24.0",
@@ -102,6 +101,6 @@ indent-style = "space"
 docstring-code-format = true
 
 [tool.pyright]
-include = ["graphiti_core"]
+include = ["graphiti_core", ".github/intake"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
