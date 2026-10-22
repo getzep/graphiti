@@ -1946,3 +1946,54 @@ async def test_extract_edge_timestamps_prefers_edge_reference_time(monkeypatch):
         None,
         edge_reference_time,
     )
+
+
+def test_future_invalid_at_does_not_expire_edge_at_ingestion():
+    """A future invalid_at means the fact ends later — do not set expired_at=now."""
+    from graphiti_core.utils.maintenance.edge_operations import _apply_temporal_invalidation
+
+    future_end = datetime.now(timezone.utc) + timedelta(days=365)
+    edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='works_for',
+        group_id='group_1',
+        fact='Alice works for Acme until a future date',
+        episodes=['episode_1'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=datetime.now(timezone.utc) - timedelta(days=30),
+        invalid_at=future_end,
+        expired_at=None,
+    )
+
+    _apply_temporal_invalidation(edge, [])
+
+    assert edge.invalid_at == future_end
+    assert edge.expired_at is None
+
+
+def test_past_invalid_at_expires_edge_at_ingestion():
+    """A past invalid_at means the fact is already historical — set expired_at."""
+    from graphiti_core.utils.maintenance.edge_operations import _apply_temporal_invalidation
+
+    past_end = datetime.now(timezone.utc) - timedelta(days=7)
+    edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='worked_for',
+        group_id='group_1',
+        fact='Alice worked for Acme until last week',
+        episodes=['episode_1'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=datetime.now(timezone.utc) - timedelta(days=365),
+        invalid_at=past_end,
+        expired_at=None,
+    )
+
+    before = datetime.now(timezone.utc)
+    _apply_temporal_invalidation(edge, [])
+    after = datetime.now(timezone.utc)
+
+    assert edge.invalid_at == past_end
+    assert edge.expired_at is not None
+    assert before <= edge.expired_at <= after

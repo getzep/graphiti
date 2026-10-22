@@ -723,9 +723,12 @@ def _apply_temporal_invalidation(
     """
     now = utc_now()
 
-    # The edge arrived with an end date, so it is already historical.
+    # An end date in the past (or now) means the fact is already historical.
+    # A future invalid_at is a scheduled end — keep the edge active until then.
     if resolved_edge.invalid_at and not resolved_edge.expired_at:
-        resolved_edge.expired_at = now
+        invalid_at_utc = ensure_utc(resolved_edge.invalid_at)
+        if invalid_at_utc is not None and invalid_at_utc <= now:
+            resolved_edge.expired_at = now
 
     # A candidate that starts later supersedes this edge, so expire this one instead.
     if resolved_edge.expired_at is None:
