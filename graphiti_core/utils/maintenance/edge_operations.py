@@ -730,7 +730,9 @@ def _apply_temporal_invalidation(
         if invalid_at_utc is not None and invalid_at_utc <= now:
             resolved_edge.expired_at = now
 
-    # A candidate that starts later supersedes this edge, so expire this one instead.
+    # A candidate that starts later supersedes this edge. Only shorten an existing
+    # finite end (never extend it). Mark expired_at only when the resulting end is
+    # already past/now — a still-future invalid_at stays active until then.
     if resolved_edge.expired_at is None:
         invalidation_candidates.sort(key=lambda c: (c.valid_at is None, ensure_utc(c.valid_at)))
         for candidate in invalidation_candidates:
@@ -741,8 +743,17 @@ def _apply_temporal_invalidation(
                 and resolved_edge_valid_at_utc is not None
                 and candidate_valid_at_utc > resolved_edge_valid_at_utc
             ):
+                existing_invalid_at_utc = ensure_utc(resolved_edge.invalid_at)
+                if (
+                    existing_invalid_at_utc is not None
+                    and candidate_valid_at_utc >= existing_invalid_at_utc
+                ):
+                    # Candidate starts at/after our known end — would only extend; skip.
+                    continue
                 resolved_edge.invalid_at = candidate.valid_at
-                resolved_edge.expired_at = now
+                new_invalid_at_utc = ensure_utc(resolved_edge.invalid_at)
+                if new_invalid_at_utc is not None and new_invalid_at_utc <= now:
+                    resolved_edge.expired_at = now
                 break
 
     return resolve_edge_contradictions(resolved_edge, invalidation_candidates)
