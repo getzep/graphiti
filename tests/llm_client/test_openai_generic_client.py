@@ -5,9 +5,9 @@ import openai
 import pytest
 from pydantic import BaseModel
 
-from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.config import LLMConfig, ModelSize
 from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
-from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+from graphiti_core.llm_client.openai_generic_client import DEFAULT_MODEL, OpenAIGenericClient
 from graphiti_core.prompts.models import Message
 
 
@@ -55,6 +55,41 @@ def _make_client(content: str = '{"foo": "bar"}', error: Exception | None = None
         **kwargs,
     )
     return client, completions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('structured_output_mode', ['json_schema', 'json_object'])
+@pytest.mark.parametrize(
+    'main_model,small_model,model_size,override,expected_model',
+    [
+        ('main-model', 'small-model', ModelSize.small, None, 'small-model'),
+        ('main-model', 'small-model', ModelSize.medium, None, 'main-model'),
+        ('main-model', None, ModelSize.small, None, 'main-model'),
+        (None, 'small-model', ModelSize.small, None, 'small-model'),
+        (None, None, ModelSize.small, None, DEFAULT_MODEL),
+        (None, 'small-model', ModelSize.medium, None, DEFAULT_MODEL),
+        ('main-model', 'small-model', ModelSize.small, 'routed-model', 'routed-model'),
+        ('main-model', 'small-model', ModelSize.medium, 'routed-model', 'routed-model'),
+    ],
+)
+async def test_model_selection_honors_size_and_explicit_override(
+    main_model, small_model, model_size, override, expected_model, structured_output_mode
+):
+    completions = DummyChatCompletions(content='{"foo": "bar"}')
+    client = OpenAIGenericClient(
+        config=LLMConfig(api_key='test', model=main_model, small_model=small_model),
+        client=DummyClient(completions),
+        structured_output_mode=structured_output_mode,
+    )
+
+    result = await client.generate_response(
+        _messages(), response_model=ResponseModel, model_size=model_size, model=override
+    )
+
+    assert result == {'foo': 'bar'}
+    assert len(completions.create_calls) == 1
+    assert completions.create_calls[0]['model'] == expected_model
+
 
 
 @pytest.mark.asyncio

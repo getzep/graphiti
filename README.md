@@ -576,6 +576,10 @@ for any other provider, point `base_url` at its endpoint and set the appropriate
 **Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for these endpoints. It is optimized for local models with a
 higher default max token limit (16K vs 8K) and handles structured outputs across compatible providers.
 
+For simpler prompts marked `ModelSize.small`, the generic client uses `LLMConfig.small_model`
+when configured, otherwise it reuses `LLMConfig.model`. Explicit per-call model overrides,
+including `LLMRuntime` routes, take precedence over size-based selection.
+
 Install the models:
 
 ```bash
