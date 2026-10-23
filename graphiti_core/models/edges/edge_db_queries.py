@@ -64,8 +64,8 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
     match provider:
         case GraphProvider.FALKORDB:
             return """
-                MATCH (source:Entity {uuid: $edge_data.source_uuid})
-                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MATCH (source:Entity {uuid: $edge_data.source_node_uuid})
+                MATCH (target:Entity {uuid: $edge_data.target_node_uuid})
                 MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
                 SET e = $edge_data
                 SET e.fact_embedding = vecf32($edge_data.fact_embedding)
@@ -73,8 +73,8 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
             """
         case GraphProvider.NEPTUNE:
             return """
-                MATCH (source:Entity {uuid: $edge_data.source_uuid})
-                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MATCH (source:Entity {uuid: $edge_data.source_node_uuid})
+                MATCH (target:Entity {uuid: $edge_data.target_node_uuid})
                 MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
                 SET e = removeKeyFromMap(removeKeyFromMap($edge_data, "fact_embedding"), "episodes")
                 SET e.fact_embedding = join([x IN coalesce($edge_data.fact_embedding, []) | toString(x) ], ",")
@@ -83,8 +83,8 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
             """
         case GraphProvider.KUZU:
             return """
-                MATCH (source:Entity {uuid: $source_uuid})
-                MATCH (target:Entity {uuid: $target_uuid})
+                MATCH (source:Entity {uuid: $source_node_uuid})
+                MATCH (target:Entity {uuid: $target_node_uuid})
                 MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(target)
                 SET
                     e.group_id = $group_id,
@@ -109,8 +109,8 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
             return (
                 (
                     """
-                        MATCH (source:Entity {uuid: $edge_data.source_uuid})
-                        MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                        MATCH (source:Entity {uuid: $edge_data.source_node_uuid})
+                        MATCH (target:Entity {uuid: $edge_data.target_node_uuid})
                         MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
                         SET e = $edge_data
                         """
