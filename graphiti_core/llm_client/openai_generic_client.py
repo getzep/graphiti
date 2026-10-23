@@ -153,9 +153,10 @@ class OpenAIGenericClient(LLMClient):
                 openai_messages.append({'role': 'user', 'content': m.content})
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
+        default_model = self.small_model if model_size == ModelSize.small else self.model
         try:
             response = await self.client.chat.completions.create(
-                model=model or self.model or DEFAULT_MODEL,
+                model=model or default_model or self.model or DEFAULT_MODEL,
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=max_tokens,
