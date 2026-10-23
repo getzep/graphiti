@@ -395,17 +395,21 @@ class FalkorSearchOperations(SearchOperations):
         filter_params: dict[str, Any] = {}
         group_filter_query = ''
         if group_ids is not None:
-            group_filter_query += '\nAND e.group_id IN $group_ids'
+            group_filter_query += '\nWHERE e.group_id IN $group_ids'
             filter_params['group_ids'] = group_ids
 
+        # Use the node yielded by the fulltext procedure directly (as the node
+        # and community variants do). Re-matching it via
+        # `MATCH (e:Episodic) WHERE e.uuid = episode.uuid` cannot be answered
+        # from an index (the right-hand side is a per-row value), so every hit
+        # triggered a scan over all Episodic nodes — O(hits x episodes).
         cypher = (
             get_nodes_query(
                 'episode_content', '$query', limit=limit, provider=GraphProvider.FALKORDB
             )
             + """
-            YIELD node AS episode, score
-            MATCH (e:Episodic)
-            WHERE e.uuid = episode.uuid
+            YIELD node AS e, score
+            WITH e, score
             """
             + group_filter_query
             + """
