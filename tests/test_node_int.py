@@ -19,6 +19,8 @@ from uuid import uuid4
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.models.nodes.node_db_queries import get_entity_node_return_query
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -130,6 +132,26 @@ async def test_entity_node(sample_entity_node, graph_driver):
     node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
+    await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_entity_node_read_leaves_out_name_embedding(sample_entity_node, graph_driver):
+    if graph_driver.provider != GraphProvider.FALKORDB:
+        pytest.skip('Only the FalkorDB return query leaves the embedding out')
+    await sample_entity_node.save(graph_driver)
+
+    records, _, _ = await graph_driver.execute_query(
+        'MATCH (n:Entity {uuid: $uuid}) RETURN '
+        + get_entity_node_return_query(graph_driver.provider),
+        uuid=sample_entity_node.uuid,
+    )
+
+    assert records[0]['attributes']['name_embedding'] is None
+    assert records[0]['attributes']['age'] == 30
+    assert records[0]['attributes']['location'] == 'New York'
+    retrieved = await EntityNode.get_by_uuid(graph_driver, sample_entity_node.uuid)
+    await assert_entity_node_equals(graph_driver, retrieved, sample_entity_node)
     await graph_driver.close()
 
 
