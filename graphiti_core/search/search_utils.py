@@ -101,7 +101,11 @@ def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver)
     for f in group_ids_filter_list:
         group_ids_filter += f if not group_ids_filter else f' OR {f}'
 
-    group_ids_filter += ' AND ' if group_ids_filter else ''
+    # Wrap the OR-chain in parens before AND-ing the query terms. Without parens, Lucene's
+    # AND > OR precedence binds the terms to only the LAST group_id clause, so a multi-group
+    # full-text search collapses to that group alone (zeroing bm25-only episode search when the
+    # last group is empty/non-matching). Parenthesizing applies the terms across all groups.
+    group_ids_filter = f'({group_ids_filter}) AND ' if group_ids_filter else ''
 
     lucene_query = lucene_sanitize(query)
     # If the lucene query is too long return no query
