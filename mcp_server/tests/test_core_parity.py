@@ -176,7 +176,7 @@ class TestQueueServiceThreading:
             reference_time=ref_time,
             edge_types=edge_types,
             edge_type_map=edge_type_map,
-            excluded_entity_types=['Object'],
+            excluded_entity_types=['Preference'],
             previous_episode_uuids=['prev-uuid'],
             custom_extraction_instructions='extra',
             update_communities=True,
@@ -192,7 +192,7 @@ class TestQueueServiceThreading:
         assert kwargs['reference_time'] == ref_time
         assert kwargs['edge_types'] == edge_types
         assert kwargs['edge_type_map'] == edge_type_map
-        assert kwargs['excluded_entity_types'] == ['Object']
+        assert kwargs['excluded_entity_types'] == ['Preference']
         assert kwargs['previous_episode_uuids'] == ['prev-uuid']
         assert kwargs['custom_extraction_instructions'] == 'extra'
         assert kwargs['update_communities'] is True
