@@ -90,6 +90,8 @@ async def test_create_calls_api_correctly(
     _, kwargs = mock_openai_client.embeddings.create.call_args
     assert kwargs['model'] == DEFAULT_EMBEDDING_MODEL
     assert kwargs['input'] == 'Test input'
+    # dimensions is not forwarded unless explicitly configured
+    assert 'dimensions' not in kwargs
 
     # Verify result is processed correctly
     assert result == mock_openai_response.data[0].embedding[: openai_embedder.config.embedding_dim]
@@ -120,6 +122,49 @@ async def test_create_batch_processes_multiple_inputs(
         mock_openai_batch_response.data[1].embedding[: openai_embedder.config.embedding_dim],
         mock_openai_batch_response.data[2].embedding[: openai_embedder.config.embedding_dim],
     ]
+
+
+@pytest.mark.asyncio
+async def test_create_forwards_dimensions_and_skips_truncation(
+    mock_openai_client: Any, mock_openai_response: MagicMock
+) -> None:
+    """When ``dimensions`` is configured it is forwarded to the API and the natively
+    sized vector is returned without the lossy truncation step."""
+    # Setup: request a native dimensionality larger than the default embedding_dim
+    native_vector = mock_openai_response.data[0].embedding
+    config = OpenAIEmbedderConfig(api_key='test_api_key', dimensions=len(native_vector))
+    embedder = OpenAIEmbedder(config=config)
+    embedder.client = mock_openai_client
+    mock_openai_client.embeddings.create.return_value = mock_openai_response
+
+    # Call method
+    result = await embedder.create('Test input')
+
+    # Verify dimensions is forwarded to the API
+    _, kwargs = mock_openai_client.embeddings.create.call_args
+    assert kwargs['dimensions'] == len(native_vector)
+
+    # Verify the full native vector is returned, not truncated to embedding_dim
+    assert result == native_vector
+    assert len(result) > embedder.config.embedding_dim
+
+
+@pytest.mark.asyncio
+async def test_create_batch_forwards_dimensions(
+    mock_openai_client: Any, mock_openai_batch_response: MagicMock
+) -> None:
+    """create_batch forwards ``dimensions`` and returns untruncated native vectors."""
+    native_len = len(mock_openai_batch_response.data[0].embedding)
+    config = OpenAIEmbedderConfig(api_key='test_api_key', dimensions=native_len)
+    embedder = OpenAIEmbedder(config=config)
+    embedder.client = mock_openai_client
+    mock_openai_client.embeddings.create.return_value = mock_openai_batch_response
+
+    result = await embedder.create_batch(['Input 1', 'Input 2', 'Input 3'])
+
+    _, kwargs = mock_openai_client.embeddings.create.call_args
+    assert kwargs['dimensions'] == native_len
+    assert result == [data.embedding for data in mock_openai_batch_response.data]
 
 
 if __name__ == '__main__':
