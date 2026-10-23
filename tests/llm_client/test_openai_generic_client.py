@@ -91,7 +91,6 @@ async def test_model_selection_honors_size_and_explicit_override(
     assert completions.create_calls[0]['model'] == expected_model
 
 
-
 @pytest.mark.asyncio
 async def test_defaults_to_json_schema_response_format():
     client, completions = _make_client()
