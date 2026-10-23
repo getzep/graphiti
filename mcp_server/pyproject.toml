@@ -61,7 +61,7 @@ docstring-code-format = true
 
 [dependency-groups]
 dev = [
-    "faker>=40.21.0",
+    "faker>=40.23.0",
     "httpx>=0.28.1",
     "psutil>=7.1.2",
     "pyright>=1.1.408",
