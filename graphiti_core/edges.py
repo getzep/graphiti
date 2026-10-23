@@ -132,7 +132,7 @@ class Edge(BaseModel, ABC):
         return hash(self.uuid)
 
     def __eq__(self, other):
-        if isinstance(other, Node):
+        if isinstance(other, Edge):
             return self.uuid == other.uuid
         return False
 
