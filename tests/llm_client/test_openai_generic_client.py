@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import openai
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
@@ -38,6 +38,19 @@ class DummyClient:
 
 class ResponseModel(BaseModel):
     foo: str
+
+
+class NestedModel(BaseModel):
+    name: str
+    note: str | None = None
+
+
+class OptionalFieldsModel(BaseModel):
+    title: str
+    valid_at: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    nested: NestedModel | None = None
+    children: list[NestedModel] = Field(default_factory=list)
 
 
 def _messages() -> list[Message]:
@@ -168,3 +181,56 @@ async def test_non_retryable_error_is_not_retried():
         await client.generate_response(_messages(), response_model=ResponseModel)
 
     assert len(completions.create_calls) == 1
+
+
+def test_require_all_properties_lists_every_field_and_keeps_types():
+    # pydantic leaves fields with defaults out of `required`; grammar-backed servers
+    # (llama.cpp, Ollama) then let the model skip those keys. The sent schema lists every
+    # property as required, at every level, without touching the types.
+    schema = OptionalFieldsModel.model_json_schema()
+
+    sent = OpenAIGenericClient._require_all_properties(schema)
+
+    assert sent['required'] == ['title', 'valid_at', 'tags', 'nested', 'children']
+    assert sent['$defs']['NestedModel']['required'] == ['name', 'note']
+    assert sent['properties']['valid_at'] == schema['properties']['valid_at']
+    assert sent['properties']['tags'] == schema['properties']['tags']
+    assert (
+        sent['$defs']['NestedModel']['properties'] == schema['$defs']['NestedModel']['properties']
+    )
+    # the input schema is not mutated
+    assert schema['required'] == ['title']
+    assert schema['$defs']['NestedModel']['required'] == ['name']
+
+
+def test_require_all_properties_only_touches_object_schemas():
+    # A dict-valued object with no `properties` (additionalProperties) is left alone, and a
+    # property that happens to be named "properties" is handled as a field, not as a schema.
+    open_object = {'type': 'object', 'additionalProperties': {'type': 'string'}}
+    assert OpenAIGenericClient._require_all_properties(open_object) == open_object
+    awkward = {
+        'type': 'object',
+        'properties': {'properties': {'type': 'object', 'properties': {'x': {'type': 'string'}}}},
+    }
+    sent = OpenAIGenericClient._require_all_properties(awkward)
+    assert sent['required'] == ['properties']
+    assert sent['properties']['properties']['required'] == ['x']
+
+
+def test_response_still_validates_after_requiring_every_property():
+    # Requiring a key in the schema changes what the model emits, not what pydantic accepts:
+    # a reply with every key present validates, and so does one with the optional keys missing.
+    with_every_key = {'title': 't', 'valid_at': None, 'tags': [], 'nested': None, 'children': []}
+    assert OptionalFieldsModel(**with_every_key).valid_at is None
+    assert OptionalFieldsModel(title='t').tags == []
+
+
+@pytest.mark.asyncio
+async def test_json_schema_mode_sends_every_property_as_required():
+    client, completions = _make_client(content='{"title": "t"}')
+
+    await client.generate_response(_messages(), response_model=OptionalFieldsModel)
+
+    sent = completions.create_calls[0]['response_format']['json_schema']['schema']
+    assert sent['required'] == ['title', 'valid_at', 'tags', 'nested', 'children']
+    assert sent['$defs']['NestedModel']['required'] == ['name', 'note']
