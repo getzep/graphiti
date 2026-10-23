@@ -6,6 +6,9 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
+from graphiti_core.helpers import validate_excluded_entity_types
+from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,6 +151,9 @@ class QueueService:
         """
         if self._graphiti_client is None:
             raise RuntimeError('Queue service not initialized. Call initialize() first.')
+
+        validate_entity_types(entity_types)
+        validate_excluded_entity_types(excluded_entity_types, entity_types)
 
         async def process_episode():
             """Process the episode using the graphiti client."""

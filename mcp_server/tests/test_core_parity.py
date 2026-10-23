@@ -15,8 +15,10 @@ from unittest.mock import AsyncMock
 import pytest
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
+from graphiti_core.errors import EntityTypeValidationError
 from graphiti_core.nodes import EntityNode
 from graphiti_core.search.search_filters import ComparisonOperator, SearchFilters
+from pydantic import BaseModel
 
 # Add the src directory to the path (mirrors the other unit tests)
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
@@ -156,6 +158,32 @@ class TestQueueServiceThreading:
     """The queue service must forward every parity param to Graphiti.add_episode."""
 
     @pytest.mark.asyncio
+    async def test_add_episode_rejects_invalid_entity_type_before_queueing(self):
+        class DataObject(BaseModel):
+            attributes: str | None = None
+
+        client = AsyncMock(spec=Graphiti)
+        service = QueueService()
+        await service.initialize(client)
+
+        with pytest.raises(
+            EntityTypeValidationError,
+            match='attributes cannot be used as an attribute for DataObject',
+        ):
+            await service.add_episode(
+                group_id='g1',
+                name='ep',
+                content='This system has several attributes including age, status, and priority.',
+                source_description='desc',
+                episode_type='text',
+                entity_types={'DataObject': DataObject},
+                uuid=None,
+            )
+
+        assert 'g1' not in service._episode_queues
+        client.add_episode.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_add_episode_forwards_all_params(self):
         client = AsyncMock(spec=Graphiti)
         service = QueueService()
@@ -171,7 +199,10 @@ class TestQueueServiceThreading:
             content='body',
             source_description='desc',
             episode_type='text',
-            entity_types={'Preference': ENTITY_TYPES['Preference']},
+            entity_types={
+                'Preference': ENTITY_TYPES['Preference'],
+                'Object': ENTITY_TYPES['Object'],
+            },
             uuid='ep-uuid',
             reference_time=ref_time,
             edge_types=edge_types,
