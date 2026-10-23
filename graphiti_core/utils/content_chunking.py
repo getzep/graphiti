@@ -525,10 +525,12 @@ def _chunk_by_size(
 
         chunks.append(text[start:end].strip())
 
-        # Move start forward, ensuring progress even if overlap >= chunk_size
-        # Always advance by at least (chunk_size - overlap) or 1 char minimum
-        min_progress = max(1, chunk_size_chars - overlap_chars)
-        start = max(start + min_progress, end - overlap_chars)
+        if end >= len(text):
+            break
+
+        # Base the next window on the actual end after word-boundary adjustment.
+        # A nominal stride can jump past that end and discard source characters.
+        start = max(start + 1, end - overlap_chars)
 
     return chunks
 
