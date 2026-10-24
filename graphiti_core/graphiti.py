@@ -18,6 +18,7 @@ import json
 import logging
 from datetime import datetime
 from time import time
+from typing import Any, cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -27,8 +28,8 @@ from typing_extensions import LiteralString
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.decorators import handle_multiple_group_ids
-from graphiti_core.driver.driver import GraphDriver
-from graphiti_core.driver.neo4j_driver import Neo4jDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.neo4j_driver import Neo4jDriver, _env_use_vector_index
 from graphiti_core.edges import (
     CommunityEdge,
     Edge,
@@ -39,6 +40,7 @@ from graphiti_core.edges import (
     create_entity_edge_embeddings,
 )
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
 from graphiti_core.graphiti_types import (
     GraphitiClients,
@@ -222,6 +224,7 @@ class Graphiti:
         trace_span_prefix: str = 'graphiti',
         prompt_library: ChatPromptLibrary | None = None,
         llm_runtime: LLMRuntime | None = None,
+        use_vector_index: bool | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -298,6 +301,14 @@ class Graphiti:
             on the runtime path. Route lightweight prompts to a smaller model.
             GLiNER2 does not support per-prompt routing. Cannot be combined
             with ``llm_client`` or ``prompt_library``.
+        use_vector_index : bool | None, optional
+            Enable Neo4j vector-index search when Graphiti constructs its default
+            Neo4j driver. If omitted, the Neo4j environment fallback is used.
+            Vector indexing requires a positive integer ``embedder.config.embedding_dim``;
+            Azure and custom embedders without it cannot opt in yet. Supplied Neo4j
+            drivers with vector indexing enabled must use the same dimension as the
+            embedder. Invalid opt-in configurations raise ``ValueError`` here;
+            opt-out behavior is unchanged.
 
         Returns
         -------
@@ -327,12 +338,61 @@ class Graphiti:
             if extras:
                 raise ValueError('llm_runtime cannot be combined with: ' + ', '.join(extras) + '.')
 
-        if graph_driver:
+        if graph_driver is None and uri is None:
+            raise ValueError('uri must be provided when graph_driver is None')
+
+        if embedder:
+            self.embedder = embedder
+        else:
+            self.embedder = OpenAIEmbedder()
+
+        # Validate opt-in configurations before constructing a driver, which can
+        # schedule index DDL immediately. Supplied drivers own their opt-in flag.
+        vector_index_enabled = (
+            (_env_use_vector_index() if use_vector_index is None else use_vector_index)
+            if graph_driver is None
+            else getattr(graph_driver, 'provider', None) == GraphProvider.NEO4J
+            and getattr(graph_driver, 'use_vector_index', False)
+        )
+        embedding_dim = EMBEDDING_DIM
+        if vector_index_enabled:
+            embedder_name = type(self.embedder).__name__
+            declaration_error = (
+                f'{embedder_name} must declare a positive integer config.embedding_dim '
+                'to use Neo4j vector indexing; disable the vector-index opt-in or use '
+                'an embedder that declares embedding_dim.'
+            )
+            try:
+                # Read directly so even AttributeError from a property is chained.
+                declared_dim = cast(Any, self.embedder).config.embedding_dim
+            except Exception as exc:
+                raise ValueError(declaration_error) from exc
+            if (
+                not isinstance(declared_dim, int)
+                or isinstance(declared_dim, bool)
+                or declared_dim <= 0
+            ):
+                raise ValueError(declaration_error)
+            driver_dim = getattr(graph_driver, 'embedding_dim', None)
+            if graph_driver is not None and declared_dim != driver_dim:
+                raise ValueError(
+                    f'{embedder_name} config.embedding_dim ({declared_dim}) does not match '
+                    f'Neo4j driver.embedding_dim ({driver_dim}); configure '
+                    'matching dimensions or disable the vector-index opt-in.'
+                )
+            embedding_dim = declared_dim
+
+        if graph_driver is not None:
             self.driver = graph_driver
         else:
-            if uri is None:
-                raise ValueError('uri must be provided when graph_driver is None')
-            self.driver = Neo4jDriver(uri, user, password)
+            assert uri is not None  # Narrowed by the validation above.
+            self.driver = Neo4jDriver(
+                uri,
+                user,
+                password,
+                embedding_dim=embedding_dim,
+                use_vector_index=use_vector_index,
+            )
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
@@ -351,11 +411,6 @@ class Graphiti:
                 self.prompt_library = ensure_prompt_library_wrapped(prompt_library)
             else:
                 self.prompt_library = None
-
-        if embedder:
-            self.embedder = embedder
-        else:
-            self.embedder = OpenAIEmbedder()
         if cross_encoder:
             self.cross_encoder = cross_encoder
         else:
