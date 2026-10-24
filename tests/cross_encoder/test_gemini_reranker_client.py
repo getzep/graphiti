@@ -121,7 +121,7 @@ class TestGeminiRerankerClientRanking:
         assert result[2][1] == 0.20  # 20/100
 
     @pytest.mark.asyncio
-    async def test_rank_empty_passages(self, gemini_reranker_client):
+    async def test_rank_empty_passages(self, gemini_reranker_client, mock_gemini_client):
         """Test ranking with empty passages list."""
         query = 'Test query'
         passages = []
@@ -129,12 +129,18 @@ class TestGeminiRerankerClientRanking:
         result = await gemini_reranker_client.rank(query, passages)
 
         assert result == []
+        mock_gemini_client.aio.models.generate_content.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_rank_single_passage(self, gemini_reranker_client, mock_gemini_client):
-        """Test ranking with a single passage."""
+    @pytest.mark.parametrize('score_text, expected_score', [('75', 0.75), ('0', 0.0), ('', 0.0)])
+    async def test_rank_single_passage(
+        self, gemini_reranker_client, mock_gemini_client, score_text, expected_score
+    ):
+        """A single candidate still needs a relevance score for threshold filtering."""
         # Setup mock response
-        mock_gemini_client.aio.models.generate_content.return_value = create_mock_response('75')
+        mock_gemini_client.aio.models.generate_content.return_value = create_mock_response(
+            score_text
+        )
 
         query = 'Test query'
         passages = ['Single test passage']
@@ -143,7 +149,18 @@ class TestGeminiRerankerClientRanking:
 
         assert len(result) == 1
         assert result[0][0] == 'Single test passage'
-        assert result[0][1] == 1.0  # Single passage gets full score
+        assert result[0][1] == expected_score
+        mock_gemini_client.aio.models.generate_content.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_rank_single_passage_propagates_rate_limit(
+        self, gemini_reranker_client, mock_gemini_client
+    ):
+        """Scoring failures must not turn a lone candidate into a perfect match."""
+        mock_gemini_client.aio.models.generate_content.side_effect = Exception('HTTP 429')
+
+        with pytest.raises(RateLimitError):
+            await gemini_reranker_client.rank('Test query', ['Single test passage'])
 
     @pytest.mark.asyncio
     async def test_rank_score_extraction_with_regex(
@@ -321,7 +338,6 @@ class TestGeminiRerankerClientRanking:
         mock_gemini_client.aio.models.generate_content.side_effect = mock_responses
 
         query = 'Test query'
-        # Use multiple passages to avoid the single passage special case
         passages = ['Passage 1', 'Passage 2']
 
         result = await gemini_reranker_client.rank(query, passages)
@@ -339,7 +355,6 @@ class TestGeminiRerankerClientRanking:
         mock_gemini_client.aio.models.generate_content.return_value = mock_response
 
         query = 'Test query'
-        # Use multiple passages to avoid the single passage special case
         passages = ['Passage 1', 'Passage 2']
 
         result = await gemini_reranker_client.rank(query, passages)
