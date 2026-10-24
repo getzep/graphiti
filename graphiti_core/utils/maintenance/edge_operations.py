@@ -163,7 +163,6 @@ async def extract_edges(
     start = time()
     initial_node_uuids = {node.uuid for node in nodes}
 
-    extract_edges_max_tokens = 16384
     llm_client = clients.llm_client
 
     # Build mapping from edge type name to list of valid signatures
@@ -239,7 +238,6 @@ async def extract_edges(
         context,
         clients=clients,
         response_model=ExtractedEdges,
-        max_tokens=extract_edges_max_tokens,
         group_id=group_id or primary_episode.group_id,
     )
     all_edges_data = ExtractedEdges(**llm_response).edges
