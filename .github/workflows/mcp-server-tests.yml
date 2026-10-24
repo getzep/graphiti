@@ -73,6 +73,13 @@ jobs:
           print('graphiti_core.__file__=' + str(path));
           print('graphiti-core version=' + importlib.metadata.version('graphiti-core'));
           sys.exit(0 if path.is_relative_to(root) else 1)"
+      # These tests use fake clients and need neither FalkorDB nor OpenAI, so they
+      # also run on fork PRs where the live suite self-skips.
+      - name: Run MCP unit tests
+        working-directory: mcp_server
+        env:
+          UV_NO_SYNC: "1"
+        run: uv run pytest tests/test_group_routing.py -p no:cacheprovider
       - name: Wait for FalkorDB
         run: |
           for i in $(seq 1 30); do
