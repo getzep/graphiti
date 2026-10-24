@@ -1,7 +1,8 @@
 import logging
+from typing import Annotated
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, conlist
 
 from graphiti_core.utils.maintenance.attribute_utils import (
     DEFAULT_ATTRIBUTE_MAX_LENGTH,
@@ -93,6 +94,48 @@ def test_list_short_passes_through():
     kept, dropped = cap_string_attributes(response, _Person)
     assert kept == response
     assert dropped == set()
+
+
+class _CountCappedPerson(BaseModel):
+    aliases: list[str] = Field(default_factory=list, max_length=3)
+    tags: list[str] | None = Field(default=None, max_length=5)
+    roles: conlist(str, max_length=2) = Field(default_factory=list)  # type: ignore[valid-type]
+
+
+def test_list_field_max_length_counts_items_not_characters():
+    """Field(max_length=N) on a list limits the item count; it must not be used as a
+    per-string cap, or every valid list with an item longer than N chars is dropped."""
+    response = {
+        'aliases': ['Samantha Rivera', 'Sammy'],
+        'tags': ['engineer', 'marathon runner'],
+        'roles': ['founder', 'chief executive'],
+    }
+    _CountCappedPerson(**response)  # Valid per the schema.
+    kept, dropped = cap_string_attributes(response, _CountCappedPerson)
+    assert kept == response
+    assert dropped == set()
+
+
+def test_list_field_with_item_count_cap_still_uses_default_string_cap():
+    bleed = 'x' * (DEFAULT_ATTRIBUTE_MAX_LENGTH + 1)
+    kept, dropped = cap_string_attributes({'aliases': ['Sammy', bleed]}, _CountCappedPerson)
+    assert 'aliases' not in kept
+    assert dropped == {'aliases'}
+
+
+class _ItemCappedPerson(BaseModel):
+    quotes: list[Annotated[str, Field(max_length=500)]] | None = Field(default=None, max_length=2)
+
+
+def test_list_item_max_length_sets_per_item_cap():
+    long_quote = 'q' * 400  # Over the default cap, under the item type's max_length.
+    kept, dropped = cap_string_attributes({'quotes': [long_quote]}, _ItemCappedPerson)
+    assert kept == {'quotes': [long_quote]}
+    assert dropped == set()
+
+    kept, dropped = cap_string_attributes({'quotes': ['q' * 501]}, _ItemCappedPerson)
+    assert 'quotes' not in kept
+    assert dropped == {'quotes'}
 
 
 def test_required_field_overcap_kept_with_warning(caplog):
@@ -233,6 +276,13 @@ def test_apply_overlay_keeps_prior_for_omitted_and_dropped_fields():
     assert merged['phones'] == '415-555-0142'  # cap-dropped; prior preserved
     assert merged['industry'] == 'Software'  # LLM-omitted; prior preserved
     assert dropped == {'phones'}
+
+
+def test_apply_overlay_keeps_list_with_item_count_cap():
+    llm = {'aliases': ['Samantha Rivera', 'Sammy']}
+    merged, dropped = apply_capped_attributes(llm, _CountCappedPerson, {}, merge_mode='overlay')
+    assert merged == llm
+    assert dropped == set()
 
 
 def test_apply_overlay_legitimate_update_passes_through():
