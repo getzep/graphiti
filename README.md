@@ -78,13 +78,16 @@ A context graph contains:
 
 ## Graphiti and Zep
 
-Graphiti is the open-source framework for building temporal knowledge graphs at the core of
-[Zep's](https://www.getzep.com) context infrastructure. Zep manages context graphs at scale, providing
-governed, low-latency context retrieval and assembly for production deployments.
+Graphiti is an open-source Python framework for building and querying temporal context graphs. You supply the graph
+database, LLM, and embedder, and you build the service around it: ingestion, tenancy, access control, and operations.
 
-Under the hood, Zep is powered by a proprietary graph database — the
-[Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs
-with low-latency retrieval, so production deployments don't require a separate third-party graph database.
+[Zep](https://www.getzep.com) is the unified context layer for enterprises. Zep brings data from across a business into
+governed context graphs and serves that context to agents in production. Graphiti is the graph construction framework
+inside Zep. [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, stores and
+serves millions of context graphs with low-latency retrieval.
+
+Teams use both to give agents memory. Neither is an agent memory product: Graphiti is a framework for building graphs,
+and Zep unifies, governs, and serves an enterprise's context.
 
 Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org/abs/2501.13956).
 
@@ -96,20 +99,23 @@ Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org
 
 | Aspect | Zep | Graphiti |
 |--------|-----|---------|
-| **What they are** | Managed context graph infrastructure | Open-source framework for building temporal knowledge graphs |
-| **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
-| **Graph database** | Proprietary [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs with low-latency retrieval; no third-party graph database vendor required | Bring your own third-party graph database |
-| **User & conversation management** | Built-in users, threads, and message storage | Build your own |
+| **What it is** | The unified context layer for enterprises | An open-source framework for building temporal context graphs |
+| **Scope** | Unifies data from across an enterprise into governed context and serves it to agents | Builds and queries graphs inside your own application |
+| **Context graphs** | Manages millions of context graphs with governance | Builds and queries the graphs you define |
+| **Graph database** | [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, built for millions of context graphs with low-latency retrieval; no third-party graph database required | Bring your own: Neo4j, FalkorDB, or Amazon Neptune |
+| **Users, threads, and ingestion** | Built-in users, threads, and ingestion for messages and business data | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
-| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
+| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; CLI; SDKs for Python, TypeScript, and Go | Build your own tools |
 | **Enterprise features** | SLAs, support, security guarantees | Self-managed |
-| **Deployment** | Fully managed or in your cloud | Self-hosted only |
+| **Deployment** | Fully managed or in your cloud (BYOC) | Self-hosted only |
 
 ### When to choose which
 
-**Choose Zep** if you want a turnkey, enterprise-grade platform with security, performance, and support baked in.
+**Choose Zep** if you want an enterprise's context unified, governed, and served to agents in production, without
+building and operating that system yourself.
 
-**Choose Graphiti** if you want a flexible OSS core and you're comfortable building/operating the surrounding system.
+**Choose Graphiti** if you are building temporal context graphs into your own system and will operate the graph
+database, retrieval, and surrounding service yourself.
 
 ## Why Graphiti?
 
@@ -331,8 +337,8 @@ For a production deployment, use one of these options:
 
 - Use the `graphiti-core` library in your own service. Your service must supply authentication, authorization, tenant
   isolation, and input controls.
-- Use [Zep](https://www.getzep.com), the managed context platform that is built on Graphiti. Zep is available as a
-  managed service or in your own cloud (BYOC). For a comparison, see [Zep vs Graphiti](#zep-vs-graphiti).
+- Use [Zep](https://www.getzep.com), the unified context layer for enterprises, which is built on Graphiti. Zep is
+  available as a managed service or in your own cloud (BYOC). For a comparison, see [Zep vs Graphiti](#zep-vs-graphiti).
 
 ### MCP Server
 
