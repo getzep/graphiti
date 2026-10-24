@@ -70,7 +70,20 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         self,
         executor: QueryExecutor,
     ) -> None:
-        await executor.execute_query('CALL db.indexes() YIELD name DROP INDEX name')
+        # Neo4j 5 removed db.indexes(), and DROP INDEX only takes a literal name, so list
+        # the indexes first and drop them one by one. Token lookup indexes back every
+        # label scan and constraint-owned indexes can only go with their constraint, so
+        # both are kept.
+        records, _, _ = await executor.execute_query(
+            """
+            SHOW INDEXES YIELD name, type, owningConstraint
+            WHERE type <> 'LOOKUP' AND owningConstraint IS NULL
+            RETURN name
+            """
+        )
+        for record in records:
+            escaped_name = record['name'].replace('`', '``')
+            await executor.execute_query(f'DROP INDEX `{escaped_name}` IF EXISTS')
 
     async def get_community_clusters(
         self,
