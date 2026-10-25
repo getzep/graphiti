@@ -28,7 +28,7 @@ jobs:
     # Fork PRs do not receive SOCKET_API_KEY; skip rather than soft-skip so the
     # smoke assertions (which require sfw routing) are not vacuously skipped.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: depot-ubuntu-22.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -69,7 +69,7 @@ jobs:
 
   docker-guard:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: depot-ubuntu-22.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Verify conditional Socket Firewall Docker install paths
         env:

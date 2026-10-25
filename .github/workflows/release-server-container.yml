@@ -15,10 +15,9 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: depot-ubuntu-24.04-small
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
-      id-token: write
     environment:
       name: release
     steps:
@@ -103,9 +102,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up Depot CLI
+      - name: Set up QEMU
         if: steps.version.outputs.skip != 'true'
-        uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Docker Buildx
+        if: steps.version.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Extract metadata
         if: steps.version.outputs.skip != 'true'
@@ -124,9 +127,8 @@ jobs:
 
       - name: Build and push Docker image
         if: steps.version.outputs.skip != 'true'
-        uses: depot/build-push-action@5f3b3c2e5a00f0093de47f657aeaefcedff27d18 # v1
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          project: v9jv1mlpwc
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
