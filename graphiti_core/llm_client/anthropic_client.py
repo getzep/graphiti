@@ -47,32 +47,20 @@ else:
 logger = logging.getLogger(__name__)
 
 AnthropicModel = Literal[
-    'claude-sonnet-4-5',
-    'claude-sonnet-4-5-20250929',
-    'claude-haiku-4-5',
-    'claude-haiku-4-5-20251001',
-    'claude-opus-4-5',
-    'claude-opus-4-5-20251101',
-    'claude-sonnet-4-6',
-    'claude-opus-4-6',
-    'claude-opus-4-7',
-    'claude-opus-4-8',
+    'claude-haiku-5-5',
+    'claude-sonnet-5',
+    'claude-opus-5',
+    'claude-fable-5',
 ]
 
-DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5'
+DEFAULT_MODEL: AnthropicModel = 'claude-haiku-5-5'
 
 # Standard output limits without beta headers.
 ANTHROPIC_MODEL_MAX_TOKENS = {
-    'claude-sonnet-4-5': 65536,
-    'claude-sonnet-4-5-20250929': 65536,
-    'claude-haiku-4-5': 65536,
-    'claude-haiku-4-5-20251001': 65536,
-    'claude-opus-4-5': 65536,
-    'claude-opus-4-5-20251101': 65536,
-    'claude-sonnet-4-6': 131072,
-    'claude-opus-4-6': 131072,
-    'claude-opus-4-7': 131072,
-    'claude-opus-4-8': 131072,
+    'claude-haiku-5-5': 128000,
+    'claude-sonnet-5': 128000,
+    'claude-opus-5': 128000,
+    'claude-fable-5': 128000,
 }
 
 # Default max tokens for models not in the mapping
