@@ -16,13 +16,15 @@ limitations under the License.
 
 # Running tests: pytest -xvs tests/llm_client/test_anthropic_client.py
 
+import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
-from graphiti_core.llm_client.anthropic_client import AnthropicClient
+from graphiti_core.llm_client import anthropic_client as anthropic_client_module
+from graphiti_core.llm_client.anthropic_client import AnthropicClient, _parse_sdk_major_version
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.errors import RateLimitError, RefusalError
 from graphiti_core.prompts.models import Message
@@ -99,20 +101,46 @@ class TestAnthropicClientInitialization:
         assert client.client == mock_client
 
 
+def _tool_use_response() -> MagicMock:
+    """Build a mock Anthropic response carrying a single tool_use content item."""
+    content_item = MagicMock()
+    content_item.type = 'tool_use'
+    content_item.input = {'test_field': 'test_value'}
+
+    mock_response = MagicMock()
+    mock_response.content = [content_item]
+    return mock_response
+
+
+class TestAnthropicSdkVersionParsing:
+    """Tests for _parse_sdk_major_version."""
+
+    @pytest.mark.parametrize(
+        ('version', 'expected'),
+        [
+            ('0.111.0', 0),
+            ('1.2.3', 1),
+            ('2.0.0', 2),
+            (None, 0),
+            ('', 0),
+            ('not-a-version', 0),
+        ],
+    )
+    def test_parse_sdk_major_version(self, version, expected):
+        """Test major version parsing, including missing and malformed input."""
+        assert _parse_sdk_major_version(version) == expected
+
+
 class TestAnthropicClientGenerateResponse:
     """Tests for AnthropicClient generate_response method."""
 
     @pytest.mark.asyncio
-    async def test_generate_response_with_tool_use(self, anthropic_client, mock_async_anthropic):
+    async def test_generate_response_with_tool_use(
+        self, anthropic_client, mock_async_anthropic, monkeypatch
+    ):
         """Test successful response generation with tool use."""
-        # Setup mock response
-        content_item = MagicMock()
-        content_item.type = 'tool_use'
-        content_item.input = {'test_field': 'test_value'}
-
-        mock_response = MagicMock()
-        mock_response.content = [content_item]
-        mock_async_anthropic.messages.create.return_value = mock_response
+        monkeypatch.setattr(anthropic_client_module, '_ANTHROPIC_SDK_MAJOR_VERSION', 0)
+        mock_async_anthropic.messages.create.return_value = _tool_use_response()
 
         # Call method
         messages = [
@@ -127,6 +155,50 @@ class TestAnthropicClientGenerateResponse:
         assert isinstance(result, dict)
         assert result['test_field'] == 'test_value'
         mock_async_anthropic.messages.create.assert_called_once()
+        # Legacy SDKs keep receiving the configured temperature
+        _, kwargs = mock_async_anthropic.messages.create.call_args
+        assert kwargs['temperature'] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_generate_response_omits_temperature_when_unset(
+        self, mock_async_anthropic, monkeypatch
+    ):
+        """Unset temperature must not be sent; the API rejects an explicit null."""
+        monkeypatch.setattr(anthropic_client_module, '_ANTHROPIC_SDK_MAJOR_VERSION', 0)
+        config = LLMConfig(api_key='test_api_key', model='test-model', temperature=None)
+        client = AnthropicClient(config=config, client=mock_async_anthropic)
+        mock_async_anthropic.messages.create.return_value = _tool_use_response()
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        await client.generate_response(messages=messages, response_model=ResponseModel)
+
+        _, kwargs = mock_async_anthropic.messages.create.call_args
+        assert 'temperature' not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_generate_response_skips_temperature_on_sdk_v1(
+        self, mock_async_anthropic, monkeypatch, caplog
+    ):
+        """SDK 1.x removed the temperature kwarg; configured values are skipped with a debug log."""
+        monkeypatch.setattr(anthropic_client_module, '_ANTHROPIC_SDK_MAJOR_VERSION', 1)
+        config = LLMConfig(api_key='test_api_key', model='test-model', temperature=0.7)
+        client = AnthropicClient(config=config, client=mock_async_anthropic)
+        mock_async_anthropic.messages.create.return_value = _tool_use_response()
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        with caplog.at_level(logging.DEBUG, logger='graphiti_core.llm_client.anthropic_client'):
+            result = await client.generate_response(messages=messages, response_model=ResponseModel)
+
+        assert result['test_field'] == 'test_value'
+        _, kwargs = mock_async_anthropic.messages.create.call_args
+        assert 'temperature' not in kwargs
+        assert 'removed the temperature parameter' in caplog.text
 
     @pytest.mark.asyncio
     async def test_generate_response_with_text_response(
