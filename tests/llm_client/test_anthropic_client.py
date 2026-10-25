@@ -87,7 +87,7 @@ class TestAnthropicClientInitialization:
         config = LLMConfig(api_key='test_api_key')
         client = AnthropicClient(config=config, cache=False)
 
-        assert client.model == 'claude-haiku-4-5'
+        assert client.model == 'claude-haiku-5-5'
 
     @patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'env_api_key'})
     def test_init_without_config(self):
@@ -95,7 +95,7 @@ class TestAnthropicClientInitialization:
         client = AnthropicClient(cache=False)
 
         assert client.config.api_key == 'env_api_key'
-        assert client.model == 'claude-haiku-4-5'
+        assert client.model == 'claude-haiku-5-5'
 
     def test_init_with_custom_client(self):
         """Test initialization with a custom AsyncAnthropic client."""
@@ -106,12 +106,9 @@ class TestAnthropicClientInitialization:
 
     def test_model_limits_match_supported_models(self, anthropic_client):
         assert set(get_args(AnthropicModel)) == set(ANTHROPIC_MODEL_MAX_TOKENS)
-        assert not any(
-            model.startswith(('claude-2', 'claude-3')) for model in get_args(AnthropicModel)
-        )
+        assert all('-5' in model for model in get_args(AnthropicModel))
         for model in get_args(AnthropicModel):
-            expected = 131072 if model.endswith(('4-6', '4-7', '4-8')) else 65536
-            assert anthropic_client._get_max_tokens_for_model(model) == expected
+            assert anthropic_client._get_max_tokens_for_model(model) == 128000
 
     @pytest.mark.parametrize('model', ['', 'unknown-model'])
     def test_unknown_model_token_limit(self, anthropic_client, model):
