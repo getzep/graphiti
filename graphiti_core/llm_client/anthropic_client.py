@@ -47,53 +47,32 @@ else:
 logger = logging.getLogger(__name__)
 
 AnthropicModel = Literal[
-    'claude-sonnet-4-5-latest',
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
-    'claude-haiku-4-5-latest',
-    'claude-3-7-sonnet-latest',
-    'claude-3-7-sonnet-20250219',
-    'claude-3-5-haiku-latest',
-    'claude-3-5-haiku-20241022',
-    'claude-3-5-sonnet-latest',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-5-sonnet-20240620',
-    'claude-3-opus-latest',
-    'claude-3-opus-20240229',
-    'claude-3-sonnet-20240229',
-    'claude-3-haiku-20240307',
-    'claude-2.1',
-    'claude-2.0',
+    'claude-haiku-4-5',
+    'claude-haiku-4-5-20251001',
+    'claude-opus-4-5',
+    'claude-opus-4-5-20251101',
+    'claude-sonnet-4-6',
+    'claude-opus-4-6',
+    'claude-opus-4-7',
+    'claude-opus-4-8',
 ]
 
-DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
+DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5'
 
-# Maximum output tokens for different Anthropic models
-# Based on official Anthropic documentation (as of 2025)
-# Note: These represent standard limits without beta headers.
-# Some models support higher limits with additional configuration (e.g., Claude 3.7 supports
-# 128K with 'anthropic-beta: output-128k-2025-02-19' header, but this is not currently implemented).
+# Standard output limits without beta headers.
 ANTHROPIC_MODEL_MAX_TOKENS = {
-    # Claude 4.5 models - 64K tokens
-    'claude-sonnet-4-5-latest': 65536,
+    'claude-sonnet-4-5': 65536,
     'claude-sonnet-4-5-20250929': 65536,
-    'claude-haiku-4-5-latest': 65536,
-    # Claude 3.7 models - standard 64K tokens
-    'claude-3-7-sonnet-latest': 65536,
-    'claude-3-7-sonnet-20250219': 65536,
-    # Claude 3.5 models
-    'claude-3-5-haiku-latest': 8192,
-    'claude-3-5-haiku-20241022': 8192,
-    'claude-3-5-sonnet-latest': 8192,
-    'claude-3-5-sonnet-20241022': 8192,
-    'claude-3-5-sonnet-20240620': 8192,
-    # Claude 3 models - 4K tokens
-    'claude-3-opus-latest': 4096,
-    'claude-3-opus-20240229': 4096,
-    'claude-3-sonnet-20240229': 4096,
-    'claude-3-haiku-20240307': 4096,
-    # Claude 2 models - 4K tokens
-    'claude-2.1': 4096,
-    'claude-2.0': 4096,
+    'claude-haiku-4-5': 65536,
+    'claude-haiku-4-5-20251001': 65536,
+    'claude-opus-4-5': 65536,
+    'claude-opus-4-5-20251101': 65536,
+    'claude-sonnet-4-6': 131072,
+    'claude-opus-4-6': 131072,
+    'claude-opus-4-7': 131072,
+    'claude-opus-4-8': 131072,
 }
 
 # Default max tokens for models not in the mapping
