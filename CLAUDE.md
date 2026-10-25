@@ -149,17 +149,19 @@ The codebase supports multiple LLM providers but works best with services suppor
   - `gpt-4o-mini` - Previous generation efficient
 
 **Anthropic Models:**
-- **Claude 4.5 Family** (Latest):
-  - `claude-sonnet-4-5-latest` - Flagship model, auto-updates
+- **Claude 4.5 Family**:
+  - `claude-sonnet-4-5` - Sonnet alias
   - `claude-sonnet-4-5-20250929` - Pinned Sonnet version from September 2025
-  - `claude-haiku-4-5-latest` - Fast model, auto-updates
-- **Claude 3.7 Family**:
-  - `claude-3-7-sonnet-latest` - Auto-updates
-  - `claude-3-7-sonnet-20250219` - Pinned version from February 2025
-- **Claude 3.5 Family**:
-  - `claude-3-5-sonnet-latest` - Auto-updates
-  - `claude-3-5-sonnet-20241022` - Pinned version from October 2024
-  - `claude-3-5-haiku-latest` - Fast model
+  - `claude-haiku-4-5` - Default Anthropic model
+  - `claude-haiku-4-5-20251001` - Pinned Haiku version from October 2025
+  - `claude-opus-4-5` - Opus alias
+  - `claude-opus-4-5-20251101` - Pinned Opus version from November 2025
+- **Claude 4.6 Family**:
+  - `claude-sonnet-4-6` - Sonnet model
+  - `claude-opus-4-6` - Opus model
+- **Claude 4.7 / 4.8 Family**:
+  - `claude-opus-4-7` - Opus 4.7 model
+  - `claude-opus-4-8` - Opus 4.8 model
 
 **Google Gemini Models:**
 - **Gemini 2.5 Family** (Latest):
