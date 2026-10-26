@@ -745,40 +745,59 @@ def _apply_temporal_invalidation(
     return resolve_edge_contradictions(resolved_edge, invalidation_candidates)
 
 
+def contradiction_invalid_at(resolved_edge: EntityEdge, edge: EntityEdge) -> datetime | None:
+    """Return the invalid_at that resolved_edge gives edge when resolved_edge contradicts edge.
+
+    Return None when the dates show that resolved_edge cannot end edge.
+    """
+    edge_valid_at = ensure_utc(edge.valid_at)
+    edge_invalid_at = ensure_utc(edge.invalid_at)
+    new_valid_at = ensure_utc(resolved_edge.valid_at)
+    new_invalid_at = ensure_utc(resolved_edge.invalid_at)
+
+    # The intervals do not overlap.
+    if (
+        edge_invalid_at is not None and new_valid_at is not None and edge_invalid_at <= new_valid_at
+    ) or (
+        edge_valid_at is not None and new_invalid_at is not None and new_invalid_at <= edge_valid_at
+    ):
+        return None
+
+    # A later state replaces the earlier state.
+    if edge_valid_at is not None and new_valid_at is not None and edge_valid_at < new_valid_at:
+        return resolved_edge.valid_at
+
+    # A termination fact stores the end of the state in invalid_at. A fact with no date
+    # ends the state at the time of its episode.
+    if new_invalid_at is not None:
+        end, end_utc = resolved_edge.invalid_at, new_invalid_at
+    elif new_valid_at is None and resolved_edge.reference_time is not None:
+        end, end_utc = resolved_edge.reference_time, ensure_utc(resolved_edge.reference_time)
+    else:
+        return None
+
+    if end_utc is None:
+        return None
+    edge_start = edge_valid_at if edge_valid_at is not None else ensure_utc(edge.reference_time)
+    if edge_start is not None and end_utc <= edge_start:
+        return None
+    # Do not move an end date that is already earlier.
+    if edge_invalid_at is not None and edge_invalid_at <= end_utc:
+        return None
+    return end
+
+
 def resolve_edge_contradictions(
     resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
 ) -> list[EntityEdge]:
-    if len(invalidation_candidates) == 0:
-        return []
-
-    # Determine which contradictory edges need to be expired
     invalidated_edges: list[EntityEdge] = []
     for edge in invalidation_candidates:
-        # (Edge invalid before new edge becomes valid) or (new edge invalid before edge becomes valid)
-        edge_invalid_at_utc = ensure_utc(edge.invalid_at)
-        resolved_edge_valid_at_utc = ensure_utc(resolved_edge.valid_at)
-        edge_valid_at_utc = ensure_utc(edge.valid_at)
-        resolved_edge_invalid_at_utc = ensure_utc(resolved_edge.invalid_at)
-
-        if (
-            edge_invalid_at_utc is not None
-            and resolved_edge_valid_at_utc is not None
-            and edge_invalid_at_utc <= resolved_edge_valid_at_utc
-        ) or (
-            edge_valid_at_utc is not None
-            and resolved_edge_invalid_at_utc is not None
-            and resolved_edge_invalid_at_utc <= edge_valid_at_utc
-        ):
+        invalid_at = contradiction_invalid_at(resolved_edge, edge)
+        if invalid_at is None:
             continue
-        # New edge invalidates edge
-        elif (
-            edge_valid_at_utc is not None
-            and resolved_edge_valid_at_utc is not None
-            and edge_valid_at_utc < resolved_edge_valid_at_utc
-        ):
-            edge.invalid_at = resolved_edge.valid_at
-            edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
-            invalidated_edges.append(edge)
+        edge.invalid_at = invalid_at
+        edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
+        invalidated_edges.append(edge)
 
     return invalidated_edges
 
