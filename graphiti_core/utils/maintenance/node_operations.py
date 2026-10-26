@@ -194,6 +194,22 @@ def _build_entity_types_context(
     return entity_types_context
 
 
+def has_extractable_entity_types(
+    entity_types: dict[str, type[BaseModel]] | None,
+    excluded_entity_types: list[str] | None,
+) -> bool:
+    """Return whether any entity type is left for extraction after exclusions.
+
+    ``extract_nodes`` returns no nodes without calling the model when this is
+    ``False``, so callers can skip the extraction steps that build on its nodes.
+    """
+    return bool(
+        _filter_entity_types_context(
+            _build_entity_types_context(entity_types), excluded_entity_types
+        )
+    )
+
+
 def _filter_entity_types_context(
     entity_types_context: list[dict],
     excluded_entity_types: list[str] | None,
