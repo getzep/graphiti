@@ -18,7 +18,8 @@ import json
 import logging
 from datetime import datetime
 from time import time
-from uuid import uuid4
+from typing import TypeVar, cast
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -27,7 +28,7 @@ from typing_extensions import LiteralString
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.decorators import handle_multiple_group_ids
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
     CommunityEdge,
@@ -145,31 +146,39 @@ def _saga_summary_messages_utf8_bytes(messages: list) -> int:
     return sum(len(message.content.encode('utf-8')) for message in messages)
 
 
+_SagaEpisodeT = TypeVar(
+    '_SagaEpisodeT',
+    tuple[str, datetime | None, datetime],
+    tuple[str, datetime | None, datetime, str],
+)
+
+
 def select_saga_summary_episodes(
-    episodes_data: list[tuple[str, datetime | None, datetime]],
+    episodes_data: list[_SagaEpisodeT],
     max_episode_chars: int = SAGA_SUMMARY_MAX_EPISODE_CHARS,
-) -> tuple[list[tuple[str, datetime | None, datetime]], int, bool]:
+) -> tuple[list[_SagaEpisodeT], int, bool]:
     """Select a contiguous ingestion-time episode batch using a character budget.
 
     Packs oldest-first so last_summarized_at can advance through a backlog.
     When the oldest episode alone exceeds the budget, truncate it rather than
     skip, matching Go entity-summary behavior for a single oversized episode.
     """
-    selected: list[tuple[str, datetime | None, datetime]] = []
+    selected: list[_SagaEpisodeT] = []
     selected_chars = 0
     dropped = False
 
-    for content, valid_at, created_at in episodes_data:
+    for episode in episodes_data:
+        content = episode[0]
         content_chars = len(content)
         if selected_chars + content_chars <= max_episode_chars:
-            selected.append((content, valid_at, created_at))
+            selected.append(episode)
             selected_chars += content_chars
             continue
 
         if not selected:
             truncated = content[:max_episode_chars]
             if truncated:
-                selected.append((truncated, valid_at, created_at))
+                selected.append(cast(_SagaEpisodeT, (truncated, *episode[1:])))
                 selected_chars = len(truncated)
             dropped = True
             break
@@ -179,7 +188,7 @@ def select_saga_summary_episodes(
         dropped = True
         break
 
-    selected_bytes = sum(len(content.encode('utf-8')) for content, _, _ in selected)
+    selected_bytes = sum(len(episode[0].encode('utf-8')) for episode in selected)
     return selected, selected_bytes, dropped
 
 
@@ -204,6 +213,50 @@ class AddBulkEpisodeResults(BaseModel):
 class AddTripletResults(BaseModel):
     nodes: list[EntityNode]
     edges: list[EntityEdge]
+
+
+async def _load_or_create_episode(
+    *,
+    driver: GraphDriver,
+    uuid: str | None,
+    name: str,
+    group_id: str,
+    source: EpisodeType,
+    content: str,
+    source_description: str,
+    created_at: datetime,
+    valid_at: datetime,
+) -> EpisodicNode:
+    if uuid is not None:
+        try:
+            return await EpisodicNode.get_by_uuid(driver, uuid)
+        except NodeNotFoundError:
+            pass
+    values = {
+        'name': name,
+        'group_id': group_id,
+        'labels': [],
+        'source': source,
+        'content': content,
+        'source_description': source_description,
+        'created_at': created_at,
+        'valid_at': valid_at,
+    }
+    if uuid is not None:
+        values['uuid'] = uuid
+    return EpisodicNode(**values)
+
+
+def _oracle_episodic_edges(driver: GraphDriver, edges: list[EpisodicEdge]) -> list[EpisodicEdge]:
+    if driver.provider == GraphProvider.ORACLE:
+        for edge in edges:
+            identity = json.dumps(
+                [edge.group_id, edge.source_node_uuid, edge.target_node_uuid],
+                ensure_ascii=False,
+                separators=(',', ':'),
+            )
+            edge.uuid = str(uuid5(NAMESPACE_URL, 'graphiti-oracle26ai/MENTIONS/' + identity))
+    return edges
 
 
 class Graphiti:
@@ -514,28 +567,33 @@ class Graphiti:
         from graphiti_core.helpers import parse_db_date
 
         driver = driver or self.driver
-
-        records, _, _ = await driver.execute_query(
-            """
-            MATCH (s:Saga {name: $name, group_id: $group_id})
-            RETURN s.uuid AS uuid, s.name AS name, s.group_id AS group_id, s.created_at AS created_at,
-                   s.first_episode_uuid AS first_episode_uuid, s.last_episode_uuid AS last_episode_uuid
-            """,
-            name=saga_name,
-            group_id=group_id,
-            routing_='r',
-        )
-
-        if records:
-            record = records[0]
-            return SagaNode(
-                uuid=record['uuid'],
-                name=record['name'],
-                group_id=record['group_id'],
-                created_at=parse_db_date(record['created_at']),  # type: ignore
-                first_episode_uuid=record['first_episode_uuid'],
-                last_episode_uuid=record['last_episode_uuid'],
+        if getattr(driver, 'provider', None) == GraphProvider.ORACLE:
+            sagas = await SagaNode.get_by_group_ids(driver, [group_id])
+            for saga in sagas:
+                if saga.name == saga_name:
+                    return saga
+        else:
+            # Preserve the existing backend lookup and its first/last episode pointers.
+            records, _, _ = await driver.execute_query(
+                """
+                MATCH (s:Saga {name: $name, group_id: $group_id})
+                RETURN s.uuid AS uuid, s.name AS name, s.group_id AS group_id, s.created_at AS created_at,
+                       s.first_episode_uuid AS first_episode_uuid, s.last_episode_uuid AS last_episode_uuid
+                """,
+                name=saga_name,
+                group_id=group_id,
+                routing_='r',
             )
+            if records:
+                record = records[0]
+                return SagaNode(
+                    uuid=record['uuid'],
+                    name=record['name'],
+                    group_id=record['group_id'],
+                    created_at=parse_db_date(record['created_at']),  # type: ignore
+                    first_episode_uuid=record['first_episode_uuid'],
+                    last_episode_uuid=record['last_episode_uuid'],
+                )
 
         saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
         await saga.save(driver)
@@ -576,13 +634,24 @@ class Graphiti:
         saga_uuid: str,
         since: datetime | None = None,
         limit: int = 200,
-    ) -> list[tuple[str, datetime | None, datetime]] | None:
-        """Retrieve (content, valid_at, created_at) episodes, using IoC if available."""
+        *,
+        after_uuid: str | None = None,
+    ) -> list[tuple[str, datetime | None, datetime, str]] | None:
+        """Retrieve content and the composite ingestion cursor, using IoC if available."""
         if self.driver.graph_operations_interface:
             try:
-                return await self.driver.graph_operations_interface.saga_get_episode_contents(
-                    self.driver, saga_uuid, since=since, limit=limit
-                )
+                operations = self.driver.graph_operations_interface
+                if getattr(self.driver, 'provider', None) == GraphProvider.ORACLE:
+                    rows = await operations.saga_get_episode_contents(
+                        self.driver, saga_uuid, since=since, limit=limit, after_uuid=after_uuid
+                    )
+                else:
+                    # Existing backend implementations keep their three-field contract and
+                    # do not receive a new keyword argument.
+                    rows = await operations.saga_get_episode_contents(
+                        self.driver, saga_uuid, since=since, limit=limit
+                    )
+                return [(row[0], row[1], row[2], row[3] if len(row) == 4 else '') for row in rows]
             except NotImplementedError:
                 pass
         return None
@@ -636,11 +705,15 @@ class Graphiti:
         # eligible because last_summarized_at advances only through this batch.
         max_episodes = MAX_SAGA_EPISODES_FOR_SUMMARY
         since = saga.last_summarized_at
+        after_uuid = saga.last_summarized_episode_uuid
         existing_summary = truncate_at_sentence(saga.summary or '', SAGA_SUMMARY_MAX_CHARS)
 
         # Try IoC interface first, fall back to raw Cypher
         episodes_data = await self._saga_get_episode_contents(
-            saga_id, since=since, limit=max_episodes
+            saga_id,
+            since=since,
+            after_uuid=after_uuid,
+            limit=max_episodes,
         )
         if episodes_data is None:
             if since is not None:
@@ -677,7 +750,14 @@ class Graphiti:
                 content = r.get('content')
                 created_at = parse_db_date(r.get('created_at'))
                 if content and created_at is not None:
-                    episodes_data.append((content, parse_db_date(r.get('valid_at')), created_at))
+                    episodes_data.append(
+                        (
+                            content,
+                            parse_db_date(r.get('valid_at')),
+                            created_at,
+                            str(r.get('uuid') or ''),
+                        )
+                    )
 
         if not episodes_data:
             saga._summary_episodes_fetched = 0
@@ -713,15 +793,16 @@ class Graphiti:
             )
 
         def _prompt_context(
-            selected: list[tuple[str, datetime | None, datetime]],
+            selected: list[tuple[str, datetime | None, datetime, str]],
         ) -> dict[str, object]:
             prompt_episodes_data = sorted(
-                selected, key=lambda episode: (episode[1] or episode[2], episode[2])
+                selected,
+                key=lambda episode: (episode[1] or episode[2], episode[2], episode[3]),
             )
             return {
                 'saga_name': saga.name,
                 'existing_summary': existing_summary,
-                'episodes': [content for content, _, _ in prompt_episodes_data],
+                'episodes': [content for content, _, _, _ in prompt_episodes_data],
             }
 
         schema_reserve = len(_SAGA_SUMMARY_SCHEMA_WRAPPER.encode('utf-8')) + len(
@@ -744,12 +825,14 @@ class Graphiti:
             if prompt_bytes <= SAGA_SUMMARY_MAX_PROMPT_BYTES:
                 break
             if len(episodes_data) == 1:
-                content, valid_at, created_at = episodes_data[0]
+                content, valid_at, created_at, episode_uuid = episodes_data[0]
                 over = prompt_bytes - SAGA_SUMMARY_MAX_PROMPT_BYTES
                 truncated = truncate_utf8_to_bytes(
                     content, max(0, len(content.encode('utf-8')) - over)
                 )
-                episodes_data = [(truncated, valid_at, created_at)] if truncated else []
+                episodes_data = (
+                    [(truncated, valid_at, created_at, episode_uuid)] if truncated else []
+                )
                 break
             episodes_data = episodes_data[:-1]
             episodes_dropped = True
@@ -757,13 +840,12 @@ class Graphiti:
         saga._summary_episodes_selected = len(episodes_data)
         saga._summary_episodes_skipped = total_episode_count - len(episodes_data)
         saga._summary_selected_episode_bytes = sum(
-            len(content.encode('utf-8')) for content, _, _ in episodes_data
+            len(content.encode('utf-8')) for content, _, _, _ in episodes_data
         )
         if not episodes_data:
             logger.info(f'No saga episode content fit the summary byte budget for saga {saga_id}')
             return saga
-        valid_ats = [valid_at for _, valid_at, _ in episodes_data if valid_at is not None]
-        summarized_created_ats = [created_at for _, _, created_at in episodes_data]
+        valid_ats = [valid_at for _, valid_at, _, _ in episodes_data if valid_at is not None]
 
         context = _prompt_context(episodes_data)
 
@@ -785,7 +867,13 @@ class Graphiti:
         # Ingestion-time watermark for the next-run filter. Advance only
         # through the episodes that were actually sent to the summary prompt so
         # byte-budgeted later episodes remain reachable on subsequent runs.
-        saga.last_summarized_at = max(summarized_created_ats) if summarized_created_ats else None
+        summarized_cursor = max(
+            ((created_at, episode_uuid) for _, _, created_at, episode_uuid in episodes_data),
+            default=None,
+        )
+        if summarized_cursor is not None:
+            saga.last_summarized_at, saga.last_summarized_episode_uuid = summarized_cursor
+            saga.last_summarized_episode_uuid = saga.last_summarized_episode_uuid or None
         # Episode-time watermark for public/temporal consumers: advance only
         # forward to the latest reference time we just summarized. If no
         # episode in this batch carried a valid_at, leave the previous value unchanged.
@@ -1029,6 +1117,7 @@ class Graphiti:
         episode_uuids = [ep.uuid for ep in episodes]
 
         episodic_edges = build_episodic_edges(nodes, episode_uuids, now, node_episode_index_map)
+        episodic_edges = _oracle_episodic_edges(driver, episodic_edges)
         for ep in episodes:
             ep.entity_edges = [edge.uuid for edge in entity_edges]
             if not self.store_raw_episode_content:
@@ -1319,6 +1408,10 @@ class Graphiti:
         default-database case reuses the shared instances unchanged (no copy, no clone),
         preserving existing behaviour for the common single-database deployment.
         """
+        bound_scope = getattr(self.driver, '_scope_group_id', None)
+        if group_id is None and bound_scope is not None:
+            return str(bound_scope), self.driver, self.clients
+
         if group_id is None:
             # Use the provider's default group id and the preset database name.
             return get_default_group_id(self.driver.provider), self.driver, self.clients
@@ -1445,19 +1538,16 @@ class Graphiti:
                 )
 
                 # Get or create episode
-                episode = (
-                    await EpisodicNode.get_by_uuid(driver, uuid)
-                    if uuid is not None
-                    else EpisodicNode(
-                        name=name,
-                        group_id=group_id,
-                        labels=[],
-                        source=source,
-                        content=episode_body,
-                        source_description=source_description,
-                        created_at=now,
-                        valid_at=reference_time,
-                    )
+                episode = await _load_or_create_episode(
+                    driver=driver,
+                    uuid=uuid,
+                    name=name,
+                    group_id=group_id,
+                    source=source,
+                    content=episode_body,
+                    source_description=source_description,
+                    created_at=now,
+                    valid_at=reference_time,
                 )
 
                 # Create default edge type map
@@ -1678,11 +1768,10 @@ class Graphiti:
                 )
 
                 episodes = [
-                    await EpisodicNode.get_by_uuid(driver, episode.uuid)
-                    if episode.uuid is not None
-                    else EpisodicNode(
+                    await _load_or_create_episode(
+                        driver=driver,
+                        uuid=episode.uuid,
                         name=episode.name,
-                        labels=[],
                         source=episode.source,
                         content=episode.content,
                         source_description=episode.source_description,
@@ -1763,6 +1852,7 @@ class Graphiti:
 
                 # Resolved pointers for episodic edges
                 resolved_episodic_edges = resolve_edge_pointers(episodic_edges, final_uuid_map)
+                resolved_episodic_edges = _oracle_episodic_edges(driver, resolved_episodic_edges)
 
                 edges_to_save = resolved_edges + invalidated_edges
                 for episode in episodes:
@@ -2172,6 +2262,30 @@ class Graphiti:
         return AddTripletResults(edges=edges, nodes=nodes)
 
     async def remove_episode(self, episode_uuid: str):
+        if self.driver.provider == GraphProvider.ORACLE:
+
+            async def prepare_summary(node, remaining_episodes):
+                node.summary = ''
+                node.attributes = {}
+                for start in range(0, len(remaining_episodes), SUMMARY_REBUILD_BATCH_SIZE):
+                    await _extract_entity_summaries_batch(
+                        self.llm_client,
+                        [node],
+                        remaining_episodes[start : start + SUMMARY_REBUILD_BATCH_SIZE],
+                        None,
+                        None,
+                        {},
+                        skip_fact_appending=True,
+                        clients=self.clients,
+                        require_all_summaries=True,
+                    )
+
+            native_removal = getattr(self.driver.graph_ops, 'remove_episode', None)
+            if native_removal is None:
+                raise NotImplementedError('Oracle episode removal operations are unavailable')
+            await native_removal(self.driver, episode_uuid, prepare_summary)
+            return
+
         # Find the episode to be deleted
         episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
 

@@ -405,7 +405,9 @@ class GraphOperationsInterface(BaseModel):
         saga_uuid: str,
         since: Any | None = None,
         limit: int = 200,
-    ) -> list[tuple[str, Any, Any]]:
+        *,
+        after_uuid: str | None = None,
+    ) -> list[tuple[str, Any, Any]] | list[tuple[str, Any, Any, str]]:
         """Retrieve episode content + timestamps from a saga for summarization.
 
         Args:
@@ -416,11 +418,14 @@ class GraphOperationsInterface(BaseModel):
                 after this timestamp; if None, returns all episodes. Filtering
                 by ingestion time (not ``valid_at``) keeps backfilled episodes
                 with historical reference times reachable on subsequent runs.
+            after_uuid: UUID tie-breaker for episodes whose ``created_at`` equals
+                ``since``. It is ignored when ``since`` is None.
             limit: Maximum number of episodes to return
 
         Returns:
-            list[tuple[str, datetime | None, datetime]]: (content, valid_at,
-            created_at) tuples in ingestion order by ``created_at``. The
+            Existing providers may return (content, valid_at, created_at) triples.
+            Oracle returns (content, valid_at, created_at, uuid) tuples in ingestion
+            order by ``created_at`` and UUID. The
             caller may reorder selected episodes by ``valid_at`` for the
             prompt, while ``created_at`` advances the ingestion-time filter
             watermark only through episodes actually included in that prompt.

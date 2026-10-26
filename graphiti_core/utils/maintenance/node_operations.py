@@ -1097,6 +1097,7 @@ async def _extract_entity_summaries_batch(
     entity_types: dict[str, type[BaseModel]] | None = None,
     clients: GraphitiClients | None = None,
     max_coroutines: int | None = None,
+    require_all_summaries: bool = False,
 ) -> None:
     """Extract summaries for multiple entities in batched LLM calls.
 
@@ -1162,6 +1163,7 @@ async def _extract_entity_summaries_batch(
                 use_episode_prompt=skip_fact_appending,
                 entity_types=entity_types,
                 clients=clients,
+                require_all_summaries=require_all_summaries,
             )
             for flight in node_flights
         ],
@@ -1178,6 +1180,7 @@ async def _process_summary_flight(
     use_episode_prompt: bool = False,
     entity_types: dict[str, type[BaseModel]] | None = None,
     clients: GraphitiClients | None = None,
+    require_all_summaries: bool = False,
 ) -> None:
     """Process a single flight of nodes for batch summarization."""
     # Build entity type descriptions from docstrings, stripping GOOD/BAD
@@ -1254,17 +1257,25 @@ async def _process_summary_flight(
 
     # Apply summaries from LLM response
     summaries_response = SummarizedEntities(**llm_response)
+    summarized_uuids: set[str] = set()
     for summarized_entity in summaries_response.summaries:
         matching_nodes = name_to_nodes.get(summarized_entity.name.lower(), [])
         if matching_nodes:
             truncated_summary = truncate_at_sentence(summarized_entity.summary, MAX_SUMMARY_CHARS)
+            if require_all_summaries and not truncated_summary.strip():
+                raise ValueError('empty summary returned for a requested entity')
             for node in matching_nodes:
+                if require_all_summaries and node.uuid in summarized_uuids:
+                    raise ValueError('duplicate summary returned for a requested entity')
                 node.summary = truncated_summary
+                summarized_uuids.add(node.uuid)
         else:
             logger.warning(
                 'LLM returned summary for unknown entity (first 30 chars): %.30s',
                 summarized_entity.name,
             )
+    if require_all_summaries and summarized_uuids != {node.uuid for node in nodes}:
+        raise ValueError('summary response omitted a requested entity')
 
 
 def _build_episode_context(
