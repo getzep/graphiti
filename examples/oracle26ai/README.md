@@ -129,8 +129,8 @@ They need no database, credentials or model-provider call:
 
 ```sh
 uv sync --extra dev --extra oracle
-GRAPHITI_TELEMETRY_ENABLED=false DISABLE_NEO4J=1 DISABLE_FALKORDB=1 \\
-  DISABLE_KUZU=1 DISABLE_NEPTUNE=1 \\
+GRAPHITI_TELEMETRY_ENABLED=false DISABLE_NEO4J=1 DISABLE_FALKORDB=1 \
+  DISABLE_KUZU=1 DISABLE_NEPTUNE=1 \
   uv run pytest tests/driver/oracle -m 'not integration' -q
 ```
 
@@ -138,7 +138,7 @@ Native tests have the `_int.py` suffix and `integration` marker and are disabled
 They use synthetic owned groups. Point them only at a dedicated, configured Oracle test schema:
 
 ```sh
-RUN_ORACLE_TESTS=1 GRAPHITI_TELEMETRY_ENABLED=false \\
+RUN_ORACLE_TESTS=1 GRAPHITI_TELEMETRY_ENABLED=false \
   uv run pytest tests/driver/oracle -m 'integration and not falkor' -q
 ```
 
