@@ -158,3 +158,17 @@ def test_falkordb_fulltext_query_escapes_default_group_id():
     built = _build_falkor_fulltext_query('hello', [default])
     assert '@group_id:"\\_"' in built
     assert '@group_id:"_"' not in built
+
+
+def test_build_neo4j_fulltext_query_parenthesises_multiple_groups():
+    # Multiple group_ids must be parenthesised so Lucene's AND operator binds to
+    # the entire OR group expression rather than only the final group.
+    built = _build_neo4j_fulltext_query('insomnia', ['A', 'B'])
+    assert built == '(group_id:"A" OR group_id:"B") AND (insomnia)'
+
+
+def test_fulltext_query_parenthesises_multiple_groups():
+    driver = SimpleNamespace(provider=GraphProvider.NEO4J, fulltext_syntax='')
+    built = fulltext_query('insomnia', ['A', 'B'], driver)
+    assert built == '(group_id:"A" OR group_id:"B") AND (insomnia)'
+
