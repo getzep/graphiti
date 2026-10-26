@@ -781,7 +781,8 @@ def contradiction_invalid_at(resolved_edge: EntityEdge, edge: EntityEdge) -> dat
     edge_start = edge_valid_at if edge_valid_at is not None else ensure_utc(edge.reference_time)
     if edge_start is not None and end_utc <= edge_start:
         return None
-    # Do not move an end date that is already earlier.
+    # Do not move an end date that is already earlier. A later end date moves to the
+    # earlier end, as it does for a later state.
     if edge_invalid_at is not None and edge_invalid_at <= end_utc:
         return None
     return end
