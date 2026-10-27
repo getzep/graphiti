@@ -60,9 +60,7 @@ def _build_neo4j_fulltext_query(
 
     group_ids_filter_list = [f'group_id:"{g}"' for g in group_ids] if group_ids is not None else []
     group_ids_filter = (
-        '(' + ' OR '.join(group_ids_filter_list) + ') AND '
-        if group_ids_filter_list
-        else ''
+        '(' + ' OR '.join(group_ids_filter_list) + ') AND ' if group_ids_filter_list else ''
     )
 
     lucene_query = lucene_sanitize(query)

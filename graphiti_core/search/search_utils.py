@@ -98,9 +98,7 @@ def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver)
         else []
     )
     group_ids_filter = (
-        '(' + ' OR '.join(group_ids_filter_list) + ') AND '
-        if group_ids_filter_list
-        else ''
+        '(' + ' OR '.join(group_ids_filter_list) + ') AND ' if group_ids_filter_list else ''
     )
 
     lucene_query = lucene_sanitize(query)

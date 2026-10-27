@@ -171,4 +171,3 @@ def test_fulltext_query_parenthesises_multiple_groups():
     driver = SimpleNamespace(provider=GraphProvider.NEO4J, fulltext_syntax='')
     built = fulltext_query('insomnia', ['A', 'B'], driver)
     assert built == '(group_id:"A" OR group_id:"B") AND (insomnia)'
-
