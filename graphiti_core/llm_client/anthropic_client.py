@@ -100,6 +100,33 @@ ANTHROPIC_MODEL_MAX_TOKENS = {
 DEFAULT_ANTHROPIC_MAX_TOKENS = 8192
 
 
+def _parse_sdk_major_version(version: str | None) -> int:
+    """Parse the major version number from a package version string.
+
+    Used to detect the installed anthropic SDK generation: 1.0 removed the
+    ``temperature``/``top_p``/``top_k`` keyword arguments from
+    ``messages.create()``, so passing them raises a TypeError before the
+    request is sent.
+
+    Args:
+        version: A dotted version string (e.g. '0.111.0'), or None.
+
+    Returns:
+        The major version as an int. Returns 0 when the string is missing or
+        cannot be parsed, keeping request kwargs unchanged for SDKs where
+        ``temperature`` is still accepted.
+    """
+    if not version:
+        return 0
+    try:
+        return int(version.split('.')[0])
+    except ValueError:
+        return 0
+
+
+_ANTHROPIC_SDK_MAJOR_VERSION = _parse_sdk_major_version(getattr(anthropic, '__version__', None))
+
+
 class AnthropicClient(LLMClient):
     """
     A client for the Anthropic LLM.
@@ -289,15 +316,25 @@ class AnthropicClient(LLMClient):
         try:
             # Create the appropriate tool based on whether response_model is provided
             tools, tool_choice = self._create_tool(response_model)
-            result = await self.client.messages.create(
-                system=system_message.content,
-                max_tokens=max_creation_tokens,
-                temperature=self.temperature,
-                messages=user_messages_cast,
-                model=effective_model,
-                tools=tools,
-                tool_choice=tool_choice,
-            )
+            request_kwargs: dict[str, typing.Any] = {
+                'system': system_message.content,
+                'max_tokens': max_creation_tokens,
+                'messages': user_messages_cast,
+                'model': effective_model,
+                'tools': tools,
+                'tool_choice': tool_choice,
+            }
+            # Only send temperature when it is set (the API rejects an explicit
+            # null) and when the installed SDK still accepts the keyword.
+            if self.temperature is not None:
+                if _ANTHROPIC_SDK_MAJOR_VERSION < 1:
+                    request_kwargs['temperature'] = self.temperature
+                else:
+                    logger.debug(
+                        f'anthropic SDK >=1.0 removed the temperature parameter; '
+                        f'ignoring configured temperature={self.temperature}'
+                    )
+            result = await self.client.messages.create(**request_kwargs)
 
             # Extract token usage from the response
             input_tokens = 0
