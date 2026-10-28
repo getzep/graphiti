@@ -554,6 +554,25 @@ All are incorporated above. The material ones:
 - Estimates re-baselined from 5,000-7,000 lines / 3-5 weeks to 8,000-12,000 lines /
   6-9 weeks against the Oracle PR's measured size.
 
+## 16. Implementation status (2026-10-28)
+
+Implemented on branch `feat/spanner-graph-driver` (fork `rickragv/graphiti`):
+
+- `875ec09` PR-A core hooks (`SagaNodeOperations.get_by_name`,
+  `EpisodeNodeOperations.count_mentions_of_entity`) with routing tests.
+- `128a21c` core fix: `label_propagation` never terminated for two entities joined only by
+  parallel edges (found while implementing community clusters; affects every backend).
+- `6800e27` the driver: `graphiti_core/driver/spanner/` (foundation, eleven ops classes,
+  legacy adapters), `spanner` extra, test-harness registration, 146 foundation tests.
+- `e0b8359` README, quickstart, this spec, emulator CI workflow.
+
+Verified on emulator 1.5.59: the driver's own suite plus the repository's `test_node_int.py`,
+`test_edge_int.py` and `test_graphiti_mock.py` (26 passed, 3 skipped: test-only Cypher
+helpers) with `ENABLE_SPANNER=1`; repo-wide ruff and pyright clean. Deviations from the
+design discovered during implementation are recorded in the relevant sections above
+(source-column filters, `GRAPH_TABLE` traversals, Neo4j-style cosine scale, `{0,n}` bounds
+accepted, `Database.close()` run on a daemon thread).
+
 ## Appendix A. Draft RFC comment for issue #1198
 
 > I would like to contribute a Spanner Graph backend and am asking for `rfc-approved` before

@@ -94,6 +94,13 @@ async def spanner_driver(spanner_config: SpannerConfig) -> AsyncIterator[Spanner
 
 
 @pytest_asyncio.fixture(loop_scope='session')
+async def clean_driver(spanner_driver: SpannerDriver) -> SpannerDriver:
+    """The shared driver with every table emptied first, for tests that write data."""
+    await spanner_driver.clear_tables()
+    return spanner_driver
+
+
+@pytest_asyncio.fixture(loop_scope='session')
 async def scratch_driver(spanner_driver: SpannerDriver) -> AsyncIterator[SpannerDriver]:
     """A driver on its own fresh, empty database (no schema), dropped after the test."""
     driver = spanner_driver.with_database(new_database_id())

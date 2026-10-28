@@ -118,10 +118,12 @@ def _date_predicate(
     only ``IS NULL`` matches edges without the date. An empty OR-list, or any empty AND-group
     (vacuously true), adds no constraint; Neo4j renders invalid Cypher for both.
     """
+    # Decide before binding anything, so a vacuous group does not leave parameters bound by
+    # earlier groups behind.
+    if not groups or any(not group for group in groups):
+        return None
     or_parts: list[str] = []
     for i, group in enumerate(groups):
-        if not group:
-            return None
         and_parts: list[str] = []
         for j, date_filter in enumerate(group):
             operator = date_filter.comparison_operator

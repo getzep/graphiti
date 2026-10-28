@@ -81,7 +81,9 @@ from graphiti_core.edges import (
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode, SagaNode
 from tests.driver.spanner.conftest import TEST_EMBEDDING_DIM
 
-pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope='session')]
+# Emulator-backed, like the repository's database-backed suites; skipped without the
+# emulator by the fixtures, so no `integration` marker (which would exclude them from CI).
+pytestmark = pytest.mark.asyncio(loop_scope='session')
 
 T0 = datetime(2026, 10, 28, 12, 30, 15, 123456, tzinfo=timezone.utc)
 T1 = T0 + timedelta(hours=1)
