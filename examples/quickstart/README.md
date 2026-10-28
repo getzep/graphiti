@@ -60,6 +60,8 @@ SPANNER_INSTANCE=your_spanner_instance
 SPANNER_DATABASE=your_spanner_database
 # Optional: target the local emulator instead of Google Cloud
 SPANNER_EMULATOR_HOST=localhost:9010
+# Optional: use Gemini (gemini-2.5-flash + gemini-embedding-001) instead of OpenAI for the Spanner quickstart
+GOOGLE_API_KEY=your_google_api_key
 
 # To use a different database, modify the driver constructor in the script
 ```

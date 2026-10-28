@@ -502,9 +502,78 @@ graphiti = Graphiti(graph_driver=driver)
 await graphiti.build_indices_and_constraints()
 ```
 
+What you provide and what the driver creates:
+
+- **You create** the Spanner instance (Enterprise or Enterprise Plus edition, or the free trial instance) and an
+  empty database, and grant the runtime identity `roles/spanner.databaseUser`.
+- **The driver creates** everything inside the database on `build_indices_and_constraints()`: the node and edge
+  tables, secondary indexes, full-text search indexes and the `graphiti` property graph. The call is idempotent
+  (it only applies what is missing), so running it on every startup is safe. It needs
+  `roles/spanner.databaseAdmin` the first time, because it issues DDL.
+- `embedding_dim` must equal your embedding model's width, because the vector columns pin it. With Google's
+  `gemini-embedding-001` choose one of its supported sizes (768, 1536 or 3072) and pass the same number to the
+  embedder and the driver, as in the example below. OpenAI `text-embedding-3-small` uses the default 1024;
+  Ollama `bge-m3` is 1024 and `nomic-embed-text` is 768 with the
+  [OpenAI-compatible setup](#using-graphiti-with-openai-compatible-providers-and-local-llms).
+
+A complete Google-only configuration, Spanner Graph plus Gemini for the LLM, embeddings and reranking
+(`pip install graphiti-core[spanner,google-genai]`, `GOOGLE_API_KEY` set):
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+from graphiti_core.driver.spanner_driver import SpannerDriver
+from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig
+from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig
+
+EMBEDDING_DIM = 1536  # gemini-embedding-001 supports 768, 1536 and 3072
+
+driver = SpannerDriver(
+    project='<GCP_PROJECT_ID>',
+    instance='<SPANNER_INSTANCE_ID>',
+    database='<SPANNER_DATABASE_ID>',
+    embedding_dim=EMBEDDING_DIM,
+)
+
+graphiti = Graphiti(
+    graph_driver=driver,
+    llm_client=GeminiClient(config=LLMConfig(api_key='<GOOGLE_API_KEY>', model='gemini-2.5-flash')),
+    embedder=GeminiEmbedder(
+        config=GeminiEmbedderConfig(
+            api_key='<GOOGLE_API_KEY>',
+            embedding_model='gemini-embedding-001',
+            embedding_dim=EMBEDDING_DIM,
+        )
+    ),
+    cross_encoder=GeminiRerankerClient(
+        config=LLMConfig(api_key='<GOOGLE_API_KEY>', model='gemini-2.5-flash-lite')
+    ),
+)
+
+await graphiti.build_indices_and_constraints()
+```
+
+Local development against the emulator needs no Google Cloud project:
+
+```bash
+docker run -d -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator
+export SPANNER_EMULATOR_HOST=localhost:9010   # the driver then uses anonymous credentials
+```
+
+With the emulator the instance and database still have to exist; `examples/quickstart/quickstart_spanner.py`
+shows the few lines that create them when missing.
+
+Multitenancy follows Graphiti's `group_id` model: all tenants share one database, every table carries a
+`group_id` column, and every index includes it, so tenant-scoped searches stay index-served. Pass `group_id` on
+writes (`add_episode(..., group_id='tenant-a')`) and `group_ids` on reads (`search(query, group_ids=['tenant-a'])`);
+`group_ids=None` searches every tenant, as it does on every backend. Remove a tenant with
+`clear_data(driver, ['tenant-a'])`. For hard isolation use one database per tenant via `driver.with_database(name)`
+and run `build_indices_and_constraints()` once per database.
+
 The Spanner backend is a native GoogleSQL/GQL implementation rather than a Cypher dialect. Two behaviours differ
-from Neo4j: tenants share one database and are separated by the `group_id` column (not one database per group),
-and saving an edge whose source node does not exist raises an error instead of silently writing nothing.
+from Neo4j: saving an edge whose source node does not exist raises `SpannerMissingEndpointError` instead of
+silently writing nothing, and full-text ranking uses Spanner's scorer rather than BM25 (results are fused with
+vector similarity, so retrieval quality is comparable but ordering within the text leg can differ).
 
 Contributing a new graph backend? See [Adding a graph driver](CONTRIBUTING.md#adding-a-graph-driver).
 

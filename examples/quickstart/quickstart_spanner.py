@@ -69,6 +69,54 @@ if not spanner_database:
     raise ValueError('SPANNER_DATABASE must be set')
 
 
+def build_clients():
+    """Gemini when GOOGLE_API_KEY is set (a Google-only stack), otherwise Graphiti's OpenAI defaults.
+
+    Returns (llm_client, embedder, cross_encoder, embedding_dim). The embedding size is passed
+    to the driver because the Spanner vector columns pin it.
+    """
+    google_api_key = os.environ.get('GOOGLE_API_KEY')
+    if not google_api_key:
+        return None, None, None, None
+
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+    from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig
+    from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig
+
+    embedding_dim = 1536  # gemini-embedding-001 supports 768, 1536 and 3072
+    return (
+        GeminiClient(config=LLMConfig(api_key=google_api_key, model='gemini-2.5-flash')),
+        GeminiEmbedder(
+            config=GeminiEmbedderConfig(
+                api_key=google_api_key,
+                embedding_model='gemini-embedding-001',
+                embedding_dim=embedding_dim,
+            )
+        ),
+        GeminiRerankerClient(
+            config=LLMConfig(api_key=google_api_key, model='gemini-2.5-flash-lite')
+        ),
+        embedding_dim,
+    )
+
+
+def ensure_emulator_database(driver: SpannerDriver) -> None:
+    """On the emulator, create the instance and database when they do not exist yet.
+
+    Against Google Cloud the instance and database are provisioned outside the application,
+    so this is only called when SPANNER_EMULATOR_HOST is set.
+    """
+    if not driver.instance.exists():
+        instance = driver.client.instance(
+            driver.config.instance,
+            configuration_name=f'projects/{driver.config.project}/instanceConfigs/emulator-config',
+            node_count=1,
+        )
+        instance.create().result(120)
+    if not driver.database.exists():
+        driver.database.create().result(300)
+
+
 async def main():
     #################################################
     # INITIALIZATION
@@ -81,13 +129,26 @@ async def main():
     # database.
     #################################################
 
+    llm_client, embedder, cross_encoder, embedding_dim = build_clients()
+
+    driver_kwargs = {}
+    if embedding_dim is not None:
+        driver_kwargs['embedding_dim'] = embedding_dim  # otherwise EMBEDDING_DIM (OpenAI default)
     driver = SpannerDriver(
         project=spanner_project,
         instance=spanner_instance,
         database=spanner_database,
+        **driver_kwargs,
     )
+    if os.environ.get('SPANNER_EMULATOR_HOST'):
+        ensure_emulator_database(driver)
 
-    graphiti = Graphiti(graph_driver=driver)
+    graphiti = Graphiti(
+        graph_driver=driver,
+        llm_client=llm_client,
+        embedder=embedder,
+        cross_encoder=cross_encoder,
+    )
 
     try:
         await graphiti.build_indices_and_constraints()
