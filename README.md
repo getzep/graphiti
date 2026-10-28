@@ -249,9 +249,8 @@ uv add graphiti-core[spanner]
 ```
 
 Spanner Graph, full-text search and vector search require a Spanner instance on the Enterprise or Enterprise Plus
-edition (the 90-day free trial instance includes them). For local development the
-[Spanner emulator](https://cloud.google.com/spanner/docs/emulator) supports everything the driver needs except
-production-accurate full-text ranking.
+edition; the 90-day free trial instance includes them. The driver's test suite runs against the Spanner emulator
+(`SPANNER_EMULATOR_HOST`), which is also usable for CI.
 
 ### You can also install optional LLM providers as extras:
 
@@ -485,7 +484,7 @@ from graphiti_core.driver.spanner_driver import SpannerDriver
 
 # Create a Spanner driver. Credentials come from Application Default Credentials
 # (`gcloud auth application-default login`, an attached service account, or
-# GOOGLE_APPLICATION_CREDENTIALS); set SPANNER_EMULATOR_HOST=localhost:9010 to target the emulator.
+# GOOGLE_APPLICATION_CREDENTIALS).
 driver = SpannerDriver(
     project='<GCP_PROJECT_ID>',
     instance='<SPANNER_INSTANCE_ID>',
@@ -553,15 +552,35 @@ graphiti = Graphiti(
 await graphiti.build_indices_and_constraints()
 ```
 
-Local development against the emulator needs no Google Cloud project:
+Provisioning on Google Cloud, once per project:
 
 ```bash
-docker run -d -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator
-export SPANNER_EMULATOR_HOST=localhost:9010   # the driver then uses anonymous credentials
+gcloud config set project <GCP_PROJECT_ID>
+gcloud services enable spanner.googleapis.com
+
+# Spanner Graph, full-text search and vector search need the Enterprise edition or higher.
+# 100 processing units is the smallest paid instance; add --instance-type=free-instance for the 90-day trial.
+gcloud spanner instances create graphiti \
+  --config=regional-us-central1 --description="Graphiti" \
+  --edition=ENTERPRISE --processing-units=100
+
+gcloud spanner databases create graphiti --instance=graphiti
+
+# The identity that runs Graphiti needs databaseUser; the identity that runs
+# build_indices_and_constraints() the first time also needs databaseAdmin (it issues DDL).
+gcloud spanner databases add-iam-policy-binding graphiti --instance=graphiti \
+  --member="serviceAccount:<RUNTIME_SA>@<GCP_PROJECT_ID>.iam.gserviceaccount.com" \
+  --role="roles/spanner.databaseUser"
+gcloud spanner databases add-iam-policy-binding graphiti --instance=graphiti \
+  --member="user:<YOUR_EMAIL>" --role="roles/spanner.databaseAdmin"
+
+# Local credentials for development; on GCE, GKE or Cloud Run the attached service account is used.
+gcloud auth application-default login
 ```
 
-With the emulator the instance and database still have to exist; `examples/quickstart/quickstart_spanner.py`
-shows the few lines that create them when missing.
+Then `SpannerDriver(project='<GCP_PROJECT_ID>', instance='graphiti', database='graphiti', ...)` as above, and
+`await graphiti.build_indices_and_constraints()` creates the schema. `examples/quickstart/quickstart_spanner.py`
+is a complete runnable example driven by `SPANNER_PROJECT`, `SPANNER_INSTANCE` and `SPANNER_DATABASE`.
 
 Multitenancy follows Graphiti's `group_id` model: all tenants share one database, every table carries a
 `group_id` column, and every index includes it, so tenant-scoped searches stay index-served. Pass `group_id` on

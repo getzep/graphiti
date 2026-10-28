@@ -34,14 +34,19 @@ from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 # Set up logging and environment variables for
 # connecting to Google Cloud Spanner Graph.
 #
+# Prerequisites in your Google Cloud project (see
+# the "Google Cloud Spanner Graph" section of the
+# main README for the gcloud commands):
+#   - a Spanner instance on the Enterprise edition
+#     (or the 90-day free trial instance)
+#   - an empty database in that instance
+#   - roles/spanner.databaseUser for the runtime
+#     identity, plus roles/spanner.databaseAdmin
+#     for whoever runs the schema creation below
 # Credentials come from Application Default
 # Credentials (gcloud auth application-default
 # login, an attached service account, or
-# GOOGLE_APPLICATION_CREDENTIALS). To run against
-# the local emulator instead, start it with
-#   docker run -d -p 9010:9010 -p 9020:9020 \
-#     gcr.io/cloud-spanner-emulator/emulator
-# and set SPANNER_EMULATOR_HOST=localhost:9010.
+# GOOGLE_APPLICATION_CREDENTIALS).
 #################################################
 
 # Configure logging
@@ -100,23 +105,6 @@ def build_clients():
     )
 
 
-def ensure_emulator_database(driver: SpannerDriver) -> None:
-    """On the emulator, create the instance and database when they do not exist yet.
-
-    Against Google Cloud the instance and database are provisioned outside the application,
-    so this is only called when SPANNER_EMULATOR_HOST is set.
-    """
-    if not driver.instance.exists():
-        instance = driver.client.instance(
-            driver.config.instance,
-            configuration_name=f'projects/{driver.config.project}/instanceConfigs/emulator-config',
-            node_count=1,
-        )
-        instance.create().result(120)
-    if not driver.database.exists():
-        driver.database.create().result(300)
-
-
 async def main():
     #################################################
     # INITIALIZATION
@@ -140,8 +128,6 @@ async def main():
         database=spanner_database,
         **driver_kwargs,
     )
-    if os.environ.get('SPANNER_EMULATOR_HOST'):
-        ensure_emulator_database(driver)
 
     graphiti = Graphiti(
         graph_driver=driver,
