@@ -106,3 +106,36 @@ def test_attribute_extraction_preamble_handles_empty_messages():
     messages: list[Message] = []
     client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
     assert messages == []
+
+
+def test_is_server_or_retry_error_recognizes_openai_5xx():
+    """OpenAI SDK 5xx must retry the same way as httpx 5xx (#2093)."""
+    from types import SimpleNamespace
+
+    import httpx
+    import openai
+    from graphiti_core.llm_client.client import is_server_or_retry_error
+
+    request = httpx.Request('POST', 'https://example.com/v1/chat/completions')
+    httpx_err = httpx.HTTPStatusError(
+        'server error',
+        request=request,
+        response=httpx.Response(503, request=request),
+    )
+    assert is_server_or_retry_error(httpx_err) is True
+
+    openai_err = openai.InternalServerError(
+        message='high demand',
+        response=SimpleNamespace(status_code=503, headers={}, request=None),
+        body=None,
+    )
+    assert is_server_or_retry_error(openai_err) is True
+
+    client_err = openai.BadRequestError(
+        message='bad request',
+        response=SimpleNamespace(status_code=400, headers={}, request=None),
+        body=None,
+    )
+    assert is_server_or_retry_error(client_err) is False
+
+    assert is_server_or_retry_error(ValueError('nope')) is False
