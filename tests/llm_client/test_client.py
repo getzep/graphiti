@@ -114,6 +114,7 @@ def test_is_server_or_retry_error_recognizes_openai_5xx():
 
     import httpx
     import openai
+
     from graphiti_core.llm_client.client import is_server_or_retry_error
 
     request = httpx.Request('POST', 'https://example.com/v1/chat/completions')
