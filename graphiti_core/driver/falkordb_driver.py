@@ -128,6 +128,12 @@ class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
     default_group_id: str = '_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
+
+    @property
+    def single_graph_mode(self) -> bool:
+        # One graph for all group_ids; isolation via the group_id property.
+        return True
+
     aoss_client: None = None
 
     def __init__(
@@ -246,9 +252,10 @@ class FalkorDriver(GraphDriver):
             result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
         except Exception as e:
             if 'already indexed' in str(e) or 'Stopwords are already set' in str(e):
-                # check if index already exists
-                logger.info(f'Index already exists: {e}')
-                return None
+                # Idempotent index creation (incl. FalkorDB 6.x stopwords):
+                # report at the call site, not here.
+                logger.debug(f'Index already exists: {e}')
+                raise
             logger.error(f'Error executing FalkorDB query: {e}\n{cypher_query_}\n{params}')
             raise
 
@@ -321,30 +328,81 @@ class FalkorDriver(GraphDriver):
         if drop_tasks:
             await asyncio.gather(*drop_tasks)
 
+    async def _warn_on_legacy_graph_layout(self) -> None:
+        """Log a warning when the database still contains per-group graphs.
+
+        The unified backend keeps all group_ids in one graph. Data in other
+        graph keys is not visible to this driver. Point the operator at the
+        migration tool instead of staying silent. Detection problems must
+        never block startup.
+        """
+        if getattr(self, '_legacy_layout_checked', False):
+            return
+        try:
+            graph_keys = await self.client.list_graphs()
+        except Exception:
+            # Transient failure: do NOT set the flag, so the next
+            # build_indices call retries the probe instead of silencing the
+            # warning for this driver's lifetime.
+            return
+        self._legacy_layout_checked = True
+
+        if len(graph_keys) > 1000:
+            # A Redis instance shared with many other applications: probing
+            # every key costs more than the warning is worth.
+            return
+
+        legacy: list[str] = []
+        for key in graph_keys:
+            if key == self._database:
+                continue
+            try:
+                graph = self.client.select_graph(key)
+                result = await graph.query('MATCH (e:Episodic) RETURN count(e)')
+                if result.result_set and result.result_set[0][0] > 0:
+                    legacy.append(key)
+            except Exception:
+                continue  # not a graphiti graph or not readable; skip it
+
+        if legacy:
+            shown = ', '.join(legacy[:5]) + (' ...' if len(legacy) > 5 else '')
+            logger.warning(
+                f'FalkorDB still holds graphiti data in legacy per-group graphs: {shown}. '
+                f'The unified driver reads only the {self._database!r} graph. '
+                'Run mcp_server/migrate_falkordb_graphs.py to move the data.'
+            )
+
     async def build_indices_and_constraints(self, delete_existing=False):
+        await self._warn_on_legacy_graph_layout()
+
         if delete_existing:
             await self.delete_all_indexes()
-        range_indices = get_range_indices(self.provider)
-        fulltext_indices = get_fulltext_indices(self.provider)
-        # Keep range indexes first; FalkorDB 6.x range lookups fail if fulltext indexes cover a property first.
-        index_queries = range_indices + fulltext_indices
+        # Keep range indexes first; FalkorDB 6.x range lookups fail if
+        # fulltext indexes cover a property first (#1963).
+        index_queries = get_range_indices(self.provider) + get_fulltext_indices(self.provider)
         for query in index_queries:
-            await self.execute_query(query)
+            try:
+                await self.execute_query(query)
+            except Exception as e:
+                # Index creation is idempotent at the call site: an 'already indexed'
+                # error means the desired state is already present.
+                if 'already indexed' in str(e) or 'Stopwords are already set' in str(e):
+                    logger.info(f'Index already exists: {e}')
+                else:
+                    raise
 
     def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
-        """
-        if database == self._database:
-            cloned = self
-        elif database == self.default_group_id:
-            cloned = FalkorDriver(falkor_db=self.client)
-        else:
-            # Create a new instance of FalkorDriver with the same connection but a different database
-            cloned = FalkorDriver(falkor_db=self.client, database=database)
 
-        return cloned
+        Note: FalkorDB now uses a single graph for all group_ids, with logical isolation
+        via the group_id property on nodes. This matches the behavior of the Neo4j driver
+        and allows for cross-group_id queries and the shared groups mechanism.
+        """
+        # Return self to maintain single database connection
+        # Data isolation is achieved via group_id filtering, not separate graphs
+        return self
 
     async def health_check(self) -> None:
         """Check FalkorDB connectivity by running a simple query."""

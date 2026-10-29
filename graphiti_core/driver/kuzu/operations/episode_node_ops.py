@@ -175,7 +175,7 @@ class KuzuEpisodeNodeOperations(EpisodeNodeOperations):
             """
             + EPISODIC_NODE_RETURN
             + """
-            ORDER BY uuid DESC
+            ORDER BY created_at DESC, uuid DESC
             """
             + limit_clause
         )
