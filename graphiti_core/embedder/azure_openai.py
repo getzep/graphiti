@@ -34,9 +34,15 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
         self,
         azure_client: AsyncAzureOpenAI | AsyncOpenAI,
         model: str = 'text-embedding-3-small',
+        embedding_dim: int | None = None,
     ):
         self.azure_client = azure_client
         self.model = model
+        # When set, embeddings are truncated to ``embedding_dim`` so this client
+        # matches the dimensionality produced by ``OpenAIEmbedder``/``VoyageAIEmbedder``
+        # (which truncate to ``config.embedding_dim``). Left as ``None`` by default
+        # to preserve the previous behaviour of returning the model's full output.
+        self.embedding_dim = embedding_dim
 
     async def create(self, input_data: str | list[str] | Any) -> list[float]:
         """Create embeddings using Azure OpenAI client."""
@@ -53,7 +59,8 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
             response = await self.azure_client.embeddings.create(model=self.model, input=text_input)
 
             # Return the first embedding as a list of floats
-            return response.data[0].embedding
+            embedding = response.data[0].embedding
+            return embedding[: self.embedding_dim] if self.embedding_dim is not None else embedding
         except Exception as e:
             logger.error(f'Error in Azure OpenAI embedding: {e}')
             raise
@@ -65,7 +72,14 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
                 model=self.model, input=input_data_list
             )
 
-            return [embedding.embedding for embedding in response.data]
+            return [
+                (
+                    item.embedding[: self.embedding_dim]
+                    if self.embedding_dim is not None
+                    else item.embedding
+                )
+                for item in response.data
+            ]
         except Exception as e:
             logger.error(f'Error in Azure OpenAI batch embedding: {e}')
             raise
