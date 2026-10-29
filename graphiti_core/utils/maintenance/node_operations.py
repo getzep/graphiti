@@ -292,7 +292,7 @@ async def _extract_nodes_single(
 ) -> list[ExtractedEntity]:
     """Extract entities using a single LLM call."""
     llm_response = await _call_extraction_llm(llm_client, episode, context, clients=clients)
-    response_object = ExtractedEntities(**llm_response)
+    response_object = ExtractedEntities.model_validate(llm_response)
     return response_object.extracted_entities
 
 
@@ -744,7 +744,9 @@ async def _resolve_with_llm(
         max_tokens=dedupe_nodes_max_tokens,
     )
 
-    node_resolutions: list[NodeDuplicate] = NodeResolutions(**llm_response).entity_resolutions
+    node_resolutions: list[NodeDuplicate] = NodeResolutions.model_validate(
+        llm_response
+    ).entity_resolutions
 
     valid_relative_range = range(len(state.unresolved_indices))
     processed_relative_ids: set[int] = set()
