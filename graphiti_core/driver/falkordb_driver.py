@@ -90,8 +90,9 @@ def _strip_nul_bytes(value: Any) -> Any:
 class FalkorDriverSession(GraphDriverSession):
     provider = GraphProvider.FALKORDB
 
-    def __init__(self, graph: FalkorGraph):
+    def __init__(self, graph: FalkorGraph, initialization: 'FalkorDriver | None' = None):
         self.graph = graph
+        self._initialization = initialization
 
     async def __aenter__(self):
         return self
@@ -109,6 +110,8 @@ class FalkorDriverSession(GraphDriverSession):
         return await func(self, *args, **kwargs)
 
     async def run(self, query: str | list, **kwargs: Any) -> Any:
+        if self._initialization is not None:
+            await self._initialization._wait_for_initialization()
         # FalkorDB does not support argument for Label Set, so it's converted into an array of queries
         if isinstance(query, list):
             for cypher, params in query:
@@ -138,6 +141,7 @@ class FalkorDriver(GraphDriver):
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
         database: str = 'default_db',
+        _parent: 'FalkorDriver | None' = None,
     ):
         """
         Initialize the FalkorDB driver.
@@ -156,6 +160,11 @@ class FalkorDriver(GraphDriver):
         """
         super().__init__()
         self._database = database
+        self._parent = _parent
+        # All scoped clones share the owner's per-graph initialization tasks.
+        self._index_tasks: dict[str, asyncio.Task[None]] = (
+            _parent._index_tasks if _parent is not None else {}
+        )
         if falkor_db is not None:
             # If a FalkorDB instance is provided, use it directly
             self.client = falkor_db
@@ -175,13 +184,34 @@ class FalkorDriver(GraphDriver):
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
 
-        self._init_task: asyncio.Task | None = None
-        # Schedule the indices and constraints to be built
-        try:
-            loop = asyncio.get_running_loop()
-            self._init_task = loop.create_task(self.build_indices_and_constraints())
-        except RuntimeError:
-            pass
+        self._init_task: asyncio.Task[None] | None = self._index_tasks.get(database)
+        if self._init_task is None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass
+            else:
+                self._init_task = loop.create_task(self.build_indices_and_constraints())
+                self._index_tasks[database] = self._init_task
+                self._init_task.add_done_callback(self._finish_initialization)
+
+    def _finish_initialization(self, task: asyncio.Task[None]) -> None:
+        # Retrieve failures even if no caller awaits. Retain the failed task
+        # so every subsequent scoped query observes the same initialization error.
+        if task.cancelled():
+            if self._index_tasks.get(self._database) is task:
+                del self._index_tasks[self._database]
+            return
+        error = task.exception()
+        if error is not None:
+            logger.warning(
+                'FalkorDB index initialization failed for %s', self._database, exc_info=error
+            )
+
+    async def _wait_for_initialization(self) -> None:
+        task = self._index_tasks.get(self._database)
+        if task is not None and task is not asyncio.current_task():
+            await asyncio.shield(task)
 
     # --- Operations properties ---
 
@@ -236,6 +266,7 @@ class FalkorDriver(GraphDriver):
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any):
+        await self._wait_for_initialization()
         graph = self._get_graph(self._database)
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
@@ -270,18 +301,24 @@ class FalkorDriver(GraphDriver):
         return records, header, None
 
     def session(self, database: str | None = None) -> GraphDriverSession:
-        return FalkorDriverSession(self._get_graph(database))
+        return FalkorDriverSession(
+            self._get_graph(database),
+            self if database is None or database == self._database else None,
+        )
 
     async def close(self) -> None:
-        """Close the driver connection."""
-        if self._init_task is not None:
-            if not self._init_task.done():
-                self._init_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await self._init_task
-            elif not self._init_task.cancelled():
-                # Retrieve any exception so it doesn't go unobserved
-                self._init_task.exception()
+        """Only the owner may close the connection shared by scoped clones."""
+        if self._parent is not None:
+            return
+        tasks = list(self._index_tasks.values())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        for task in tasks:
+            # A done callback logged any failure; closing must still release
+            # the shared connection after a failed index build.
+            with suppress(asyncio.CancelledError, Exception):
+                await task
         if hasattr(self.client, 'aclose'):
             await self.client.aclose()  # type: ignore[reportUnknownMemberType]
         elif hasattr(self.client.connection, 'aclose'):
@@ -339,10 +376,12 @@ class FalkorDriver(GraphDriver):
         if database == self._database:
             cloned = self
         elif database == self.default_group_id:
-            cloned = FalkorDriver(falkor_db=self.client)
+            cloned = FalkorDriver(falkor_db=self.client, _parent=self._parent or self)
         else:
             # Create a new instance of FalkorDriver with the same connection but a different database
-            cloned = FalkorDriver(falkor_db=self.client, database=database)
+            cloned = FalkorDriver(
+                falkor_db=self.client, database=database, _parent=self._parent or self
+            )
 
         return cloned
 
