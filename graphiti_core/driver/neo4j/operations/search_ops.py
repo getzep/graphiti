@@ -84,7 +84,7 @@ class Neo4jSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EntityNode]:
-        fuzzy_query = _build_neo4j_fulltext_query(query, group_ids)
+        fuzzy_query = self.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
         if fuzzy_query == '':
             return []
 
@@ -237,7 +237,7 @@ class Neo4jSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EntityEdge]:
-        fuzzy_query = _build_neo4j_fulltext_query(query, group_ids)
+        fuzzy_query = self.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
         if fuzzy_query == '':
             return []
 
@@ -404,7 +404,7 @@ class Neo4jSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EpisodicNode]:
-        fuzzy_query = _build_neo4j_fulltext_query(query, group_ids)
+        fuzzy_query = self.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
         if fuzzy_query == '':
             return []
 
@@ -447,7 +447,7 @@ class Neo4jSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[CommunityNode]:
-        fuzzy_query = _build_neo4j_fulltext_query(query, group_ids)
+        fuzzy_query = self.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
         if fuzzy_query == '':
             return []
 
