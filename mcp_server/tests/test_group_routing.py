@@ -61,6 +61,10 @@ class FakeClient:
     async def remove_episode(self, uuid):
         self.seen.append((self, uuid))
 
+    async def get_nodes_and_edges_by_episode(self, uuids):
+        self.seen.append(('provenance', uuids))
+        return SimpleNamespace(nodes=[], edges=[])
+
 
 def make_client(driver) -> FakeClient:
     return FakeClient(driver)
@@ -193,7 +197,7 @@ async def test_get_entity_edge_uses_cloned_driver_for_explicit_group(monkeypatch
             uuid=uuid,
             fact='f',
             name='e',
-            group_id='g',
+            group_id='group-x',
             created_at=None,
             valid_at=None,
             invalid_at=None,
@@ -236,6 +240,9 @@ async def test_delete_entity_edge_uses_cloned_driver_for_explicit_group(monkeypa
     calls = []
 
     class FakeEdge:
+        uuid = 'uuid-1'
+        group_id = 'group-y'
+
         async def delete(self, driver):
             calls.append(('delete', driver))
 
@@ -256,6 +263,11 @@ async def test_delete_episode_calls_remove_episode_on_scoped_client(monkeypatch)
     client = make_client(FakeDriver())
     install_service(monkeypatch, client)
 
+    async def fake_get_by_uuid(driver, uuid):
+        return SimpleNamespace(uuid=uuid, group_id='group-z')
+
+    monkeypatch.setattr(server.EpisodicNode, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+
     response = await server.delete_episode('uuid-9', group_id='group-z')
 
     assert client.seen[0][1] == 'uuid-9'
@@ -273,3 +285,89 @@ async def test_delete_episode_uses_base_client_without_any_group(monkeypatch):
     await server.delete_episode('uuid-9')
 
     assert client.seen[0][0] is client
+
+
+async def test_get_entity_edge_rejects_other_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+    formatted = []
+
+    async def fake_get_by_uuid(driver, uuid):
+        return SimpleNamespace(uuid=uuid, group_id='other')
+
+    monkeypatch.setattr(server.EntityEdge, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+    monkeypatch.setattr(
+        server, 'format_fact_result', lambda edge: formatted.append(edge) or {'uuid': edge.uuid}
+    )
+
+    response = await server.get_entity_edge('uuid-1', group_id='group-x')
+
+    assert 'not in group' in response['error']
+    assert formatted == []
+
+
+async def test_delete_entity_edge_rejects_other_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+    deleted = []
+
+    class FakeEdge:
+        uuid = 'uuid-1'
+        group_id = 'other'
+
+        async def delete(self, driver):
+            deleted.append(driver)
+
+    async def fake_get_by_uuid(driver, uuid):
+        return FakeEdge()
+
+    monkeypatch.setattr(server.EntityEdge, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+
+    response = await server.delete_entity_edge('uuid-1', group_id='group-x')
+
+    assert 'not in group' in response['error']
+    assert deleted == []
+
+
+async def test_delete_episode_rejects_other_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+
+    async def fake_get_by_uuid(driver, uuid):
+        return SimpleNamespace(uuid=uuid, group_id='other')
+
+    monkeypatch.setattr(server.EpisodicNode, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+
+    response = await server.delete_episode('uuid-9', group_id='group-z')
+
+    assert 'not in group' in response['error']
+    assert client.seen == []
+
+
+async def test_get_episode_entities_rejects_other_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+
+    async def fake_get_by_uuid(driver, uuid):
+        return SimpleNamespace(uuid=uuid, group_id='other')
+
+    monkeypatch.setattr(server.EpisodicNode, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+
+    response = await server.get_episode_entities(['uuid-9'], group_id='group-z')
+
+    assert 'not in group' in response['error']
+    assert client.seen == []
+
+
+async def test_get_episode_entities_allows_matching_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+
+    async def fake_get_by_uuid(driver, uuid):
+        return SimpleNamespace(uuid=uuid, group_id='group-x')
+
+    monkeypatch.setattr(server.EpisodicNode, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+
+    response = await server.get_episode_entities(['uuid-9'], group_id='group-x')
+
+    assert 'Retrieved provenance' in response['message']
