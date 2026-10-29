@@ -1,0 +1,30 @@
+name: Oracle driver unit tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  oracle-unit-tests:
+    runs-on: ubuntu-latest
+    env:
+      GRAPHITI_TELEMETRY_ENABLED: 'false'
+      DISABLE_NEO4J: '1'
+      DISABLE_FALKORDB: '1'
+      DISABLE_KUZU: '1'
+      DISABLE_NEPTUNE: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39
+      - name: Install optional driver and test dependencies
+        run: uv sync --extra dev --extra oracle
+      - name: Test Oracle contracts without a database or model provider
+        run: uv run pytest tests/driver/oracle -m 'not integration' -q

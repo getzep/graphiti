@@ -909,6 +909,9 @@ class SagaNode(Node):
     first_episode_uuid: str | None = None
     last_episode_uuid: str | None = None
     last_summarized_at: datetime | None = None
+    # UUID tie-breaker paired with last_summarized_at. This makes incremental
+    # summary pagination lossless when multiple episodes share a timestamp.
+    last_summarized_episode_uuid: str | None = None
     # Maximum ``valid_at`` (episode reference time) across all episodes covered
     # by the most recent summary. ``last_summarized_at`` is the ingestion-time
     # filter watermark for the next incremental summarize run; this field
