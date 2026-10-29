@@ -4,6 +4,7 @@ from collections import defaultdict
 from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.operations.graph_utils import MAX_LABEL_PROPAGATION_SWEEPS
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
@@ -102,10 +103,13 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
+    for _ in range(MAX_LABEL_PROPAGATION_SWEEPS):
         no_change = True
-        new_community_map: dict[str, int] = {}
 
+        # Labels are updated in place so that later nodes in the sweep see earlier moves.
+        # A synchronous update (compute all new labels, then swap the map) never terminates
+        # when two nodes are joined only by parallel edges: each adopts the other's label on
+        # every sweep. The sweep cap guards against any other oscillation.
         for uuid, neighbors in projection.items():
             curr_community = community_map[uuid]
 
@@ -123,15 +127,12 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             else:
                 new_community = max(community_candidate, curr_community)
 
-            new_community_map[uuid] = new_community
-
             if new_community != curr_community:
+                community_map[uuid] = new_community
                 no_change = False
 
         if no_change:
             break
-
-        community_map = new_community_map
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():

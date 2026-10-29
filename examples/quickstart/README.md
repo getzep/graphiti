@@ -20,6 +20,10 @@ This example demonstrates the basic functionality of Graphiti, including:
   - FalkorDB server running (see [FalkorDB documentation](https://docs.falkordb.com) for setup)
 - **For Amazon Neptune**:
   - Amazon server running (see [Amazon Neptune documentation](https://aws.amazon.com/neptune/developer-resources/) for setup)
+- **For Google Cloud Spanner Graph**:
+  - A Google Cloud project with a Spanner instance on the Enterprise edition (or the 90-day free trial instance)
+    and an empty database; provisioning commands are in the main README
+  - `pip install graphiti-core[spanner]` and Application Default Credentials (`gcloud auth application-default login`)
 
 
 ## Setup Instructions
@@ -50,6 +54,14 @@ NEPTUNE_PORT=your_port_or_8182
 AOSS_HOST=your_aoss_host
 AOSS_PORT=your_port_or_443
 
+# Google Cloud Spanner Graph connection parameters (instance on the Enterprise edition; see the
+# "Google Cloud Spanner Graph" section of the main README for the gcloud provisioning steps)
+SPANNER_PROJECT=your_gcp_project
+SPANNER_INSTANCE=your_spanner_instance
+SPANNER_DATABASE=your_spanner_database
+# Optional: use Gemini (gemini-2.5-flash + gemini-embedding-001) instead of OpenAI for the Spanner quickstart
+GOOGLE_API_KEY=your_google_api_key
+
 # To use a different database, modify the driver constructor in the script
 ```
 
@@ -67,6 +79,9 @@ python quickstart_falkordb.py
 
 # For Amazon Neptune
 python quickstart_neptune.py
+
+# For Google Cloud Spanner Graph
+python quickstart_spanner.py
 ```
 
 ## What This Example Demonstrates

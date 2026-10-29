@@ -29,6 +29,8 @@ from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerCli
 from graphiti_core.decorators import handle_multiple_group_ids
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
+from graphiti_core.driver.operations.episode_node_ops import EpisodeNodeOperations
+from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.edges import (
     CommunityEdge,
     Edge,
@@ -446,6 +448,8 @@ class Graphiti:
             return 'neo4j'
         elif 'falkor' in class_name:
             return 'falkordb'
+        elif 'spanner' in class_name:
+            return 'spanner'
         # Embedder providers
         elif 'voyage' in class_name:
             return 'voyage'
@@ -514,6 +518,22 @@ class Graphiti:
         from graphiti_core.helpers import parse_db_date
 
         driver = driver or self.driver
+
+        # Backends that cannot run the inline Cypher below implement
+        # SagaNodeOperations.get_by_name; everyone else raises NotImplementedError and keeps
+        # the existing query.
+        saga_ops = driver.saga_node_ops
+        if isinstance(saga_ops, SagaNodeOperations):
+            try:
+                existing_saga = await saga_ops.get_by_name(driver, saga_name, group_id)
+            except NotImplementedError:
+                pass
+            else:
+                if existing_saga is not None:
+                    return existing_saga
+                saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
+                await saga.save(driver)
+                return saga
 
         records, _, _ = await driver.execute_query(
             """
@@ -2171,6 +2191,24 @@ class Graphiti:
         await add_nodes_and_edges_bulk(self.driver, [], [], nodes, edges, self.embedder)
         return AddTripletResults(edges=edges, nodes=nodes)
 
+    async def _count_entity_mentions(self, entity_uuid: str) -> int:
+        """Count MENTIONS edges pointing at an entity.
+
+        Backends that cannot run the inline Cypher implement
+        ``EpisodeNodeOperations.count_mentions_of_entity``; everyone else raises
+        ``NotImplementedError`` and keeps the existing query.
+        """
+        episode_ops = self.driver.episode_node_ops
+        if isinstance(episode_ops, EpisodeNodeOperations):
+            try:
+                return await episode_ops.count_mentions_of_entity(self.driver, entity_uuid)
+            except NotImplementedError:
+                pass
+
+        query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
+        records, _, _ = await self.driver.execute_query(query, uuid=entity_uuid, routing_='r')
+        return int(records[0]['episode_count']) if records else 0
+
     async def remove_episode(self, episode_uuid: str):
         # Find the episode to be deleted
         episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
@@ -2194,12 +2232,8 @@ class Graphiti:
         # We should delete all nodes that are only mentioned in the deleted episode
         nodes_to_delete: list[EntityNode] = []
         for node in nodes:
-            query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
-            records, _, _ = await self.driver.execute_query(query, uuid=node.uuid, routing_='r')
-
-            for record in records:
-                if record['episode_count'] == 1:
-                    nodes_to_delete.append(node)
+            if await self._count_entity_mentions(node.uuid) == 1:
+                nodes_to_delete.append(node)
 
         deleted_node_uuids = {node.uuid for node in nodes_to_delete}
         surviving_nodes = [node for node in nodes if node.uuid not in deleted_node_uuids]

@@ -1,0 +1,87 @@
+name: Spanner Driver Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "graphiti_core/driver/spanner/**"
+      - "graphiti_core/driver/spanner_driver.py"
+      - "graphiti_core/driver/operations/**"
+      - "tests/driver/spanner/**"
+      - "tests/helpers_test.py"
+      - ".github/workflows/spanner-driver-tests.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+  pull_request:
+    branches: [main]
+    paths:
+      - "graphiti_core/driver/spanner/**"
+      - "graphiti_core/driver/spanner_driver.py"
+      - "graphiti_core/driver/operations/**"
+      - "tests/driver/spanner/**"
+      - "tests/helpers_test.py"
+      - ".github/workflows/spanner-driver-tests.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  spanner-emulator-tests:
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Setup Socket Firewall wrapper
+        uses: ./.github/actions/setup-socket-firewall
+        with:
+          socket-api-key: ${{ secrets.SOCKET_API_KEY }}
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.10"
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
+        with:
+          version: "latest"
+      - name: Start Spanner emulator
+        # Same host-network pattern as unit_tests.yml: `services:` containers are not
+        # reachable from the job host on the depot runner pool.
+        run: |
+          docker run -d --name spanner-emulator --network host \
+            gcr.io/cloud-spanner-emulator/emulator:1.5.59
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Wait for Spanner emulator
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:9020/v1/projects/test-project/instanceConfigs >/dev/null 2>&1; then
+              echo "spanner emulator ready after ${i}s"; break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "spanner emulator did not become ready in 60s" >&2
+              docker logs spanner-emulator
+              exit 1
+            fi
+            sleep 1
+          done
+      - name: Run Spanner driver tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          SPANNER_EMULATOR_HOST: 127.0.0.1:9010
+          SPANNER_PROJECT: test-project
+          SPANNER_INSTANCE: test-instance
+          SPANNER_DATABASE: graphiti-ci
+          ENABLE_SPANNER: 1
+          DISABLE_NEO4J: 1
+          DISABLE_FALKORDB: 1
+          DISABLE_KUZU: 1
+          DISABLE_NEPTUNE: 1
+          GRAPHITI_TELEMETRY_ENABLED: "false"
+        run: |
+          uv run pytest \
+            tests/driver/spanner \
+            tests/test_node_int.py \
+            tests/test_edge_int.py \
+            tests/test_graphiti_mock.py \
+            -m "not integration"

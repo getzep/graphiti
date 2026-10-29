@@ -68,6 +68,16 @@ if os.getenv('DISABLE_NEPTUNE') is None:
     except ImportError:
         raise
 
+# Spanner is opt-in: it needs the Spanner emulator (SPANNER_EMULATOR_HOST) or a real
+# instance. Set ENABLE_SPANNER=1 to include it in the matrix.
+if os.getenv('ENABLE_SPANNER') is not None and os.getenv('DISABLE_SPANNER') is None:
+    try:
+        from graphiti_core.driver.spanner_driver import SpannerDriver
+
+        drivers.append(GraphProvider.SPANNER)
+    except ImportError:
+        raise
+
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'test')
@@ -83,8 +93,41 @@ AOSS_HOST = os.getenv('AOSS_HOST', None)
 
 KUZU_DB = os.getenv('KUZU_DB', ':memory:')
 
+SPANNER_PROJECT = os.getenv('SPANNER_PROJECT', 'test-project')
+SPANNER_INSTANCE = os.getenv('SPANNER_INSTANCE', 'test-instance')
+SPANNER_DATABASE = os.getenv('SPANNER_DATABASE', 'graphiti-test')
+SPANNER_EMULATOR_HOST = os.getenv('SPANNER_EMULATOR_HOST')
+
 group_id = 'graphiti_test_group'
 group_id_2 = 'graphiti_test_group_2'
+
+SPANNER_NODE_TABLES = ('Entity', 'Episodic', 'Community', 'Saga')
+SPANNER_EDGE_TABLES = ('RelatesTo', 'Mentions', 'HasMember', 'HasEpisode', 'NextEpisode')
+
+
+def _ensure_spanner_database(driver: GraphDriver) -> None:
+    """Create the emulator instance and database on first use (no-op when they exist)."""
+    instance = driver.instance  # type: ignore[attr-defined]
+    database = driver.database  # type: ignore[attr-defined]
+    if SPANNER_EMULATOR_HOST is not None and not instance.exists():
+        instance.configuration_name = f'projects/{SPANNER_PROJECT}/instanceConfigs/emulator-config'
+        instance.node_count = 1
+        instance.create().result(120)
+    if not database.exists():
+        database.create().result(300)
+
+
+async def _spanner_count(
+    driver: GraphDriver, tables: tuple[str, ...], column: str, uuids: list[str]
+) -> int:
+    total = 0
+    for table in tables:
+        records, _, _ = await driver.execute_query(
+            f'SELECT COUNT(*) AS count FROM {table} WHERE {column} IN UNNEST(@uuids)',
+            uuids=uuids,
+        )
+        total += int(records[0]['count'])
+    return total
 
 
 def get_driver(provider: GraphProvider) -> GraphDriver:
@@ -112,6 +155,18 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             port=int(NEPTUNE_PORT),
             aoss_host=AOSS_HOST,
         )
+    elif provider == GraphProvider.SPANNER:
+        spanner_driver = SpannerDriver(
+            project=SPANNER_PROJECT,
+            instance=SPANNER_INSTANCE,
+            database=SPANNER_DATABASE,
+            emulator_host=SPANNER_EMULATOR_HOST,
+            # The shared tests mix embedding sizes (the mock embedder is 384-wide, some
+            # fixtures hard-code 1024), so leave the vector columns unconstrained.
+            embedding_dim=None,
+        )
+        _ensure_spanner_database(spanner_driver)
+        return spanner_driver
     else:
         raise ValueError(f'Driver {provider} not available')
 
@@ -120,6 +175,10 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
 async def graph_driver(request):
     driver = request.param
     graph_driver = get_driver(driver)
+    if driver == GraphProvider.SPANNER:
+        # Spanner is schema-first: tables, indexes and the property graph must exist
+        # before any data operation. This is idempotent after the first run.
+        await graph_driver.build_indices_and_constraints()
     await clear_data(graph_driver, [group_id, group_id_2])
     try:
         yield graph_driver  # provide driver to the test
@@ -198,6 +257,8 @@ def test_lucene_sanitize():
 
 
 async def get_node_count(driver: GraphDriver, uuids: list[str]) -> int:
+    if driver.provider == GraphProvider.SPANNER:
+        return await _spanner_count(driver, SPANNER_NODE_TABLES, 'uuid', uuids)
     results, _, _ = await driver.execute_query(
         """
         MATCH (n)
@@ -210,6 +271,8 @@ async def get_node_count(driver: GraphDriver, uuids: list[str]) -> int:
 
 
 async def get_edge_count(driver: GraphDriver, uuids: list[str]) -> int:
+    if driver.provider == GraphProvider.SPANNER:
+        return await _spanner_count(driver, SPANNER_EDGE_TABLES, 'edge_uuid', uuids)
     results, _, _ = await driver.execute_query(
         """
         MATCH (n)-[e]->(m)

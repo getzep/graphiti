@@ -105,3 +105,16 @@ class EpisodeNodeOperations(ABC):
         source: str | None = None,
         saga: str | None = None,
     ) -> list[EpisodicNode]: ...
+
+    async def count_mentions_of_entity(
+        self,
+        executor: QueryExecutor,
+        entity_node_uuid: str,
+    ) -> int:
+        """Count the MENTIONS edges pointing at an entity node.
+
+        Counts edges, not distinct episodes, to match the inline query that
+        ``Graphiti.remove_episode`` runs today. Not abstract on purpose: existing drivers keep
+        that inline query, and the client falls back to it on ``NotImplementedError``.
+        """
+        raise NotImplementedError

@@ -163,7 +163,8 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
-  Serverless collection (serves as the full text search backend) / Kuzu 0.11.2 (**deprecated**, see below)
+  Serverless collection (serves as the full text search backend) / Google Cloud Spanner Graph (Enterprise edition
+  or the emulator) / Kuzu 0.11.2 (**deprecated**, see below)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -236,6 +237,21 @@ pip install graphiti-core[neptune]
 uv add graphiti-core[neptune]
 ```
 
+### Installing with Google Cloud Spanner Graph Support
+
+If you plan to use Google Cloud Spanner Graph as your graph database backend, install with the Spanner extra:
+
+```bash
+pip install graphiti-core[spanner]
+
+# or with uv
+uv add graphiti-core[spanner]
+```
+
+Spanner Graph, full-text search and vector search require a Spanner instance on the Enterprise or Enterprise Plus
+edition; the 90-day free trial instance includes them. The driver's test suite runs against the Spanner emulator
+(`SPANNER_EMULATOR_HOST`), which is also usable for CI.
+
 ### You can also install optional LLM providers as extras:
 
 ```bash
@@ -256,6 +272,9 @@ pip install graphiti-core[falkordb,anthropic,google-genai]
 
 # Install with Amazon Neptune
 pip install graphiti-core[neptune]
+
+# Install with Google Cloud Spanner Graph
+pip install graphiti-core[spanner]
 ```
 
 ## Default to Low Concurrency; LLM Provider 429 Rate Limit Errors
@@ -283,7 +302,7 @@ performance.
 For a complete working example, see the [Quickstart Example](examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
 
-1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
+1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, Google Cloud Spanner Graph, or Kuzu database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -456,6 +475,124 @@ driver = NeptuneDriver(
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
 ```
+
+#### Google Cloud Spanner Graph
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.spanner_driver import SpannerDriver
+
+# Create a Spanner driver. Credentials come from Application Default Credentials
+# (`gcloud auth application-default login`, an attached service account, or
+# GOOGLE_APPLICATION_CREDENTIALS).
+driver = SpannerDriver(
+    project='<GCP_PROJECT_ID>',
+    instance='<SPANNER_INSTANCE_ID>',
+    database='<SPANNER_DATABASE_ID>',
+    graph_name='graphiti',   # Optional, name of the property graph
+    embedding_dim=1024,      # Optional, must match your embedder; defaults to EMBEDDING_DIM
+)
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+
+# Creates the tables, indexes, search indexes and the property graph. Needs the
+# Spanner database admin role once; runtime needs only the database user role.
+await graphiti.build_indices_and_constraints()
+```
+
+What you provide and what the driver creates:
+
+- **You create** the Spanner instance (Enterprise or Enterprise Plus edition, or the free trial instance) and an
+  empty database, and grant the runtime identity `roles/spanner.databaseUser`.
+- **The driver creates** everything inside the database on `build_indices_and_constraints()`: the node and edge
+  tables, secondary indexes, full-text search indexes and the `graphiti` property graph. The call is idempotent
+  (it only applies what is missing), so running it on every startup is safe. It needs
+  `roles/spanner.databaseAdmin` the first time, because it issues DDL.
+- `embedding_dim` must equal your embedding model's width, because the vector columns pin it. With Google's
+  `gemini-embedding-001` choose one of its supported sizes (768, 1536 or 3072) and pass the same number to the
+  embedder and the driver, as in the example below. OpenAI `text-embedding-3-small` uses the default 1024;
+  Ollama `bge-m3` is 1024 and `nomic-embed-text` is 768 with the
+  [OpenAI-compatible setup](#using-graphiti-with-openai-compatible-providers-and-local-llms).
+
+A complete Google-only configuration, Spanner Graph plus Gemini for the LLM, embeddings and reranking
+(`pip install graphiti-core[spanner,google-genai]`, `GOOGLE_API_KEY` set):
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+from graphiti_core.driver.spanner_driver import SpannerDriver
+from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig
+from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig
+
+EMBEDDING_DIM = 1536  # gemini-embedding-001 supports 768, 1536 and 3072
+
+driver = SpannerDriver(
+    project='<GCP_PROJECT_ID>',
+    instance='<SPANNER_INSTANCE_ID>',
+    database='<SPANNER_DATABASE_ID>',
+    embedding_dim=EMBEDDING_DIM,
+)
+
+graphiti = Graphiti(
+    graph_driver=driver,
+    llm_client=GeminiClient(config=LLMConfig(api_key='<GOOGLE_API_KEY>', model='gemini-2.5-flash')),
+    embedder=GeminiEmbedder(
+        config=GeminiEmbedderConfig(
+            api_key='<GOOGLE_API_KEY>',
+            embedding_model='gemini-embedding-001',
+            embedding_dim=EMBEDDING_DIM,
+        )
+    ),
+    cross_encoder=GeminiRerankerClient(
+        config=LLMConfig(api_key='<GOOGLE_API_KEY>', model='gemini-2.5-flash-lite')
+    ),
+)
+
+await graphiti.build_indices_and_constraints()
+```
+
+Provisioning on Google Cloud, once per project:
+
+```bash
+gcloud config set project <GCP_PROJECT_ID>
+gcloud services enable spanner.googleapis.com
+
+# Spanner Graph, full-text search and vector search need the Enterprise edition or higher.
+# 100 processing units is the smallest paid instance; add --instance-type=free-instance for the 90-day trial.
+gcloud spanner instances create graphiti \
+  --config=regional-us-central1 --description="Graphiti" \
+  --edition=ENTERPRISE --processing-units=100
+
+gcloud spanner databases create graphiti --instance=graphiti
+
+# The identity that runs Graphiti needs databaseUser; the identity that runs
+# build_indices_and_constraints() the first time also needs databaseAdmin (it issues DDL).
+gcloud spanner databases add-iam-policy-binding graphiti --instance=graphiti \
+  --member="serviceAccount:<RUNTIME_SA>@<GCP_PROJECT_ID>.iam.gserviceaccount.com" \
+  --role="roles/spanner.databaseUser"
+gcloud spanner databases add-iam-policy-binding graphiti --instance=graphiti \
+  --member="user:<YOUR_EMAIL>" --role="roles/spanner.databaseAdmin"
+
+# Local credentials for development; on GCE, GKE or Cloud Run the attached service account is used.
+gcloud auth application-default login
+```
+
+Then `SpannerDriver(project='<GCP_PROJECT_ID>', instance='graphiti', database='graphiti', ...)` as above, and
+`await graphiti.build_indices_and_constraints()` creates the schema. `examples/quickstart/quickstart_spanner.py`
+is a complete runnable example driven by `SPANNER_PROJECT`, `SPANNER_INSTANCE` and `SPANNER_DATABASE`.
+
+Multitenancy follows Graphiti's `group_id` model: all tenants share one database, every table carries a
+`group_id` column, and every index includes it, so tenant-scoped searches stay index-served. Pass `group_id` on
+writes (`add_episode(..., group_id='tenant-a')`) and `group_ids` on reads (`search(query, group_ids=['tenant-a'])`);
+`group_ids=None` searches every tenant, as it does on every backend. Remove a tenant with
+`clear_data(driver, ['tenant-a'])`. For hard isolation use one database per tenant via `driver.with_database(name)`
+and run `build_indices_and_constraints()` once per database.
+
+The Spanner backend is a native GoogleSQL/GQL implementation rather than a Cypher dialect. Two behaviours differ
+from Neo4j: saving an edge whose source node does not exist raises `SpannerMissingEndpointError` instead of
+silently writing nothing, and full-text ranking uses Spanner's scorer rather than BM25 (results are fused with
+vector similarity, so retrieval quality is comparable but ordering within the text leg can differ).
 
 Contributing a new graph backend? See [Adding a graph driver](CONTRIBUTING.md#adding-a-graph-driver).
 
@@ -799,7 +936,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
+  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics, Google Cloud Spanner Graph)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
