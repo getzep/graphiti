@@ -101,7 +101,9 @@ def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver)
         joined = ' OR '.join(group_ids_filter_list)
         # Parenthesize multi-group ORs so Lucene does not bind AND tighter than OR
         # (group_id:"A" OR group_id:"B" AND (q) would only require the last group).
-        group_ids_filter = f'({joined}) AND ' if len(group_ids_filter_list) > 1 else f'{joined} AND '
+        group_ids_filter = (
+            f'({joined}) AND ' if len(group_ids_filter_list) > 1 else f'{joined} AND '
+        )
     else:
         group_ids_filter = ''
 
