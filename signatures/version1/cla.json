@@ -1885,6 +1885,46 @@
       "created_at": "2026-10-23T22:07:31Z",
       "repoId": 840056306,
       "pullRequestNo": 2063
+    },
+    {
+      "name": "gmll-star",
+      "email": "19073749650@163.com",
+      "accountType": "personal",
+      "id": 196021602,
+      "comment_id": 6380281371,
+      "created_at": "2026-10-24T05:16:59Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2064
+    },
+    {
+      "name": "NotZhu",
+      "email": "3495159203@qq.com",
+      "accountType": "personal",
+      "id": 191095760,
+      "comment_id": 6395435960,
+      "created_at": "2026-10-25T08:31:54Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2075
+    },
+    {
+      "name": "eventanilha82",
+      "email": "eventanilha@hotmail.com",
+      "accountType": "personal",
+      "id": 89204274,
+      "comment_id": 6429796954,
+      "created_at": "2026-10-26T23:29:40Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2086
+    },
+    {
+      "name": "rickragv",
+      "email": "ricky4singh2017@gmail.com",
+      "accountType": "personal",
+      "id": 6717323,
+      "comment_id": 6464884301,
+      "created_at": "2026-10-28T09:01:26Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2091
     }
   ]
 }
