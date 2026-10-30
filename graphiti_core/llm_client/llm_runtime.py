@@ -72,10 +72,10 @@ class LLMRuntime:
             OpenAIClient(),
             models=['gpt-5.1', 'gpt-5-nano'],
         )
-        AnthropicModels = Literal['claude-sonnet-4-5', 'claude-haiku-4-5']
+        AnthropicModels = Literal['claude-sonnet-5', 'claude-haiku-5-5']
         anthropic = LLMTransport[AnthropicModels](
             AnthropicClient(),
-            models=['claude-sonnet-4-5', 'claude-haiku-4-5'],
+            models=['claude-sonnet-5', 'claude-haiku-5-5'],
         )
 
         runtime = LLMRuntime(
@@ -85,7 +85,7 @@ class LLMRuntime:
                     extract_attributes=openai.model('gpt-5-nano'),
                 ),
                 dedupe_edges=PromptRoutes.DedupeEdges(
-                    resolve_edge=anthropic.model('claude-haiku-4-5'),
+                    resolve_edge=anthropic.model('claude-haiku-5-5'),
                 ),
             ),
         )
