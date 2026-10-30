@@ -286,3 +286,53 @@ async def test_saga_summary_budget_uses_routed_prompt(monkeypatch):
         prompt_bytes = sum(len(message.content.encode('utf-8')) for message in llm.messages)
         assert prompt_bytes <= 25_000
     assert routed_llm.messages[0].content.startswith('P' * 100)
+
+
+class _CloningDriver(SimpleNamespace):
+    def __init__(self, database: str, operations):
+        super().__init__(_database=database, graph_operations_interface=operations, clones=[])
+
+    def clone(self, database: str):
+        cloned = _CloningDriver(database, _FakeGraphOperations())
+        self.clones.append(cloned)
+        return cloned
+
+
+async def test_summarize_saga_reads_and_writes_the_group_graph():
+    default_operations = _FakeGraphOperations()
+    llm = _FakeLLMClient()
+    graphiti = _make_graphiti(default_operations, llm)
+    graphiti.driver = _CloningDriver('default_db', default_operations)
+    graphiti.clients = graphiti.clients.model_copy(update={'driver': graphiti.driver})
+
+    saga = await graphiti.summarize_saga('saga-1', group_id='team_a')
+
+    assert [clone._database for clone in graphiti.driver.clones] == ['team_a']
+    group_operations = graphiti.driver.clones[0].graph_operations_interface
+    assert group_operations.saved_saga is saga
+    assert saga.summary == 'updated summary'
+    assert default_operations.saved_saga is None
+
+
+async def test_summarize_saga_without_group_id_uses_the_client_graph():
+    operations = _FakeGraphOperations()
+    llm = _FakeLLMClient()
+    graphiti = _make_graphiti(operations, llm)
+    graphiti.driver = _CloningDriver('default_db', operations)
+
+    saga = await graphiti.summarize_saga('saga-1')
+
+    assert graphiti.driver.clones == []
+    assert operations.saved_saga is saga
+
+
+async def test_summarize_saga_group_id_matching_the_client_graph_does_not_clone():
+    operations = _FakeGraphOperations()
+    llm = _FakeLLMClient()
+    graphiti = _make_graphiti(operations, llm)
+    graphiti.driver = _CloningDriver('team_a', operations)
+
+    saga = await graphiti.summarize_saga('saga-1', group_id='team_a')
+
+    assert graphiti.driver.clones == []
+    assert operations.saved_saga is saga

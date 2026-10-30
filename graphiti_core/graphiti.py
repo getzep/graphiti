@@ -576,12 +576,14 @@ class Graphiti:
         saga_uuid: str,
         since: datetime | None = None,
         limit: int = 200,
+        driver: GraphDriver | None = None,
     ) -> list[tuple[str, datetime | None, datetime]] | None:
         """Retrieve (content, valid_at, created_at) episodes, using IoC if available."""
-        if self.driver.graph_operations_interface:
+        driver = driver or self.driver
+        if driver.graph_operations_interface:
             try:
-                return await self.driver.graph_operations_interface.saga_get_episode_contents(
-                    self.driver, saga_uuid, since=since, limit=limit
+                return await driver.graph_operations_interface.saga_get_episode_contents(
+                    driver, saga_uuid, since=since, limit=limit
                 )
             except NotImplementedError:
                 pass
@@ -590,6 +592,7 @@ class Graphiti:
     async def summarize_saga(
         self,
         saga_id: str,
+        group_id: str | None = None,
     ) -> SagaNode:
         """Incrementally summarize a saga using only new episodes since the last summary.
 
@@ -617,6 +620,12 @@ class Graphiti:
         ----------
         saga_id : str
             The UUID of the saga to summarize.
+        group_id : str | None, optional
+            The group the saga belongs to. On providers that keep each group in its
+            own graph (FalkorDB), pass the ``group_id`` the saga was created under so
+            the saga, its episodes and the saved summary are read from and written to
+            that graph, as ``add_episode`` does. When omitted, the client's current
+            graph is used.
 
         Returns
         -------
@@ -628,7 +637,13 @@ class Graphiti:
         NodeNotFoundError
             If the saga with the given UUID does not exist.
         """
-        saga = await SagaNode.get_by_uuid(self.driver, saga_id)
+        if group_id is None:
+            driver = self.driver
+            saga_clients = getattr(self, 'clients', None)
+        else:
+            _, driver, saga_clients = self._resolve_request_scope(group_id)
+
+        saga = await SagaNode.get_by_uuid(driver, saga_id)
 
         # Fetch only episodes added since the last summary. Cap the window to the same episode
         # count node summaries use so a long thread or document cannot fill
@@ -640,11 +655,11 @@ class Graphiti:
 
         # Try IoC interface first, fall back to raw Cypher
         episodes_data = await self._saga_get_episode_contents(
-            saga_id, since=since, limit=max_episodes
+            saga_id, since=since, limit=max_episodes, driver=driver
         )
         if episodes_data is None:
             if since is not None:
-                records, _, _ = await self.driver.execute_query(
+                records, _, _ = await driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
                     WHERE e.created_at IS NOT NULL AND e.created_at > $since
@@ -658,7 +673,7 @@ class Graphiti:
                     routing_='r',
                 )
             else:
-                records, _, _ = await self.driver.execute_query(
+                records, _, _ = await driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
                     WHERE e.created_at IS NOT NULL
@@ -727,7 +742,6 @@ class Graphiti:
         schema_reserve = len(_SAGA_SUMMARY_SCHEMA_WRAPPER.encode('utf-8')) + len(
             json.dumps(SagaSummary.model_json_schema()).encode('utf-8')
         )
-        saga_clients = getattr(self, 'clients', None)
         while episodes_data:
             context = _prompt_context(episodes_data)
             prompt_bytes = (
@@ -796,7 +810,7 @@ class Graphiti:
                 or new_episode_watermark > saga.last_summarized_episode_valid_at
             ):
                 saga.last_summarized_episode_valid_at = new_episode_watermark
-        await saga.save(self.driver)
+        await saga.save(driver)
 
         logger.info(f'Updated summary for saga {saga_id}')
 
