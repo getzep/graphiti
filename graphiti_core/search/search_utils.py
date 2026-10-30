@@ -101,7 +101,10 @@ def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver)
     for f in group_ids_filter_list:
         group_ids_filter += f if not group_ids_filter else f' OR {f}'
 
-    group_ids_filter += ' AND ' if group_ids_filter else ''
+    # Parentheses are required: Lucene AND binds tighter than OR, so without them
+    # `group_id:"A" OR group_id:"B" AND (q)` only requires the last group.
+    if group_ids_filter:
+        group_ids_filter = f'({group_ids_filter}) AND '
 
     lucene_query = lucene_sanitize(query)
     # If the lucene query is too long return no query
