@@ -702,15 +702,15 @@ openai = LLMTransport[OpenAIModels](
     models=['gpt-5.1', 'gpt-5-nano'],
 )
 
-AnthropicModels = Literal['claude-sonnet-4-5', 'claude-haiku-4-5']
+AnthropicModels = Literal['claude-sonnet-5', 'claude-haiku-5-5']
 anthropic = LLMTransport[AnthropicModels](
     AnthropicClient(),
-    models=['claude-sonnet-4-5', 'claude-haiku-4-5'],
+    models=['claude-sonnet-5', 'claude-haiku-5-5'],
 )
 
 main = openai.model('gpt-5.1')
 nano = openai.model('gpt-5-nano')
-haiku = anthropic.model('claude-haiku-4-5')
+haiku = anthropic.model('claude-haiku-5-5')
 runtime = LLMRuntime(
     model=main,
     routes=PromptRoutes(
