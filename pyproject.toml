@@ -68,6 +68,11 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+# Pillow 13 has the security fixes and needs Python 3.11+. On Python 3.10, uv resolves
+# voyageai 0.2.x, which does not use Pillow.
+constraint-dependencies = ["pillow>=13.0.0"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
