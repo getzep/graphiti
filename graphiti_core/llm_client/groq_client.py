@@ -53,7 +53,7 @@ class GroqClient(LLMClient):
             config.max_tokens = DEFAULT_MAX_TOKENS
         super().__init__(config, cache)
 
-        self.client = AsyncGroq(api_key=config.api_key)
+        self.client = AsyncGroq(api_key=config.api_key, base_url=config.base_url)
 
     async def _generate_response(
         self,
