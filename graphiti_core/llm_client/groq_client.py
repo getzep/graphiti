@@ -55,6 +55,32 @@ class GroqClient(LLMClient):
 
         self.client = AsyncGroq(api_key=config.api_key)
 
+    async def generate_response(
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int | None = None,
+        model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
+        prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
+        model: str | None = None,
+    ) -> dict[str, typing.Any]:
+        # Resolve the model before the base class builds its response-cache key.
+        if model is None and model_size == ModelSize.small:
+            model = self.small_model
+        return await super().generate_response(
+            messages,
+            response_model,
+            max_tokens,
+            model_size,
+            group_id,
+            prompt_name,
+            attribute_extraction=attribute_extraction,
+            model=model,
+        )
+
     async def _generate_response(
         self,
         messages: list[Message],
