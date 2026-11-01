@@ -1982,6 +1982,8 @@ async def get_embeddings_for_nodes(
         uuid: str = result.get('uuid')
         embedding: list[float] = result.get('name_embedding')
         if uuid is not None and embedding is not None:
+            if driver.provider == GraphProvider.NEPTUNE:
+                embedding = [float(value) for value in embedding]
             embeddings_dict[uuid] = embedding
 
     return embeddings_dict
@@ -2023,6 +2025,8 @@ async def get_embeddings_for_communities(
         uuid: str = result.get('uuid')
         embedding: list[float] = result.get('name_embedding')
         if uuid is not None and embedding is not None:
+            if driver.provider == GraphProvider.NEPTUNE:
+                embedding = [float(value) for value in embedding]
             embeddings_dict[uuid] = embedding
 
     return embeddings_dict
@@ -2070,6 +2074,8 @@ async def get_embeddings_for_edges(
         uuid: str = result.get('uuid')
         embedding: list[float] = result.get('fact_embedding')
         if uuid is not None and embedding is not None:
+            if driver.provider == GraphProvider.NEPTUNE:
+                embedding = [float(value) for value in embedding]
             embeddings_dict[uuid] = embedding
 
     return embeddings_dict
