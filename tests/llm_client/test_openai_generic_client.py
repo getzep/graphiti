@@ -95,6 +95,26 @@ async def test_json_object_mode_uses_json_object_and_injects_schema():
 
 
 @pytest.mark.asyncio
+async def test_generate_response_does_not_mutate_caller_messages():
+    client, completions = _make_client(structured_output_mode='json_object')
+    messages = _messages()
+    original = [message.model_dump() for message in messages]
+
+    await client.generate_response(
+        messages,
+        response_model=ResponseModel,
+        group_id='test-group',
+        attribute_extraction=True,
+    )
+
+    assert [message.model_dump() for message in messages] == original
+    call = completions.create_calls[0]
+    assert 'ATTRIBUTE EXTRACTION:' in call['messages'][0]['content']
+    assert 'same language' in call['messages'][0]['content']
+    assert 'Respond with a JSON object in the following format' in call['messages'][-1]['content']
+
+
+@pytest.mark.asyncio
 async def test_no_response_model_uses_json_object_without_injection():
     client, completions = _make_client(content='{"any": "thing"}')
 

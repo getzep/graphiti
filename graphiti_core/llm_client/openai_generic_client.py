@@ -187,6 +187,8 @@ class OpenAIGenericClient(LLMClient):
         attribute_extraction: bool = False,
         model: str | None = None,
     ) -> dict[str, typing.Any]:
+        messages = self._clone_messages(messages)
+
         self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
