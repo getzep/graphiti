@@ -57,13 +57,13 @@ docker run -d \
 ### Build with Default Version
 
 ```bash
-docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.build.yml build
 ```
 
 ### Build with Specific Graphiti Version
 
 ```bash
-GRAPHITI_CORE_VERSION=0.32.0 docker compose -f docker/docker-compose.yml build
+GRAPHITI_CORE_VERSION=0.32.0 docker compose -f docker/docker-compose.yml -f docker/docker-compose.build.yml build
 ```
 
 ### Build Arguments
