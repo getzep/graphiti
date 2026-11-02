@@ -1,12 +1,18 @@
+# Runs the published images. The config file is the one inside the image
+# (CONFIG_PATH). To build locally and mount ../config/config-docker-falkordb.yaml:
+#   docker compose -f docker-compose-falkordb.yml -f docker-compose-falkordb.build.yml up --build
 services:
   falkordb:
     image: falkordb/falkordb:latest
+    restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379" # Redis/FalkorDB port
       - "127.0.0.1:3000:3000" # FalkorDB web UI
     environment:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
       - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
+      # Append-only file: every write is logged, so a hard stop loses at most ~1s.
+      - REDIS_ARGS=${REDIS_ARGS:---appendonly yes}
     volumes:
       - falkordb_data:/var/lib/falkordb/data
     healthcheck:
@@ -18,12 +24,10 @@ services:
 
   graphiti-mcp:
     # To use the latest graphiti-core, build locally with:
-    #   docker compose -f docker-compose-falkordb.yml build
+    #   docker compose -f docker-compose-falkordb.yml -f docker-compose-falkordb.build.yml build
     # The Docker Hub image may lag behind the latest release.
     image: zepai/knowledge-graph-mcp:standalone
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.standalone
+    restart: unless-stopped
     env_file:
       - path: ../.env
         required: false
@@ -38,9 +42,7 @@ services:
       # Application configuration
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
-      - CONFIG_PATH=/app/mcp/config/config.yaml
-    volumes:
-      - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
+      - CONFIG_PATH=${CONFIG_PATH:-/app/mcp/config/config-docker-falkordb.yaml}
     ports:
       - "127.0.0.1:8000:8000" # Expose the MCP server via HTTP transport
     command: ["uv", "run", "main.py"]
