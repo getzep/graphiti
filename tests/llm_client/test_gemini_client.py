@@ -122,6 +122,41 @@ class TestGeminiClientGenerateResponse:
         mock_gemini_client.aio.models.generate_content.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_output_tokens_include_thinking_tokens(self, gemini_client, mock_gemini_client):
+        """Thinking tokens are billed as output, so they count towards output tokens."""
+        mock_response = MagicMock()
+        mock_response.text = 'Test response text'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_response.usage_metadata.prompt_token_count = 10
+        mock_response.usage_metadata.candidates_token_count = 20
+        mock_response.usage_metadata.thoughts_token_count = 30
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        messages = [Message(role='user', content='Test message')]
+        _, input_tokens, output_tokens = await gemini_client._generate_response(messages)
+
+        assert input_tokens == 10
+        assert output_tokens == 50
+
+    @pytest.mark.asyncio
+    async def test_output_tokens_without_thinking_tokens(self, gemini_client, mock_gemini_client):
+        """A response without thinking tokens keeps the candidate count."""
+        mock_response = MagicMock()
+        mock_response.text = 'Test response text'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_response.usage_metadata.prompt_token_count = 10
+        mock_response.usage_metadata.candidates_token_count = 20
+        mock_response.usage_metadata.thoughts_token_count = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        messages = [Message(role='user', content='Test message')]
+        _, _, output_tokens = await gemini_client._generate_response(messages)
+
+        assert output_tokens == 20
+
+    @pytest.mark.asyncio
     async def test_generate_response_with_structured_output(
         self, gemini_client, mock_gemini_client
     ):
