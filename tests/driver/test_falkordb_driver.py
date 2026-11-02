@@ -723,3 +723,72 @@ class TestFalkorDriverIntegration:
         finally:
             await driver.execute_query('MATCH (n) DETACH DELETE n')
             await driver.close()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_entity_edge_legacy_save_and_stray_keys_read_clean(self):
+        """Legacy `EntityEdge.save` stores no stray keys, and edges that already carry
+        `source_uuid` / `target_uuid` (written by older versions) read back clean."""
+        pytest.importorskip('falkordb')
+
+        from graphiti_core.edges import EntityEdge
+        from graphiti_core.nodes import EntityNode
+        from graphiti_core.utils.datetime_utils import utc_now
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(
+                host=falkor_host, port=falkor_port, database='test_edge_leak_legacy'
+            )
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+        try:
+            embedding = [0.1] * 4
+            source = EntityNode(
+                name='src', group_id='g1', labels=['Entity'], name_embedding=embedding
+            )
+            target = EntityNode(
+                name='tgt', group_id='g1', labels=['Entity'], name_embedding=embedding
+            )
+            await driver.entity_node_ops.save(driver, source)
+            await driver.entity_node_ops.save(driver, target)
+
+            edge = EntityEdge(
+                source_node_uuid=source.uuid,
+                target_node_uuid=target.uuid,
+                name='RELATES_TO',
+                fact='src relates to tgt',
+                fact_embedding=embedding,
+                group_id='g1',
+                created_at=utc_now(),
+                attributes={'source_uuid': 'old-s', 'target_uuid': 'old-t', 'custom': 'kept'},
+            )
+            await edge.save(driver)
+
+            records, _, _ = await driver.execute_query(
+                'MATCH ()-[e:RELATES_TO {uuid: $uuid}]->() '
+                'RETURN e.source_uuid AS s, e.target_uuid AS t',
+                uuid=edge.uuid,
+            )
+            assert records[0]['s'] is None
+            assert records[0]['t'] is None
+
+            # simulate an edge written by an older version
+            await driver.execute_query(
+                'MATCH ()-[e:RELATES_TO {uuid: $uuid}]->() '
+                'SET e.source_uuid = $s, e.target_uuid = $t',
+                uuid=edge.uuid,
+                s=source.uuid,
+                t=target.uuid,
+            )
+            loaded = await driver.entity_edge_ops.get_by_uuid(driver, edge.uuid)
+            assert loaded.attributes == {'custom': 'kept'}
+            loaded_legacy = await EntityEdge.get_by_uuid(driver, edge.uuid)
+            assert loaded_legacy.attributes == {'custom': 'kept'}
+        finally:
+            await driver.execute_query('MATCH (n) DETACH DELETE n')
+            await driver.close()
