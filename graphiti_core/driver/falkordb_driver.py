@@ -236,6 +236,7 @@ class FalkorDriver(GraphDriver):
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any):
+        await self._await_initialized()
         graph = self._get_graph(self._database)
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
@@ -268,6 +269,27 @@ class FalkorDriver(GraphDriver):
             records.append(record)
 
         return records, header, None
+
+    async def _await_initialized(self) -> None:
+        """Wait for the background index-construction task before running a query.
+
+        ``__init__`` schedules ``build_indices_and_constraints`` as a background
+        task so startup is not blocked. Await it here so the first query does not
+        race with index creation, and observe any failure so it is not reported as
+        'Task exception was never retrieved'. Returns immediately when the task is
+        already finished or when it is the currently running task (the build
+        routine itself drives queries through ``execute_query``).
+        """
+        task = self._init_task
+        if task is None or task is asyncio.current_task():
+            return
+        if task.done():
+            task.exception()
+            return
+        try:
+            await task
+        except Exception:
+            logger.exception('FalkorDB index initialization task failed')
 
     def session(self, database: str | None = None) -> GraphDriverSession:
         return FalkorDriverSession(self._get_graph(database))
