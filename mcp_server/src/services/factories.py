@@ -161,11 +161,15 @@ class LLMClientFactory:
                     # verbatim and downstream clients omit temperature when it is None.
                     temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
-                    base_url=config.providers.openai.api_url,
+                    # Top-level api_base is the documented override (e.g. an Ollama
+                    # endpoint); fall back to the provider-level api_url.
+                    base_url=config.api_base or config.providers.openai.api_url,
                 )
 
                 # Detect if we're using a non-OpenAI provider (Ollama, LM Studio, etc)
-                use_generic_client = is_non_openai_provider(config.providers.openai.api_url)
+                use_generic_client = is_non_openai_provider(
+                    config.api_base or config.providers.openai.api_url
+                )
 
                 if use_generic_client:
                     # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
@@ -329,7 +333,10 @@ class EmbedderFactory:
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
-                    base_url=config.providers.openai.api_url,  # Support custom endpoints like Ollama
+                    # Top-level api_base is the documented override (e.g. an Ollama
+                    # endpoint); fall back to the provider-level api_url.
+                    base_url=config.api_base
+                    or config.providers.openai.api_url,  # Support custom endpoints like Ollama
                     embedding_dim=config.dimensions,  # Support custom embedding dimensions
                 )
                 return OpenAIEmbedder(config=embedder_config)
