@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -36,7 +36,7 @@ from graphiti_core.edges import (
 from graphiti_core.errors import EdgeNotFoundError
 from tests.driver.oracle.operations.recording import RecordingExecutor, RecordingTransaction
 
-NOW = datetime(2026, 9, 21, 12, tzinfo=UTC)
+NOW = datetime(2026, 9, 21, 12, tzinfo=timezone.utc)
 
 
 def make_entity_edge() -> EntityEdge:

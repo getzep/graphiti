@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Protocol, cast
 from uuid import NAMESPACE_URL, uuid5
 
@@ -26,7 +26,7 @@ from graphiti_core.namespaces.nodes import NodeNamespace
 from graphiti_core.nodes import EntityNode
 from graphiti_core.search.search_filters import SearchFilters
 
-CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 class GraphitiSurface(Protocol):
@@ -86,7 +86,7 @@ def normalize_nodes(nodes: list[EntityNode]) -> list[dict[str, Any]]:
             'labels': sorted(node.labels),
             'summary': node.summary,
             'attributes': dict(sorted(node.attributes.items())),
-            'created_at': node.created_at.astimezone(UTC).isoformat(),
+            'created_at': node.created_at.astimezone(timezone.utc).isoformat(),
         }
         for node in sorted(nodes, key=lambda item: item.uuid)
     ]
@@ -103,16 +103,20 @@ def normalize_edges(edges: list[EntityEdge]) -> list[dict[str, Any]]:
             'fact': edge.fact,
             'episodes': sorted(edge.episodes),
             'attributes': dict(sorted(edge.attributes.items())),
-            'created_at': edge.created_at.astimezone(UTC).isoformat(),
-            'valid_at': edge.valid_at.astimezone(UTC).isoformat() if edge.valid_at else None,
+            'created_at': edge.created_at.astimezone(timezone.utc).isoformat(),
+            'valid_at': edge.valid_at.astimezone(timezone.utc).isoformat()
+            if edge.valid_at
+            else None,
             'invalid_at': (
-                edge.invalid_at.astimezone(UTC).isoformat() if edge.invalid_at else None
+                edge.invalid_at.astimezone(timezone.utc).isoformat() if edge.invalid_at else None
             ),
             'expired_at': (
-                edge.expired_at.astimezone(UTC).isoformat() if edge.expired_at else None
+                edge.expired_at.astimezone(timezone.utc).isoformat() if edge.expired_at else None
             ),
             'reference_time': (
-                edge.reference_time.astimezone(UTC).isoformat() if edge.reference_time else None
+                edge.reference_time.astimezone(timezone.utc).isoformat()
+                if edge.reference_time
+                else None
             ),
         }
         for edge in sorted(edges, key=lambda item: item.uuid)

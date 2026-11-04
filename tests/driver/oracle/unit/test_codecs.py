@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from array import array
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -40,7 +40,7 @@ def test_entity_codec_round_trip_preserves_labels_attributes_and_vector() -> Non
         summary='neutral fixture',
         attributes={'rank': 2, 'active': True},
         name_embedding=[0.0] * 1024,
-        created_at=datetime(2026, 9, 21, tzinfo=UTC),
+        created_at=datetime(2026, 9, 21, tzinfo=timezone.utc),
     )
 
     restored = entity_node_from_record(entity_node_to_binds(node))
@@ -59,8 +59,8 @@ def test_episode_codec_round_trip_preserves_temporal_and_metadata_fields() -> No
         content='{"event":"created"}',
         entity_edges=['edge-1'],
         episode_metadata={'synthetic': True},
-        created_at=datetime(2026, 9, 21, 12, tzinfo=UTC),
-        valid_at=datetime(2026, 9, 20, 18, tzinfo=UTC),
+        created_at=datetime(2026, 9, 21, 12, tzinfo=timezone.utc),
+        valid_at=datetime(2026, 9, 20, 18, tzinfo=timezone.utc),
     )
 
     restored = episode_node_from_record(episode_node_to_binds(episode))
@@ -88,5 +88,5 @@ def test_naive_datetime_is_rejected() -> None:
 def test_oracle_timestamp_decode_normalizes_naive_driver_value_to_utc() -> None:
     decoded = decode_oracle_datetime(datetime(2026, 9, 21, 12))
 
-    assert decoded == datetime(2026, 9, 21, 12, tzinfo=UTC)
-    assert decoded.tzinfo is UTC
+    assert decoded == datetime(2026, 9, 21, 12, tzinfo=timezone.utc)
+    assert decoded.tzinfo is timezone.utc

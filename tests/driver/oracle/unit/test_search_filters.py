@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -50,8 +50,8 @@ def test_empty_group_list_matches_nothing() -> None:
 
 
 def test_values_are_bound_and_date_groups_keep_or_of_and_shape() -> None:
-    start = datetime(2026, 9, 21, 8, tzinfo=UTC)
-    end = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    start = datetime(2026, 9, 21, 8, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 21, 18, tzinfo=timezone.utc)
     untrusted_value = "critical') OR 1=1 --"
     filters = SearchFilters(
         edge_types=['ASSIGNED_TO'],

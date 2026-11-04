@@ -266,15 +266,34 @@ async def test_read_materializes_async_lobs_and_normalizes_json_decimals(monkeyp
             self.value = value
 
         async def read(self) -> str:
+            assert pool.released == 0
             return self.value
 
     monkeypatch.setattr(session_module.oracledb, 'AsyncLOB', FakeAsyncLOB)
     cursor = FakeCursor(
-        rows=[(FakeAsyncLOB('Alpha summary'), {'rank': Decimal('2'), 'ratio': Decimal('1.5')})],
+        rows=[
+            (
+                FakeAsyncLOB('Alpha summary'),
+                {
+                    'rank': Decimal('2'),
+                    'ratio': Decimal('1.5'),
+                    'items': [Decimal('3'), {'note': FakeAsyncLOB('Nested note')}],
+                },
+            ),
+            (FakeAsyncLOB('Beta summary'), {'rank': Decimal('4')}),
+        ],
         columns=('SUMMARY', 'PROPERTIES'),
     )
-    session = Oracle26aiSession(FakePool(FakeConnection(cursor)))
+    pool = FakePool(FakeConnection(cursor))
+    session = Oracle26aiSession(pool)
 
     records, _, _ = await session.run('select summary, properties from graphiti_nodes')
 
-    assert records == [{'summary': 'Alpha summary', 'properties': {'rank': 2, 'ratio': 1.5}}]
+    assert records == [
+        {
+            'summary': 'Alpha summary',
+            'properties': {'rank': 2, 'ratio': 1.5, 'items': [3, {'note': 'Nested note'}]},
+        },
+        {'summary': 'Beta summary', 'properties': {'rank': 4}},
+    ]
+    assert pool.released == 1

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -26,7 +26,7 @@ from graphiti_core.nodes import SagaNode
 
 @pytest.mark.asyncio
 async def test_tied_episode_timestamps_are_summarized_exactly_once(monkeypatch) -> None:
-    tied = datetime(2026, 10, 16, 12, tzinfo=UTC)
+    tied = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
     saga = SagaNode(
         uuid='saga-a',
         name='tie-safe',
@@ -81,7 +81,7 @@ async def test_tied_episode_timestamps_are_summarized_exactly_once(monkeypatch) 
 
 @pytest.mark.asyncio
 async def test_legacy_cursor_replays_frontier_then_persists_real_uuid(monkeypatch) -> None:
-    tied = datetime(2026, 10, 16, 12, tzinfo=UTC)
+    tied = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
     saga = SagaNode(
         uuid='saga-legacy',
         name='legacy-tie-safe',

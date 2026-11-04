@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -38,7 +38,7 @@ from graphiti_core.driver.oracle.sql.episode_removal import (
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 
-NOW = datetime(2026, 10, 22, tzinfo=UTC)
+NOW = datetime(2026, 10, 22, tzinfo=timezone.utc)
 
 
 class RemovalExecutor:

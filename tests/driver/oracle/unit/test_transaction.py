@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -42,7 +42,7 @@ from graphiti_core.edges import (
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode, SagaNode
 from tests.driver.oracle.unit.fakes import FakeConnection, FakeCursor, FakePool
 
-NOW = datetime(2026, 10, 16, 12, tzinfo=UTC)
+NOW = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
 
 
 def make_driver(connection: FakeConnection) -> Oracle26aiDriver:

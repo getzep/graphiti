@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -31,7 +31,7 @@ def identity_entity() -> EntityNode:
         labels=['NetworkAsset'],
         summary='Synthetic identity lookup fixture.',
         attributes={'serial_number': 'SN-42', 'slot': 7},
-        created_at=datetime(2026, 10, 16, tzinfo=UTC),
+        created_at=datetime(2026, 10, 16, tzinfo=timezone.utc),
     )
 
 

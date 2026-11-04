@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -31,10 +31,10 @@ def saga() -> SagaNode:
         summary='three temporal events',
         first_episode_uuid='00000000-0000-0000-0000-000000000111',
         last_episode_uuid='00000000-0000-0000-0000-000000000113',
-        last_summarized_at=datetime(2026, 9, 21, 13, tzinfo=UTC),
+        last_summarized_at=datetime(2026, 9, 21, 13, tzinfo=timezone.utc),
         last_summarized_episode_uuid='00000000-0000-0000-0000-000000000112',
-        last_summarized_episode_valid_at=datetime(2026, 9, 20, 18, tzinfo=UTC),
-        created_at=datetime(2026, 9, 20, 12, tzinfo=UTC),
+        last_summarized_episode_valid_at=datetime(2026, 9, 20, 18, tzinfo=timezone.utc),
+        created_at=datetime(2026, 9, 20, 12, tzinfo=timezone.utc),
     )
 
 
@@ -52,8 +52,8 @@ async def test_saga_round_trip_preserves_composite_and_temporal_watermarks() -> 
 
 @pytest.mark.asyncio
 async def test_saga_previous_episode_and_incremental_contents_use_distinct_times() -> None:
-    valid_at = datetime(2026, 9, 20, 18, tzinfo=UTC)
-    created_at = datetime(2026, 9, 21, 13, tzinfo=UTC)
+    valid_at = datetime(2026, 9, 20, 18, tzinfo=timezone.utc)
+    created_at = datetime(2026, 9, 21, 13, tzinfo=timezone.utc)
     executor = RecordingExecutor([{'uuid': 'episode-previous'}])
     operations = OracleSagaNodeOperations()
 
@@ -73,13 +73,13 @@ async def test_saga_previous_episode_and_incremental_contents_use_distinct_times
     result = await operations.get_episode_contents(
         executor,
         saga().uuid,
-        since=datetime(2026, 9, 21, 12, tzinfo=UTC),
+        since=datetime(2026, 9, 21, 12, tzinfo=timezone.utc),
         after_uuid='episode-earlier',
         limit=25,
     )
 
     assert result == [('event', valid_at, created_at, 'episode-previous')]
-    assert executor.calls[-1][1]['since'] == datetime(2026, 9, 21, 12, tzinfo=UTC)
+    assert executor.calls[-1][1]['since'] == datetime(2026, 9, 21, 12, tzinfo=timezone.utc)
     assert executor.calls[-1][1]['after_uuid'] == 'episode-earlier'
     assert 'e.created_at IS NOT NULL' in executor.calls[-1][0]
     assert 'e.created_at > :since' in executor.calls[-1][0]
@@ -90,20 +90,20 @@ async def test_saga_previous_episode_and_incremental_contents_use_distinct_times
 
 @pytest.mark.asyncio
 async def test_saga_backfill_returns_ingestion_order_not_event_time_order() -> None:
-    first_created = datetime(2026, 9, 21, 10, tzinfo=UTC)
-    second_created = datetime(2026, 9, 21, 11, tzinfo=UTC)
+    first_created = datetime(2026, 9, 21, 10, tzinfo=timezone.utc)
+    second_created = datetime(2026, 9, 21, 11, tzinfo=timezone.utc)
     executor = RecordingExecutor(
         [
             {
                 'uuid': 'episode-a',
                 'content': 'late backfill',
-                'valid_at': datetime(2025, 1, 1, tzinfo=UTC),
+                'valid_at': datetime(2025, 1, 1, tzinfo=timezone.utc),
                 'created_at': first_created,
             },
             {
                 'uuid': 'episode-b',
                 'content': 'current event',
-                'valid_at': datetime(2026, 9, 21, tzinfo=UTC),
+                'valid_at': datetime(2026, 9, 21, tzinfo=timezone.utc),
                 'created_at': second_created,
             },
         ]
@@ -112,7 +112,7 @@ async def test_saga_backfill_returns_ingestion_order_not_event_time_order() -> N
     result = await OracleSagaNodeOperations().get_episode_contents(
         executor,
         saga().uuid,
-        since=datetime(2026, 9, 21, 9, tzinfo=UTC),
+        since=datetime(2026, 9, 21, 9, tzinfo=timezone.utc),
     )
 
     assert [content for content, _, _, _ in result] == ['late backfill', 'current event']
@@ -121,7 +121,7 @@ async def test_saga_backfill_returns_ingestion_order_not_event_time_order() -> N
 
 @pytest.mark.asyncio
 async def test_tied_saga_timestamps_advance_by_uuid_without_skipping() -> None:
-    tied = datetime(2026, 9, 21, 10, tzinfo=UTC)
+    tied = datetime(2026, 9, 21, 10, tzinfo=timezone.utc)
     executor = RecordingExecutor(
         [{'uuid': 'episode-b', 'content': 'second', 'valid_at': tied, 'created_at': tied}]
     )
@@ -140,7 +140,7 @@ async def test_tied_saga_timestamps_advance_by_uuid_without_skipping() -> None:
 
 @pytest.mark.asyncio
 async def test_legacy_timestamp_cursor_replays_equal_timestamp_frontier() -> None:
-    tied = datetime(2026, 9, 21, 10, tzinfo=UTC)
+    tied = datetime(2026, 9, 21, 10, tzinfo=timezone.utc)
     executor = RecordingExecutor(
         [{'uuid': 'episode-a', 'content': 'replayed', 'valid_at': tied, 'created_at': tied}]
     )

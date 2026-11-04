@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -35,7 +35,7 @@ async def test_legacy_entity_save_reaches_oracle_sql_not_cypher() -> None:
         name='Alpha',
         group_id='group-a',
         labels=['Concept'],
-        created_at=datetime(2026, 9, 21, tzinfo=UTC),
+        created_at=datetime(2026, 9, 21, tzinfo=timezone.utc),
     )
 
     await node.save(driver)

@@ -122,16 +122,10 @@ async def execute_on_connection(
 
         columns = [_column_name(column) for column in cursor.description]
         rows = await cursor.fetchall()
-        records = [
-            dict(
-                zip(
-                    columns,
-                    [await _materialize_oracle_value(value) for value in row],
-                    strict=True,
-                )
-            )
-            for row in rows
-        ]
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            values = [await _materialize_oracle_value(value) for value in row]
+            records.append(dict(zip(columns, values, strict=True)))
         return records, columns, None
 
 

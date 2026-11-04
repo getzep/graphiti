@@ -148,13 +148,25 @@ application acceptance, capacity certification or production approval.
 
 ### Validation scope
 
-Local validation on Python 3.12.12 passed the repository's `make check`: Ruff, Pyright and
-1008 tests, with 53 skipped and 39 deselected. The dedicated Oracle hermetic selection passed
-174 cases with 29 integration cases deselected. These counts are not live-database counts.
+After synchronization with upstream `main` at `fb60e59d` on November 4, 2026, local validation on
+Python 3.12.12 passed the repository's `make check`: Ruff, Pyright and 1011 tests, with 53 skipped
+and 39 deselected. This includes all 174 Oracle hermetic cases.
 
-A clean installation of the built wheel also passed two native Oracle smoke tests: large UTF-8
-CLOB/JSON round-trip with Text tail-token canaries, and shared-fact episode removal with a
-deterministic summary helper. Imports resolved to the installed wheel, not an editable source
-tree. Test-owned fixtures were cleaned and the existing schema/index readiness was unchanged.
-No live model call was used. This does not qualify every native test, runtime, TLS configuration
-or application workload; in particular, no Python 3.13 native qualification is claimed.
+On Python 3.10.20, the existing CI no-database selection passed 796 cases with 12 skipped, and the
+Oracle hermetic selection passed 174 cases with 29 integration cases deselected. Locked dev/Oracle
+installs and dependency checks passed on both runtimes. The Oracle unit workflow now covers both
+versions. These counts are not live-database counts.
+
+The Python 3.10 run exposed a nested asynchronous comprehension that prevented the driver from
+importing on that runtime. Result materialization now uses an explicit row loop, with regression
+coverage for row order, nested LOB/JSON values and reading LOBs before the connection is released.
+Tests use `timezone.utc`, which is available on Python 3.10. No SQL or migrations changed.
+
+Earlier installed-wheel evidence, collected on October 26, 2026, passed two native Oracle smoke
+tests: large UTF-8 CLOB/JSON round-trip with Text tail-token canaries, and shared-fact episode
+removal with a deterministic summary helper. Imports resolved to the installed wheel, not an
+editable source tree. Test-owned fixtures were cleaned and the existing schema/index readiness
+was unchanged. Those native tests were not repeated for the November 4 alignment; its new gates
+are local hermetic checks. No live model call was used. This does not qualify every native test,
+runtime, TLS configuration or application workload; in particular, no Python 3.10 or Python 3.13
+native qualification is claimed.

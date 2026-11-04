@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -21,7 +21,7 @@ from graphiti_core.driver.oracle.legacy import OracleLegacyGraphOperations
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.nodes import EntityNode, EpisodicNode
 
-NOW = datetime(2026, 10, 6, 12, tzinfo=UTC)
+NOW = datetime(2026, 10, 6, 12, tzinfo=timezone.utc)
 VECTOR = [0.0] * 1023 + [1.0]
 
 

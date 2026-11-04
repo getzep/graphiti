@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -32,7 +32,7 @@ def entity(group_id: str = 'group-a', *, vector_size: int = 1024) -> EntityNode:
         summary='group-scoped',
         attributes={'source': group_id},
         name_embedding=[0.0] * vector_size,
-        created_at=datetime(2026, 9, 21, tzinfo=UTC),
+        created_at=datetime(2026, 9, 21, tzinfo=timezone.utc),
     )
 
 

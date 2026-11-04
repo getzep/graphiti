@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -31,7 +31,7 @@ def community() -> CommunityNode:
         labels=[],
         summary='Alpha and Beta',
         name_embedding=[0.0] * 1024,
-        created_at=datetime(2026, 9, 21, tzinfo=UTC),
+        created_at=datetime(2026, 9, 21, tzinfo=timezone.utc),
     )
 
 

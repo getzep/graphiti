@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -28,7 +28,7 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, Episodic
 from graphiti_core.search.search_filters import SearchFilters
 from tests.driver.oracle.operations.recording import RecordingExecutor
 
-NOW = datetime(2026, 9, 21, 12, tzinfo=UTC)
+NOW = datetime(2026, 9, 21, 12, tzinfo=timezone.utc)
 
 
 def entity() -> EntityNode:

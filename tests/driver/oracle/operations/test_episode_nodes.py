@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -32,20 +32,20 @@ def episode(uuid: str, valid_at: datetime) -> EpisodicNode:
         source_description='synthetic',
         content='{"event":"updated"}',
         entity_edges=[],
-        created_at=datetime(2026, 9, 21, tzinfo=UTC),
+        created_at=datetime(2026, 9, 21, tzinfo=timezone.utc),
         valid_at=valid_at,
     )
 
 
 @pytest.mark.asyncio
 async def test_retrieve_episodes_returns_codec_records_in_chronological_order() -> None:
-    older = episode('episode-1', datetime(2026, 9, 20, tzinfo=UTC))
-    newer = episode('episode-2', datetime(2026, 9, 21, tzinfo=UTC))
+    older = episode('episode-1', datetime(2026, 9, 20, tzinfo=timezone.utc))
+    newer = episode('episode-2', datetime(2026, 9, 21, tzinfo=timezone.utc))
     executor = RecordingExecutor([episode_node_to_binds(older), episode_node_to_binds(newer)])
 
     result = await OracleEpisodeNodeOperations().retrieve_episodes(
         executor,
-        reference_time=datetime(2026, 9, 21, 23, tzinfo=UTC),
+        reference_time=datetime(2026, 9, 21, 23, tzinfo=timezone.utc),
         last_n=2,
         group_ids=['group-a'],
         source='json',
@@ -58,7 +58,7 @@ async def test_retrieve_episodes_returns_codec_records_in_chronological_order() 
 
 @pytest.mark.asyncio
 async def test_episode_save_derives_search_text_without_changing_content() -> None:
-    item = episode('episode-3', datetime(2026, 9, 21, tzinfo=UTC))
+    item = episode('episode-3', datetime(2026, 9, 21, tzinfo=timezone.utc))
     executor = RecordingExecutor()
 
     await OracleEpisodeNodeOperations().save(executor, item)

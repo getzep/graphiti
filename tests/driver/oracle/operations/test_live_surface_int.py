@@ -19,7 +19,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -43,7 +43,7 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, Episodic
 from graphiti_core.search.search_filters import SearchFilters
 
 ROOT = Path(__file__).parents[4]
-NOW = datetime(2026, 9, 22, 12, tzinfo=UTC)
+NOW = datetime(2026, 9, 22, 12, tzinfo=timezone.utc)
 TEST_NAMESPACE = os.environ.get('ORACLE_TEST_NAMESPACE', 'graphiti-oracle-' + uuid4().hex)
 VECTOR_A = [1.0] + [0.0] * 1023
 VECTOR_B = [0.0, 1.0] + [0.0] * 1022
