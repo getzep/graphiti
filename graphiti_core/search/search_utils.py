@@ -828,7 +828,7 @@ async def node_bfs_search(
             f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH (origin {{uuid: origin_uuid}})-[e:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
-            WHERE origin:Entity OR origin.Episode
+            WHERE (origin:Entity OR origin:Episodic)
             AND n.group_id = origin.group_id
             """
         ]
