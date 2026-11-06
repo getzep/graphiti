@@ -206,6 +206,52 @@ class AddTripletResults(BaseModel):
     edges: list[EntityEdge]
 
 
+async def _get_or_create_episode(
+    driver: GraphDriver,
+    uuid: str | None,
+    *,
+    name: str,
+    group_id: str,
+    source: EpisodeType,
+    content: str,
+    source_description: str,
+    created_at: datetime,
+    valid_at: datetime,
+) -> EpisodicNode:
+    """Load the stored episode for ``uuid``, or build one when it does not exist.
+
+    Callers may supply their own uuid (for example a uuid5 of an idempotency key)
+    so a retried ``add_episode`` targets the same episode. A uuid that is not in
+    the graph yet is new work, not an error, so it is created here.
+    """
+    if uuid is None:
+        return EpisodicNode(
+            name=name,
+            group_id=group_id,
+            labels=[],
+            source=source,
+            content=content,
+            source_description=source_description,
+            created_at=created_at,
+            valid_at=valid_at,
+        )
+
+    try:
+        return await EpisodicNode.get_by_uuid(driver, uuid)
+    except NodeNotFoundError:
+        return EpisodicNode(
+            uuid=uuid,
+            name=name,
+            group_id=group_id,
+            labels=[],
+            source=source,
+            content=content,
+            source_description=source_description,
+            created_at=created_at,
+            valid_at=valid_at,
+        )
+
+
 class Graphiti:
     def __init__(
         self,
@@ -1445,19 +1491,16 @@ class Graphiti:
                 )
 
                 # Get or create episode
-                episode = (
-                    await EpisodicNode.get_by_uuid(driver, uuid)
-                    if uuid is not None
-                    else EpisodicNode(
-                        name=name,
-                        group_id=group_id,
-                        labels=[],
-                        source=source,
-                        content=episode_body,
-                        source_description=source_description,
-                        created_at=now,
-                        valid_at=reference_time,
-                    )
+                episode = await _get_or_create_episode(
+                    driver,
+                    uuid,
+                    name=name,
+                    group_id=group_id,
+                    source=source,
+                    content=episode_body,
+                    source_description=source_description,
+                    created_at=now,
+                    valid_at=reference_time,
                 )
 
                 # Create default edge type map
