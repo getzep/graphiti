@@ -1,0 +1,12 @@
+# Build override for docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+services:
+  graphiti-falkordb:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        GRAPHITI_CORE_VERSION: ${GRAPHITI_CORE_VERSION:-0.29.1}
+        MCP_SERVER_VERSION: ${MCP_SERVER_VERSION:-1.1.3}
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
