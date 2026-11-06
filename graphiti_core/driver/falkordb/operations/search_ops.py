@@ -238,13 +238,20 @@ class FalkorSearchOperations(SearchOperations):
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
+        # FalkorDB plans a re-match of the endpoints by uuid as a full :Entity label
+        # scan for EVERY row the fulltext index yields, so the cost becomes
+        # O(hits x entities). The relationship the index already returned knows its
+        # own endpoints, so read them directly. The label predicate keeps the result
+        # set identical to the pattern's.
         cypher = (
             get_relationships_query(
                 'edge_name_and_fact', limit=limit, provider=GraphProvider.FALKORDB
             )
             + """
             YIELD relationship AS rel, score
-            MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+            WITH rel AS e, score, startNode(rel) AS n, endNode(rel) AS m
+            WHERE n:Entity AND m:Entity
+            WITH e, score, n, m
             """
             + filter_query
             + """
