@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import inspect
 import json
 import logging
 import os
@@ -65,6 +66,15 @@ ANTHROPIC_MODEL_MAX_TOKENS = {
 
 # Default max tokens for models not in the mapping
 DEFAULT_ANTHROPIC_MAX_TOKENS = 8192
+
+
+def _accepts_keyword(func: typing.Callable[..., typing.Any], name: str) -> bool:
+    """Return whether func accepts the keyword argument, directly or through **kwargs."""
+    try:
+        parameters = inspect.signature(func).parameters.values()
+    except (TypeError, ValueError):
+        return True
+    return any(p.name == name or p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters)
 
 
 class AnthropicClient(LLMClient):
@@ -179,6 +189,17 @@ class AnthropicClient(LLMClient):
         tool_choice_cast = typing.cast(ToolChoiceParam, tool_choice)
         return tool_list_cast, tool_choice_cast
 
+    def _temperature_arguments(self) -> dict[str, typing.Any]:
+        """Return the messages.create arguments that send temperature with the installed SDK.
+
+        anthropic 1.0 removed the temperature keyword from messages.create, but the API still
+        takes the field, so newer SDKs receive it through extra_body. The request body is the
+        same either way.
+        """
+        if _accepts_keyword(self.client.messages.create, 'temperature'):
+            return {'temperature': self.temperature}
+        return {'extra_body': {'temperature': self.temperature}}
+
     def _get_max_tokens_for_model(self, model: str) -> int:
         """Get the maximum output tokens for a specific Anthropic model.
 
@@ -259,11 +280,11 @@ class AnthropicClient(LLMClient):
             result = await self.client.messages.create(
                 system=system_message.content,
                 max_tokens=max_creation_tokens,
-                temperature=self.temperature,
                 messages=user_messages_cast,
                 model=effective_model,
                 tools=tools,
                 tool_choice=tool_choice,
+                **self._temperature_arguments(),
             )
 
             # Extract token usage from the response
