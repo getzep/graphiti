@@ -6,6 +6,9 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
+from graphiti_core.helpers import validate_excluded_entity_types
+from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
+
 logger = logging.getLogger(__name__)
 
 
@@ -149,10 +152,15 @@ class QueueService:
         if self._graphiti_client is None:
             raise RuntimeError('Queue service not initialized. Call initialize() first.')
 
+        validate_entity_types(entity_types)
+        validate_excluded_entity_types(excluded_entity_types, entity_types)
+
+        episode_label = f"'{name}'" + (f' (uuid: {uuid})' if uuid else '')
+
         async def process_episode():
             """Process the episode using the graphiti client."""
             try:
-                logger.info(f'Processing episode {uuid} for group {group_id}')
+                logger.info(f'Processing episode {episode_label} for group {group_id}')
 
                 # Process the episode using the graphiti client
                 await self._graphiti_client.add_episode(
@@ -174,10 +182,12 @@ class QueueService:
                     uuid=uuid,
                 )
 
-                logger.info(f'Successfully processed episode {uuid} for group {group_id}')
+                logger.info(f'Successfully processed episode {episode_label} for group {group_id}')
 
             except Exception as e:
-                logger.error(f'Failed to process episode {uuid} for group {group_id}: {str(e)}')
+                logger.error(
+                    f'Failed to process episode {episode_label} for group {group_id}: {str(e)}'
+                )
                 raise
 
         # Use the existing add_episode_task method to queue the processing
