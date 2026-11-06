@@ -17,6 +17,7 @@ limitations under the License.
 import json
 
 from graphiti_core.nodes import EpisodeType
+from graphiti_core.utils import content_chunking
 from graphiti_core.utils.content_chunking import (
     CHARS_PER_TOKEN,
     _count_json_keys,
@@ -273,6 +274,27 @@ class TestChunkOverlap:
                 overlap = current_words & next_words
                 # At minimum, common words like 'Paragraph', 'with', etc.
                 assert len(overlap) > 0
+
+    def test_explicit_zero_overlap_is_not_replaced_by_default(self, monkeypatch):
+        text = '\n\n'.join(f'Paragraph {i} with some content here.' for i in range(400))
+        json_content = json.dumps([{'k': i, 'v': 'x' * 30} for i in range(600)])
+        message_content = '\n'.join(f'Alice: line {i} with words in it' for i in range(600))
+
+        for chunker, content in (
+            (chunk_text_content, text),
+            (chunk_json_content, json_content),
+            (chunk_message_content, message_content),
+        ):
+            # Pin the default so the result does not depend on CHUNK_OVERLAP_TOKENS
+            # in the environment.
+            monkeypatch.setattr(content_chunking, 'CHUNK_OVERLAP_TOKENS', 100)
+            no_overlap = chunker(content, chunk_size_tokens=400, overlap_tokens=0)
+            default_overlap = chunker(content, chunk_size_tokens=400)
+            assert sum(len(c) for c in no_overlap) < sum(len(c) for c in default_overlap)
+
+            # An explicit 0 must match a default that resolves to 0.
+            monkeypatch.setattr(content_chunking, 'CHUNK_OVERLAP_TOKENS', 0)
+            assert chunker(content, chunk_size_tokens=400) == no_overlap
 
 
 class TestEdgeCases:
