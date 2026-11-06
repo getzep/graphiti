@@ -77,7 +77,7 @@ async def test_json_schema_mode_does_not_inject_schema_into_prompt():
     await client.generate_response(messages, response_model=ResponseModel)
 
     sent_user_content = completions.create_calls[0]['messages'][-1]['content']
-    assert 'Respond with a JSON object in the following format' not in sent_user_content
+    assert 'valid INSTANCE of the' not in sent_user_content
 
 
 @pytest.mark.asyncio
@@ -90,7 +90,7 @@ async def test_json_object_mode_uses_json_object_and_injects_schema():
     assert call['response_format'] == {'type': 'json_object'}
     # The schema must be injected into the prompt since the API will not enforce it.
     sent_user_content = call['messages'][-1]['content']
-    assert 'Respond with a JSON object in the following format' in sent_user_content
+    assert 'valid INSTANCE of the' in sent_user_content
     assert json.dumps(ResponseModel.model_json_schema()) in sent_user_content
 
 
@@ -102,9 +102,7 @@ async def test_no_response_model_uses_json_object_without_injection():
 
     call = completions.create_calls[0]
     assert call['response_format'] == {'type': 'json_object'}
-    assert (
-        'Respond with a JSON object in the following format' not in call['messages'][-1]['content']
-    )
+    assert 'valid INSTANCE of the' not in call['messages'][-1]['content']
     assert result == {'any': 'thing'}
 
 
