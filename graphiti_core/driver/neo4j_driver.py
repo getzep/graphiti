@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from typing import Any
 
@@ -194,8 +194,8 @@ class Neo4jDriver(GraphDriver):
                 self._init_task.exception()
         await self.client.close()
 
-    def delete_all_indexes(self) -> Coroutine:
-        return self.execute_query('CALL db.indexes() YIELD name DROP INDEX name')
+    async def delete_all_indexes(self) -> None:
+        await self._graph_ops.delete_all_indexes(self)
 
     async def _execute_index_query(self, query: LiteralString) -> EagerResult | None:
         """Execute an index creation query, ignoring 'index already exists' errors.

@@ -94,12 +94,25 @@ async def test_execute_query_defaults_to_neo4j_database():
 
 async def test_delete_all_indexes_routes_through_execute_query():
     driver = _make_driver(database='custom')
+    driver.client.execute_query.side_effect = [
+        ([{'name': 'entity_uuid'}, {'name': 'odd`name'}], None, None),
+        ([], None, None),
+        ([], None, None),
+    ]
     try:
         await driver.delete_all_indexes()
 
-        driver.client.execute_query.assert_awaited_once()
-        call_kwargs = driver.client.execute_query.await_args.kwargs
-        assert call_kwargs['database_'] == 'custom'
-        assert 'database_' not in call_kwargs['parameters_']
+        calls = driver.client.execute_query.await_args_list
+        listing_query = calls[0].args[0]
+        assert 'SHOW INDEXES' in listing_query
+        assert "type <> 'LOOKUP'" in listing_query
+        assert 'owningConstraint IS NULL' in listing_query
+        assert [call.args[0] for call in calls[1:]] == [
+            'DROP INDEX `entity_uuid` IF EXISTS',
+            'DROP INDEX `odd``name` IF EXISTS',
+        ]
+        for call in calls:
+            assert call.kwargs['database_'] == 'custom'
+            assert 'database_' not in call.kwargs['parameters_']
     finally:
         await driver.close()
