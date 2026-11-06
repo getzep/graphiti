@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import typing
+from contextvars import ContextVar
 from typing import Any, Literal
 
 import openai
@@ -35,6 +36,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = 'gpt-4.1-mini'
 
 StructuredOutputMode = Literal['json_schema', 'json_object']
+
+# A client can serve concurrent prompts; an instance attribute would mix their usage.
+_usage_prompt: ContextVar[str | None] = ContextVar('generic_usage_prompt', default=None)
 
 
 class OpenAIGenericClient(LLMClient):
@@ -161,6 +165,13 @@ class OpenAIGenericClient(LLMClient):
                 max_tokens=max_tokens,
                 response_format=self._build_response_format(response_model),  # type: ignore[arg-type]
             )
+            # A completed request consumes tokens even if parsing fails and we retry it.
+            usage = getattr(response, 'usage', None)
+            self.token_tracker.record(
+                _usage_prompt.get(),
+                getattr(usage, 'prompt_tokens', 0) or 0,
+                getattr(usage, 'completion_tokens', 0) or 0,
+            )
             result = response.choices[0].message.content or ''
             # An empty body (refusal, length finish_reason, or a flaky endpoint) would make
             # json.loads raise a cryptic JSONDecodeError; surface a clear error instead.
@@ -216,6 +227,7 @@ class OpenAIGenericClient(LLMClient):
                 attributes['prompt.name'] = prompt_name
             span.add_attributes(attributes)
 
+            usage_context = _usage_prompt.set(prompt_name)
             try:
                 # Delegate to the base tenacity wrapper so transient JSONDecodeError /
                 # RateLimitError get backoff-retried (4 attempts) — most relevant in the
@@ -233,3 +245,5 @@ class OpenAIGenericClient(LLMClient):
                 span.set_status('error', str(e))
                 span.record_exception(e)
                 raise
+            finally:
+                _usage_prompt.reset(usage_context)
