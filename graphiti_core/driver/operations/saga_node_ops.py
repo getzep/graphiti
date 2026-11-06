@@ -86,3 +86,17 @@ class SagaNodeOperations(ABC):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ) -> list[SagaNode]: ...
+
+    async def get_by_name(
+        self,
+        executor: QueryExecutor,
+        name: str,
+        group_id: str,
+    ) -> SagaNode | None:
+        """Return the saga with this name in the group, or None if there is none.
+
+        Not abstract on purpose: existing drivers keep Graphiti's inline lookup query in
+        ``Graphiti._get_or_create_saga``. Backends that cannot run that Cypher override this
+        method, and the client falls back to the inline query on ``NotImplementedError``.
+        """
+        raise NotImplementedError

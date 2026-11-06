@@ -1037,6 +1037,9 @@ async def test_graphiti_retrieve_episodes(
 
 @pytest.mark.asyncio
 async def test_filter_existing_duplicate_of_edges(graph_driver, mock_embedder):
+    if graph_driver.provider == GraphProvider.SPANNER:
+        pytest.skip('filter_existing_duplicate_of_edges is a test-only Cypher helper')
+
     # Create entity nodes
     entity_node_1 = EntityNode(
         name='test_entity_1',
@@ -2167,6 +2170,9 @@ async def test_get_relevant_nodes(
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
 
+    if graph_driver.provider == GraphProvider.SPANNER:
+        pytest.skip('get_relevant_nodes is a test-only Cypher helper')
+
     if graph_driver.provider == GraphProvider.KUZU:
         pytest.skip('Skipping as tests fail on Kuzu')
 
@@ -2229,6 +2235,9 @@ async def test_get_relevant_edges_and_invalidation_candidates(
 ):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
+
+    if graph_driver.provider == GraphProvider.SPANNER:
+        pytest.skip('get_relevant_edges is a test-only Cypher helper')
 
     graphiti = Graphiti(
         graph_driver=graph_driver,
