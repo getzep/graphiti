@@ -124,3 +124,65 @@ async def test_create_batch_processes_multiple_inputs(
 
 if __name__ == '__main__':
     pytest.main(['-xvs', __file__])
+
+
+async def test_create_batch_splits_requests_when_batch_size_is_set():
+    """Input larger than batch_size is divided into several requests."""
+    embedder = OpenAIEmbedder(config=OpenAIEmbedderConfig(api_key='test', batch_size=2))
+
+    requests: list[list[str]] = []
+
+    seen: list[str] = []
+
+    async def fake_create(**kwargs):
+        requests.append(kwargs['input'])
+        data = [
+            MagicMock(embedding=create_embedding_values(0.1 * offset))
+            for offset in [seen.index(t) for t in kwargs['input']] or [0]
+        ]
+        # global-order encoding: each text gets a unique multiplier by its
+        # position in the ORIGINAL input, pinning cross-batch order
+        return MagicMock(data=data)
+
+    # 简化实现: 直接给每个全局位置唯一值
+    values = {t: 0.1 * (i + 1) for i, t in enumerate(['a', 'b', 'c', 'd', 'e'])}
+
+    async def fake_create(**kwargs):  # noqa: F811
+        requests.append(kwargs['input'])
+        data = [MagicMock(embedding=create_embedding_values(values[t])) for t in kwargs['input']]
+        return MagicMock(data=data)
+
+    embedder.client = MagicMock()
+    embedder.client.embeddings.create = fake_create
+
+    result = await embedder.create_batch(['a', 'b', 'c', 'd', 'e'])
+
+    assert [len(r) for r in requests] == [2, 2, 1]
+    assert len(result) == 5
+    # order preservation: embedding i must carry the multiplier of the i-th
+    # ORIGINAL input text, proving batches were concatenated in order
+    expected = [create_embedding_values(values[t])[0] for t in ['a', 'b', 'c', 'd', 'e']]
+    assert [e[0] for e in result] == expected
+
+
+async def test_create_batch_sends_one_request_without_batch_size():
+    """Without batch_size, the whole input goes in one request."""
+    embedder = OpenAIEmbedder(config=OpenAIEmbedderConfig(api_key='test'))
+
+    requests: list[list[str]] = []
+
+    async def fake_create(**kwargs):
+        requests.append(kwargs['input'])
+        data = [
+            MagicMock(embedding=create_embedding_values(0.1 * (k + 1)))
+            for k, _ in enumerate(kwargs['input'])
+        ]
+        return MagicMock(data=data)
+
+    embedder.client = MagicMock()
+    embedder.client.embeddings.create = fake_create
+
+    result = await embedder.create_batch(['a', 'b', 'c', 'd', 'e'])
+
+    assert len(requests) == 1
+    assert len(result) == 5
