@@ -45,6 +45,36 @@ from graphiti_core.nodes import Node
 
 logger = logging.getLogger(__name__)
 
+# Endpoint keys of an entity edge. `source_uuid` / `target_uuid` are the MATCH keys of the
+# single-edge save query; `source_node_uuid` / `target_node_uuid` are the canonical fields.
+# These names are reserved: an attribute with one of them is never written to the edge.
+ENTITY_EDGE_ENDPOINT_KEYS = frozenset(
+    {'source_uuid', 'target_uuid', 'source_node_uuid', 'target_node_uuid'}
+)
+
+# Keys stored as named edge fields (or endpoint keys). They are not user attributes, so they
+# are dropped from `attributes` when an edge is read.
+ENTITY_EDGE_RESERVED_KEYS = ENTITY_EDGE_ENDPOINT_KEYS | {
+    'uuid',
+    'fact',
+    'fact_embedding',
+    'name',
+    'group_id',
+    'episodes',
+    'created_at',
+    'expired_at',
+    'valid_at',
+    'invalid_at',
+    'reference_time',
+}
+
+
+def strip_entity_edge_reserved_keys(attributes: dict[str, Any]) -> dict[str, Any]:
+    """Remove reserved edge keys from a record's attribute map in place."""
+    for key in ENTITY_EDGE_RESERVED_KEYS:
+        attributes.pop(key, None)
+    return attributes
+
 
 class Edge(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
@@ -368,11 +398,18 @@ class EntityEdge(Edge):
             )
         else:
             for k, v in (self.attributes or {}).items():
-                if k not in edge_data:
+                if k not in edge_data and k not in ENTITY_EDGE_ENDPOINT_KEYS:
                     edge_data[k] = v
+            extra_params: dict[str, Any] = {}
+            if driver.provider == GraphProvider.FALKORDB:
+                # Pass the MATCH keys separately so `SET e = $edge_data` does not
+                # persist them as edge properties that leak into attributes.
+                extra_params['source_uuid'] = edge_data.pop('source_uuid')
+                extra_params['target_uuid'] = edge_data.pop('target_uuid')
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
                 edge_data=edge_data,
+                **extra_params,
             )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
@@ -975,20 +1012,7 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
     else:
-        attributes = record['attributes']
-        attributes.pop('uuid', None)
-        attributes.pop('source_node_uuid', None)
-        attributes.pop('target_node_uuid', None)
-        attributes.pop('fact', None)
-        attributes.pop('fact_embedding', None)
-        attributes.pop('name', None)
-        attributes.pop('group_id', None)
-        attributes.pop('episodes', None)
-        attributes.pop('created_at', None)
-        attributes.pop('expired_at', None)
-        attributes.pop('valid_at', None)
-        attributes.pop('invalid_at', None)
-        attributes.pop('reference_time', None)
+        attributes = strip_entity_edge_reserved_keys(record['attributes'])
 
     edge = EntityEdge(
         uuid=record['uuid'],

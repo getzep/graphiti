@@ -16,7 +16,7 @@ limitations under the License.
 
 from typing import Any
 
-from graphiti_core.edges import EntityEdge
+from graphiti_core.edges import EntityEdge, strip_entity_edge_reserved_keys
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 
@@ -52,20 +52,7 @@ def entity_node_from_record(record: Any) -> EntityNode:
 
 def entity_edge_from_record(record: Any) -> EntityEdge:
     """Parse an entity edge from a database record."""
-    attributes = record['attributes']
-    attributes.pop('uuid', None)
-    attributes.pop('source_node_uuid', None)
-    attributes.pop('target_node_uuid', None)
-    attributes.pop('fact', None)
-    attributes.pop('fact_embedding', None)
-    attributes.pop('name', None)
-    attributes.pop('group_id', None)
-    attributes.pop('episodes', None)
-    attributes.pop('created_at', None)
-    attributes.pop('expired_at', None)
-    attributes.pop('valid_at', None)
-    attributes.pop('invalid_at', None)
-    attributes.pop('reference_time', None)
+    attributes = strip_entity_edge_reserved_keys(record['attributes'])
 
     return EntityEdge(
         uuid=record['uuid'],
