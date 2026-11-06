@@ -26,16 +26,28 @@ class NodeResult(TypedDict):
 class NodeSearchResponse(TypedDict):
     message: str
     nodes: list[NodeResult]
+    # Which partitions this read actually covered; None means every group.
+    # Present so an empty result reports its scope instead of reading as
+    # "there is nothing" when it really means "nothing in that one group".
+    searched_group_ids: list[str] | None
 
 
 class FactSearchResponse(TypedDict):
     message: str
     facts: list[dict[str, Any]]
+    # Which partitions this read actually covered; None means every group.
+    # Present so an empty result reports its scope instead of reading as
+    # "there is nothing" when it really means "nothing in that one group".
+    searched_group_ids: list[str] | None
 
 
 class EpisodeSearchResponse(TypedDict):
     message: str
     episodes: list[dict[str, Any]]
+    # Which partitions this read actually covered; None means every group.
+    # Present so an empty result reports its scope instead of reading as
+    # "there is nothing" when it really means "nothing in that one group".
+    searched_group_ids: list[str] | None
 
 
 class StatusResponse(TypedDict):
