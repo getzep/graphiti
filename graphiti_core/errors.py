@@ -79,7 +79,10 @@ class GroupIdValidationError(GraphitiError):
     """Raised when a group_id contains invalid characters."""
 
     def __init__(self, group_id: str):
-        self.message = f'group_id "{group_id}" must contain only alphanumeric characters, dashes, or underscores'
+        self.message = (
+            f'group_id "{group_id}" must contain only alphanumeric characters, dashes, or underscores '
+            f'(valid: "my_group", "group-123"; invalid: "my group", "group@org")'
+        )
         super().__init__(self.message)
 
 
