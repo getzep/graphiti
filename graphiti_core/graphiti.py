@@ -115,6 +115,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     _extract_entity_summaries_batch,
     extract_attributes_from_nodes,
     extract_nodes,
+    has_extractable_entity_types,
     resolve_extracted_nodes,
 )
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
@@ -1485,24 +1486,31 @@ class Graphiti:
                     entity_types,
                 )
 
-                # Extract and resolve edges in parallel with attribute extraction
-                (
-                    resolved_edges,
-                    invalidated_edges,
-                    new_edges,
-                ) = await self._extract_and_resolve_edges(
-                    episode,
-                    extracted_nodes,
-                    previous_episodes,
-                    edge_type_map or edge_type_map_default,
-                    group_id,
-                    edge_types,
-                    nodes,
-                    uuid_map,
-                    custom_extraction_instructions=custom_extraction_instructions,
-                    entity_types=entity_types,
-                    clients=clients,
-                )
+                # Extract and resolve edges in parallel with attribute extraction.
+                # When every entity type is excluded, extract_nodes skips the model
+                # and edge extraction would only materialize plain Entity endpoints
+                # that the exclusions are meant to keep out, so skip it as well.
+                resolved_edges: list[EntityEdge] = []
+                invalidated_edges: list[EntityEdge] = []
+                new_edges: list[EntityEdge] = []
+                if has_extractable_entity_types(entity_types, excluded_entity_types):
+                    (
+                        resolved_edges,
+                        invalidated_edges,
+                        new_edges,
+                    ) = await self._extract_and_resolve_edges(
+                        episode,
+                        extracted_nodes,
+                        previous_episodes,
+                        edge_type_map or edge_type_map_default,
+                        group_id,
+                        edge_types,
+                        nodes,
+                        uuid_map,
+                        custom_extraction_instructions=custom_extraction_instructions,
+                        entity_types=entity_types,
+                        clients=clients,
+                    )
 
                 entity_edges = resolved_edges + invalidated_edges
 
