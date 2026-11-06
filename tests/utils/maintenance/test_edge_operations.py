@@ -1946,3 +1946,177 @@ async def test_extract_edge_timestamps_prefers_edge_reference_time(monkeypatch):
         None,
         edge_reference_time,
     )
+
+
+def _make_temporal_edge(
+    uuid: str,
+    *,
+    valid_at: datetime | None = None,
+    invalid_at: datetime | None = None,
+    reference_time: datetime | None = None,
+    expired_at: datetime | None = None,
+) -> EntityEdge:
+    created_at = (
+        valid_at or reference_time or invalid_at or datetime(2025, 1, 1, tzinfo=timezone.utc)
+    )
+    return EntityEdge(
+        uuid=uuid,
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='WORKS_AT',
+        group_id='group_1',
+        fact=uuid,
+        episodes=[],
+        created_at=created_at,
+        valid_at=valid_at,
+        invalid_at=invalid_at,
+        reference_time=reference_time,
+        expired_at=expired_at,
+    )
+
+
+def test_apply_temporal_invalidation_handles_termination_fact_with_same_start():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=start)
+    new_edge = _make_temporal_edge('new', valid_at=start, invalid_at=end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == end
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_handles_dated_termination_without_valid_at():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=start)
+    new_edge = _make_temporal_edge('new', invalid_at=end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == end
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_uses_episode_time_for_undated_termination():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    reference_time = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=start)
+    new_edge = _make_temporal_edge('new', reference_time=reference_time)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == reference_time
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_uses_old_episode_time_when_valid_at_is_missing():
+    old_reference_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    new_reference_time = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', reference_time=old_reference_time)
+    new_edge = _make_temporal_edge('new', reference_time=new_reference_time)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == new_reference_time
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_skips_old_edge_that_starts_after_termination():
+    old_start = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=old_start)
+    new_edge = _make_temporal_edge('new', invalid_at=end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at is None
+    assert old_edge.expired_at is None
+    assert invalidated == []
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_does_not_extend_an_existing_end():
+    old_end = datetime(2025, 1, 5, tzinfo=timezone.utc)
+    original_expired_at = datetime(2025, 1, 6, tzinfo=timezone.utc)
+    new_end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge(
+        'old',
+        valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        invalid_at=old_end,
+        expired_at=original_expired_at,
+    )
+    new_edge = _make_temporal_edge('new', invalid_at=new_end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == old_end
+    assert old_edge.expired_at == original_expired_at
+    assert invalidated == []
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_skips_undated_edges_without_later_episode_time():
+    same_reference_time = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    same_old = _make_temporal_edge('same-old', reference_time=same_reference_time)
+    same_new = _make_temporal_edge('same-new', reference_time=same_reference_time)
+
+    assert edge_ops._apply_temporal_invalidation(same_new, [same_old]) == []
+    assert edge_ops._apply_temporal_invalidation(same_old, [same_new]) == []
+    assert same_old.invalid_at is None
+    assert same_old.expired_at is None
+    assert same_new.invalid_at is None
+    assert same_new.expired_at is None
+
+    old_edge = _make_temporal_edge(
+        'later-old', reference_time=datetime(2025, 2, 2, tzinfo=timezone.utc)
+    )
+    new_edge = _make_temporal_edge(
+        'earlier-new', reference_time=datetime(2025, 2, 1, tzinfo=timezone.utc)
+    )
+
+    assert edge_ops._apply_temporal_invalidation(new_edge, [old_edge]) == []
+    assert old_edge.invalid_at is None
+    assert old_edge.expired_at is None
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_keeps_later_state_change_behavior():
+    old_edge = _make_temporal_edge('old', valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+    new_start = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    new_edge = _make_temporal_edge('new', valid_at=new_start)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == new_start
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_keeps_earlier_state_change_behavior():
+    old_start = datetime(2025, 3, 1, tzinfo=timezone.utc)
+    new_edge = _make_temporal_edge('new', valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+    old_edge = _make_temporal_edge('old', valid_at=old_start)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at is None
+    assert old_edge.expired_at is None
+    assert invalidated == []
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_returns_empty_for_no_candidates():
+    new_edge = _make_temporal_edge('new', valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+
+    assert edge_ops._apply_temporal_invalidation(new_edge, []) == []
