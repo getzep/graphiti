@@ -66,6 +66,14 @@ embedder:
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
+# By default, infer a reranker from the LLM and embedder providers, then fall back to local BGE.
+# Set this explicitly to openai, azure_openai, gemini, or bge to override that selection.
+# API-backed rerankers reuse credentials from the matching llm.providers or embedder.providers block.
+# Optionally set RERANKER_MODEL to override the provider client's default model.
+reranker:
+  provider: ${RERANKER_PROVIDER:auto}
+  model: ${RERANKER_MODEL:}
+
 database:
   provider: "falkordb"  # Using FalkorDB for this configuration
 
@@ -80,6 +88,12 @@ graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}
   episode_id_prefix: ${EPISODE_ID_PREFIX:}
   user_id: ${USER_ID:mcp_user}
+  # Search recipe used by search_memory_facts and search_nodes.
+  # cross_encoder activates the reranker configured above; rrf avoids reranker API calls.
+  # cross_encoder also adds breadth-first graph expansion, and an API-backed reranker makes one
+  # call per candidate: up to 2x the result limit for facts and up to 6x for nodes.
+  fact_reranker: ${FACT_RERANKER:rrf}
+  node_reranker: ${NODE_RERANKER:rrf}
   entity_types:
     - name: "Preference"
       description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"
