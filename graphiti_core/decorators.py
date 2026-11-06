@@ -97,7 +97,13 @@ def handle_multiple_group_ids(func: F) -> F:
 
             # Merge results based on type
             if isinstance(results[0], SearchResults):
-                return SearchResults.merge(results)
+                config_func_pos = get_parameter_position(func, 'config')
+                config_pos = config_func_pos - 1 if config_func_pos is not None else None
+                config = kwargs.get('config')
+                if config is None and config_pos is not None and len(args) > config_pos:
+                    config = args[config_pos]
+                limit = getattr(config, 'limit', None) if config is not None else None
+                return SearchResults.merge(results, limit=limit)
             elif isinstance(results[0], list):
                 return [item for result in results for item in result]
             elif isinstance(results[0], tuple):
