@@ -163,9 +163,10 @@ def edge_search_filter_query_constructor(
             node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels
         filter_queries.append(node_label_filter)
 
-    if filters.valid_at is not None:
+    active_groups = [group for group in (filters.valid_at or []) if group]
+    if active_groups:
         valid_at_filter = '('
-        for i, or_list in enumerate(filters.valid_at):
+        for i, or_list in enumerate(active_groups):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
                     ComparisonOperator.is_null,
@@ -187,16 +188,17 @@ def edge_search_filter_query_constructor(
 
             valid_at_filter += and_filter_query
 
-            if i == len(filters.valid_at) - 1:
+            if i == len(active_groups) - 1:
                 valid_at_filter += ')'
             else:
                 valid_at_filter += ' OR '
 
         filter_queries.append(valid_at_filter)
 
-    if filters.invalid_at is not None:
+    active_groups = [group for group in (filters.invalid_at or []) if group]
+    if active_groups:
         invalid_at_filter = '('
-        for i, or_list in enumerate(filters.invalid_at):
+        for i, or_list in enumerate(active_groups):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
                     ComparisonOperator.is_null,
@@ -218,16 +220,17 @@ def edge_search_filter_query_constructor(
 
             invalid_at_filter += and_filter_query
 
-            if i == len(filters.invalid_at) - 1:
+            if i == len(active_groups) - 1:
                 invalid_at_filter += ')'
             else:
                 invalid_at_filter += ' OR '
 
         filter_queries.append(invalid_at_filter)
 
-    if filters.created_at is not None:
+    active_groups = [group for group in (filters.created_at or []) if group]
+    if active_groups:
         created_at_filter = '('
-        for i, or_list in enumerate(filters.created_at):
+        for i, or_list in enumerate(active_groups):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
                     ComparisonOperator.is_null,
@@ -249,16 +252,17 @@ def edge_search_filter_query_constructor(
 
             created_at_filter += and_filter_query
 
-            if i == len(filters.created_at) - 1:
+            if i == len(active_groups) - 1:
                 created_at_filter += ')'
             else:
                 created_at_filter += ' OR '
 
         filter_queries.append(created_at_filter)
 
-    if filters.expired_at is not None:
+    active_groups = [group for group in (filters.expired_at or []) if group]
+    if active_groups:
         expired_at_filter = '('
-        for i, or_list in enumerate(filters.expired_at):
+        for i, or_list in enumerate(active_groups):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
                     ComparisonOperator.is_null,
@@ -280,7 +284,7 @@ def edge_search_filter_query_constructor(
 
             expired_at_filter += and_filter_query
 
-            if i == len(filters.expired_at) - 1:
+            if i == len(active_groups) - 1:
                 expired_at_filter += ')'
             else:
                 expired_at_filter += ' OR '
