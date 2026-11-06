@@ -21,6 +21,7 @@ import typing
 from abc import ABC, abstractmethod
 
 import httpx
+import openai
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
@@ -65,6 +66,11 @@ def is_server_or_retry_error(exception):
     # fails after the bounded retries with a clear error.
     if isinstance(exception, RateLimitError | EmptyResponseError | json.decoder.JSONDecodeError):
         return True
+
+    # The OpenAI SDK raises its own APIStatusError subclasses (e.g. InternalServerError for
+    # a 503), not httpx.HTTPStatusError, so provider 5xx errors need their own check.
+    if isinstance(exception, openai.APIStatusError):
+        return 500 <= exception.status_code < 600
 
     return (
         isinstance(exception, httpx.HTTPStatusError) and 500 <= exception.response.status_code < 600
