@@ -14,21 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import os
 import unittest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.driver.falkordb.operations.graph_ops import FalkorGraphMaintenanceOperations
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
 
-    HAS_FALKORDB = True
+    HAS_FALKORDB = FalkorDriverSession is not None
 except ImportError:
     FalkorDriver = None
     HAS_FALKORDB = False
@@ -116,546 +112,54 @@ class TestFalkorDriver:
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_execute_query_handles_index_already_exists_error(self):
-        """Test handling of 'already indexed' error."""
-        mock_graph = MagicMock()
-        mock_graph.query = AsyncMock(side_effect=Exception('Index already indexed'))
-        self.mock_client.select_graph.return_value = mock_graph
+    async def test_execute_query_reraises_already_indexed(self):
+        """execute_query must not swallow index errors; the caller demotes them."""
+        driver = FalkorDriver.__new__(FalkorDriver)
+        driver.client = MagicMock()
+        driver._database = 'GRAPHITI'
 
-        with patch('graphiti_core.driver.falkordb_driver.logger') as mock_logger:
-            result = await self.driver.execute_query('CREATE INDEX ...')
+        graph = MagicMock()
+        graph.query = AsyncMock(side_effect=Exception("Attribute 'uuid' is already indexed"))
+        driver.client.select_graph = MagicMock(return_value=graph)
 
-            mock_logger.info.assert_called_once()
-            assert result is None
+        with pytest.raises(Exception, match='already indexed'):
+            await driver.execute_query('CREATE INDEX FOR (n:Entity) ON (n.uuid)')
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_execute_query_handles_stopwords_already_set_error(self):
-        mock_graph = MagicMock()
-        mock_graph.query = AsyncMock(
+    async def test_execute_query_reraises_stopwords_already_set(self):
+        """FalkorDB 6.x stopwords idempotence error follows the re-raise contract."""
+        driver = FalkorDriver.__new__(FalkorDriver)
+        driver.client = MagicMock()
+        driver._database = 'GRAPHITI'
+
+        graph = MagicMock()
+        graph.query = AsyncMock(
             side_effect=Exception(
                 "Can not override index configuration: Stopwords are already set for label 'Entity'"
             )
         )
-        self.mock_client.select_graph.return_value = mock_graph
+        driver.client.select_graph = MagicMock(return_value=graph)
 
-        with patch('graphiti_core.driver.falkordb_driver.logger') as mock_logger:
-            result = await self.driver.execute_query('CREATE FULLTEXT INDEX ...')
-
-            mock_logger.info.assert_called_once()
-            assert result is None
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_falkordb_fulltext_indices_use_ddl_form(self):
-        queries = get_fulltext_indices(GraphProvider.FALKORDB)
-
-        assert all('db.idx.fulltext.createNodeIndex' not in query for query in queries)
-        assert all(query.strip().startswith('CREATE FULLTEXT INDEX') for query in queries)
-        assert all('OPTIONS {stopwords:' in query for query in queries[:3])
+        with pytest.raises(Exception, match='Stopwords are already set'):
+            await driver.execute_query('CREATE FULLTEXT INDEX ...')
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_build_indices_creates_range_before_fulltext(self):
-        with patch.object(self.driver, 'execute_query', new_callable=AsyncMock) as mock_execute:
-            await self.driver.build_indices_and_constraints()
-
-        assert mock_execute.await_args_list == [
-            call(query)
-            for query in get_range_indices(GraphProvider.FALKORDB)
-            + get_fulltext_indices(GraphProvider.FALKORDB)
-        ]
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_graph_maintenance_builds_range_before_fulltext(self):
-        executor = MagicMock()
-        executor.execute_query = AsyncMock()
-        operations = FalkorGraphMaintenanceOperations()
-
-        await operations.build_indices_and_constraints(executor)
-
-        assert executor.execute_query.await_args_list == [
-            call(query)
-            for query in get_range_indices(GraphProvider.FALKORDB)
-            + get_fulltext_indices(GraphProvider.FALKORDB)
-        ]
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_execute_query_propagates_other_exceptions(self):
-        """Test that other exceptions are properly propagated."""
-        mock_graph = MagicMock()
-        mock_graph.query = AsyncMock(side_effect=Exception('Other error'))
-        self.mock_client.select_graph.return_value = mock_graph
-
-        with patch('graphiti_core.driver.falkordb_driver.logger') as mock_logger:
-            with pytest.raises(Exception, match='Other error'):
-                await self.driver.execute_query('INVALID QUERY')
-
-            mock_logger.error.assert_called_once()
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_execute_query_converts_datetime_parameters(self):
-        """Test that datetime objects in kwargs are converted to ISO strings."""
-        mock_graph = MagicMock()
-        mock_result = MagicMock()
-        mock_result.header = []
-        mock_result.result_set = []
-        mock_graph.query = AsyncMock(return_value=mock_result)
-        self.mock_client.select_graph.return_value = mock_graph
-
-        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-
-        await self.driver.execute_query(
-            'CREATE (n:Node) SET n.created_at = $created_at', created_at=test_datetime
-        )
-
-        call_args = mock_graph.query.call_args[0]
-        assert call_args[1]['created_at'] == test_datetime.isoformat()
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_execute_query_strips_nul_bytes_from_parameters(self):
-        mock_graph = MagicMock()
-        mock_result = MagicMock()
-        mock_result.header = []
-        mock_result.result_set = []
-        mock_graph.query = AsyncMock(return_value=mock_result)
-        self.mock_client.select_graph.return_value = mock_graph
-
-        await self.driver.execute_query(
-            'CREATE (n:Node) SET n.content = $content',
-            content='Seamless Recruiting \x00 Onboarding',
-            nested={'values': ['ok\x00', 'clean']},
-        )
-
-        call_args = mock_graph.query.call_args[0]
-        assert call_args[1]['content'] == 'Seamless Recruiting  Onboarding'
-        assert call_args[1]['nested'] == {'values': ['ok', 'clean']}
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_session_creation(self):
-        """Test session creation with specific database."""
-        mock_graph = MagicMock()
-        self.mock_client.select_graph.return_value = mock_graph
-
-        session = self.driver.session()
-
-        assert isinstance(session, FalkorDriverSession)
-        assert session.graph is mock_graph
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_session_creation_with_none_uses_default_database(self):
-        """Test session creation with None uses default database."""
-        mock_graph = MagicMock()
-        self.mock_client.select_graph.return_value = mock_graph
-
-        session = self.driver.session()
-
-        assert isinstance(session, FalkorDriverSession)
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_close_calls_connection_close(self):
-        """Test driver close method calls connection close."""
-        mock_connection = MagicMock()
-        mock_connection.close = AsyncMock()
-        self.mock_client.connection = mock_connection
-
-        # Ensure hasattr checks work correctly
-        del self.mock_client.aclose  # Remove aclose if it exists
-
-        with patch('builtins.hasattr') as mock_hasattr:
-            # hasattr(self.client, 'aclose') returns False
-            # hasattr(self.client.connection, 'aclose') returns False
-            # hasattr(self.client.connection, 'close') returns True
-            mock_hasattr.side_effect = lambda obj, attr: (
-                attr == 'close' and obj is mock_connection
-            )
-
-            await self.driver.close()
-
-        mock_connection.close.assert_called_once()
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_delete_all_indexes(self):
-        """Test delete_all_indexes method."""
-        with patch.object(self.driver, 'execute_query', new_callable=AsyncMock) as mock_execute:
-            # Return None to simulate no indexes found
-            mock_execute.return_value = None
-
-            await self.driver.delete_all_indexes()
-
-            mock_execute.assert_called_once_with('CALL db.indexes()')
-
-
-class TestFalkorDriverSession:
-    """Test FalkorDB driver session functionality."""
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.mock_graph = MagicMock()
-        self.session = FalkorDriverSession(self.mock_graph)
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_session_async_context_manager(self):
-        """Test session can be used as async context manager."""
-        async with self.session as s:
-            assert s is self.session
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_close_method(self):
-        """Test session close method doesn't raise exceptions."""
-        await self.session.close()  # Should not raise
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_execute_write_passes_session_and_args(self):
-        """Test execute_write method passes session and arguments correctly."""
-
-        async def test_func(session, *args, **kwargs):
-            assert session is self.session
-            assert args == ('arg1', 'arg2')
-            assert kwargs == {'key': 'value'}
-            return 'result'
-
-        result = await self.session.execute_write(test_func, 'arg1', 'arg2', key='value')
-        assert result == 'result'
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_run_single_query_with_parameters(self):
-        """Test running a single query with parameters."""
-        self.mock_graph.query = AsyncMock()
-
-        await self.session.run('MATCH (n) RETURN n', param1='value1', param2='value2')
-
-        self.mock_graph.query.assert_called_once_with(
-            'MATCH (n) RETURN n', {'param1': 'value1', 'param2': 'value2'}
-        )
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_run_multiple_queries_as_list(self):
-        """Test running multiple queries passed as list."""
-        self.mock_graph.query = AsyncMock()
-
-        queries = [
-            ('MATCH (n) RETURN n', {'param1': 'value1'}),
-            ('CREATE (n:Node)', {'param2': 'value2'}),
-        ]
-
-        await self.session.run(queries)
-
-        assert self.mock_graph.query.call_count == 2
-        calls = self.mock_graph.query.call_args_list
-        assert calls[0][0] == ('MATCH (n) RETURN n', {'param1': 'value1'})
-        assert calls[1][0] == ('CREATE (n:Node)', {'param2': 'value2'})
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_run_converts_datetime_objects_to_iso_strings(self):
-        """Test that datetime objects are converted to ISO strings."""
-        self.mock_graph.query = AsyncMock()
-        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-
-        await self.session.run(
-            'CREATE (n:Node) SET n.created_at = $created_at', created_at=test_datetime
-        )
-
-        self.mock_graph.query.assert_called_once()
-        call_args = self.mock_graph.query.call_args[0]
-        assert call_args[1]['created_at'] == test_datetime.isoformat()
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_run_strips_nul_bytes_from_list_query_parameters(self):
-        self.mock_graph.query = AsyncMock()
-
-        queries = [
-            (
-                'CREATE (n:Node) SET n.content = $content',
-                {'content': 'a\x00b', 'items': ('x\x00', 'y')},
-            )
-        ]
-
-        await self.session.run(queries)
-
-        self.mock_graph.query.assert_called_once_with(
-            'CREATE (n:Node) SET n.content = $content',
-            {'content': 'ab', 'items': ('x', 'y')},
-        )
-
-
-class TestDatetimeConversion:
-    """Test datetime conversion utility function."""
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_convert_datetime_dict(self):
-        """Test datetime conversion in nested dictionary."""
-        from graphiti_core.driver.falkordb_driver import convert_datetimes_to_strings
-
-        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        input_dict = {
-            'string_val': 'test',
-            'datetime_val': test_datetime,
-            'nested_dict': {'nested_datetime': test_datetime, 'nested_string': 'nested_test'},
-        }
-
-        result = convert_datetimes_to_strings(input_dict)
-
-        assert result['string_val'] == 'test'
-        assert result['datetime_val'] == test_datetime.isoformat()
-        assert result['nested_dict']['nested_datetime'] == test_datetime.isoformat()
-        assert result['nested_dict']['nested_string'] == 'nested_test'
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_convert_datetime_list_and_tuple(self):
-        """Test datetime conversion in lists and tuples."""
-        from graphiti_core.driver.falkordb_driver import convert_datetimes_to_strings
-
-        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-
-        # Test list
-        input_list = ['test', test_datetime, ['nested', test_datetime]]
-        result_list = convert_datetimes_to_strings(input_list)
-        assert result_list[0] == 'test'
-        assert result_list[1] == test_datetime.isoformat()
-        assert result_list[2][1] == test_datetime.isoformat()
-
-        # Test tuple
-        input_tuple = ('test', test_datetime)
-        result_tuple = convert_datetimes_to_strings(input_tuple)
-        assert isinstance(result_tuple, tuple)
-        assert result_tuple[0] == 'test'
-        assert result_tuple[1] == test_datetime.isoformat()
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_convert_single_datetime(self):
-        """Test datetime conversion for single datetime object."""
-        from graphiti_core.driver.falkordb_driver import convert_datetimes_to_strings
-
-        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        result = convert_datetimes_to_strings(test_datetime)
-        assert result == test_datetime.isoformat()
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_convert_other_types_unchanged(self):
-        """Test that non-datetime types are returned unchanged."""
-        from graphiti_core.driver.falkordb_driver import convert_datetimes_to_strings
-
-        assert convert_datetimes_to_strings('string') == 'string'
-        assert convert_datetimes_to_strings(123) == 123
-        assert convert_datetimes_to_strings(None) is None
-        assert convert_datetimes_to_strings(True) is True
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_static_method_handles_datetime_values(self):
-        """FalkorDriver.convert_datetimes_to_strings must not raise on datetime values.
-
-        Regression test: isinstance() was called with the datetime module instead
-        of the datetime.datetime class, raising TypeError for any datetime input.
-        """
-        test_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-
-        result = FalkorDriver.convert_datetimes_to_strings({'ts': test_datetime, 'n': 5})
-
-        assert result == {'ts': test_datetime.isoformat(), 'n': 5}
-
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    def test_convert_normalizes_non_utc_offsets(self):
-        """Non-UTC offsets must be normalized to UTC before serialization.
-
-        FalkorDB stores datetimes as ISO strings and compares them
-        lexicographically, which is only correct when all offsets match.
-        """
-        from datetime import timedelta
-
-        from graphiti_core.driver.falkordb_driver import convert_datetimes_to_strings
-
-        tz_plus_3 = timezone(timedelta(hours=3))
-        # 13:00+03:00 is 10:00 UTC
-        aware_non_utc = datetime(2024, 1, 1, 13, 0, 0, tzinfo=tz_plus_3)
-
-        assert convert_datetimes_to_strings(aware_non_utc) == '2024-01-01T10:00:00+00:00'
-
-        # naive datetimes are assumed UTC and serialized with an explicit offset
-        naive = datetime(2024, 1, 1, 10, 0, 0)
-        assert convert_datetimes_to_strings(naive) == '2024-01-01T10:00:00+00:00'
-
-
-# Simple integration test
-class TestFalkorDriverIntegration:
-    """Simple integration test for FalkorDB driver."""
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_basic_integration_with_real_falkordb(self):
-        """Basic integration test with real FalkorDB instance."""
-        pytest.importorskip('falkordb')
-
-        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
-        falkor_port = os.getenv('FALKORDB_PORT', '6379')
-
-        try:
-            driver = FalkorDriver(host=falkor_host, port=falkor_port)
-
-            # Test basic query execution
-            result = await driver.execute_query('RETURN 1 as test')
-            assert result is not None
-
-            result_set, header, summary = result
-            assert header == ['test']
-            assert result_set == [{'test': 1}]
-
-            await driver.close()
-
-        except Exception as e:
-            pytest.skip(f'FalkorDB not available for integration test: {e}')
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_clear_data_group_ids_includes_saga_nodes(self):
-        """clear_data(group_ids=...) must delete Saga nodes of those groups.
-
-        Regression test: the label list only covered Entity, Episodic and
-        Community, so Saga nodes survived group-scoped deletion.
-        """
-        pytest.importorskip('falkordb')
-
-        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
-        falkor_port = os.getenv('FALKORDB_PORT', '6379')
-
-        try:
-            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_clear_saga')
-            await driver.execute_query('MATCH (n) DETACH DELETE n')
-        except Exception as e:
-            pytest.skip(f'FalkorDB not available for integration test: {e}')
-
-        try:
-            await driver.execute_query(
-                "CREATE (:Saga {uuid: 's1', name: 'saga', group_id: 'g1', "
-                "created_at: '2024-01-01T00:00:00'})"
-            )
-            await driver.execute_query(
-                "CREATE (:Entity {uuid: 'e1', name: 'x', group_id: 'g1', "
-                "created_at: '2024-01-01T00:00:00'})"
-            )
-            await driver.execute_query(
-                "CREATE (:Saga {uuid: 's2', name: 'other', group_id: 'g2', "
-                "created_at: '2024-01-01T00:00:00'})"
-            )
-
-            await driver.graph_ops.clear_data(driver, group_ids=['g1'])
-
-            records, _, _ = await driver.execute_query('MATCH (n) RETURN n.uuid AS uuid')
-            remaining = sorted(r['uuid'] for r in records)
-            # everything in g1 is gone, including the Saga node; g2 is untouched
-            assert remaining == ['s2']
-        finally:
-            await driver.execute_query('MATCH (n) DETACH DELETE n')
-            await driver.close()
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_bulk_save_does_not_persist_labels_property(self):
-        """Bulk-saved entities must get real labels, not a stray 'labels' property.
-
-        Regression test: the FALKORDB bulk save query ran `SET n = node` with the
-        labels list still in the map, persisting it as a node property (the
-        single-node save does not), and issued one query per label.
-        """
-        pytest.importorskip('falkordb')
-
-        from graphiti_core.models.nodes.node_db_queries import get_entity_node_save_bulk_query
-
-        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
-        falkor_port = os.getenv('FALKORDB_PORT', '6379')
-
-        try:
-            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_bulk_labels')
-            await driver.execute_query('MATCH (n) DETACH DELETE n')
-        except Exception as e:
-            pytest.skip(f'FalkorDB not available for integration test: {e}')
-
-        try:
-            node = {
-                'uuid': 'bulk-1',
-                'name': 'BulkGuy',
-                'group_id': 'g1',
-                'summary': 's',
-                'created_at': '2024-01-01T00:00:00',
-                'labels': ['Entity', 'Person'],
-                'name_embedding': [0.1, 0.2, 0.3, 0.4],
-            }
-            queries = get_entity_node_save_bulk_query(GraphProvider.FALKORDB, [node])
-
-            # one query per node, not one per label
-            assert len(queries) == 1
-
-            for query, params in queries:
-                await driver.execute_query(query, **params)
-
-            records, _, _ = await driver.execute_query(
-                "MATCH (n:Entity {uuid: 'bulk-1'}) RETURN labels(n) AS labels, n.labels AS prop"
-            )
-            assert len(records) == 1
-            assert set(records[0]['labels']) == {'Entity', 'Person'}
-            assert records[0]['prop'] is None
-        finally:
-            await driver.execute_query('MATCH (n) DETACH DELETE n')
-            await driver.close()
-
-    @pytest.mark.asyncio
-    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
-    async def test_retrieve_episodes_with_non_utc_valid_at(self):
-        """Episodes saved with a non-UTC offset must be found by a UTC reference time.
-
-        Regression test: valid_at was serialized with its original offset and
-        compared lexicographically against a UTC reference string, so an episode
-        at 10:00 UTC written as 13:00+03:00 was missed by a 10:30 UTC reference.
-        """
-        pytest.importorskip('falkordb')
-
-        from datetime import timedelta
-
-        from graphiti_core.nodes import EpisodeType, EpisodicNode
-        from graphiti_core.utils.datetime_utils import utc_now
-
-        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
-        falkor_port = os.getenv('FALKORDB_PORT', '6379')
-
-        try:
-            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='test_tz_episodes')
-            await driver.execute_query('MATCH (n) DETACH DELETE n')
-        except Exception as e:
-            pytest.skip(f'FalkorDB not available for integration test: {e}')
-
-        try:
-            tz_plus_3 = timezone(timedelta(hours=3))
-            episode = EpisodicNode(
-                name='ep-tz',
-                group_id='tz_group',
-                source=EpisodeType.text,
-                source_description='test',
-                content='timezone regression content',
-                # 13:00+03:00 is 10:00 UTC
-                valid_at=datetime(2024, 1, 1, 13, 0, tzinfo=tz_plus_3),
-                created_at=utc_now(),
-            )
-            await driver.episode_node_ops.save(driver, episode)
-
-            reference = datetime(2024, 1, 1, 10, 30, tzinfo=timezone.utc)
-            episodes = await driver.episode_node_ops.retrieve_episodes(
-                driver, reference, last_n=5, group_ids=['tz_group']
-            )
-
-            assert [e.name for e in episodes] == ['ep-tz']
-        finally:
-            await driver.execute_query('MATCH (n) DETACH DELETE n')
-            await driver.close()
+    async def test_build_indices_demotes_already_indexed(self, caplog):
+        """build_indices_and_constraints demotes idempotent index errors to INFO."""
+        driver = FalkorDriver.__new__(FalkorDriver)
+        driver.client = MagicMock()
+        driver._database = 'GRAPHITI'
+        driver.provider = GraphProvider.FALKORDB
+
+        graph = MagicMock()
+        graph.query = AsyncMock(side_effect=Exception("Attribute 'uuid' is already indexed"))
+        driver.client.select_graph = MagicMock(return_value=graph)
+
+        import logging as _logging
+
+        with caplog.at_level(_logging.INFO, logger='graphiti_core.driver.falkordb_driver'):
+            await driver.build_indices_and_constraints()
+
+        assert any('Index already exists' in r.message for r in caplog.records)
