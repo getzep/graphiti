@@ -16,9 +16,11 @@ limitations under the License.
 
 from __future__ import annotations
 
+import collections.abc
 import logging
 import os
-from typing import Any, Literal
+import types
+from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -27,8 +29,9 @@ logger = logging.getLogger(__name__)
 # Default cap for free-form string attribute values. Calibrated to comfortably fit
 # normal short-text fields (phones, industries, URLs, addresses, alias lists) while
 # rejecting multi-paragraph LLM meta-reasoning. Customers with legitimately longer
-# fields should set an explicit max_length on the Pydantic Field, or override the
-# default globally via the GRAPHITI_ATTRIBUTE_MAX_LENGTH env var.
+# fields should set an explicit max_length on the Pydantic Field (on the item type for
+# list fields), or override the default globally via the GRAPHITI_ATTRIBUTE_MAX_LENGTH
+# env var.
 DEFAULT_ATTRIBUTE_MAX_LENGTH = 250
 
 # When a list-typed string attribute is provided, the per-item cap and an aggregate
@@ -41,6 +44,10 @@ _ENV_VAR = 'GRAPHITI_ATTRIBUTE_MAX_LENGTH'
 # Track invalid env values we've already warned about so a misconfigured deploy
 # emits one warning per unique bad value rather than one per cap invocation.
 _warned_invalid_env: set[str] = set()
+
+# On these field types, Field(max_length=...) bounds the number of items, not the
+# length of each string.
+_COLLECTION_TYPES = (list, tuple, set, frozenset, collections.abc.Sequence, collections.abc.Set)
 
 
 # Merge semantics shared by node and edge call sites:
@@ -80,15 +87,40 @@ def _resolve_default_max_length(default_max_length: int) -> int:
     return parsed
 
 
+def _metadata_max_length(metadata: list[Any]) -> int | None:
+    for meta in metadata:
+        explicit = getattr(meta, 'max_length', None)
+        if explicit is not None:
+            return int(explicit)
+        # Field(...) inside Annotated keeps its constraints on a nested FieldInfo.
+        nested = _metadata_max_length(getattr(meta, 'metadata', None) or [])
+        if nested is not None:
+            return nested
+    return None
+
+
+def _item_metadata(collection_annotation: Any) -> list[Any]:
+    args = get_args(collection_annotation)
+    if args and get_origin(args[0]) is Annotated:
+        return list(get_args(args[0])[1:])
+    return []
+
+
 def _field_max_length(model: type[BaseModel], field_name: str) -> int | None:
     field_info = model.model_fields.get(field_name)
     if field_info is None:
         return None
-    for meta in getattr(field_info, 'metadata', []) or []:
-        explicit = getattr(meta, 'max_length', None)
-        if explicit is not None:
-            return int(explicit)
-    return None
+    annotation = field_info.annotation
+    members = (
+        [arg for arg in get_args(annotation) if arg is not type(None)]
+        if get_origin(annotation) in (Union, types.UnionType)
+        else [annotation]
+    )
+    if members and all((get_origin(member) or member) in _COLLECTION_TYPES for member in members):
+        # The field-level max_length is an item count here, so only a constraint on
+        # the item type (e.g. list[Annotated[str, Field(max_length=500)]]) sets the cap.
+        return _metadata_max_length([meta for member in members for meta in _item_metadata(member)])
+    return _metadata_max_length(getattr(field_info, 'metadata', []) or [])
 
 
 def _field_is_required(model: type[BaseModel], field_name: str) -> bool:
@@ -157,7 +189,9 @@ def cap_string_attributes(
 
     Cap precedence: an explicit ``max_length`` on the Pydantic Field wins; otherwise
     the resolved default (``GRAPHITI_ATTRIBUTE_MAX_LENGTH`` env var if set, else
-    ``default_max_length``). Non-string, non-string-list fields pass through untouched.
+    ``default_max_length``). For list-typed fields the explicit cap must sit on the
+    item type, because ``Field(max_length=...)`` on a list bounds its item count.
+    Non-string, non-string-list fields pass through untouched.
 
     Returns ``(kept, dropped)``:
       * ``kept`` — the response dict with over-cap fields removed (with one exception,
