@@ -186,6 +186,18 @@ class TestChunkTextContent:
             # Should end with sentence punctuation or continue to next chunk
             assert chunk[-1] in '.!? ' or True  # Allow flexibility
 
+    def test_explicit_zero_overlap_tokens_is_honored(self):
+        """overlap_tokens=0 must not fall back to CHUNK_OVERLAP_TOKENS (falsy `or`)."""
+        text = '\n\n'.join(f'Paragraph {i} with some content here.' for i in range(10))
+        explicit_zero = chunk_text_content(text, chunk_size_tokens=50, overlap_tokens=0)
+        left_as_none = chunk_text_content(text, chunk_size_tokens=50)
+        # With no overlap, consecutive chunks should not share paragraph text.
+        # Default overlap produces more/shared coverage; zero must differ from None.
+        assert explicit_zero != left_as_none
+        for i in range(len(explicit_zero) - 1):
+            assert explicit_zero[i] not in explicit_zero[i + 1]
+            assert explicit_zero[i + 1] not in explicit_zero[i]
+
     def test_preserves_text_completeness(self):
         text = 'Alpha beta gamma delta epsilon zeta eta theta.'
         chunks = chunk_text_content(text, chunk_size_tokens=10, overlap_tokens=2)
