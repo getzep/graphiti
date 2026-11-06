@@ -163,7 +163,8 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
-  Serverless collection (serves as the full text search backend) / Kuzu 0.11.2 (**deprecated**, see below)
+  Serverless collection (serves as the full text search backend) / Oracle AI Database 26ai
+  (see the [native Oracle guide](examples/oracle26ai/README.md)) / Kuzu 0.11.2 (**deprecated**, see below)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -208,6 +209,19 @@ pip install graphiti-core[falkordblite]
 # or with uv
 uv add graphiti-core[falkordblite]
 ```
+
+### Installing with Oracle AI Database 26ai Support
+
+The optional native Oracle driver uses SQL, JSON/CLOB, VECTOR, Oracle Text and SQL/PGQ:
+
+```bash
+pip install 'graphiti-core[oracle]'
+```
+
+See the [Oracle driver guide](examples/oracle26ai/README.md) for connection setup,
+1024-dimensional embeddings, migration privileges, the explicit Text-readiness barrier,
+episode-removal limitations and gated tests. Native smoke tests have exercised Python 3.12;
+installation compatibility alone does not establish a live-database or production qualification.
 
 ### Installing with Kuzu Support
 
