@@ -1946,3 +1946,129 @@ async def test_extract_edge_timestamps_prefers_edge_reference_time(monkeypatch):
         None,
         edge_reference_time,
     )
+
+
+def test_future_invalid_at_does_not_expire_edge_at_ingestion():
+    """A future invalid_at means the fact ends later — do not set expired_at=now."""
+    from graphiti_core.utils.maintenance.edge_operations import _apply_temporal_invalidation
+
+    future_end = datetime.now(timezone.utc) + timedelta(days=365)
+    edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='works_for',
+        group_id='group_1',
+        fact='Alice works for Acme until a future date',
+        episodes=['episode_1'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=datetime.now(timezone.utc) - timedelta(days=30),
+        invalid_at=future_end,
+        expired_at=None,
+    )
+
+    _apply_temporal_invalidation(edge, [])
+
+    assert edge.invalid_at == future_end
+    assert edge.expired_at is None
+
+
+def test_past_invalid_at_expires_edge_at_ingestion():
+    """A past invalid_at means the fact is already historical — set expired_at."""
+    from graphiti_core.utils.maintenance.edge_operations import _apply_temporal_invalidation
+
+    past_end = datetime.now(timezone.utc) - timedelta(days=7)
+    edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='worked_for',
+        group_id='group_1',
+        fact='Alice worked for Acme until last week',
+        episodes=['episode_1'],
+        created_at=datetime.now(timezone.utc),
+        valid_at=datetime.now(timezone.utc) - timedelta(days=365),
+        invalid_at=past_end,
+        expired_at=None,
+    )
+
+    before = datetime.now(timezone.utc)
+    _apply_temporal_invalidation(edge, [])
+    after = datetime.now(timezone.utc)
+
+    assert edge.invalid_at == past_end
+    assert edge.expired_at is not None
+    assert before <= edge.expired_at <= after
+
+
+def test_later_candidate_does_not_extend_future_invalid_at():
+    """R4: later contradiction after a finite future end must not extend or expire."""
+    from graphiti_core.utils.maintenance.edge_operations import _apply_temporal_invalidation
+
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=7)
+    edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='leads',
+        group_id='group_1',
+        fact='Bob leads project X',
+        episodes=['episode_1'],
+        created_at=now,
+        valid_at=now - timedelta(days=15),
+        invalid_at=end,
+        expired_at=None,
+    )
+    later = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='leads',
+        group_id='group_1',
+        fact='Carol leads project X',
+        episodes=['episode_2'],
+        created_at=now,
+        valid_at=now + timedelta(days=16),
+        invalid_at=None,
+        expired_at=None,
+    )
+
+    _apply_temporal_invalidation(edge, [later])
+
+    assert edge.invalid_at == end
+    assert edge.expired_at is None
+
+
+def test_later_candidate_shortens_future_invalid_at_without_expiring():
+    """Overlapping later contradiction may shorten invalid_at but not expire while future."""
+    from graphiti_core.utils.maintenance.edge_operations import _apply_temporal_invalidation
+
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=7)
+    clip = now + timedelta(days=1)
+    edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='leads',
+        group_id='group_1',
+        fact='Bob leads project X until next week',
+        episodes=['episode_1'],
+        created_at=now,
+        valid_at=now - timedelta(days=15),
+        invalid_at=end,
+        expired_at=None,
+    )
+    later = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='leads',
+        group_id='group_1',
+        fact='Carol leads project X starting tomorrow',
+        episodes=['episode_2'],
+        created_at=now,
+        valid_at=clip,
+        invalid_at=None,
+        expired_at=None,
+    )
+
+    _apply_temporal_invalidation(edge, [later])
+
+    assert edge.invalid_at == clip
+    assert edge.expired_at is None
