@@ -46,6 +46,11 @@ from services.factories import (
     LLMClientFactory,
 )
 from services.queue_service import QueueService
+from services.rate_limit_retry import (
+    RateLimitRetryEmbedder,
+    RateLimitRetryPolicy,
+    add_llm_rate_limit_retry,
+)
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
 from utils.type_config import (
     build_edge_type_map,
@@ -254,6 +259,15 @@ class GraphitiService:
                 embedder_client = EmbedderFactory.create(self.config.embedder)
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
+
+            # graphiti-core's provider clients fail fast on rate limits (429 /
+            # RESOURCE_EXHAUSTED), which would drop queued episodes. Retry those calls
+            # with backoff; repeating a single provider call has no graph side effects.
+            retry_policy = RateLimitRetryPolicy.from_env()
+            if llm_client is not None:
+                add_llm_rate_limit_retry(llm_client, retry_policy)
+            if embedder_client is not None:
+                embedder_client = RateLimitRetryEmbedder(embedder_client, retry_policy)
 
             # Create cross-encoder (reranker) client. Without this, Graphiti defaults to
             # OpenAIRerankerClient, which needs an OpenAI API key even on non-OpenAI setups.
