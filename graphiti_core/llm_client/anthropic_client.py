@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
-from .client import LLMClient
+from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
@@ -346,6 +346,9 @@ class AnthropicClient(LLMClient):
         self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
+
+        # Add multilingual extraction instructions, matching the other provider clients.
+        messages[0].content += get_extraction_language_instruction(group_id)
 
         # Wrap entire operation in tracing span
         with self.tracer.start_span('llm.generate') as span:
