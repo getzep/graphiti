@@ -72,7 +72,8 @@ def mock_gemini_client() -> Generator[Any, Any, None]:
 def gemini_embedder(mock_gemini_client: Any) -> GeminiEmbedder:
     """Create a GeminiEmbedder with a mocked client."""
     config = GeminiEmbedderConfig(api_key='test_api_key')
-    client = GeminiEmbedder(config=config)
+    # an explicit batch size, so the batching tests do not depend on the default model's limit
+    client = GeminiEmbedder(config=config, batch_size=100)
     client.client = mock_gemini_client
     return client
 
@@ -100,6 +101,14 @@ class TestGeminiEmbedderInitialization:
 
         assert embedder.config is not None
         assert embedder.config.embedding_model == DEFAULT_EMBEDDING_MODEL
+
+    @patch('google.genai.Client')
+    def test_default_model_is_a_gemini_api_embedding_model(self, mock_client):
+        """The default must be a model the Gemini API serves; text-embedding-001 is not one."""
+        assert DEFAULT_EMBEDDING_MODEL == 'gemini-embedding-001'
+        assert GeminiEmbedderConfig().embedding_model == 'gemini-embedding-001'
+        # gemini-embedding-001 takes one input per request
+        assert GeminiEmbedder().batch_size == 1
 
     @patch('google.genai.Client')
     def test_init_with_partial_config(self, mock_client):
