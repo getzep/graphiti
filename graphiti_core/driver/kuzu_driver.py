@@ -150,6 +150,7 @@ class KuzuDriver(GraphDriver):
             stacklevel=2,
         )
         super().__init__()
+        self._database = db
         self.db = kuzu.Database(db)
 
         self.setup_schema()
@@ -250,10 +251,7 @@ class KuzuDriver(GraphDriver):
         pass
 
     async def build_indices_and_constraints(self, delete_existing: bool = False):
-        # Kuzu doesn't support dynamic index creation like Neo4j or FalkorDB
-        # Schema and indices are created during setup_schema()
-        # This method is required by the abstract base class but is a no-op for Kuzu
-        pass
+        await self.graph_ops.build_indices_and_constraints(self, delete_existing)
 
     def setup_schema(self):
         conn = kuzu.Connection(self.db)
