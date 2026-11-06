@@ -66,9 +66,18 @@ def is_server_or_retry_error(exception):
     if isinstance(exception, RateLimitError | EmptyResponseError | json.decoder.JSONDecodeError):
         return True
 
-    return (
-        isinstance(exception, httpx.HTTPStatusError) and 500 <= exception.response.status_code < 600
-    )
+    if isinstance(exception, httpx.HTTPStatusError) and 500 <= exception.response.status_code < 600:
+        return True
+
+    # OpenAI SDK (and OpenAI-compatible providers via AsyncOpenAI) raise APIStatusError
+    # subclasses such as InternalServerError for 5xx — not httpx.HTTPStatusError — so
+    # those must be recognized here or tenacity never backs them off (see #2093).
+    try:
+        from openai import APIStatusError
+    except ImportError:  # pragma: no cover - openai is a hard dependency
+        return False
+
+    return isinstance(exception, APIStatusError) and 500 <= exception.status_code < 600
 
 
 class LLMClient(ABC):
