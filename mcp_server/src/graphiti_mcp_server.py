@@ -219,6 +219,19 @@ def _client_for_group(client: Graphiti, group_id: str) -> Graphiti:
     return scoped
 
 
+def _ensure_group_id(obj: Any, group_id: str, kind: str) -> None:
+    """Reject a UUID-addressed object that belongs to a different group.
+
+    On property-model backends ``driver.clone()`` is a no-op, so the
+    UUID-addressed core lookups cannot scope themselves by group. Enforce the
+    documented MCP contract at the tool boundary instead.
+    """
+    actual_group_id = getattr(obj, 'group_id', None)
+    if actual_group_id != group_id:
+        obj_uuid = getattr(obj, 'uuid', '?')
+        raise ValueError(f'{kind} {obj_uuid} is not in group {group_id!r}')
+
+
 # Global client for backward compatibility
 graphiti_client: Graphiti | None = None
 semaphore: asyncio.Semaphore
@@ -716,6 +729,8 @@ async def delete_entity_edge(
         )
         # Get the entity edge by UUID
         entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
+        if effective_group_id:
+            _ensure_group_id(entity_edge, effective_group_id, 'Entity edge')
         # Delete the edge using its delete method
         await entity_edge.delete(driver)
         return SuccessResponse(message=f'Entity edge with UUID {uuid} deleted successfully')
@@ -749,6 +764,9 @@ async def delete_episode(uuid: str, group_id: str | None = None) -> SuccessRespo
         scoped_client = (
             _client_for_group(client, effective_group_id) if effective_group_id else client
         )
+        if effective_group_id:
+            episode = await EpisodicNode.get_by_uuid(scoped_client.driver, uuid)
+            _ensure_group_id(episode, effective_group_id, 'Episode')
         # remove_episode cascades cleanup of episode-created entities/edges,
         # unlike EpisodicNode.delete which would orphan them.
         await scoped_client.remove_episode(uuid)
@@ -781,6 +799,8 @@ async def get_entity_edge(uuid: str, group_id: str | None = None) -> dict[str, A
         )
         # Get the entity edge directly using the EntityEdge class method
         entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
+        if effective_group_id:
+            _ensure_group_id(entity_edge, effective_group_id, 'Entity edge')
 
         # Use the format_fact_result function to serialize the edge
         # Return the Python dict directly - MCP will handle serialization
@@ -1085,6 +1105,10 @@ async def get_episode_entities(
         scoped_client = (
             _client_for_group(client, effective_group_id) if effective_group_id else client
         )
+        if effective_group_id:
+            for episode_uuid in episode_uuids:
+                episode = await EpisodicNode.get_by_uuid(scoped_client.driver, episode_uuid)
+                _ensure_group_id(episode, effective_group_id, 'Episode')
         results = await scoped_client.get_nodes_and_edges_by_episode(episode_uuids)
 
         return EpisodeEntitiesResponse(
