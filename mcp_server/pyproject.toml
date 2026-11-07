@@ -21,9 +21,14 @@ providers = [
     "google-genai>=2.8.0",
     "anthropic>=0.107.1",
     "groq>=1.2.0",
-    "voyageai>=0.3.7",
+    "voyageai>=0.2.3",
     "sentence-transformers>=3.2.1",
 ]
+
+[tool.uv]
+# Pillow 13 has the security fixes and needs Python 3.11+. On Python 3.10, uv resolves
+# voyageai 0.2.x, which does not use Pillow.
+constraint-dependencies = ["pillow>=13.0.0"]
 
 [tool.pyright]
 include = ["src", "tests"]

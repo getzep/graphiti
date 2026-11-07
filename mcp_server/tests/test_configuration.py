@@ -30,7 +30,7 @@ def test_config_loading():
 
     # Test environment variable override
     os.environ['LLM__PROVIDER'] = 'anthropic'
-    os.environ['LLM__MODEL'] = 'claude-3-opus'
+    os.environ['LLM__MODEL'] = 'claude-opus-5'
     config2 = GraphitiConfig()
 
     print('\n✓ Environment variable overrides work')
@@ -156,7 +156,7 @@ def test_cli_override():
         host = '127.0.0.1'
         port = 9999
         llm_provider = 'anthropic'
-        model = 'claude-3-sonnet'
+        model = 'claude-sonnet-5'
         temperature = 0.5
         embedder_provider = 'voyage'
         embedder_model = 'voyage-3'
