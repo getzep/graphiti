@@ -22,12 +22,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from embedder_fixtures import create_embedding_values
+from google.genai import types
 
 from graphiti_core.embedder.gemini import (
     DEFAULT_EMBEDDING_MODEL,
     GeminiEmbedder,
     GeminiEmbedderConfig,
 )
+
+
+def _texts(contents: Any) -> list[str]:
+    """Texts of the per-input Content objects the embedder hands to the SDK."""
+    assert all(isinstance(c, types.Content) and c.parts and len(c.parts) == 1 for c in contents)
+    return [c.parts[0].text for c in contents]
 
 
 def create_gemini_embedding(multiplier: float = 0.1, dimension: int = 1536) -> MagicMock:
@@ -132,7 +139,7 @@ class TestGeminiEmbedderCreate:
         mock_gemini_client.aio.models.embed_content.assert_called_once()
         _, kwargs = mock_gemini_client.aio.models.embed_content.call_args
         assert kwargs['model'] == DEFAULT_EMBEDDING_MODEL
-        assert kwargs['contents'] == ['Test input']
+        assert _texts(kwargs['contents']) == ['Test input']
 
         # Verify result is processed correctly
         assert result == mock_gemini_response.embeddings[0].values
@@ -261,7 +268,7 @@ class TestGeminiEmbedderCreateBatch:
         mock_gemini_client.aio.models.embed_content.assert_called_once()
         _, kwargs = mock_gemini_client.aio.models.embed_content.call_args
         assert kwargs['model'] == DEFAULT_EMBEDDING_MODEL
-        assert kwargs['contents'] == input_batch
+        assert _texts(kwargs['contents']) == input_batch
 
         # Verify all results are processed correctly
         assert len(result) == 3
@@ -393,3 +400,56 @@ class TestGeminiEmbedderCreateBatch:
 
 if __name__ == '__main__':
     pytest.main(['-xvs', __file__])
+
+
+class TestGeminiEmbedderEmbedding2Batching:
+    """google-genai >= 2.x collapses a list[str] into one multi-part Content for
+    gemini-embedding-2, which yields a single embedding for the whole batch."""
+
+    @pytest.mark.asyncio
+    async def test_each_input_is_its_own_content(
+        self, mock_gemini_client: Any, mock_gemini_batch_response: MagicMock
+    ) -> None:
+        embedder = GeminiEmbedder(
+            config=GeminiEmbedderConfig(
+                api_key='k', embedding_model='gemini-embedding-2', embedding_dim=3072
+            )
+        )
+        embedder.client = mock_gemini_client
+        mock_gemini_client.aio.models.embed_content.return_value = mock_gemini_batch_response
+
+        await embedder.create_batch(['a', 'b', 'c'])
+
+        _, kwargs = mock_gemini_client.aio.models.embed_content.call_args
+        contents = kwargs['contents']
+        assert len(contents) == 3
+        assert _texts(contents) == ['a', 'b', 'c']
+        assert kwargs['config'].output_dimensionality == 3072
+
+    @pytest.mark.asyncio
+    async def test_fewer_embeddings_than_inputs_falls_back_to_one_by_one(
+        self, mock_gemini_client: Any
+    ) -> None:
+        embedder = GeminiEmbedder(
+            config=GeminiEmbedderConfig(
+                api_key='k', embedding_model='gemini-embedding-2', embedding_dim=8
+            )
+        )
+        embedder.client = mock_gemini_client
+        collapsed = MagicMock()
+        collapsed.embeddings = [create_gemini_embedding(0.5, 8)]  # one vector for three inputs
+        single = MagicMock()
+        single.embeddings = [create_gemini_embedding(0.1, 8)]
+        mock_gemini_client.aio.models.embed_content.side_effect = [
+            collapsed,
+            single,
+            single,
+            single,
+        ]
+
+        result = await embedder.create_batch(['a', 'b', 'c'])
+
+        # batch call + three individual retries, never a misaligned 1-for-3 result
+        assert mock_gemini_client.aio.models.embed_content.call_count == 4
+        assert len(result) == 3
+        assert all(v == single.embeddings[0].values for v in result)
