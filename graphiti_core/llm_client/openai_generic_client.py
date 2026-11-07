@@ -115,13 +115,47 @@ class OpenAIGenericClient(LLMClient):
         # field required), which raw model_json_schema() routinely violates (that's why the
         # dedicated OpenAIClient uses responses.parse() instead). So adherence is best-effort
         # on OpenAI-proper; constrained-decoding servers (vLLM, llama.cpp) still enforce it.
+        # One piece of the strict subset is applied regardless, because it is the one those
+        # servers act on: every property is listed as required, so the grammar always emits
+        # each key instead of letting the model skip an optional one (see
+        # _require_all_properties).
         return {
             'type': 'json_schema',
             'json_schema': {
                 'name': getattr(response_model, '__name__', 'structured_response'),
-                'schema': response_model.model_json_schema(),
+                'schema': self._require_all_properties(response_model.model_json_schema()),
             },
         }
+
+    @staticmethod
+    def _require_all_properties(schema: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of ``schema`` in which every object lists all of its properties as required.
+
+        pydantic leaves fields that have a default out of ``required``. Servers that turn the
+        schema into a decoding grammar (llama.cpp, and Ollama on top of it) read ``required``
+        as "must emit this key" and everything else as "may skip it", so a small model under
+        the grammar tends to omit optional keys altogether rather than answer ``null``. On
+        Graphiti's edge extraction that shows up as facts with no ``valid_at``/``invalid_at``.
+
+        Listing every property as required makes the grammar emit each key. Types are left
+        exactly as pydantic wrote them: a ``str | None`` field is still answered with ``null``
+        when the model has nothing to say, a list is still a list, and validation of the
+        response is unchanged. This is the same "all properties required" shape OpenAI's
+        strict structured outputs demand and the dedicated ``OpenAIClient`` already sends.
+        """
+
+        def walk(node: Any) -> Any:
+            if isinstance(node, dict):
+                out = {key: walk(value) for key, value in node.items()}
+                properties = out.get('properties')
+                if out.get('type') == 'object' and isinstance(properties, dict) and properties:
+                    out['required'] = list(properties)
+                return out
+            if isinstance(node, list):
+                return [walk(value) for value in node]
+            return node
+
+        return walk(schema)
 
     @staticmethod
     def _strip_code_fences(text: str) -> str:
