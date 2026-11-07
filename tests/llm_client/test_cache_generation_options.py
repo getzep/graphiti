@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -82,3 +83,33 @@ async def test_response_cache_reuses_identical_generation_options(cached_groq):
     first = await client.generate_response(messages(), max_tokens=12)
     assert await client.generate_response(messages(), max_tokens=12) == first
     assert len(calls) == 1
+
+
+async def test_cache_write_does_not_change_generation_identity(cached_groq):
+    create, calls = cached_groq
+    client = create(temperature=0)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    complete = client.client.chat.completions.create
+
+    async def blocked_completion(**kwargs):
+        started.set()
+        await release.wait()
+        return await complete(**kwargs)
+
+    client.client.chat.completions.create = blocked_completion
+    pending = asyncio.create_task(client.generate_response(messages(), max_tokens=12))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        client.temperature = 1
+        release.set()
+        assert (await asyncio.wait_for(pending, timeout=1))['temperature'] == 0
+
+        warm = create(temperature=1)
+        assert (await warm.generate_response(messages(), max_tokens=12))['temperature'] == 1
+        assert len(calls) == 2
+    finally:
+        release.set()
+        if not pending.done():
+            pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
