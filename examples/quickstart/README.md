@@ -78,6 +78,46 @@ python quickstart_neptune.py
 - **Node Search Using Recipes**: Using predefined search configurations like NODE_HYBRID_SEARCH_RRF to directly search for nodes rather than edges
 - **Result Processing**: Understanding the structure of search results including facts, nodes, and temporal metadata
 
+## Search for facts valid at a specific time
+
+By default, `Graphiti.search()` can return current and superseded facts. A date in
+the query text does not automatically add a date filter. Use `SearchFilters` to
+select facts with known start dates that were valid at a particular instant.
+
+For example, suppose the graph contains these two facts:
+
+| Fact | Valid from (UTC) | Invalid from (UTC) |
+| --- | --- | --- |
+| Alice lives in Tokyo | January 10, 2026 | July 1, 2026 |
+| Alice lives in Berlin | July 1, 2026 | Unset |
+
+Use the connected `graphiti` instance from the quickstart to search that graph:
+
+```python
+from datetime import datetime, timezone
+
+from graphiti_core.search.search_filters import ComparisonOperator, DateFilter, SearchFilters
+
+as_of = datetime(2026, 6, 30, tzinfo=timezone.utc)
+valid_at_time = SearchFilters(
+    valid_at=[[DateFilter(date=as_of, comparison_operator=ComparisonOperator.less_than_equal)]],
+    invalid_at=[
+        [DateFilter(date=as_of, comparison_operator=ComparisonOperator.greater_than)],
+        [DateFilter(comparison_operator=ComparisonOperator.is_null)],
+    ],
+)
+
+results = await graphiti.search('Where did Alice live?', search_filter=valid_at_time)
+for result in results:
+    print(result.fact)
+```
+
+Of the two facts above, the filter admits Tokyo on June 30 and Berlin starting
+July 1 at 00:00 UTC. A fact's start is inclusive and its end is exclusive.
+An unset end means the fact is open-ended. This example filters on when a fact
+was true. It excludes facts with unknown start dates and uses the graph's
+currently stored knowledge, which may include facts ingested after the requested time.
+
 ## Next Steps
 
 After running this example, you can:

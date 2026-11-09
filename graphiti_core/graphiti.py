@@ -1923,7 +1923,7 @@ class Graphiti:
         Perform a hybrid search on the knowledge graph.
 
         This method executes a search query on the graph, combining vector and
-        text-based search techniques to retrieve relevant facts, returning the edges as a string.
+        text-based search techniques to retrieve relevant facts as entity edges.
 
         This is our basic out-of-the-box search, for more robust results we recommend using our more advanced
         search method graphiti.search_().
@@ -1938,6 +1938,8 @@ class Graphiti:
             The graph partitions to return data from.
         num_results : int, optional
             The maximum number of results to return. Defaults to 10.
+        search_filter : SearchFilters, optional
+            Constraints on the returned facts, including their validity dates.
 
         Returns
         -------
@@ -1946,11 +1948,10 @@ class Graphiti:
 
         Notes
         -----
-        This method uses a SearchConfig with num_episodes set to 0 and
-        num_results set to the provided num_results parameter.
-
-        The search is performed using the current date and time as the reference
-        point for temporal relevance.
+        Search applies no validity-date constraints by default, so results can
+        include both current and superseded facts. To search for facts valid at
+        a specific instant, pass a search_filter that requires valid_at to be
+        at or before that instant and invalid_at to be later or unset.
         """
         search_config = (
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
