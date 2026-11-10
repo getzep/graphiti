@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+import re
 from collections.abc import Coroutine
 from typing import Any
 
@@ -251,28 +252,24 @@ class NeptuneDriver(GraphDriver):
                 if isinstance(v, datetime.datetime):
                     params[k] = v.isoformat()
                 elif isinstance(v, list):
-                    # Handle lists that might contain datetime objects
+                    is_datetime_list = bool(v) and all(
+                        isinstance(item, datetime.datetime) for item in v
+                    )
+                    if is_datetime_list:
+                        datetime_list = (
+                            '[' + ', '.join(f'datetime("{item.isoformat()}")' for item in v) + ']'
+                        )
+                        query = re.sub(
+                            r'\$' + re.escape(k) + r'\b',
+                            lambda _, replacement=datetime_list: replacement,
+                            str(query),
+                        )
+
                     for i, item in enumerate(v):
                         if isinstance(item, datetime.datetime):
                             v[i] = item.isoformat()
-                            query = str(query).replace(f'${k}', f'datetime(${k})')
                         if isinstance(item, dict):
                             query = self._sanitize_parameters(query, v[i])
-
-                    # If the list contains datetime objects, we need to wrap each element with datetime()
-                    if any(isinstance(item, str) and 'T' in item for item in v):
-                        # Create a new list expression with datetime() wrapped around each element
-                        datetime_list = (
-                            '['
-                            + ', '.join(
-                                f'datetime("{item}")'
-                                if isinstance(item, str) and 'T' in item
-                                else repr(item)
-                                for item in v
-                            )
-                            + ']'
-                        )
-                        query = str(query).replace(f'${k}', datetime_list)
                 elif isinstance(v, dict):
                     query = self._sanitize_parameters(query, v)
             return query

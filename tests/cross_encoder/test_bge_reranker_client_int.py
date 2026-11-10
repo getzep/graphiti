@@ -16,7 +16,11 @@ limitations under the License.
 
 import pytest
 
-from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
+pytest.importorskip(
+    'sentence_transformers', reason='sentence-transformers is an optional dependency'
+)
+
+from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient  # noqa: E402
 
 
 @pytest.fixture

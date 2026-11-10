@@ -267,17 +267,7 @@ class GeminiClient(LLMClient):
         """
         try:
             gemini_messages: typing.Any = []
-            # If a response model is provided, add schema for structured output
             system_prompt = ''
-            if response_model is not None:
-                # Get the schema from the Pydantic model
-                pydantic_schema = response_model.model_json_schema()
-
-                # Create instruction to output in the desired JSON format
-                system_prompt += (
-                    f'Output ONLY valid JSON matching this schema: {json.dumps(pydantic_schema)}.\n'
-                    'Do not include any explanatory text before or after the JSON.\n\n'
-                )
 
             # Add messages content
             # First check for a system message

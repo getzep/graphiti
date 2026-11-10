@@ -78,13 +78,16 @@ A context graph contains:
 
 ## Graphiti and Zep
 
-Graphiti is the open-source framework for building temporal knowledge graphs at the core of
-[Zep's](https://www.getzep.com) context infrastructure. Zep manages context graphs at scale, providing
-governed, low-latency context retrieval and assembly for production deployments.
+Graphiti is an open-source Python framework for building and querying temporal context graphs. You supply the graph
+database, LLM, and embedder, and you build the service around it: ingestion, tenancy, access control, and operations.
 
-Under the hood, Zep is powered by a proprietary graph database — the
-[Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs
-with low-latency retrieval, so production deployments don't require a separate third-party graph database.
+[Zep](https://www.getzep.com) is the unified context layer for enterprises. Zep brings data from across a business into
+governed context graphs and serves that context to agents in production. Graphiti is the graph construction framework
+inside Zep. [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, stores and
+serves millions of context graphs with low-latency retrieval.
+
+Teams use both to give agents memory. Neither is an agent memory product: Graphiti is a framework for building graphs,
+and Zep unifies, governs, and serves an enterprise's context.
 
 Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org/abs/2501.13956).
 
@@ -96,20 +99,23 @@ Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org
 
 | Aspect | Zep | Graphiti |
 |--------|-----|---------|
-| **What they are** | Managed context graph infrastructure | Open-source framework for building temporal knowledge graphs |
-| **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
-| **Graph database** | Proprietary [Context Graph Engine](https://www.getzep.com/platform/context-graph-engine/) — built for millions of context graphs with low-latency retrieval; no third-party graph database vendor required | Bring your own third-party graph database |
-| **User & conversation management** | Built-in users, threads, and message storage | Build your own |
+| **What it is** | The unified context layer for enterprises | An open-source framework for building temporal context graphs |
+| **Scope** | Unifies data from across an enterprise into governed context and serves it to agents | Builds and queries graphs inside your own application |
+| **Context graphs** | Manages millions of context graphs with governance | Builds and queries the graphs you define |
+| **Graph database** | [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, built for millions of context graphs with low-latency retrieval; no third-party graph database required | Bring your own: Neo4j, FalkorDB, or Amazon Neptune |
+| **Users, threads, and ingestion** | Built-in users, threads, and ingestion for messages and business data | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
-| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
+| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; CLI; SDKs for Python, TypeScript, and Go | Build your own tools |
 | **Enterprise features** | SLAs, support, security guarantees | Self-managed |
-| **Deployment** | Fully managed or in your cloud | Self-hosted only |
+| **Deployment** | Fully managed or in your cloud (BYOC) | Self-hosted only |
 
 ### When to choose which
 
-**Choose Zep** if you want a turnkey, enterprise-grade platform with security, performance, and support baked in.
+**Choose Zep** if you want an enterprise's context unified, governed, and served to agents in production, without
+building and operating that system yourself.
 
-**Choose Graphiti** if you want a flexible OSS core and you're comfortable building/operating the surrounding system.
+**Choose Graphiti** if you are building temporal context graphs into your own system and will operate the graph
+database, retrieval, and surrounding service yourself.
 
 ## Why Graphiti?
 
@@ -307,9 +313,36 @@ You can use Docker Compose to quickly start the required services:
 
   This will start the FalkorDB Docker service and related components.
 
-## MCP Server
+## Reference MCP and REST servers
 
-The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server
+The `mcp_server` and `server` directories contain reference implementations of an MCP server and a REST server. These
+servers show how to put Graphiti behind a protocol. These servers are not production deployments.
+
+> [!WARNING]
+> The reference servers have no authentication, no authorization, and no prompt-injection protection. These omissions
+> are intentional. Do not expose the reference servers to an untrusted network.
+
+The reference servers have these limits:
+
+- The servers do not authenticate callers. Any caller can read, change, or delete data in any `group_id`.
+- The servers do not detect or block prompt injection. The servers send episode content and tool input to the
+  configured LLM without a filter.
+- The example Docker Compose files use default database credentials.
+
+Security reports about these limits are out of scope. Pull requests that add authentication, authorization, or
+prompt-injection filters to the reference servers are also out of scope. For more information, see the
+[security policy scope](SECURITY.md#scope).
+
+For a production deployment, use one of these options:
+
+- Use the `graphiti-core` library in your own service. Your service must supply authentication, authorization, tenant
+  isolation, and input controls.
+- Use [Zep](https://www.getzep.com), the unified context layer for enterprises, which is built on Graphiti. Zep is
+  available as a managed service or in your own cloud (BYOC). For a comparison, see [Zep vs Graphiti](#zep-vs-graphiti).
+
+### MCP Server
+
+The `mcp_server` directory contains a reference Model Context Protocol (MCP) server for Graphiti. This server
 allows AI assistants to interact with Graphiti's context graph capabilities through the MCP protocol.
 
 Key features of the MCP server include:
@@ -325,9 +358,9 @@ workflows.
 
 For detailed setup instructions and usage examples, see the [MCP server README](mcp_server/README.md).
 
-## REST Service
+### REST Service
 
-The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+The `server` directory contains a reference REST service for the Graphiti API. The service uses FastAPI.
 
 Please see the [server README](server/README.md) for more information.
 
@@ -665,15 +698,15 @@ openai = LLMTransport[OpenAIModels](
     models=['gpt-5.1', 'gpt-5-nano'],
 )
 
-AnthropicModels = Literal['claude-sonnet-4-5', 'claude-haiku-4-5']
+AnthropicModels = Literal['claude-sonnet-5', 'claude-haiku-5-5']
 anthropic = LLMTransport[AnthropicModels](
     AnthropicClient(),
-    models=['claude-sonnet-4-5', 'claude-haiku-4-5'],
+    models=['claude-sonnet-5', 'claude-haiku-5-5'],
 )
 
 main = openai.model('gpt-5.1')
 nano = openai.model('gpt-5-nano')
-haiku = anthropic.model('claude-haiku-4-5')
+haiku = anthropic.model('claude-haiku-5-5')
 runtime = LLMRuntime(
     model=main,
     routes=PromptRoutes(
@@ -696,6 +729,55 @@ that need a smaller model to that model explicitly. Legacy calls without
 
 GLiNER2 binds model objects at initialization. It does not support per-prompt
 model routing. See ``spec/llm-runtime.md`` for the runtime API.
+
+### Jev dedupe
+
+JevClient routes node dedupe and edge resolution to TypeSafe Jev. Set
+``JEV_API_KEY`` before you create the client. The duplicate threshold defaults
+to 0.7. The contradiction threshold defaults to 0.8.
+
+Jev is a decision model. It answers typed questions with probabilities. It
+does not generate text. Use a general LLM as the default model. Route only
+``dedupe_nodes.nodes`` and ``dedupe_edges.resolve_edge`` to Jev. Do not use Jev
+for extraction, summaries, or other generation tasks.
+
+TypeSafe hosts the Jev API. Graphiti sends dedupe prompt content to TypeSafe.
+See the [FalkorDB Jev dedupe example](examples/jev/) for a runnable example.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import (
+    JevClient,
+    LLMRuntime,
+    LLMTransport,
+    OpenAIClient,
+    PromptRoutes,
+    jev_prompt_overrides,
+)
+
+openai = LLMTransport(OpenAIClient(), models=['gpt-6-luna'])
+jev = LLMTransport(JevClient(), models=['jev-latest'])
+jev_dedupe = jev.model('jev-latest', prompt_overrides=jev_prompt_overrides())
+
+runtime = LLMRuntime(
+    model=openai.model('gpt-6-luna'),
+    routes=PromptRoutes(
+        dedupe_nodes=PromptRoutes.DedupeNodes(nodes=jev_dedupe),
+        dedupe_edges=PromptRoutes.DedupeEdges(resolve_edge=jev_dedupe),
+    ),
+)
+graphiti = Graphiti(..., llm_runtime=runtime)
+```
+
+### OpenAI Decisions dedupe
+
+``OpenAIDecisionsClient`` routes node dedupe and edge resolution to the OpenAI
+Decisions API. Use a general LLM as the default model. A decision model
+answers typed questions with probabilities and does not generate text. Do not
+use it for extraction, summaries, or other generation tasks.
+
+See the [OpenAI Decisions FalkorDB example](examples/openai_decisions/) for a
+runnable example.
 
 ## Documentation
 

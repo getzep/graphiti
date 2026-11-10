@@ -4,12 +4,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, resolve_prompt_messages
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.prompt_config import LLMTransport
 from graphiti_core.prompts import create_prompt_library
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
-from graphiti_core.prompts.models import ChatPrompt, SystemMessage, UserMessage
+from graphiti_core.prompts.models import ChatPrompt, Message, SystemMessage, UserMessage
 
 
 def _clients(library=None, llm=None) -> GraphitiClients:
@@ -151,3 +151,39 @@ async def test_complete_prompt_routes_to_runtime_when_set():
     assert kwargs['model'] == 'gpt-4.1'
     assert 'small_model' not in kwargs
     assert clients.llm_client.generate_response.await_count == 0
+
+
+def test_resolve_prompt_messages_uses_legacy_prompt_without_clients():
+    legacy_messages = [Message(role='user', content='legacy prompt')]
+
+    messages = resolve_prompt_messages(
+        'summarize_sagas.summarize_saga',
+        lambda _context: legacy_messages,
+        {'saga_name': 'test saga'},
+    )
+
+    assert messages == legacy_messages
+
+
+def test_resolve_prompt_messages_uses_prompt_library_override():
+    library = create_prompt_library(
+        {
+            'summarize_sagas': {
+                'summarize_saga': lambda context: ChatPrompt(
+                    system=SystemMessage(content='CUSTOM_SAGA_PROMPT'),
+                    user=UserMessage(content=context['saga_name']),
+                )
+            }
+        }
+    )
+    clients = _clients(library)
+
+    messages = resolve_prompt_messages(
+        'summarize_sagas.summarize_saga',
+        lambda _context: [Message(role='user', content='legacy prompt')],
+        {'saga_name': 'test saga'},
+        clients=clients,
+    )
+
+    assert 'CUSTOM_SAGA_PROMPT' in messages[0].content
+    assert messages[1].content == 'test saga'

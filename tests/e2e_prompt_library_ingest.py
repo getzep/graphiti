@@ -79,7 +79,7 @@ def _validate_openai_key() -> str:
 
 class StubLLM(LLMClient):
     def __init__(self) -> None:
-        super().__init__(config=LLMConfig(model='gpt-4.1-mini', small_model='gpt-4.1-nano'))
+        super().__init__(config=LLMConfig(model='gpt-4.1-mini'))
         self.calls: list[dict[str, Any]] = []
 
     async def _generate_response(
@@ -287,11 +287,11 @@ async def _run_mock(driver: Neo4jDriver) -> int:
 
     # Path 3: LLMRuntime
     transport = LLMTransport(StubLLM())
-    nano = transport.model('gpt-4.1-nano')
+    routed = transport.model('gpt-5.4-mini')
     runtime = LLMRuntime(
         model=transport.model('gpt-4.1-mini'),
         routes=PromptRoutes(
-            extract_nodes=PromptRoutes.ExtractNodes(extract_message=nano),
+            extract_nodes=PromptRoutes.ExtractNodes(extract_message=routed),
         ),
     )
     g3 = Graphiti(
@@ -364,11 +364,11 @@ async def _run_openai(driver: Neo4jDriver) -> int:
     async def path_bound() -> None:
         group_id = f'e2e-oa-bound-{run_id}'
         transport = LLMTransport(OpenAIClient())
-        nano = transport.model('gpt-4.1-nano')
+        routed = transport.model('gpt-5.4-mini')
         runtime = LLMRuntime(
             model=transport.model('gpt-4.1-mini'),
             routes=PromptRoutes(
-                extract_nodes=PromptRoutes.ExtractNodes(extract_message=nano),
+                extract_nodes=PromptRoutes.ExtractNodes(extract_message=routed),
             ),
             prompt_overrides=LLMPromptOverrides(
                 extract_nodes=LLMPromptOverrides.ExtractNodes(
