@@ -7,12 +7,12 @@
 
 server:
   transport: "http"  # Options: stdio, sse (deprecated), http
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   port: 8000
   
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: ${MODEL_NAME:gpt-5.5}
+  model: ${MODEL_NAME:gpt-6-luna}
   max_tokens: 4096
   # Use json_object for OpenAI-compatible providers that accept json_schema
   # but do not reliably enforce the requested Pydantic schema.

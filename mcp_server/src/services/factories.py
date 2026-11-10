@@ -1,5 +1,7 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
+import re
+
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
@@ -109,17 +111,21 @@ def is_non_openai_provider(base_url: str | None) -> bool:
 
 
 def reasoning_effort_for_model(model: str) -> str | None:
-    """Reasoning effort to send for a reasoning model, or None if not one.
+    """Reasoning effort for reasoning models, or None for non-reasoning models.
 
-    Reasoning models (o1, o3, gpt-5 family) need an effort; non-reasoning models
-    must not receive one. gpt-5.5 runs with reasoning off ('none') for lower
-    cost/latency (comparable extraction quality); earlier reasoning models keep
-    the cheapest broadly-supported tier ('minimal'). Shared by the OpenAI and
-    Azure OpenAI factory branches so both providers select effort identically.
+    GPT 5.1+ and later major versions use 'none'. Other GPT-5 versions and
+    o-series models use 'minimal'.
     """
-    if not model.startswith(('o1', 'o3', 'gpt-5')):
+    if model.startswith(('o1', 'o3')):
+        return 'minimal'
+    version = re.match(r'gpt-(\d+)(?:\.(\d+))?', model)
+    if version is None or int(version.group(1)) < 5:
         return None
-    return 'none' if model.startswith('gpt-5.5') else 'minimal'
+    major = int(version.group(1))
+    minor = version.group(2)
+    if major > 5 or (major == 5 and minor is not None and int(minor) >= 1):
+        return 'none'
+    return 'minimal'
 
 
 class LLMClientFactory:

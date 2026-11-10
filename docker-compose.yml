@@ -4,7 +4,7 @@ services:
     build:
       context: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test:
         [
@@ -40,8 +40,8 @@ services:
       retries: 10
       start_period: 3s
     ports:
-      - "7474:7474" # HTTP
-      - "${NEO4J_PORT:-7687}:${NEO4J_PORT:-7687}" # Bolt
+      - "127.0.0.1:7474:7474" # HTTP
+      - "127.0.0.1:${NEO4J_PORT:-7687}:${NEO4J_PORT:-7687}" # Bolt
     volumes:
       - neo4j_data:/data
     environment:
@@ -51,7 +51,7 @@ services:
     image: falkordb/falkordb:latest
     profiles: ["falkordb"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - falkordb_data:/data
     environment:
@@ -69,7 +69,7 @@ services:
       context: .
     profiles: ["falkordb"]
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     depends_on:
       falkordb:
         condition: service_healthy

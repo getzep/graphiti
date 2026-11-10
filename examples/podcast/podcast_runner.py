@@ -88,7 +88,7 @@ async def main(use_bulk: bool = False):
     setup_logging()
 
     # Configure LLM client
-    llm_config = LLMConfig(model='gpt-4.1-mini', small_model='gpt-4.1-nano')
+    llm_config = LLMConfig(model='gpt-6-luna', small_model='gpt-6-luna')
     llm_client = OpenAIClient(config=llm_config)
 
     # Use embedded FalkorDB (falkordblite) so the runner needs no external DB
