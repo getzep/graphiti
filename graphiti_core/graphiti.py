@@ -117,7 +117,10 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
-from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
+from graphiti_core.utils.ontology_utils.entity_types_utils import (
+    validate_edge_types,
+    validate_entity_types,
+)
 from graphiti_core.utils.text_utils import (
     SAGA_SUMMARY_MAX_CHARS,
     truncate_at_sentence,
@@ -1422,6 +1425,7 @@ class Graphiti:
         now = utc_now()
 
         validate_entity_types(entity_types)
+        validate_edge_types(edge_types)
         validate_excluded_entity_types(excluded_entity_types, entity_types)
 
         # Resolve a request-scoped driver/clients bundle rather than mutating the
