@@ -256,6 +256,7 @@ class LLMClient(ABC):
             span.add_attributes(attributes)
 
             # Check cache first
+            cache_key: str | None = None
             if self.cache_enabled and self.cache_dir is not None:
                 cache_key = self._get_cache_key(messages, model=model, max_tokens=max_tokens)
                 cached_response = self.cache_dir.get(cache_key)
@@ -281,8 +282,13 @@ class LLMClient(ABC):
                 raise
 
             # Cache response if enabled
-            if self.cache_enabled and self.cache_dir is not None:
-                cache_key = self._get_cache_key(messages, model=model, max_tokens=max_tokens)
+            # Do not store a response under options changed during the request.
+            if (
+                self.cache_enabled
+                and self.cache_dir is not None
+                and cache_key is not None
+                and cache_key == self._get_cache_key(messages, model=model, max_tokens=max_tokens)
+            ):
                 self.cache_dir.set(cache_key, response)
 
             return response
