@@ -16,6 +16,8 @@ limitations under the License.
 
 import json
 
+import pytest
+
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.content_chunking import (
     CHARS_PER_TOKEN,
@@ -778,3 +780,19 @@ class TestGenerateCoveringChunks:
                         covered_pairs.add(frozenset([indices[i], indices[j]]))
 
             assert covered_pairs == expected_pairs, f'Seed {seed} failed to cover all pairs'
+
+
+class TestFixedSizeContentCoverage:
+    @pytest.mark.parametrize('overlap_tokens', [1, 2, 4, 5])
+    def test_word_boundary_windows_preserve_all_characters(self, overlap_tokens):
+        # Unique letters reveal gaps even when overlapping windows repeat text.
+        text = 'abcdefghij klmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        chunks = chunk_text_content(text, chunk_size_tokens=5, overlap_tokens=overlap_tokens)
+        assert chunks
+        assert all(len(chunk) <= 20 for chunk in chunks)
+        assert set(text.replace(' ', '')) <= set(''.join(chunks))
+
+    def test_fixed_size_windows_cover_a_long_unbroken_sentence(self):
+        text = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        chunks = chunk_text_content(text, chunk_size_tokens=5, overlap_tokens=1)
+        assert chunks == [text[:20], text[16:36], text[32:52]]
