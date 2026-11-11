@@ -22,7 +22,12 @@ from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
 )
-from graphiti_core.search.search_utils import fulltext_query
+from graphiti_core.search.search_utils import (
+    community_similarity_search,
+    edge_similarity_search,
+    fulltext_query,
+    node_similarity_search,
+)
 
 
 class RecordingExecutor:
@@ -245,5 +250,55 @@ async def test_falkordb_similarity_search_filters_invalid_embeddings_before_cosi
         await method(executor, [0.1, 0.2], SearchFilters(), group_ids=['tenant'])
 
     cosine_index = executor.cypher.index('vec.cosineDistance')
+    guard_index = executor.cypher.index(expected_guard)
+    assert guard_index < cosine_index
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', [GraphProvider.NEO4J, GraphProvider.FALKORDB])
+@pytest.mark.parametrize(
+    ('method_name', 'expected_guard', 'cosine_function'),
+    [
+        (
+            'node_similarity_search',
+            'n.name_embedding IS NOT NULL AND size(n.name_embedding) = size($search_vector)',
+            'vector.similarity.cosine',
+        ),
+        (
+            'edge_similarity_search',
+            'e.fact_embedding IS NOT NULL AND size(e.fact_embedding) = size($search_vector)',
+            'vector.similarity.cosine',
+        ),
+        (
+            'community_similarity_search',
+            'c.name_embedding IS NOT NULL AND size(c.name_embedding) = size($search_vector)',
+            'vec.cosineDistance',
+        ),
+    ],
+)
+async def test_public_similarity_search_filters_invalid_embeddings_before_cosine(
+    provider, method_name, expected_guard, cosine_function
+):
+    if provider == GraphProvider.NEO4J and method_name == 'community_similarity_search':
+        cosine_function = 'vector.similarity.cosine'
+    elif provider == GraphProvider.FALKORDB and method_name != 'community_similarity_search':
+        cosine_function = 'vec.cosineDistance'
+
+    executor = RecordingExecutor()
+    driver = SimpleNamespace(
+        provider=provider,
+        search_interface=None,
+        execute_query=executor.execute_query,
+    )
+    if method_name == 'edge_similarity_search':
+        await edge_similarity_search(
+            driver, [0.1, 0.2], None, None, SearchFilters(), group_ids=['tenant']
+        )
+    elif method_name == 'community_similarity_search':
+        await community_similarity_search(driver, [0.1, 0.2], group_ids=['tenant'])
+    else:
+        await node_similarity_search(driver, [0.1, 0.2], SearchFilters(), group_ids=['tenant'])
+
+    cosine_index = executor.cypher.index(cosine_function)
     guard_index = executor.cypher.index(expected_guard)
     assert guard_index < cosine_index
