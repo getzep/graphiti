@@ -188,24 +188,16 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
 
 def get_entity_edge_return_query(provider: GraphProvider) -> str:
     # `fact_embedding` is not returned by default and must be manually loaded using `load_fact_embedding()`.
+    # Direction semantics: NEO4J/FALKORDB/NEPTUNE read source/target from the relationship itself
+    # via Cypher's built-in `startNode(e)`/`endNode(e)`, so the returned direction matches the
+    # stored relationship regardless of whether the surrounding MATCH is directed or undirected.
+    # KUZU models relationships as a `RelatesToNode_` intermediate node plus two `:RELATES_TO`
+    # edges, so `e` is a node, not a relationship, and `startNode`/`endNode` are not applicable.
+    # KUZU's MATCH is always directed `(n)-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(m)`,
+    # so `n`/`m` already reflect the true source/target.
 
-    if provider == GraphProvider.NEPTUNE:
+    if provider == GraphProvider.KUZU:
         return """
-        e.uuid AS uuid,
-        n.uuid AS source_node_uuid,
-        m.uuid AS target_node_uuid,
-        e.group_id AS group_id,
-        e.name AS name,
-        e.fact AS fact,
-        split(e.episodes, ',') AS episodes,
-        e.created_at AS created_at,
-        e.expired_at AS expired_at,
-        e.valid_at AS valid_at,
-        e.invalid_at AS invalid_at,
-        properties(e) AS attributes
-    """
-
-    return """
         e.uuid AS uuid,
         n.uuid AS source_node_uuid,
         m.uuid AS target_node_uuid,
@@ -217,11 +209,42 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
-    """ + (
-        'e.attributes AS attributes'
-        if provider == GraphProvider.KUZU
-        else 'properties(e) AS attributes'
-    )
+        e.reference_time AS reference_time,
+        e.attributes AS attributes
+    """
+
+    if provider == GraphProvider.NEPTUNE:
+        return """
+        e.uuid AS uuid,
+        startNode(e).uuid AS source_node_uuid,
+        endNode(e).uuid AS target_node_uuid,
+        e.group_id AS group_id,
+        e.name AS name,
+        e.fact AS fact,
+        split(e.episodes, ',') AS episodes,
+        e.created_at AS created_at,
+        e.expired_at AS expired_at,
+        e.valid_at AS valid_at,
+        e.invalid_at AS invalid_at,
+        e.reference_time AS reference_time,
+        properties(e) AS attributes
+    """
+
+    return """
+        e.uuid AS uuid,
+        startNode(e).uuid AS source_node_uuid,
+        endNode(e).uuid AS target_node_uuid,
+        e.group_id AS group_id,
+        e.created_at AS created_at,
+        e.name AS name,
+        e.fact AS fact,
+        e.episodes AS episodes,
+        e.expired_at AS expired_at,
+        e.valid_at AS valid_at,
+        e.invalid_at AS invalid_at,
+        e.reference_time AS reference_time,
+        properties(e) AS attributes
+    """
 
 
 def get_community_edge_save_query(provider: GraphProvider) -> str:

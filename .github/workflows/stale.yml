@@ -1,0 +1,55 @@
+name: Close stale incomplete items
+
+# Enforces the documented policy: issues and pull requests that are still missing
+# a required piece (any needs-* label) are warned after 7 days of inactivity and
+# closed 7 days later (14 total). Any comment or update resets the clock, and
+# compliant items are never touched — only these labels are in scope.
+
+on:
+  schedule:
+    - cron: "30 7 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: stale
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    if: vars.INTAKE_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9
+        with:
+          days-before-stale: 7
+          days-before-close: 7
+          # Process only items that are explicitly not ready. An item needs at
+          # least one of these labels to be considered at all.
+          any-of-labels: "needs-info,needs-issue,needs-rfc,needs-tests,needs-rework"
+          # Never auto-close approved features or security reports.
+          exempt-issue-labels: "rfc-approved,security"
+          exempt-pr-labels: "rfc-approved,security"
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          remove-stale-when-updated: true
+          operations-per-run: 60
+          stale-issue-message: >-
+            This issue is still missing a required piece (see the `needs-*` label)
+            and has been inactive for 7 days. It will be closed in 7 days unless the
+            requested information is added. Add the missing detail or a comment to
+            keep it open.
+          close-issue-message: >-
+            Closing because the requested information was not added within the
+            window. Comment with the missing detail and a maintainer can reopen it.
+          stale-pr-message: >-
+            This pull request is still marked not ready (see the `needs-*` label)
+            and has been inactive for 7 days. It will be closed in 7 days unless the
+            requested changes are made. Push an update or comment to keep it open.
+          close-pr-message: >-
+            Closing because the requested changes were not made within the window.
+            Push the changes and a maintainer can reopen it.

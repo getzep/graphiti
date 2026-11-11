@@ -74,11 +74,25 @@ class NeptuneSearchOperations(SearchOperations):
         for r in res['hits']['hits']:
             input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
+        filter_queries, filter_params = node_search_filter_query_constructor(
+            search_filter, GraphProvider.NEPTUNE
+        )
+        if group_ids is not None:
+            filter_queries.append('n.group_id IN $group_ids')
+            filter_params['group_ids'] = group_ids
+
+        filter_query = ''
+        if filter_queries:
+            filter_query = '\nAND ' + ' AND '.join(filter_queries)
+
         cypher = (
             """
             UNWIND $ids as i
             MATCH (n:Entity)
             WHERE n.uuid=i.id
+            """
+            + filter_query
+            + """
             RETURN
             """
             + get_entity_node_return_query(GraphProvider.NEPTUNE)
@@ -92,6 +106,7 @@ class NeptuneSearchOperations(SearchOperations):
             cypher,
             ids=input_ids,
             limit=limit,
+            **filter_params,
         )
 
         return [entity_node_from_record(r) for r in records]
@@ -398,18 +413,9 @@ class NeptuneSearchOperations(SearchOperations):
             + filter_query
             + """
             RETURN DISTINCT
-                e.uuid AS uuid,
-                e.group_id AS group_id,
-                startNode(e).uuid AS source_node_uuid,
-                endNode(e).uuid AS target_node_uuid,
-                e.created_at AS created_at,
-                e.name AS name,
-                e.fact AS fact,
-                split(e.episodes, ',') AS episodes,
-                e.expired_at AS expired_at,
-                e.valid_at AS valid_at,
-                e.invalid_at AS invalid_at,
-                properties(e) AS attributes
+            """
+            + get_entity_edge_return_query(GraphProvider.NEPTUNE)
+            + """
             LIMIT $limit
             """
         )
@@ -444,11 +450,20 @@ class NeptuneSearchOperations(SearchOperations):
         for r in res['hits']['hits']:
             input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
+        filter_query = ''
+        filter_params: dict[str, Any] = {}
+        if group_ids is not None:
+            filter_query = '\nAND e.group_id IN $group_ids'
+            filter_params['group_ids'] = group_ids
+
         cypher = (
             """
             UNWIND $ids as i
             MATCH (e:Episodic)
             WHERE e.uuid=i.id
+            """
+            + filter_query
+            + """
             RETURN
             """
             + EPISODIC_NODE_RETURN_NEPTUNE
@@ -462,6 +477,7 @@ class NeptuneSearchOperations(SearchOperations):
             cypher,
             ids=input_ids,
             limit=limit,
+            **filter_params,
         )
 
         return [episodic_node_from_record(r) for r in records]
@@ -486,11 +502,20 @@ class NeptuneSearchOperations(SearchOperations):
         for r in res['hits']['hits']:
             input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
+        filter_query = ''
+        filter_params: dict[str, Any] = {}
+        if group_ids is not None:
+            filter_query = '\nAND n.group_id IN $group_ids'
+            filter_params['group_ids'] = group_ids
+
         cypher = (
             """
             UNWIND $ids as i
             MATCH (n:Community)
             WHERE n.uuid=i.id
+            """
+            + filter_query
+            + """
             RETURN
         """
             + COMMUNITY_NODE_RETURN_NEPTUNE
@@ -504,6 +529,7 @@ class NeptuneSearchOperations(SearchOperations):
             cypher,
             ids=input_ids,
             limit=limit,
+            **filter_params,
         )
 
         return [community_node_from_record(r) for r in records]

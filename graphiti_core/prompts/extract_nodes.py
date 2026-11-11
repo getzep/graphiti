@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
 
@@ -428,6 +429,9 @@ HARD RULES — violating any of these is a failure:
 6. NEVER infer attribute values from the entity's name, from related entities, from
    generic world knowledge, or from prior summaries. Only verbatim or directly normalized
    text from MESSAGES qualifies as a new value.
+   Exception: for name-part fields such as first_name, last_name, given_name, or family_name,
+   a full person name explicitly present in MESSAGES is sufficient evidence to extract the
+   corresponding part. Do not use ENTITY.name alone unless the same name also appears in MESSAGES.
 
 7. If MESSAGES contain no information about an attribute, leave the existing entity
    value unchanged. If the entity has no existing value, the field is null.
@@ -652,3 +656,55 @@ versions: Versions = {
     'classify_nodes': classify_nodes,
     'extract_attributes': extract_attributes,
 }
+
+
+class ExtractNodesPrompts(ABC):
+    @abstractmethod
+    def extract_message(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_json(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_text(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def classify_nodes(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_summary(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_summaries_batch(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_entity_summaries_from_episodes(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultExtractNodesPrompts(ExtractNodesPrompts):
+    def extract_message(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_message(context))
+
+    def extract_json(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_json(context))
+
+    def extract_text(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_text(context))
+
+    def classify_nodes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(classify_nodes(context))
+
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_attributes(context))
+
+    def extract_summary(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_summary(context))
+
+    def extract_summaries_batch(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_summaries_batch(context))
+
+    def extract_entity_summaries_from_episodes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_entity_summaries_from_episodes(context))

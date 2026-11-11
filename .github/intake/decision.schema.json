@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/getzep/graphiti/blob/main/.github/intake/decision.schema.json",
+  "title": "Graphiti intake decision",
+  "description": "Contract between a deciding step (decide.py) and apply.py. apply.py never executes decider output.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "category",
+    "areas",
+    "labels",
+    "comment_id",
+    "duplicate_issue_numbers",
+    "missing_fields"
+  ],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "bug",
+        "feature",
+        "documentation",
+        "question",
+        "security",
+        "other"
+      ]
+    },
+    "areas": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "scope:core",
+          "scope:mcp",
+          "scope:service",
+          "scope:docs",
+          "scope:ci"
+        ]
+      },
+      "uniqueItems": true,
+      "maxItems": 5
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 64,
+        "enum": [
+          "bug",
+          "feature",
+          "question",
+          "documentation",
+          "duplicate",
+          "invalid",
+          "scope:core",
+          "scope:mcp",
+          "scope:service",
+          "scope:docs",
+          "scope:ci",
+          "needs-info",
+          "needs-issue",
+          "needs-rfc",
+          "needs-tests",
+          "needs-rework",
+          "security"
+        ]
+      },
+      "maxItems": 20
+    },
+    "comment_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "ask_repro",
+            "ask_rfc_fields",
+            "pr_needs_rfc",
+            "pr_needs_tests",
+            "pr_needs_rework",
+            "ask_info"
+          ]
+        }
+      ]
+    },
+    "duplicate_issue_numbers": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "maxItems": 5
+    },
+    "missing_fields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 80
+      },
+      "maxItems": 10
+    }
+  }
+}

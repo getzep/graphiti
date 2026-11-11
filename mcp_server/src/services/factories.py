@@ -1,5 +1,8 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
+import re
+
+from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
@@ -108,17 +111,21 @@ def is_non_openai_provider(base_url: str | None) -> bool:
 
 
 def reasoning_effort_for_model(model: str) -> str | None:
-    """Reasoning effort to send for a reasoning model, or None if not one.
+    """Reasoning effort for reasoning models, or None for non-reasoning models.
 
-    Reasoning models (o1, o3, gpt-5 family) need an effort; non-reasoning models
-    must not receive one. gpt-5.5 runs with reasoning off ('none') for lower
-    cost/latency (comparable extraction quality); earlier reasoning models keep
-    the cheapest broadly-supported tier ('minimal'). Shared by the OpenAI and
-    Azure OpenAI factory branches so both providers select effort identically.
+    GPT 5.1+ and later major versions use 'none'. Other GPT-5 versions and
+    o-series models use 'minimal'.
     """
-    if not model.startswith(('o1', 'o3', 'gpt-5')):
+    if model.startswith(('o1', 'o3')):
+        return 'minimal'
+    version = re.match(r'gpt-(\d+)(?:\.(\d+))?', model)
+    if version is None or int(version.group(1)) < 5:
         return None
-    return 'none' if model.startswith('gpt-5.5') else 'minimal'
+    major = int(version.group(1))
+    minor = version.group(2)
+    if major > 5 or (major == 5 and minor is not None and int(minor) >= 1):
+        return 'none'
+    return 'minimal'
 
 
 class LLMClientFactory:
@@ -163,7 +170,11 @@ class LLMClientFactory:
                 if use_generic_client:
                     # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
                     # This uses the standard Chat Completions API instead of Responses API
-                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens)
+                    return OpenAIGenericClient(
+                        config=llm_config,
+                        max_tokens=config.max_tokens,
+                        structured_output_mode=config.structured_output_mode,
+                    )
                 else:
                     # Use OpenAIClient for official OpenAI API (supports Responses API).
                     # Reasoning models get a reasoning effort; others must not.
@@ -405,6 +416,107 @@ class EmbedderFactory:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')
 
 
+class CrossEncoderFactory:
+    """Factory for creating cross-encoder (reranker) clients based on configuration.
+
+    Graphiti defaults the cross_encoder to OpenAIRerankerClient, which needs an OpenAI API key.
+    To keep the server usable on non-OpenAI setups, pick a reranker from the LLM provider, then
+    the embedder provider, and fall back to the local BGE reranker.
+    """
+
+    @staticmethod
+    def create(llm_config: LLMConfig, embedder_config: EmbedderConfig) -> CrossEncoderClient:
+        """Create a cross-encoder client based on the configured providers."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Try the LLM provider first, then the embedder, before falling back to a local model.
+        for source, config in (('LLM', llm_config), ('embedder', embedder_config)):
+            reranker = CrossEncoderFactory._reranker_for_provider(source, config, logger)
+            if reranker is not None:
+                return reranker
+
+        # No provider reranker available (e.g. Anthropic LLM + Voyage embedder), so use the
+        # local BGE cross-encoder, which needs no API key.
+        logger.warning(
+            'No provider reranker available, using local BGERerankerClient '
+            '(downloads BAAI/bge-reranker-v2-m3, ~2.3 GB, on first run)'
+        )
+        try:
+            from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
+        except ImportError as e:
+            raise ValueError(
+                'No provider reranker is available for this configuration, and the local '
+                'BGE fallback requires the optional sentence-transformers dependency. '
+                "Install the MCP server's 'providers' extra (uv sync --extra providers), "
+                "install graphiti-core's 'sentence-transformers' extra "
+                "(pip install 'graphiti-core[sentence-transformers]'), or configure the "
+                'LLM or embedder provider as OpenAI or Gemini with a valid API key.'
+            ) from e
+
+        return BGERerankerClient()
+
+    @staticmethod
+    def _reranker_for_provider(
+        source: str, config: LLMConfig | EmbedderConfig, logger
+    ) -> CrossEncoderClient | None:
+        """Return a reranker for this provider, or None if it has no native one."""
+        provider = config.provider.lower()
+
+        match provider:
+            case 'openai':
+                if not config.providers.openai:
+                    return None
+                from graphiti_core.cross_encoder.openai_reranker_client import (
+                    OpenAIRerankerClient,
+                )
+
+                logger.info(f'Using OpenAIRerankerClient from {source} provider')
+                return OpenAIRerankerClient(
+                    config=GraphitiLLMConfig(
+                        api_key=config.providers.openai.api_key,
+                        base_url=config.providers.openai.api_url,
+                    )
+                )
+
+            case 'azure_openai':
+                azure_config = config.providers.azure_openai
+                if not azure_config or not azure_config.api_url:
+                    return None
+                from openai import AsyncOpenAI
+
+                base_url = azure_config.api_url
+                if not base_url.endswith('/'):
+                    base_url += '/'
+                if not base_url.endswith('openai/v1/'):
+                    base_url += 'openai/v1/'
+                from graphiti_core.cross_encoder.openai_reranker_client import (
+                    OpenAIRerankerClient,
+                )
+
+                logger.info(f'Using OpenAIRerankerClient (Azure) from {source} provider')
+                return OpenAIRerankerClient(
+                    client=AsyncOpenAI(base_url=base_url, api_key=azure_config.api_key)
+                )
+
+            case 'gemini':
+                if not config.providers.gemini:
+                    return None
+                from graphiti_core.cross_encoder.gemini_reranker_client import (
+                    GeminiRerankerClient,
+                )
+
+                logger.info(f'Using GeminiRerankerClient from {source} provider')
+                return GeminiRerankerClient(
+                    config=GraphitiLLMConfig(api_key=config.providers.gemini.api_key)
+                )
+
+            case _:
+                # anthropic, groq, voyage etc. have no native reranker in graphiti-core.
+                return None
+
+
 class DatabaseDriverFactory:
     """Factory for creating Database drivers based on configuration.
 
@@ -434,12 +546,14 @@ class DatabaseDriverFactory:
                 uri = os.environ.get('NEO4J_URI', neo4j_config.uri)
                 username = os.environ.get('NEO4J_USER', neo4j_config.username)
                 password = os.environ.get('NEO4J_PASSWORD', neo4j_config.password)
+                database = os.environ.get('NEO4J_DATABASE', neo4j_config.database)
 
                 return {
                     'uri': uri,
                     'user': username,
                     'password': password,
-                    # Note: database and use_parallel_runtime would need to be passed
+                    'database': database,
+                    # Note: use_parallel_runtime would need to be passed
                     # to the driver after initialization if supported
                 }
 
@@ -463,19 +577,23 @@ class DatabaseDriverFactory:
                 from urllib.parse import urlparse
 
                 uri = os.environ.get('FALKORDB_URI', falkor_config.uri)
+                username = os.environ.get('FALKORDB_USERNAME')
                 password = os.environ.get('FALKORDB_PASSWORD', falkor_config.password)
+                database = os.environ.get('FALKORDB_DATABASE', falkor_config.database)
 
                 # Parse the URI to extract host and port
                 parsed = urlparse(uri)
                 host = parsed.hostname or 'localhost'
                 port = parsed.port or 6379
+                username = username or parsed.username or falkor_config.username
 
                 return {
                     'driver': 'falkordb',
                     'host': host,
                     'port': port,
+                    'username': username,
                     'password': password,
-                    'database': falkor_config.database,
+                    'database': database,
                 }
 
             case _:

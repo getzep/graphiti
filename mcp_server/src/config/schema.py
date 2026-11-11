@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -80,7 +80,7 @@ class ServerConfig(BaseModel):
         default='http',
         description='Transport type: http (default, recommended), stdio, or sse (deprecated)',
     )
-    host: str = Field(default='0.0.0.0', description='Server host')
+    host: str = Field(default='127.0.0.1', description='Server host')
     port: int = Field(default=8000, description='Server port')
 
 
@@ -147,11 +147,19 @@ class LLMConfig(BaseModel):
     """LLM configuration."""
 
     provider: str = Field(default='openai', description='LLM provider')
-    model: str = Field(default='gpt-5.5', description='Model name')
+    model: str = Field(default='gpt-6-luna', description='Model name')
     temperature: float | None = Field(
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )
     max_tokens: int = Field(default=4096, description='Max tokens')
+    structured_output_mode: Literal['json_schema', 'json_object'] = Field(
+        default='json_schema',
+        description=(
+            'Structured output mode for OpenAIGenericClient: json_schema requests native '
+            'schema enforcement; json_object injects the schema into the prompt for '
+            'OpenAI-compatible providers that do not reliably honor json_schema.'
+        ),
+    )
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)
 
 
@@ -187,6 +195,7 @@ class FalkorDBProviderConfig(BaseModel):
     """FalkorDB provider configuration."""
 
     uri: str = 'redis://localhost:6379'
+    username: str | None = None
     password: str | None = None
     database: str = 'default_db'
 

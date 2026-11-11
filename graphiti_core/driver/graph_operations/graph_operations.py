@@ -99,6 +99,28 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve nodes by group IDs with optional pagination."""
         raise NotImplementedError
 
+    async def node_get_by_names(
+        self,
+        _cls: Any,
+        driver: Any,
+        names: list[str],
+        group_ids: list[str],
+    ) -> list[Any]:
+        """Retrieve nodes by exact names scoped to group IDs."""
+        raise NotImplementedError
+
+    async def node_get_by_attribute_values(
+        self,
+        _cls: Any,
+        driver: Any,
+        group_id: str,
+        attributes: dict[str, Any],
+        node_labels: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        """Retrieve nodes matching all provided attributes within a group."""
+        raise NotImplementedError
+
     # --------------------------
     # Node: Embeddings (load)
     # --------------------------
@@ -383,8 +405,8 @@ class GraphOperationsInterface(BaseModel):
         saga_uuid: str,
         since: Any | None = None,
         limit: int = 200,
-    ) -> list[tuple[str, Any]]:
-        """Retrieve episode content + reference timestamp from a saga for summarization.
+    ) -> list[tuple[str, Any, Any]]:
+        """Retrieve episode content + timestamps from a saga for summarization.
 
         Args:
             driver: GraphDriver instance
@@ -397,13 +419,11 @@ class GraphOperationsInterface(BaseModel):
             limit: Maximum number of episodes to return
 
         Returns:
-            list[tuple[str, datetime | None]]: (content, valid_at) pairs in
-            chronological order by ``valid_at``. The ``valid_at`` value is the
-            originating episode's reference time and is used by the caller to
-            advance the saga's ``last_summarized_episode_valid_at`` field
-            (the public/temporal watermark, distinct from
-            ``last_summarized_at`` which is wall-clock and used as the
-            ingestion-time filter watermark).
+            list[tuple[str, datetime | None, datetime]]: (content, valid_at,
+            created_at) tuples in ingestion order by ``created_at``. The
+            caller may reorder selected episodes by ``valid_at`` for the
+            prompt, while ``created_at`` advances the ingestion-time filter
+            watermark only through episodes actually included in that prompt.
         """
         raise NotImplementedError
 
@@ -768,6 +788,7 @@ class GraphOperationsInterface(BaseModel):
     async def remove_communities(
         self,
         driver: Any,
+        group_ids: list[str] | None = None,
     ) -> None:
         """
         Delete all community nodes from the graph.

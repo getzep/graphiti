@@ -15,11 +15,13 @@ limitations under the License.
 """
 
 import logging
-import re
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.driver.falkordb import STOPWORDS
+from graphiti_core.driver.falkordb.fulltext import (
+    MAX_QUERY_LENGTH,
+    build_falkor_fulltext_query,
+)
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
 from graphiti_core.driver.record_parsers import (
@@ -49,87 +51,14 @@ from graphiti_core.search.search_filters import (
 
 logger = logging.getLogger(__name__)
 
-MAX_QUERY_LENGTH = 128
-
-# FalkorDB separator characters that break text into tokens
-_SEPARATOR_MAP = str.maketrans(
-    {
-        ',': ' ',
-        '.': ' ',
-        '<': ' ',
-        '>': ' ',
-        '{': ' ',
-        '}': ' ',
-        '[': ' ',
-        ']': ' ',
-        '"': ' ',
-        "'": ' ',
-        ':': ' ',
-        ';': ' ',
-        '!': ' ',
-        '@': ' ',
-        '#': ' ',
-        '$': ' ',
-        '%': ' ',
-        '^': ' ',
-        '&': ' ',
-        '*': ' ',
-        '(': ' ',
-        ')': ' ',
-        '-': ' ',
-        '+': ' ',
-        '=': ' ',
-        '~': ' ',
-        '?': ' ',
-        '|': ' ',
-        '/': ' ',
-        '\\': ' ',
-    }
-)
-
-
-def _sanitize(query: str) -> str:
-    """Replace FalkorDB special characters with whitespace."""
-    sanitized = query.translate(_SEPARATOR_MAP)
-    return ' '.join(sanitized.split())
-
-
-def _escape_fulltext_group_id(group_id: str) -> str:
-    """Escape non-alphanumeric characters in a group_id for RediSearch fulltext.
-
-    RediSearch treats characters like '_' and '-' as token separators/operators,
-    so an unescaped group_id (e.g. the default '_') causes a parse error or fails
-    to match. group_ids are restricted to ``[a-zA-Z0-9_-]`` by ``validate_group_id``,
-    so escaping every non-alphanumeric char makes them match as literals.
-    """
-    return re.sub(r'([^a-zA-Z0-9])', r'\\\1', group_id)
-
 
 def _build_falkor_fulltext_query(
     query: str,
     group_ids: list[str] | None = None,
     max_query_length: int = MAX_QUERY_LENGTH,
 ) -> str:
-    """Build a fulltext query string for FalkorDB using RedisSearch syntax."""
-    if group_ids is None or len(group_ids) == 0:
-        group_filter = ''
-    else:
-        escaped_group_ids = [f'"{_escape_fulltext_group_id(gid)}"' for gid in group_ids]
-        group_values = '|'.join(escaped_group_ids)
-        group_filter = f'(@group_id:{group_values})'
-
-    sanitized_query = _sanitize(query)
-
-    # Remove stopwords and empty tokens
-    query_words = sanitized_query.split()
-    filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
-    sanitized_query = ' | '.join(filtered_words)
-
-    if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
-        return ''
-
-    full_query = group_filter + ' (' + sanitized_query + ')'
-    return full_query
+    """Backward-compatible wrapper for the shared FalkorDB query builder."""
+    return build_falkor_fulltext_query(query, group_ids, max_query_length)
 
 
 class FalkorSearchOperations(SearchOperations):

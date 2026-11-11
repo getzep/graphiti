@@ -42,7 +42,7 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         if group_ids is None:
             await executor.execute_query('MATCH (n) DETACH DELETE n')
         else:
-            for label in ['Entity', 'Episodic', 'Community']:
+            for label in ['Entity', 'Episodic', 'Community', 'Saga']:
                 await executor.execute_query(
                     f"""
                     MATCH (n:{label})
@@ -144,17 +144,6 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
                 community_clusters.append([entity_node_from_record(r) for r in cluster_records])
 
         return community_clusters
-
-    async def remove_communities(
-        self,
-        executor: QueryExecutor,
-    ) -> None:
-        await executor.execute_query(
-            """
-            MATCH (c:Community)
-            DETACH DELETE c
-            """
-        )
 
     async def determine_entity_community(
         self,

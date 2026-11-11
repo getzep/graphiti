@@ -45,7 +45,7 @@ class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
         else:
             # Kuzu requires deleting RelatesToNode_ intermediates in addition to
             # Entity, Episodic, and Community nodes.
-            for label in ['RelatesToNode_', 'Entity', 'Episodic', 'Community']:
+            for label in ['RelatesToNode_', 'Entity', 'Episodic', 'Community', 'Saga']:
                 await executor.execute_query(
                     f"""
                     MATCH (n:{label})
@@ -149,17 +149,6 @@ class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
                 community_clusters.append([parse_kuzu_entity_node(r) for r in cluster_records])
 
         return community_clusters
-
-    async def remove_communities(
-        self,
-        executor: QueryExecutor,
-    ) -> None:
-        await executor.execute_query(
-            """
-            MATCH (c:Community)
-            DETACH DELETE c
-            """
-        )
 
     async def determine_entity_community(
         self,

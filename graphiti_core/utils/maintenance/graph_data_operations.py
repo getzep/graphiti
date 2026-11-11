@@ -44,7 +44,7 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
             await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            labels = ['Entity', 'Episodic', 'Community']
+            labels = ['Entity', 'Episodic', 'Community', 'Saga']
             if driver.provider == GraphProvider.KUZU:
                 labels.append('RelatesToNode_')
 
@@ -114,7 +114,7 @@ async def retrieve_episodes(
                 else EPISODIC_NODE_RETURN
             )
             + """
-            ORDER BY e.valid_at DESC
+            ORDER BY e.valid_at DESC, e.created_at DESC
             LIMIT $num_episodes
             """,
             saga_name=saga,
@@ -152,7 +152,7 @@ async def retrieve_episodes(
             else EPISODIC_NODE_RETURN
         )
         + """
-        ORDER BY e.valid_at DESC
+        ORDER BY e.valid_at DESC, e.created_at DESC
         LIMIT $num_episodes
         """
     )

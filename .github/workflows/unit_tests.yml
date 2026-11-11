@@ -14,6 +14,10 @@ jobs:
     runs-on: depot-ubuntu-22.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Setup Socket Firewall wrapper
+        uses: ./.github/actions/setup-socket-firewall
+        with:
+          socket-api-key: ${{ secrets.SOCKET_API_KEY }}
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -23,7 +27,7 @@ jobs:
         with:
           version: "latest"
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --extra dev
       - name: Run unit tests (no external dependencies)
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -48,6 +52,10 @@ jobs:
     runs-on: depot-ubuntu-22.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Setup Socket Firewall wrapper
+        uses: ./.github/actions/setup-socket-firewall
+        with:
+          socket-api-key: ${{ secrets.SOCKET_API_KEY }}
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -71,7 +79,7 @@ jobs:
             -e NEO4J_PLUGINS='["apoc"]' \
             neo4j:5.26-community
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --extra dev --extra sentence-transformers
       - name: Wait for databases
         run: |
           for i in $(seq 1 30); do

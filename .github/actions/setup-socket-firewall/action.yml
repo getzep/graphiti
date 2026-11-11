@@ -1,0 +1,133 @@
+name: Setup Socket Firewall wrapper
+description: >
+  Installs Socket Firewall Enterprise wrapper mode and routes supported package
+  manager commands through sfw for subsequent bash steps. Soft-skips when no
+  API key is provided (fork PRs / public contributors).
+
+inputs:
+  socket-api-key:
+    description: >
+      Socket API key with packages and entitlements:list scopes. When empty
+      (typical for fork PRs), the action prints a notice and leaves package
+      managers unwrapped so the job still succeeds.
+    required: false
+    default: ''
+  sfw-download-url:
+    description: Download URL for the Linux sfw binary used by CI runners.
+    required: false
+    default: https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-x86_64
+
+runs:
+  using: composite
+  steps:
+    - name: Install sfw
+      shell: bash
+      env:
+        SFW_DOWNLOAD_URL: ${{ inputs['sfw-download-url'] }}
+        SOCKET_API_KEY_INPUT: ${{ inputs['socket-api-key'] }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$SOCKET_API_KEY_INPUT" ]; then
+          echo "SOCKET_FIREWALL_ENABLED=false" >> "$GITHUB_ENV"
+          echo "::notice::Socket Firewall skipped: socket-api-key is empty (fork PR or missing secret)."
+          exit 0
+        fi
+
+        echo "SOCKET_FIREWALL_ENABLED=true" >> "$GITHUB_ENV"
+
+        if ! command -v sfw >/dev/null 2>&1; then
+          mkdir -p "$RUNNER_TEMP/socket-firewall"
+          curl -fsSL "$SFW_DOWNLOAD_URL" -o "$RUNNER_TEMP/socket-firewall/sfw"
+          chmod +x "$RUNNER_TEMP/socket-firewall/sfw"
+          echo "$RUNNER_TEMP/socket-firewall" >> "$GITHUB_PATH"
+        fi
+
+    - name: Export Socket Firewall environment
+      shell: bash
+      env:
+        SOCKET_API_KEY_INPUT: ${{ inputs['socket-api-key'] }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$SOCKET_API_KEY_INPUT" ]; then
+          exit 0
+        fi
+
+        {
+          echo "SOCKET_API_KEY<<EOF"
+          echo "$SOCKET_API_KEY_INPUT"
+          echo "EOF"
+          echo "CARGO_NET_GIT_FETCH_WITH_CLI=true"
+          echo "SFW_TELEMETRY_DISABLED=true"
+        } >> "$GITHUB_ENV"
+        # Auxiliary hosts package managers contact that sfw doesn't treat as
+        # registries by default (wrap = TLS-terminated passthrough, no package
+        # inspection). Keep in sync with zep-proprietary setup-socket-firewall.
+        #   storage.googleapis.com   - Go module zips served via proxy.golang.org
+        #   classic.yarnpkg.com      - Yarn classic version-check / metadata host
+        #   files.pythonhosted.org   - Python package files served by PyPI
+        extra="wrap:storage.googleapis.com,wrap:classic.yarnpkg.com,wrap:files.pythonhosted.org"
+        if [ -n "${SFW_CUSTOM_REGISTRIES:-}" ]; then
+          echo "SFW_CUSTOM_REGISTRIES=${SFW_CUSTOM_REGISTRIES},${extra}" >> "$GITHUB_ENV"
+        else
+          echo "SFW_CUSTOM_REGISTRIES=${extra}" >> "$GITHUB_ENV"
+        fi
+
+    - name: Configure bash wrapper functions
+      shell: bash
+      env:
+        SOCKET_API_KEY_INPUT: ${{ inputs['socket-api-key'] }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$SOCKET_API_KEY_INPUT" ]; then
+          exit 0
+        fi
+
+        mkdir -p "$RUNNER_TEMP/socket-firewall"
+        wrapper_file="$RUNNER_TEMP/socket-firewall/bash_env"
+        cat > "$wrapper_file" <<'EOF'
+        if command -v sfw >/dev/null 2>&1; then
+          npm() {
+            case "${1:-}" in
+              ci|install|i|add|update|view|pack) command sfw npm "$@" ;;
+              *) command npm "$@" ;;
+            esac
+          }
+          yarn() {
+            case "${1:-}" in
+              add|import|install|remove|upgrade|upgrade-interactive) command sfw yarn "$@" ;;
+              *) command yarn "$@" ;;
+            esac
+          }
+          pnpm() {
+            case "${1:-}" in
+              add|fetch|install|remove|update) command sfw pnpm "$@" ;;
+              *) command pnpm "$@" ;;
+            esac
+          }
+          pip() { command sfw pip "$@"; }
+          pip3() { command sfw pip3 "$@"; }
+          uv() {
+            case "${1:-}" in
+              add|build|export|lock|pip|remove|sync|tool) command sfw uv "$@" ;;
+              *) command uv "$@" ;;
+            esac
+          }
+          cargo() { command sfw cargo "$@"; }
+          go() {
+            case "${1:-}:${2:-}" in
+              get:*|install:*|mod:download|mod:tidy|work:sync) command sfw go "$@" ;;
+              *) command go "$@" ;;
+            esac
+          }
+          mvn() { command sfw mvn "$@"; }
+          gradle() { command sfw gradle "$@"; }
+          gem() { command sfw gem "$@"; }
+          bundle() { command sfw bundle "$@"; }
+          dotnet() { command sfw dotnet "$@"; }
+        fi
+        EOF
+
+        echo "BASH_ENV=$wrapper_file" >> "$GITHUB_ENV"

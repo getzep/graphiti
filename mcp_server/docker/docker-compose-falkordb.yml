@@ -2,8 +2,8 @@ services:
   falkordb:
     image: falkordb/falkordb:latest
     ports:
-      - "6379:6379" # Redis/FalkorDB port
-      - "3000:3000" # FalkorDB web UI
+      - "127.0.0.1:6379:6379" # Redis/FalkorDB port
+      - "127.0.0.1:3000:3000" # FalkorDB web UI
     environment:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
       - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
@@ -39,11 +39,10 @@ services:
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
-      - PATH=/root/.local/bin:${PATH}
     volumes:
       - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
     ports:
-      - "8000:8000" # Expose the MCP server via HTTP transport
+      - "127.0.0.1:8000:8000" # Expose the MCP server via HTTP transport
     command: ["uv", "run", "main.py"]
 
 volumes:
