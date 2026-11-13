@@ -84,30 +84,49 @@ class TestAmazonBedrockRerankerClientInitialization:
         assert client.model == 'amazon.rerank-v1:0'
         assert client.region == 'us-west-2'
 
-    def test_init_with_invalid_model_region_combination(self):
-        """Test initialization with invalid model and region combination."""
-        with pytest.raises(ValueError) as exc_info:
-            AmazonBedrockRerankerClient(
+    def test_init_with_unlisted_model_region_warns_and_proceeds(self, caplog):
+        """Unlisted region should warn but still construct the client."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            client = AmazonBedrockRerankerClient(
                 model='amazon.rerank-v1:0',
-                region='us-east-1',  # Amazon model not available in us-east-1
+                region='us-east-1',  # Amazon model not listed for us-east-1
             )
 
-        assert 'Model amazon.rerank-v1:0 is not supported in region us-east-1' in str(
-            exc_info.value
+        assert client.model == 'amazon.rerank-v1:0'
+        assert client.region == 'us-east-1'
+        assert any(
+            'amazon.rerank-v1:0' in record.message and 'us-east-1' in record.message
+            for record in caplog.records
         )
-        assert 'us-west-2' in str(exc_info.value)  # Should list supported regions
 
-    def test_init_with_cohere_model_invalid_region(self):
-        """Test initialization with Cohere model in unsupported region."""
-        with pytest.raises(ValueError) as exc_info:
-            AmazonBedrockRerankerClient(
+    def test_init_with_cohere_model_unlisted_region_warns(self, caplog):
+        """Cohere model in an unlisted region should warn and proceed."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            client = AmazonBedrockRerankerClient(
                 model='cohere.rerank-v3-5:0',
-                region='ap-south-1',  # Not in supported regions
+                region='ap-south-1',  # Not in MODEL_REGIONS
             )
 
-        assert 'Model cohere.rerank-v3-5:0 is not supported in region ap-south-1' in str(
-            exc_info.value
-        )
+        assert client.model == 'cohere.rerank-v3-5:0'
+        assert client.region == 'ap-south-1'
+        assert any('ap-south-1' in record.message for record in caplog.records)
+
+    def test_init_allows_ap_southeast_2(self, caplog):
+        """HLE deploys in ap-southeast-2; client must not hard-fail there."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            client = AmazonBedrockRerankerClient(
+                model='cohere.rerank-v3-5:0',
+                region='ap-southeast-2',
+            )
+
+        assert client.region == 'ap-southeast-2'
+        assert any('ap-southeast-2' in record.message for record in caplog.records)
 
     def test_model_regions_mapping(self):
         """Test that MODEL_REGIONS mapping is correct."""

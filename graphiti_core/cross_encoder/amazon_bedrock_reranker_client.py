@@ -57,11 +57,17 @@ class AmazonBedrockRerankerClient(CrossEncoderClient):
         region: str = 'us-east-1',
         max_results: int = 100,
     ):
-        # Validate region supports the model
+        # Soft-validate region support: MODEL_REGIONS is advisory (as of Dec 2025).
+        # Unknown regions (e.g. ap-southeast-2 for HLE IRSA) log a warning and proceed
+        # so callers are not hard-blocked when AWS adds availability or uses cross-region.
         if region not in MODEL_REGIONS[model]:
             supported_regions = ', '.join(MODEL_REGIONS[model])
-            raise ValueError(
-                f'Model {model} is not supported in region {region}. Supported regions: {supported_regions}'
+            logger.warning(
+                'Model %s is not listed for region %s in MODEL_REGIONS '
+                '(known regions: %s). Proceeding anyway.',
+                model,
+                region,
+                supported_regions,
             )
 
         self.model = model

@@ -144,6 +144,40 @@ class TestAmazonBedrockLLMClientGenerateResponse:
         assert result['optional_field'] == 42
 
     @pytest.mark.asyncio
+    async def test_public_generate_response_injects_schema_once(
+        self, bedrock_client, mock_boto3_client
+    ):
+        """Base LLMClient injects schema once; Bedrock must not re-inject."""
+        mock_response_body = {
+            'content': [{'text': '{"test_field": "test_value", "optional_field": 1}'}]
+        }
+        mock_response = {'body': MagicMock()}
+        mock_response['body'].read.return_value.decode.return_value = json.dumps(mock_response_body)
+        mock_boto3_client.invoke_model.return_value = mock_response
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+
+        captured_messages: list[dict] = []
+
+        async def capture_invoke(*, model, messages, temperature, max_tokens, response_format):
+            captured_messages.extend(messages)
+            return '{"test_field": "test_value", "optional_field": 1}'
+
+        with patch.object(bedrock_client, '_invoke_bedrock_model', side_effect=capture_invoke):
+            result = await bedrock_client.generate_response(
+                messages=messages, response_model=ResponseModel
+            )
+
+        assert result['test_field'] == 'test_value'
+        user_content = next(m['content'] for m in captured_messages if m['role'] == 'user')
+        # Base client phrase appears exactly once; Bedrock-specific re-injection phrase absent
+        assert user_content.count('Respond with a JSON object in the following format:') == 1
+        assert 'Please respond with valid JSON that follows this exact schema:' not in user_content
+
+    @pytest.mark.asyncio
     async def test_generate_response_json_parsing_error(self, bedrock_client, mock_boto3_client):
         """Test handling of JSON parsing errors."""
         # Setup mock response with invalid JSON

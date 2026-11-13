@@ -69,21 +69,13 @@ class AmazonBedrockLLMClient(LLMClient):
         *,
         model: str | None = None,
     ) -> dict:
-        # Convert Message objects to dict format
+        # Convert Message objects to dict format.
+        # Schema injection is handled by LLMClient.generate_response — do not
+        # re-inject here (matches Groq and other providers that use the base path).
         message_dicts = [msg.model_dump() for msg in messages]
         selected_model = model or self.model
 
         if response_model:
-            # Add JSON schema instruction for structured output
-            schema = response_model.model_json_schema()
-            schema_str = json.dumps(schema, indent=2)
-
-            # Modify the last user message to include schema instruction
-            if message_dicts and message_dicts[-1]['role'] == 'user':
-                message_dicts[-1]['content'] += (
-                    f'\n\nPlease respond with valid JSON that follows this exact schema:\n{schema_str}\n\nIMPORTANT: Return ONLY valid JSON with no extra text, explanations, or markdown formatting.'
-                )
-
             text_response = await self._invoke_bedrock_model(
                 model=selected_model,
                 messages=message_dicts,
