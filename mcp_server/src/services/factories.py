@@ -300,6 +300,18 @@ class LLMClientFactory:
                 )
                 return GroqClient(config=llm_config)
 
+            case 'bedrock':
+                if not config.providers.bedrock:
+                    raise ValueError('Bedrock provider configuration not found')
+                from graphiti_core.llm_client.amazon_bedrock_client import AmazonBedrockLLMClient
+
+                logger.info('Creating Amazon Bedrock LLM client (credentials via boto3 default chain)')
+                return AmazonBedrockLLMClient(
+                    config=GraphitiLLMConfig(model=config.model),
+                    region=config.providers.bedrock.region,
+                    max_tokens=config.max_tokens or 4096,
+                )
+
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
 
@@ -412,6 +424,25 @@ class EmbedderFactory:
                 )
                 return VoyageAIEmbedder(config=voyage_config)
 
+            case 'bedrock':
+                if not config.providers.bedrock:
+                    raise ValueError('Bedrock provider configuration not found')
+                from graphiti_core.embedder.amazon_bedrock import (
+                    AmazonBedrockEmbedder,
+                    AmazonBedrockEmbedderConfig,
+                )
+
+                logger.info(
+                    'Creating Amazon Bedrock embedder (credentials via boto3 default chain)'
+                )
+                return AmazonBedrockEmbedder(
+                    config=AmazonBedrockEmbedderConfig(
+                        model=config.model or 'amazon.titan-embed-text-v2:0',
+                        region=config.providers.bedrock.region,
+                        embedding_dim=config.dimensions or 1024,
+                    )
+                )
+
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')
 
@@ -510,6 +541,29 @@ class CrossEncoderFactory:
                 logger.info(f'Using GeminiRerankerClient from {source} provider')
                 return GeminiRerankerClient(
                     config=GraphitiLLMConfig(api_key=config.providers.gemini.api_key)
+                )
+
+            case 'bedrock':
+                if not config.providers.bedrock:
+                    return None
+                try:
+                    from graphiti_core.cross_encoder.amazon_bedrock_reranker_client import (
+                        DEFAULT_MODEL,
+                        AmazonBedrockRerankerClient,
+                    )
+                except ImportError:
+                    logger.warning(
+                        'AmazonBedrockRerankerClient not available; skipping Bedrock reranker'
+                    )
+                    return None
+
+                # LLM/embedder model ids are not rerank models; only pass through known ids.
+                rerank_models = ('cohere.rerank-v3-5:0', 'amazon.rerank-v1:0')
+                model = config.model if config.model in rerank_models else DEFAULT_MODEL
+                logger.info(f'Using AmazonBedrockRerankerClient from {source} provider')
+                return AmazonBedrockRerankerClient(
+                    model=model,
+                    region=config.providers.bedrock.region,
                 )
 
             case _:
