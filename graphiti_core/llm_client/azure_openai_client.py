@@ -128,11 +128,17 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
 
         return await self.client.chat.completions.create(**request_kwargs)
 
-    def _handle_structured_response(self, response: Any) -> dict[str, Any]:
+    def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing for both reasoning and non-reasoning models.
 
         For reasoning models (responses.parse): uses response.output_text
         For regular models (beta.chat.completions.parse): uses response.choices[0].message.parsed
+
+        Returns:
+            tuple: (parsed_response, input_tokens, output_tokens) — must match the
+            BaseOpenAIClient signature so the `_generate_response` caller can unpack
+            three values. The Azure override previously returned only the dict, which
+            raised "not enough values to unpack (expected 3, got 1)" (#1298).
         """
         # Check if this is a ParsedChatCompletion (from beta.chat.completions.parse)
         if hasattr(response, 'choices') and response.choices:
@@ -140,7 +146,10 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             message = response.choices[0].message
             if hasattr(message, 'parsed') and message.parsed:
                 # The parsed object is already a Pydantic model, convert to dict
-                return message.parsed.model_dump()
+                return (
+                    message.parsed.model_dump(),
+                    *self._extract_token_usage(response, prompt_field='prompt_tokens', completion_field='completion_tokens'),
+                )
             elif hasattr(message, 'refusal') and message.refusal:
                 from graphiti_core.llm_client.errors import RefusalError
 
@@ -151,7 +160,10 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             # Reasoning model response format (responses.parse)
             response_object = response.output_text
             if response_object:
-                return json.loads(response_object)
+                return (
+                    json.loads(response_object),
+                    *self._extract_token_usage(response, prompt_field='input_tokens', completion_field='output_tokens'),
+                )
             elif hasattr(response, 'refusal') and response.refusal:
                 from graphiti_core.llm_client.errors import RefusalError
 
@@ -160,6 +172,24 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
                 raise Exception(f'Invalid response from LLM: {response.model_dump()}')
         else:
             raise Exception(f'Unknown response format: {type(response)}')
+
+    @staticmethod
+    def _extract_token_usage(
+        response: Any, *, prompt_field: str, completion_field: str
+    ) -> tuple[int, int]:
+        """Pull token usage from either response shape.
+
+        responses.parse surfaces ``input_tokens``/``output_tokens`` while
+        ``beta.chat.completions.parse`` surfaces ``prompt_tokens``/
+        ``completion_tokens``; both are absent on some empty/error bodies.
+        """
+        usage = getattr(response, 'usage', None)
+        if usage is None:
+            return 0, 0
+        return (
+            getattr(usage, prompt_field, 0) or 0,
+            getattr(usage, completion_field, 0) or 0,
+        )
 
     @staticmethod
     def _supports_reasoning_features(model: str) -> bool:
