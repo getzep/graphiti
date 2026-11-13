@@ -17,7 +17,7 @@ limitations under the License.
 from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
@@ -37,6 +37,16 @@ class NodeDuplicate(BaseModel):
 
 class NodeResolutions(BaseModel):
     entity_resolutions: list[NodeDuplicate] = Field(..., description='List of resolved nodes')
+
+    @model_validator(mode='before')
+    @classmethod
+    def _wrap_bare_array(cls, data: Any) -> Any:
+        # See ExtractedEntities._wrap_bare_array in extract_nodes.py — same non-enforced
+        # json_schema providers, same bare-array symptom, here for node resolutions.
+        # Requires the call site to use `model_validate()` rather than `**data`.
+        if isinstance(data, list):
+            return {'entity_resolutions': data}
+        return data
 
 
 class Prompt(Protocol):
