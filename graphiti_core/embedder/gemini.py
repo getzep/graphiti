@@ -76,8 +76,13 @@ class GeminiEmbedder(EmbedderClient):
         else:
             self.client = client
 
-        if batch_size is None and self.config.embedding_model == 'gemini-embedding-001':
-            # Gemini API has a limit on the number of instances per request
+        if batch_size is None and self.config.embedding_model in (
+            'gemini-embedding-001',
+            'gemini-embedding-2-preview',
+            'gemini-embedding-2',
+        ):
+            # These models do not support batching via embed_content(contents=[...]).
+            # They treat the list as parts of a single document and return one embedding.
             # https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api
             self.batch_size = 1
         elif batch_size is None:
@@ -145,6 +150,12 @@ class GeminiEmbedder(EmbedderClient):
 
                 if not result.embeddings or len(result.embeddings) == 0:
                     raise Exception('No embeddings returned')
+
+                if len(result.embeddings) != len(batch):
+                    raise Exception(
+                        f'Batch embedding returned {len(result.embeddings)} vectors '
+                        f'for {len(batch)} inputs; model may not support batching'
+                    )
 
                 # Process embeddings from this batch
                 for embedding in result.embeddings:
