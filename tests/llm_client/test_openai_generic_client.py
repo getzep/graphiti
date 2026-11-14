@@ -144,6 +144,41 @@ def test_empty_response_error_is_retryable():
     assert is_server_or_retry_error(EmptyResponseError('empty')) is True
 
 
+def _api_status_error(error_cls: type[openai.APIStatusError], status_code: int):
+    return error_cls(
+        message=f'status {status_code}',
+        response=SimpleNamespace(status_code=status_code, headers={}, request=None),
+        body=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_error_propagates_as_openai_error():
+    # Non-rate-limit SDK errors are re-raised unchanged, so the retry predicate sees the
+    # OpenAI SDK type (not httpx.HTTPStatusError). Asserted at _generate_response level
+    # to avoid real backoff sleeps.
+    client, _ = _make_client(error=_api_status_error(openai.InternalServerError, 503))
+
+    with pytest.raises(openai.InternalServerError):
+        await client._generate_response(_messages(), response_model=ResponseModel)
+
+
+def test_openai_server_errors_are_retryable():
+    # Provider overload (e.g. Gemini's OpenAI-compatible endpoint returning 503 "high
+    # demand") is transient and should be retried instead of failing the whole episode.
+    from graphiti_core.llm_client.client import is_server_or_retry_error
+
+    assert is_server_or_retry_error(_api_status_error(openai.InternalServerError, 503)) is True
+    assert is_server_or_retry_error(_api_status_error(openai.InternalServerError, 500)) is True
+
+
+def test_openai_client_errors_are_not_retryable():
+    from graphiti_core.llm_client.client import is_server_or_retry_error
+
+    assert is_server_or_retry_error(_api_status_error(openai.BadRequestError, 400)) is False
+    assert is_server_or_retry_error(_api_status_error(openai.AuthenticationError, 401)) is False
+
+
 @pytest.mark.asyncio
 async def test_strips_markdown_code_fence_before_parsing():
     # Local/compatible models (e.g. Ollama/gemma) often wrap JSON in a ```json fence even
