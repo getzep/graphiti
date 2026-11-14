@@ -546,7 +546,9 @@ async def _collect_exact_name_candidate_nodes(
         return []
 
     names = [node.name for node in extracted_nodes if node.name]
-    group_ids = [node.group_id for node in extracted_nodes if node.group_id]
+    # Keep the default partition id (`''`): `if node.group_id` drops it and the
+    # exact-name pass then short-circuits to no candidates for those nodes.
+    group_ids = [node.group_id for node in extracted_nodes if node.group_id is not None]
     if not names or not group_ids:
         return [[] for _ in extracted_nodes]
 
