@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock
 
 import numpy as np
@@ -24,7 +24,7 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode, SagaNode
 from graphiti_core.search.search_filters import ComparisonOperator, DateFilter, SearchFilters
 from graphiti_core.search.search_utils import (
     community_fulltext_search,
@@ -1033,6 +1033,39 @@ async def test_graphiti_retrieve_episodes(
     assert len(episodes) == 2
     assert episodes[0].name == episode_node_3.name
     assert episodes[1].name == episode_node_2.name
+
+
+@pytest.mark.asyncio
+async def test_saga_namespace_round_trip(
+    graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now(timezone.utc)
+    saga = SagaNode(
+        name='test_saga',
+        group_id=group_id,
+        created_at=now,
+        summary='Alice and Bob planned a trip.',
+        first_episode_uuid='test_episode_1',
+        last_episode_uuid='test_episode_2',
+        last_summarized_at=now,
+        last_summarized_episode_valid_at=now,
+    )
+    await graphiti.nodes.saga.save(saga)
+
+    stored = await graphiti.nodes.saga.get_by_uuid(saga.uuid)
+    assert stored.summary == saga.summary
+    assert stored.first_episode_uuid == saga.first_episode_uuid
+    assert stored.last_episode_uuid == saga.last_episode_uuid
+    assert stored.last_summarized_at == now
+    assert stored.last_summarized_episode_valid_at == now
 
 
 @pytest.mark.asyncio
