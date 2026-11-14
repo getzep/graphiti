@@ -75,6 +75,14 @@ class EntityTypeValidationError(GraphitiError):
         super().__init__(self.message)
 
 
+class EdgeTypeValidationError(GraphitiError):
+    """Raised when an edge type uses protected attribute names."""
+
+    def __init__(self, edge_type: str, edge_type_attribute: str):
+        self.message = f'{edge_type_attribute} cannot be used as an attribute for {edge_type} as it is a protected attribute name.'
+        super().__init__(self.message)
+
+
 class GroupIdValidationError(GraphitiError):
     """Raised when a group_id contains invalid characters."""
 

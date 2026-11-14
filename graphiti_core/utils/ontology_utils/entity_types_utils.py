@@ -16,7 +16,8 @@ limitations under the License.
 
 from pydantic import BaseModel
 
-from graphiti_core.errors import EntityTypeValidationError
+from graphiti_core.edges import EntityEdge
+from graphiti_core.errors import EdgeTypeValidationError, EntityTypeValidationError
 from graphiti_core.nodes import EntityNode
 
 
@@ -33,5 +34,29 @@ def validate_entity_types(
         for entity_type_field_name in entity_type_field_names:
             if entity_type_field_name in entity_node_field_names:
                 raise EntityTypeValidationError(entity_type_name, entity_type_field_name)
+
+    return True
+
+
+def validate_edge_types(
+    edge_types: dict[str, type[BaseModel]] | None,
+) -> bool:
+    """Reject custom edge types that declare a protected ``EntityEdge`` field.
+
+    ``EntityEdge.save`` and ``add_nodes_and_edges_bulk`` only copy an attribute
+    onto the relationship when it does not collide with a real edge field, so an
+    edge type field named e.g. ``fact`` or ``valid_at`` would be extracted from
+    the LLM and then silently dropped on write.
+    """
+    if edge_types is None:
+        return True
+
+    entity_edge_field_names = EntityEdge.model_fields.keys()
+
+    for edge_type_name, edge_type_model in edge_types.items():
+        edge_type_field_names = edge_type_model.model_fields.keys()
+        for edge_type_field_name in edge_type_field_names:
+            if edge_type_field_name in entity_edge_field_names:
+                raise EdgeTypeValidationError(edge_type_name, edge_type_field_name)
 
     return True
