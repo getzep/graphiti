@@ -129,14 +129,22 @@ class SearchResults(BaseModel):
     community_reranker_scores: list[float] = Field(default_factory=list)
 
     @classmethod
-    def merge(cls, results_list: list['SearchResults']) -> 'SearchResults':
+    def merge(
+        cls, results_list: list['SearchResults'], limit: int | None = None
+    ) -> 'SearchResults':
         """
         Merge multiple SearchResults objects into a single SearchResults object.
+
+        When reranker scores are present, items are sorted by score descending.
+        Duplicate UUIDs across partitions keep the highest score. An optional
+        ``limit`` caps each result list after merge (multi-group search).
 
         Parameters
         ----------
         results_list : list[SearchResults]
             List of SearchResults objects to merge
+        limit : int | None
+            Optional cap applied to each merged item list after ranking
 
         Returns
         -------
@@ -146,15 +154,64 @@ class SearchResults(BaseModel):
         if not results_list:
             return cls()
 
-        merged = cls()
-        for result in results_list:
-            merged.edges.extend(result.edges)
-            merged.edge_reranker_scores.extend(result.edge_reranker_scores)
-            merged.nodes.extend(result.nodes)
-            merged.node_reranker_scores.extend(result.node_reranker_scores)
-            merged.episodes.extend(result.episodes)
-            merged.episode_reranker_scores.extend(result.episode_reranker_scores)
-            merged.communities.extend(result.communities)
-            merged.community_reranker_scores.extend(result.community_reranker_scores)
+        def _merge_scored(items_lists: list, scores_lists: list) -> tuple[list, list[float]]:
+            has_any_scores = any(bool(s) for s in scores_lists)
+            best: dict[str, tuple[object, float | None]] = {}
+            order: list[str] = []
+            for items, scores in zip(items_lists, scores_lists, strict=False):
+                for i, item in enumerate(items):
+                    score: float | None = scores[i] if i < len(scores) else None
+                    uuid = getattr(item, 'uuid', None)
+                    key = uuid if uuid is not None else f'__idx_{id(item)}'
+                    if key not in best:
+                        order.append(key)
+                        best[key] = (item, score)
+                    else:
+                        prev = best[key][1]
+                        if score is not None and (prev is None or score > prev):
+                            best[key] = (item, score)
 
-        return merged
+            if has_any_scores:
+                paired = sorted(
+                    best.values(),
+                    key=lambda x: (x[1] is not None, x[1] if x[1] is not None else float('-inf')),
+                    reverse=True,
+                )
+            else:
+                paired = [best[k] for k in order]
+
+            if limit is not None:
+                paired = paired[:limit]
+
+            out_items = [p[0] for p in paired]
+            if not has_any_scores:
+                return out_items, []
+            return out_items, [float('-inf') if p[1] is None else p[1] for p in paired]
+
+        nodes, node_scores = _merge_scored(
+            [r.nodes for r in results_list],
+            [r.node_reranker_scores for r in results_list],
+        )
+        edges, edge_scores = _merge_scored(
+            [r.edges for r in results_list],
+            [r.edge_reranker_scores for r in results_list],
+        )
+        episodes, episode_scores = _merge_scored(
+            [r.episodes for r in results_list],
+            [r.episode_reranker_scores for r in results_list],
+        )
+        communities, community_scores = _merge_scored(
+            [r.communities for r in results_list],
+            [r.community_reranker_scores for r in results_list],
+        )
+
+        return cls(
+            nodes=nodes,
+            node_reranker_scores=node_scores,
+            edges=edges,
+            edge_reranker_scores=edge_scores,
+            episodes=episodes,
+            episode_reranker_scores=episode_scores,
+            communities=communities,
+            community_reranker_scores=community_scores,
+        )
