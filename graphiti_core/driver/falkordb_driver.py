@@ -49,6 +49,9 @@ from graphiti_core.driver.falkordb.operations.entity_edge_ops import FalkorEntit
 from graphiti_core.driver.falkordb.operations.entity_node_ops import FalkorEntityNodeOperations
 from graphiti_core.driver.falkordb.operations.episode_node_ops import FalkorEpisodeNodeOperations
 from graphiti_core.driver.falkordb.operations.episodic_edge_ops import FalkorEpisodicEdgeOperations
+from graphiti_core.driver.falkordb.operations.graph_operations_interface import (
+    FalkorGraphOperationsInterface,
+)
 from graphiti_core.driver.falkordb.operations.graph_ops import FalkorGraphMaintenanceOperations
 from graphiti_core.driver.falkordb.operations.has_episode_edge_ops import (
     FalkorHasEpisodeEdgeOperations,
@@ -174,6 +177,10 @@ class FalkorDriver(GraphDriver):
         self._next_episode_edge_ops = FalkorNextEpisodeEdgeOperations()
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
+
+        # Wire the legacy dispatch point so the node/edge classmethods route
+        # group-scoped reads to each group's physical graph (see #1675).
+        self.graph_operations_interface = FalkorGraphOperationsInterface(self)
 
         self._init_task: asyncio.Task | None = None
         # Schedule the indices and constraints to be built
