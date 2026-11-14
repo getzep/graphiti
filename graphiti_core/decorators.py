@@ -61,11 +61,9 @@ def handle_multiple_group_ids(func: F) -> F:
             gid = group_ids[0]
             driver = self.clients.driver
             if gid != getattr(driver, '_database', None):
-                return await func(
-                    self,
-                    *args,
-                    **{**kwargs, 'driver': driver.clone(database=gid)},
-                )
+                bound = inspect.signature(func).bind(self, *args, **kwargs)
+                bound.arguments['driver'] = driver.clone(database=gid)
+                return await func(*bound.args, **bound.kwargs)
             return await func(self, *args, **kwargs)
 
         # FalkorDB with multiple group_ids: run per graph and merge
