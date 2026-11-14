@@ -28,7 +28,13 @@ from graphiti_core.driver.driver import (
     GraphDriverSession,
     GraphProvider,
 )
-from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
+from graphiti_core.edges import (
+    ENTITY_EDGE_ENDPOINT_KEYS,
+    Edge,
+    EntityEdge,
+    EpisodicEdge,
+    create_entity_edge_embeddings,
+)
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
 from graphiti_core.helpers import normalize_l2, semaphore_gather
@@ -216,8 +222,9 @@ async def add_nodes_and_edges_bulk_tx(
             # Attributes may contain stale string versions of typed fields
             # (e.g. reference_time as ISO string) that would replace the
             # datetime values set above.
+            # Endpoint keys are reserved and never stored from attributes.
             for k, v in (edge.attributes or {}).items():
-                if k not in edge_data:
+                if k not in edge_data and k not in ENTITY_EDGE_ENDPOINT_KEYS:
                     edge_data[k] = v
 
         edges.append(edge_data)

@@ -21,7 +21,7 @@ from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.driver.record_parsers import entity_edge_from_record
-from graphiti_core.edges import EntityEdge
+from graphiti_core.edges import ENTITY_EDGE_ENDPOINT_KEYS, EntityEdge
 from graphiti_core.errors import EdgeNotFoundError
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_return_query,
@@ -30,6 +30,10 @@ from graphiti_core.models.edges.edge_db_queries import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _attributes_without_endpoint_keys(edge: EntityEdge) -> dict[str, Any]:
+    return {k: v for k, v in (edge.attributes or {}).items() if k not in ENTITY_EDGE_ENDPOINT_KEYS}
 
 
 class FalkorEntityEdgeOperations(EntityEdgeOperations):
@@ -41,8 +45,6 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
     ) -> None:
         edge_data: dict[str, Any] = {
             'uuid': edge.uuid,
-            'source_uuid': edge.source_node_uuid,
-            'target_uuid': edge.target_node_uuid,
             'name': edge.name,
             'fact': edge.fact,
             'fact_embedding': edge.fact_embedding,
@@ -53,13 +55,24 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             'valid_at': edge.valid_at,
             'invalid_at': edge.invalid_at,
         }
-        edge_data.update(edge.attributes or {})
+        # Endpoints are passed as separate MATCH params, never stored on the edge.
+        edge_data.update(_attributes_without_endpoint_keys(edge))
 
         query = get_entity_edge_save_query(GraphProvider.FALKORDB)
         if tx is not None:
-            await tx.run(query, edge_data=edge_data)
+            await tx.run(
+                query,
+                edge_data=edge_data,
+                source_uuid=edge.source_node_uuid,
+                target_uuid=edge.target_node_uuid,
+            )
         else:
-            await executor.execute_query(query, edge_data=edge_data)
+            await executor.execute_query(
+                query,
+                edge_data=edge_data,
+                source_uuid=edge.source_node_uuid,
+                target_uuid=edge.target_node_uuid,
+            )
 
         logger.debug(f'Saved Edge to Graph: {edge.uuid}')
 
@@ -86,7 +99,8 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
                 'valid_at': edge.valid_at,
                 'invalid_at': edge.invalid_at,
             }
-            edge_data.update(edge.attributes or {})
+            # Attributes must not overwrite the endpoints the bulk query matches on.
+            edge_data.update(_attributes_without_endpoint_keys(edge))
             prepared.append(edge_data)
 
         query = get_entity_edge_save_bulk_query(GraphProvider.FALKORDB)
