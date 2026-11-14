@@ -94,6 +94,23 @@ class TestFalkorDriver:
         self.mock_client.select_graph.assert_called_once_with('default_db')
         assert result is mock_graph
 
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_get_graph_with_empty_name_defaults_to_configured_database(self):
+        mock_graph = MagicMock()
+        self.mock_client.select_graph.return_value = mock_graph
+
+        result = self.driver._get_graph('')
+
+        self.mock_client.select_graph.assert_called_once_with('default_db')
+        assert result is mock_graph
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_with_empty_database_reuses_current_driver(self):
+        clone = self.driver.clone(database='')
+
+        assert clone is self.driver
+        assert clone._database == 'default_db'
+
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     async def test_execute_query_success(self):
