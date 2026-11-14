@@ -519,7 +519,10 @@ class Graphiti:
             """
             MATCH (s:Saga {name: $name, group_id: $group_id})
             RETURN s.uuid AS uuid, s.name AS name, s.group_id AS group_id, s.created_at AS created_at,
-                   s.first_episode_uuid AS first_episode_uuid, s.last_episode_uuid AS last_episode_uuid
+                   s.summary AS summary,
+                   s.first_episode_uuid AS first_episode_uuid, s.last_episode_uuid AS last_episode_uuid,
+                   s.last_summarized_at AS last_summarized_at,
+                   s.last_summarized_episode_valid_at AS last_summarized_episode_valid_at
             """,
             name=saga_name,
             group_id=group_id,
@@ -528,13 +531,23 @@ class Graphiti:
 
         if records:
             record = records[0]
+            # Round-trip the summary and both summarization watermarks: callers
+            # save this node after adding an episode, and `SagaNode.save()`
+            # overwrites every saga field. Dropping them here would wipe the
+            # stored summary and force the next summarize_saga() run to
+            # re-summarize episodes it already covered.
             return SagaNode(
                 uuid=record['uuid'],
                 name=record['name'],
                 group_id=record['group_id'],
                 created_at=parse_db_date(record['created_at']),  # type: ignore
+                summary=record.get('summary') or '',
                 first_episode_uuid=record['first_episode_uuid'],
                 last_episode_uuid=record['last_episode_uuid'],
+                last_summarized_at=parse_db_date(record.get('last_summarized_at')),
+                last_summarized_episode_valid_at=parse_db_date(
+                    record.get('last_summarized_episode_valid_at')
+                ),
             )
 
         saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
