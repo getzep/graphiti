@@ -158,3 +158,15 @@ def test_falkordb_fulltext_query_escapes_default_group_id():
     built = _build_falkor_fulltext_query('hello', [default])
     assert '@group_id:"\\_"' in built
     assert '@group_id:"_"' not in built
+
+
+def test_bare_underscore_token_dropped_from_query():
+    """A standalone '_' (from '<ts>_<uuid>' identifiers) must not reach the
+    query string — RediSearch rejects it with a syntax error (#1820)."""
+    from graphiti_core.driver.falkordb.fulltext import build_falkor_fulltext_query
+
+    built = build_falkor_fulltext_query('1728000000_0f3c _ session summary', None)
+    # a standalone '_' token must be dropped; underscores INSIDE words stay
+    assert ' | _' not in built and '_ |' not in built and built.strip(' ()') != '_'
+    assert '1728000000_0f3c' in built
+    assert 'session' in built

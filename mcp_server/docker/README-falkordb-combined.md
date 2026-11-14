@@ -5,6 +5,7 @@ This Docker setup bundles FalkorDB (graph database) and the Graphiti MCP Server 
 ## Overview
 
 The combined image extends the official FalkorDB Docker image to include:
+
 - **FalkorDB**: Redis-based graph database running on port 6379
 - **FalkorDB Web UI**: Graph visualization interface on port 3000
 - **Graphiti MCP Server**: Knowledge graph API on port 8000
@@ -27,16 +28,16 @@ SEMAPHORE_LIMIT=10
 FALKORDB_PASSWORD=
 ```
 
-2. Start the combined service:
+1. Start the combined service:
 
 ```bash
 cd mcp_server
 docker compose -f docker/docker-compose-falkordb-combined.yml up
 ```
 
-3. Access the services:
-   - MCP Server: http://localhost:8000/mcp/
-   - FalkorDB Web UI: http://localhost:3000
+1. Access the services:
+   - MCP Server: <http://localhost:8000/mcp/>
+   - FalkorDB Web UI: <http://localhost:3000>
    - FalkorDB (Redis): localhost:6379
 
 ### Using Docker Run
@@ -80,9 +81,11 @@ GRAPHITI_CORE_VERSION=0.22.0 docker compose -f docker/docker-compose-falkordb-co
 All environment variables from the standard MCP server are supported:
 
 **Required:**
+
 - `OPENAI_API_KEY`: OpenAI API key for LLM operations
 
 **Optional:**
+
 - `BROWSER`: Enable FalkorDB Browser web UI on port 3000 (default: "1", set to "0" to disable)
 - `GRAPHITI_GROUP_ID`: Namespace for graph data (default: "main")
 - `SEMAPHORE_LIMIT`: Concurrency limit for episode processing (default: 10)
@@ -90,6 +93,7 @@ All environment variables from the standard MCP server are supported:
 - `FALKORDB_DATABASE`: FalkorDB database name (default: "default_db")
 
 **Other LLM Providers:**
+
 - `ANTHROPIC_API_KEY`: For Claude models
 - `GOOGLE_API_KEY`: For Gemini models
 - `GROQ_API_KEY`: For Groq models
@@ -148,10 +152,12 @@ When disabled, only FalkorDB (port 6379) and the MCP server (port 8000) will run
 ## Health Checks
 
 The container includes a health check that verifies:
+
 1. FalkorDB is responding to ping
 2. MCP server health endpoint is accessible
 
 Check health status:
+
 ```bash
 docker compose -f docker/docker-compose-falkordb-combined.yml ps
 ```
@@ -159,6 +165,7 @@ docker compose -f docker/docker-compose-falkordb-combined.yml ps
 ## Architecture
 
 ### Process Structure
+
 ```
 start-services.sh (PID 1)
 ├── redis-server (FalkorDB daemon)
@@ -169,6 +176,7 @@ start-services.sh (PID 1)
 The startup script launches FalkorDB as a background daemon, waits for it to be ready, optionally starts the FalkorDB Browser (if `BROWSER=1`), then starts the MCP server in the foreground. When the MCP server stops, the container exits.
 
 ### Directory Structure
+
 ```
 /app/mcp/                    # MCP server application
 ├── main.py
@@ -196,6 +204,7 @@ The startup script launches FalkorDB as a background daemon, waits for it to be 
 ### FalkorDB Not Starting
 
 Check container logs:
+
 ```bash
 docker compose -f docker/docker-compose-falkordb-combined.yml logs graphiti-falkordb
 ```
@@ -203,16 +212,19 @@ docker compose -f docker/docker-compose-falkordb-combined.yml logs graphiti-falk
 ### MCP Server Connection Issues
 
 1. Verify FalkorDB is running:
+
 ```bash
 docker compose -f docker/docker-compose-falkordb-combined.yml exec graphiti-falkordb redis-cli ping
 ```
 
-2. Check MCP server health:
+1. Check MCP server health:
+
 ```bash
 curl http://localhost:8000/health
 ```
 
-3. View all container logs:
+1. View all container logs:
+
 ```bash
 docker compose -f docker/docker-compose-falkordb-combined.yml logs -f
 ```
@@ -231,6 +243,7 @@ ports:
 ## Production Considerations
 
 1. **Resource Limits**: Add resource constraints in docker-compose:
+
 ```yaml
 deploy:
   resources:
@@ -239,10 +252,10 @@ deploy:
       memory: 4G
 ```
 
-2. **Persistent Volumes**: Use named volumes or bind mounts for production data
-3. **Monitoring**: Export logs to external monitoring system
-4. **Backups**: Regular backups of `/var/lib/falkordb/data` volume
-5. **Security**: Set `FALKORDB_PASSWORD` in production environments
+1. **Persistent Volumes**: Use named volumes or bind mounts for production data
+2. **Monitoring**: Export logs to external monitoring system
+3. **Backups**: Regular backups of `/var/lib/falkordb/data` volume
+4. **Security**: Set `FALKORDB_PASSWORD` in production environments
 
 ## Comparison with Separate Containers
 
