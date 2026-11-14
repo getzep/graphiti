@@ -133,6 +133,12 @@ class VoyageProviderConfig(BaseModel):
     model: str = 'voyage-3'
 
 
+class BedrockProviderConfig(BaseModel):
+    """Amazon Bedrock provider — credentials via boto3 default chain (IRSA/env)."""
+
+    region: str = Field(default='ap-southeast-2', description='AWS region')
+
+
 class LLMProvidersConfig(BaseModel):
     """LLM providers configuration."""
 
@@ -141,6 +147,7 @@ class LLMProvidersConfig(BaseModel):
     anthropic: AnthropicProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     groq: GroqProviderConfig | None = None
+    bedrock: BedrockProviderConfig | None = None
 
 
 class LLMConfig(BaseModel):
@@ -170,6 +177,7 @@ class EmbedderProvidersConfig(BaseModel):
     azure_openai: AzureOpenAIProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     voyage: VoyageProviderConfig | None = None
+    bedrock: BedrockProviderConfig | None = None
 
 
 class EmbedderConfig(BaseModel):

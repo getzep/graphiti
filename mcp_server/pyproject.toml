@@ -7,7 +7,7 @@ requires-python = ">=3.10,<4"
 dependencies = [
     "mcp>=2,<3",
     "openai>=2.41.0",
-    "graphiti-core[falkordb]>=0.31.1",
+    "graphiti-core[falkordb,bedrock]>=0.31.1",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0.3",
     "typing-extensions>=4.0.0",
@@ -29,6 +29,11 @@ providers = [
 # Pillow 13 has the security fixes and needs Python 3.11+. On Python 3.10, uv resolves
 # voyageai 0.2.x, which does not use Pillow.
 constraint-dependencies = ["pillow>=13.0.0"]
+
+# Use local graphiti-core (Bedrock not yet on PyPI). Docker builds strip this
+# section and pin a PyPI version — see mcp_server/docker/Dockerfile.
+[tool.uv.sources]
+graphiti-core = { path = '../', editable = true }
 
 [tool.pyright]
 include = ["src", "tests"]
