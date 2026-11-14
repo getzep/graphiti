@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -932,106 +933,87 @@ class LocatedIn(BaseModel):
     """A relationship indicating something is located in a place."""
 
 
-def test_edge_type_signatures_map_preserves_multiple_signatures():
-    """Test that edge types used across multiple node type pairs preserve all signatures.
-
-    This tests the fix for the bug where dict comprehension would overwrite
-    previous signatures when the same edge type appeared in multiple node pairs.
-    """
-    # Edge type map where the same edge type is used for multiple node pair signatures
-    # This is the scenario that was broken before the fix
-    edge_type_map: dict[tuple[str, str], list[str]] = {
-        ('Person', 'Person'): ['InterpersonalRelationship'],
-        ('Person', 'Entity'): ['InterpersonalRelationship'],  # Same type, different signature
-        ('Person', 'City'): ['LocatedIn'],
-        ('Entity', 'City'): ['LocatedIn'],  # Same type, different signature
-    }
-
-    edge_types: dict[str, type[BaseModel]] = {
+@pytest.mark.asyncio
+@pytest.mark.parametrize('episode_count', [1, 2], ids=['single-episode', 'multiple-episodes'])
+@pytest.mark.parametrize(
+    'edge_type_map, expected_signatures',
+    [
+        pytest.param(
+            {
+                ('Person', 'Person'): ['InterpersonalRelationship'],
+                ('Person', 'Entity'): ['InterpersonalRelationship'],
+                ('Person', 'City'): ['LocatedIn'],
+                ('Entity', 'City'): ['LocatedIn'],
+            },
+            {
+                'InterpersonalRelationship': [['Person', 'Person'], ['Person', 'Entity']],
+                'LocatedIn': [['Person', 'City'], ['Entity', 'City']],
+            },
+            id='shared-types',
+        ),
+        pytest.param(
+            {
+                ('Person', 'Person'): ['InterpersonalRelationship'],
+                ('Person', 'City'): ['LocatedIn'],
+            },
+            {
+                'InterpersonalRelationship': [['Person', 'Person']],
+                'LocatedIn': [['Person', 'City']],
+            },
+            id='single-signatures',
+        ),
+        pytest.param(
+            {('Person', 'Person'): ['InterpersonalRelationship']},
+            {
+                'InterpersonalRelationship': [['Person', 'Person']],
+                'LocatedIn': [['Entity', 'Entity']],
+            },
+            id='unmapped-type-default',
+        ),
+    ],
+)
+async def test_extract_edges_sends_edge_type_signatures_to_llm(
+    mock_llm_client, edge_type_map, expected_signatures, episode_count
+):
+    """Exercise #1181 through production extraction and the rendered LLM prompt."""
+    edge_types = {
         'InterpersonalRelationship': InterpersonalRelationship,
         'LocatedIn': LocatedIn,
     }
-
-    # Build the mapping the same way as in extract_edges (the fixed implementation)
-    edge_type_signatures_map: dict[str, list[tuple[str, str]]] = {}
-    for signature, edge_type_names in edge_type_map.items():
-        for edge_type in edge_type_names:
-            if edge_type not in edge_type_signatures_map:
-                edge_type_signatures_map[edge_type] = []
-            edge_type_signatures_map[edge_type].append(signature)
-
-    # Verify InterpersonalRelationship has BOTH signatures preserved
-    assert 'InterpersonalRelationship' in edge_type_signatures_map
-    interpersonal_signatures = edge_type_signatures_map['InterpersonalRelationship']
-    assert len(interpersonal_signatures) == 2
-    assert ('Person', 'Person') in interpersonal_signatures
-    assert ('Person', 'Entity') in interpersonal_signatures
-
-    # Verify LocatedIn has BOTH signatures preserved
-    assert 'LocatedIn' in edge_type_signatures_map
-    located_signatures = edge_type_signatures_map['LocatedIn']
-    assert len(located_signatures) == 2
-    assert ('Person', 'City') in located_signatures
-    assert ('Entity', 'City') in located_signatures
-
-    # Verify the edge_types_context structure
-    edge_types_context = [
-        {
-            'fact_type_name': type_name,
-            'fact_type_signatures': edge_type_signatures_map.get(type_name, [('Entity', 'Entity')]),
-            'fact_type_description': type_model.__doc__,
-        }
-        for type_name, type_model in edge_types.items()
+    mock_llm_client.generate_response.return_value = {'edges': []}
+    clients = SimpleNamespace(llm_client=mock_llm_client)
+    episodes = [
+        EpisodicNode(
+            name=f'Episode {index}',
+            group_id='group_1',
+            source='message',
+            source_description='Signature regression test',
+            content='Alice knows Bob and lives in Paris.',
+            valid_at=datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=index),
+        )
+        for index in range(episode_count)
     ]
 
-    # Verify the context has the correct structure with plural 'fact_type_signatures'
-    for ctx in edge_types_context:
-        assert 'fact_type_signatures' in ctx
-        assert isinstance(ctx['fact_type_signatures'], list)
-        assert len(ctx['fact_type_signatures']) == 2  # Each type has 2 signatures
+    await extract_edges(
+        clients,
+        episodes[0] if episode_count == 1 else episodes,
+        [EntityNode(name='Alice', group_id='group_1', labels=['Person'])],
+        [],
+        edge_type_map,
+        edge_types=edge_types,
+    )
 
-
-def test_edge_type_signatures_map_single_signature_still_works():
-    """Test that edge types with a single signature still work correctly."""
-    edge_type_map: dict[tuple[str, str], list[str]] = {
-        ('Person', 'Organization'): ['WorksAt'],
-        ('Person', 'City'): ['LivesIn'],
+    mock_llm_client.generate_response.assert_awaited_once()
+    messages = mock_llm_client.generate_response.call_args.args[0]
+    prompt = next(message.content for message in messages if '<FACT_TYPES>' in message.content)
+    fact_types = json.loads(prompt.split('<FACT_TYPES>', 1)[1].split('</FACT_TYPES>', 1)[0])
+    assert {item['fact_type_name']: item['fact_type_signatures'] for item in fact_types} == (
+        expected_signatures
+    )
+    assert {item['fact_type_name']: item['fact_type_description'] for item in fact_types} == {
+        'InterpersonalRelationship': InterpersonalRelationship.__doc__,
+        'LocatedIn': LocatedIn.__doc__,
     }
-
-    edge_types: dict[str, type[BaseModel]] = {
-        'WorksAt': BaseModel,
-        'LivesIn': BaseModel,
-    }
-
-    # Build the mapping
-    edge_type_signatures_map: dict[str, list[tuple[str, str]]] = {}
-    for signature, edge_type_names in edge_type_map.items():
-        for edge_type in edge_type_names:
-            if edge_type not in edge_type_signatures_map:
-                edge_type_signatures_map[edge_type] = []
-            edge_type_signatures_map[edge_type].append(signature)
-
-    # Verify each edge type has exactly one signature
-    assert len(edge_type_signatures_map['WorksAt']) == 1
-    assert ('Person', 'Organization') in edge_type_signatures_map['WorksAt']
-
-    assert len(edge_type_signatures_map['LivesIn']) == 1
-    assert ('Person', 'City') in edge_type_signatures_map['LivesIn']
-
-    # Verify the context structure
-    edge_types_context = [
-        {
-            'fact_type_name': type_name,
-            'fact_type_signatures': edge_type_signatures_map.get(type_name, [('Entity', 'Entity')]),
-            'fact_type_description': type_model.__doc__,
-        }
-        for type_name, type_model in edge_types.items()
-    ]
-
-    for ctx in edge_types_context:
-        assert 'fact_type_signatures' in ctx
-        assert isinstance(ctx['fact_type_signatures'], list)
-        assert len(ctx['fact_type_signatures']) == 1
 
 
 @pytest.mark.asyncio
