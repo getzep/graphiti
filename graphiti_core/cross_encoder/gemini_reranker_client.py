@@ -124,7 +124,7 @@ Provide only a number between 0 and 100 (no explanation, just the number):"""
                         # Extract numeric score from response
                         score_text = response.text.strip()
                         # Handle cases where model might return non-numeric text
-                        score_match = re.search(r'\b(\d{1,3})\b', score_text)
+                        score_match = re.search(r'(?<!\w)([+-]?\d+(?:\.\d+)?)(?!\w)', score_text)
                         if score_match:
                             score = float(score_match.group(1))
                             # Normalize to [0, 1] range and clamp to valid range
