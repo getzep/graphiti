@@ -19,12 +19,15 @@ from uuid import uuid4
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
     EpisodeType,
     EpisodicNode,
 )
+from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_utils import node_similarity_search
 from tests.helpers_test import (
     assert_community_node_equals,
     assert_entity_node_equals,
@@ -131,6 +134,51 @@ async def test_entity_node(sample_entity_node, graph_driver):
     assert node_count == 0
 
     await graph_driver.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bulk', [False, True], ids=['direct', 'bulk'])
+async def test_neo4j_entity_save_with_optional_embedding(sample_entity_node, graph_driver, bulk):
+    if graph_driver.provider != GraphProvider.NEO4J:
+        pytest.skip('This regression exercises Neo4j vector writes')
+
+    async def save(*nodes: EntityNode):
+        if bulk:
+            ops = graph_driver.entity_node_ops
+            assert ops is not None
+            await ops.save_bulk(graph_driver, list(nodes))
+        else:
+            for node in nodes:
+                await node.save(graph_driver)
+
+    unembedded = EntityNode(name='Unembedded entity', group_id=group_id)
+    await save(unembedded, sample_entity_node)
+
+    retrieved = await EntityNode.get_by_uuid(graph_driver, unembedded.uuid)
+    await retrieved.load_name_embedding(graph_driver)
+    assert retrieved.name_embedding is None
+
+    # Default reads omit embeddings. Saving an edited node must keep its stored vector.
+    retrieved = await EntityNode.get_by_uuid(graph_driver, sample_entity_node.uuid)
+    assert retrieved.name_embedding is None
+    retrieved.summary = 'Updated summary'
+    await save(retrieved)
+
+    updated = await EntityNode.get_by_uuid(graph_driver, sample_entity_node.uuid)
+    assert updated.summary == 'Updated summary'
+    await updated.load_name_embedding(graph_driver)
+    assert updated.name_embedding == sample_entity_node.name_embedding
+
+    updated.name_embedding = [0.25] * 1024
+    await save(updated)
+    reloaded = await EntityNode.get_by_uuid(graph_driver, updated.uuid)
+    await reloaded.load_name_embedding(graph_driver)
+    assert reloaded.name_embedding == updated.name_embedding
+
+    matches = await node_similarity_search(
+        graph_driver, updated.name_embedding, SearchFilters(), group_ids=[group_id]
+    )
+    assert [node.uuid for node in matches] == [updated.uuid]
 
 
 @pytest.mark.asyncio
