@@ -99,9 +99,11 @@ class Neo4jSagaNodeOperations(SagaNodeOperations):
             } IN TRANSACTIONS OF $batch_size ROWS
         """
         if tx is not None:
-            await tx.run(query, group_id=group_id, batch_size=batch_size)
+            await tx.run('MATCH (n:Saga {group_id: $group_id}) DETACH DELETE n', group_id=group_id)
         else:
-            await executor.execute_query(query, group_id=group_id, batch_size=batch_size)
+            await executor.execute_query(
+                query, group_id=group_id, batch_size=batch_size, auto_commit_=True
+            )
 
     async def delete_by_uuids(
         self,
@@ -118,9 +120,11 @@ class Neo4jSagaNodeOperations(SagaNodeOperations):
             } IN TRANSACTIONS OF $batch_size ROWS
         """
         if tx is not None:
-            await tx.run(query, uuids=uuids, batch_size=batch_size)
+            await tx.run('MATCH (n:Saga) WHERE n.uuid IN $uuids DETACH DELETE n', uuids=uuids)
         else:
-            await executor.execute_query(query, uuids=uuids, batch_size=batch_size)
+            await executor.execute_query(
+                query, uuids=uuids, batch_size=batch_size, auto_commit_=True
+            )
 
     async def get_by_uuid(
         self,
