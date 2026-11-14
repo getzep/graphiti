@@ -1863,6 +1863,34 @@ async def test_node_fulltext_search(
 
 
 @pytest.mark.asyncio
+async def test_build_indices_and_constraints_delete_existing(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
+    if graph_driver.provider != GraphProvider.NEO4J:
+        pytest.skip('Covers the Neo4j index deletion path')
+
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+    await graph_driver.execute_query(
+        'CREATE INDEX graphiti_test_extra_index IF NOT EXISTS FOR (n:Entity) ON (n.test_property)'
+    )
+
+    await graphiti.build_indices_and_constraints(delete_existing=True)
+
+    records, _, _ = await graph_driver.execute_query('SHOW INDEXES YIELD name RETURN name')
+    index_names = {record['name'] for record in records}
+    assert 'graphiti_test_extra_index' not in index_names
+    assert {'entity_uuid', 'relation_uuid', 'node_name_and_summary'} <= index_names
+    # Let the recreated indices come online before other tests query them.
+    await graph_driver.execute_query('CALL db.awaitIndexes(300)')
+
+
+@pytest.mark.asyncio
 async def test_node_similarity_search(graph_driver, mock_embedder):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
