@@ -230,7 +230,11 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         properties(e) AS attributes
     """
 
-    return """
+    # As in get_entity_node_return_query, FalkorDB replaces the discarded embedding with null.
+    attributes = (
+        'e {.*, fact_embedding: NULL}' if provider == GraphProvider.FALKORDB else 'properties(e)'
+    )
+    return f"""
         e.uuid AS uuid,
         startNode(e).uuid AS source_node_uuid,
         endNode(e).uuid AS target_node_uuid,
@@ -243,7 +247,7 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
         e.reference_time AS reference_time,
-        properties(e) AS attributes
+        {attributes} AS attributes
     """
 
 

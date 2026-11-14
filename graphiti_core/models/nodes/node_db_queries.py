@@ -284,14 +284,19 @@ def get_entity_node_return_query(provider: GraphProvider) -> str:
             n.attributes AS attributes
         """
 
-    return """
+    # On FalkorDB, `properties(n)` would also send the embedding, which the record parsers discard;
+    # with large embeddings decoding it dominates the read, so the projection replaces it with null.
+    attributes = (
+        'n {.*, name_embedding: NULL}' if provider == GraphProvider.FALKORDB else 'properties(n)'
+    )
+    return f"""
         n.uuid AS uuid,
         n.name AS name,
         n.group_id AS group_id,
         n.created_at AS created_at,
         n.summary AS summary,
         labels(n) AS labels,
-        properties(n) AS attributes
+        {attributes} AS attributes
     """
 
 

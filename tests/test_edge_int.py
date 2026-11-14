@@ -21,7 +21,9 @@ from datetime import datetime
 import numpy as np
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
+from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from tests.helpers_test import assert_datetimes_equal, get_edge_count, get_node_count, group_id
 
@@ -298,6 +300,44 @@ async def test_entity_edge(graph_driver, mock_embedder):
     node_count = await get_node_count(graph_driver, [bob_node.uuid])
     assert node_count == 0
 
+    await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_read_leaves_out_fact_embedding(graph_driver, mock_embedder):
+    if graph_driver.provider != GraphProvider.FALKORDB:
+        pytest.skip('Only the FalkorDB return query leaves the embedding out')
+    now = datetime.now()
+    alice_node = EntityNode(name='Alice', labels=[], created_at=now, group_id=group_id)
+    bob_node = EntityNode(name='Bob', labels=[], created_at=now, group_id=group_id)
+    for node in (alice_node, bob_node):
+        await node.generate_name_embedding(mock_embedder)
+        await node.save(graph_driver)
+    entity_edge = EntityEdge(
+        source_node_uuid=alice_node.uuid,
+        target_node_uuid=bob_node.uuid,
+        created_at=now,
+        name='likes',
+        fact='Alice likes Bob',
+        episodes=[],
+        group_id=group_id,
+    )
+    await entity_edge.generate_embedding(mock_embedder)
+    await entity_edge.save(graph_driver)
+
+    records, _, _ = await graph_driver.execute_query(
+        'MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity) RETURN '
+        + get_entity_edge_return_query(graph_driver.provider),
+        uuid=entity_edge.uuid,
+    )
+
+    assert records[0]['attributes']['fact_embedding'] is None
+    assert records[0]['attributes']['fact'] == 'Alice likes Bob'
+    retrieved = await EntityEdge.get_by_uuid(graph_driver, entity_edge.uuid)
+    assert retrieved.fact == 'Alice likes Bob'
+    assert 'fact_embedding' not in retrieved.attributes
+    await retrieved.load_fact_embedding(graph_driver)
+    assert np.allclose(retrieved.fact_embedding, entity_edge.fact_embedding)
     await graph_driver.close()
 
 

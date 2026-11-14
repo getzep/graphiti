@@ -6,6 +6,9 @@ NEO4J/FALKORDB/NEPTUNE must read source/target from the relationship itself
 relationship regardless of whether the surrounding MATCH is directed or undirected.
 KUZU keeps ``n.uuid``/``m.uuid`` because its `e` is an intermediate node, not a
 relationship.
+
+FalkorDB also replaces the `fact_embedding` in `attributes` with null, since the
+record parser discards it.
 """
 
 import pytest
@@ -47,11 +50,16 @@ def test_kuzu_keeps_match_variables():
     assert 'e.attributes AS attributes' in query
 
 
-def test_default_branch_returns_neo4j_or_falkordb_attributes():
-    # Both NEO4J and FALKORDB use `properties(e)`, unlike KUZU's `e.attributes`.
-    for provider in (GraphProvider.NEO4J, GraphProvider.FALKORDB):
-        query = get_entity_edge_return_query(provider)
-        assert 'properties(e) AS attributes' in query
+def test_neo4j_returns_properties_as_attributes():
+    query = get_entity_edge_return_query(GraphProvider.NEO4J)
+    assert 'properties(e) AS attributes' in query
+
+
+def test_falkordb_attributes_leave_out_the_fact_embedding():
+    # The record parser discards `fact_embedding`, so FalkorDB does not send it.
+    query = get_entity_edge_return_query(GraphProvider.FALKORDB)
+    assert 'e {.*, fact_embedding: NULL} AS attributes' in query
+    assert 'properties(e)' not in query
 
 
 @pytest.mark.parametrize('provider', list(GraphProvider))
