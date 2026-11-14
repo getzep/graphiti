@@ -158,3 +158,23 @@ def test_falkordb_fulltext_query_escapes_default_group_id():
     built = _build_falkor_fulltext_query('hello', [default])
     assert '@group_id:"\\_"' in built
     assert '@group_id:"_"' not in built
+
+
+def test_build_neo4j_fulltext_query_groups_or_clause_for_multiple_group_ids():
+    result = _build_neo4j_fulltext_query('alice', ['group_a', 'group_b'])
+
+    assert result == '(group_id:"group_a" OR group_id:"group_b") AND (alice)'
+
+
+def test_build_neo4j_fulltext_query_single_and_no_group_ids():
+    assert _build_neo4j_fulltext_query('alice', ['group_a']) == '(group_id:"group_a") AND (alice)'
+    assert _build_neo4j_fulltext_query('alice', None) == '(alice)'
+    assert _build_neo4j_fulltext_query('alice', []) == '(alice)'
+
+
+def test_fulltext_query_groups_or_clause_for_multiple_group_ids():
+    driver = SimpleNamespace(provider=GraphProvider.NEO4J, fulltext_syntax='')
+
+    result = fulltext_query('alice', ['group_a', 'group_b'], driver)
+
+    assert result == '(group_id:"group_a" OR group_id:"group_b") AND (alice)'
