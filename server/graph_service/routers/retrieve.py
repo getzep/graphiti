@@ -51,6 +51,7 @@ async def get_memory(
         group_ids=[request.group_id],
         query=combined_query,
         num_results=request.max_facts,
+        center_node_uuid=request.center_node_uuid,
     )
     facts = [get_fact_result_from_edge(edge) for edge in result]
     return GetMemoryResponse(facts=facts)
