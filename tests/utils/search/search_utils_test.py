@@ -2,9 +2,25 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from graphiti_core.driver.neo4j.operations.search_ops import Neo4jSearchOperations
 from graphiti_core.nodes import EntityNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import hybrid_node_search
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('method', ['node_fulltext_search', 'edge_fulltext_search'])
+async def test_neo4j_fulltext_search_ignores_empty_node_labels(method):
+    executor = AsyncMock()
+    executor.execute_query.return_value = ([], None, None)
+    search = getattr(Neo4jSearchOperations(), method)
+
+    await search(executor, 'Alice', SearchFilters(), group_ids=['test'])
+    without_labels = executor.execute_query.await_args
+    await search(executor, 'Alice', SearchFilters(node_labels=[]), group_ids=['test'])
+
+    assert executor.execute_query.await_count == 2
+    assert executor.execute_query.await_args == without_labels
 
 
 @pytest.mark.asyncio
