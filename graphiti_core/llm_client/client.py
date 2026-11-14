@@ -160,10 +160,16 @@ class LLMClient(ABC):
     ) -> dict[str, typing.Any]:
         pass
 
-    def _get_cache_key(self, messages: list[Message], model: str | None = None) -> str:
-        # Create a unique cache key based on the messages and model
+    def _get_cache_key(
+        self,
+        messages: list[Message],
+        model: str | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        # The same messages can produce different responses under different generation options.
         message_str = json.dumps([m.model_dump() for m in messages], sort_keys=True)
-        key_str = f'{model or self.model}:{message_str}'
+        token_limit = self.max_tokens if max_tokens is None else max_tokens
+        key_str = f'{model or self.model}:{token_limit}:{self.temperature}:{message_str}'
         return hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
 
     def _apply_attribute_extraction_preamble(
@@ -250,8 +256,9 @@ class LLMClient(ABC):
             span.add_attributes(attributes)
 
             # Check cache first
+            cache_key: str | None = None
             if self.cache_enabled and self.cache_dir is not None:
-                cache_key = self._get_cache_key(messages, model=model)
+                cache_key = self._get_cache_key(messages, model=model, max_tokens=max_tokens)
                 cached_response = self.cache_dir.get(cache_key)
                 if cached_response is not None:
                     logger.debug(f'Cache hit for {cache_key}')
@@ -275,8 +282,13 @@ class LLMClient(ABC):
                 raise
 
             # Cache response if enabled
-            if self.cache_enabled and self.cache_dir is not None:
-                cache_key = self._get_cache_key(messages, model=model)
+            # Do not store a response under options changed during the request.
+            if (
+                self.cache_enabled
+                and self.cache_dir is not None
+                and cache_key is not None
+                and cache_key == self._get_cache_key(messages, model=model, max_tokens=max_tokens)
+            ):
                 self.cache_dir.set(cache_key, response)
 
             return response
