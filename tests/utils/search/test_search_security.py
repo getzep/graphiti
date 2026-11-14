@@ -158,3 +158,23 @@ def test_falkordb_fulltext_query_escapes_default_group_id():
     built = _build_falkor_fulltext_query('hello', [default])
     assert '@group_id:"\\_"' in built
     assert '@group_id:"_"' not in built
+
+
+def test_build_neo4j_fulltext_query_parentheses_multi_group():
+    """Multi-group filters must be parenthesized so AND does not bind only the last group."""
+    single = _build_neo4j_fulltext_query('insomnia', ['A'])
+    multi = _build_neo4j_fulltext_query('insomnia', ['A', 'B'])
+    assert single == 'group_id:"A" AND (insomnia)'
+    assert multi == '(group_id:"A" OR group_id:"B") AND (insomnia)'
+
+
+def test_fulltext_query_parentheses_multi_group_for_neo4j_style_driver():
+    class _Neo4jLikeDriver:
+        provider = GraphProvider.NEO4J
+        fulltext_syntax = ''
+
+    driver = _Neo4jLikeDriver()
+    single = fulltext_query('insomnia', ['A'], driver)
+    multi = fulltext_query('insomnia', ['A', 'B'], driver)
+    assert single == 'group_id:"A" AND (insomnia)'
+    assert multi == '(group_id:"A" OR group_id:"B") AND (insomnia)'
