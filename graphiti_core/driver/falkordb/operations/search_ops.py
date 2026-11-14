@@ -286,13 +286,13 @@ class FalkorSearchOperations(SearchOperations):
             filter_queries.append('e.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
-            if source_node_uuid is not None:
-                filter_params['source_uuid'] = source_node_uuid
-                filter_queries.append('n.uuid = $source_uuid')
+        if source_node_uuid is not None:
+            filter_params['source_uuid'] = source_node_uuid
+            filter_queries.append('n.uuid = $source_uuid')
 
-            if target_node_uuid is not None:
-                filter_params['target_uuid'] = target_node_uuid
-                filter_queries.append('m.uuid = $target_uuid')
+        if target_node_uuid is not None:
+            filter_params['target_uuid'] = target_node_uuid
+            filter_queries.append('m.uuid = $target_uuid')
 
         filter_query = ''
         if filter_queries:
