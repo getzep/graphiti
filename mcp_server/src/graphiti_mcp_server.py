@@ -1218,12 +1218,12 @@ async def initialize_server() -> ServerConfig:
     # Provider selection arguments
     parser.add_argument(
         '--llm-provider',
-        choices=['openai', 'azure_openai', 'anthropic', 'gemini', 'groq'],
+        choices=['openai', 'azure_openai', 'anthropic', 'gemini', 'groq', 'bedrock'],
         help='LLM provider to use',
     )
     parser.add_argument(
         '--embedder-provider',
-        choices=['openai', 'azure_openai', 'gemini', 'voyage'],
+        choices=['openai', 'azure_openai', 'gemini', 'voyage', 'bedrock'],
         help='Embedder provider to use',
     )
     parser.add_argument(

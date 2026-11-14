@@ -176,3 +176,49 @@ class TestAzureReasoningEffort:
         client = LLMClientFactory.create(self._config('gpt-4.1'))
         assert isinstance(client, AzureOpenAILLMClient)
         assert client.reasoning is None
+
+
+class TestBedrockFactories:
+    """Bedrock LLM / embedder factory routing (IRSA — no API key)."""
+
+    def test_llm_factory_bedrock(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr('boto3.client', MagicMock())
+
+        from config.schema import BedrockProviderConfig, LLMConfig, LLMProvidersConfig
+        from services.factories import LLMClientFactory
+
+        cfg = LLMConfig(
+            provider='bedrock',
+            model='au.anthropic.claude-sonnet-4-5-20250929-v1:0',
+            providers=LLMProvidersConfig(
+                bedrock=BedrockProviderConfig(region='ap-southeast-2')
+            ),
+        )
+        client = LLMClientFactory.create(cfg)
+        assert client is not None
+        assert getattr(client, 'region', None) == 'ap-southeast-2'
+
+    def test_embedder_factory_bedrock(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr('boto3.client', MagicMock())
+
+        from config.schema import (
+            BedrockProviderConfig,
+            EmbedderConfig,
+            EmbedderProvidersConfig,
+        )
+        from services.factories import EmbedderFactory
+
+        cfg = EmbedderConfig(
+            provider='bedrock',
+            model='amazon.titan-embed-text-v2:0',
+            dimensions=1024,
+            providers=EmbedderProvidersConfig(
+                bedrock=BedrockProviderConfig(region='ap-southeast-2')
+            ),
+        )
+        client = EmbedderFactory.create(cfg)
+        assert client is not None
