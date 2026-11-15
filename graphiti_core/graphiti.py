@@ -1416,7 +1416,8 @@ class Graphiti:
                     episode.uuid: index for index, (episode, _) in enumerate(episode_context)
                 }
                 previous_episodes_by_uuid = {
-                    episode.uuid: previous_episodes for episode, previous_episodes in episode_context
+                    episode.uuid: previous_episodes
+                    for episode, previous_episodes in episode_context
                 }
                 identity_hydration_calls = []
                 for episode_uuids, nodes in identity_nodes_by_episode_uuids.items():

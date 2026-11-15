@@ -88,9 +88,7 @@ async def run_concurrent_episode(monkeypatch, identity_properties):
             node.attributes = {'email': IDENTITY_VALUE}
         return nodes
 
-    async def get_by_attribute_values(
-        cls, driver, group_id, attributes, labels=None, limit=None
-    ):
+    async def get_by_attribute_values(cls, driver, group_id, attributes, labels=None, limit=None):
         lookup_calls.append((group_id, attributes, labels, limit))
         return [stored]
 
@@ -115,9 +113,7 @@ async def run_concurrent_episode(monkeypatch, identity_properties):
         node_operations, '_collect_exact_name_candidate_nodes', AsyncMock(return_value=[[]])
     )
     monkeypatch.setattr(node_operations, '_semantic_candidate_search', AsyncMock(return_value=[[]]))
-    monkeypatch.setattr(
-        EntityNode, 'get_by_attribute_values', classmethod(get_by_attribute_values)
-    )
+    monkeypatch.setattr(EntityNode, 'get_by_attribute_values', classmethod(get_by_attribute_values))
 
     result = await graphiti.add_episode(
         name='identity episode',

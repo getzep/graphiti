@@ -529,6 +529,7 @@ async def dedupe_nodes_bulk(
             entity_types,
             **trace_kwargs,
         )
+
     first_pass_results = await semaphore_gather(
         *[
             resolve_nodes(

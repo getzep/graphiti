@@ -621,9 +621,7 @@ async def test_bulk_resolution_hydrates_multi_mention_identity_with_all_episodes
 @pytest.mark.asyncio
 async def test_bulk_resolution_keeps_multi_mention_identity_without_hydration(monkeypatch):
     graphiti, clients = _make_graphiti_for_episode_test()
-    episode_one, episode_two, previous_one, previous_two, alex, _ = (
-        _make_bulk_hydration_test_data()
-    )
+    episode_one, episode_two, previous_one, previous_two, alex, _ = _make_bulk_hydration_test_data()
     result, _ = await _run_bulk_hydration_test(
         monkeypatch,
         graphiti,
