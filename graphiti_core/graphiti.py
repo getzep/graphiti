@@ -1151,6 +1151,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         use_combined_extraction: bool = True,
         clients: GraphitiClients | None = None,
+        trace: 'ResolutionTrace | None' = None,
     ) -> tuple[
         dict[str, list[EntityNode]],
         dict[str, str],
@@ -1172,8 +1173,9 @@ class Graphiti:
         )
 
         # Dedupe extracted nodes in memory
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
-            clients, extracted_nodes_bulk, episode_context, entity_types
+            clients, extracted_nodes_bulk, episode_context, entity_types, **trace_kwargs
         )
 
         return nodes_by_episode, uuid_map, extracted_edges_bulk

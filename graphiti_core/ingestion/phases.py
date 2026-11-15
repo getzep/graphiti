@@ -571,6 +571,8 @@ async def analyze_bulk(
                 custom_extraction_instructions=custom_extraction_instructions,
                 use_combined_extraction=use_combined_extraction,
                 clients=clients,
+                # The first pass also resolves extracted nodes to stored nodes.
+                trace=trace,
             )
 
             episodic_edges: list[EpisodicEdge] = []

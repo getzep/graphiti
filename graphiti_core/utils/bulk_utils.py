@@ -59,6 +59,9 @@ from graphiti_core.utils.maintenance.node_operations import (
     resolve_extracted_nodes,
 )
 
+if typing.TYPE_CHECKING:
+    from graphiti_core.ingestion.change_set import ResolutionTrace
+
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 10
@@ -459,6 +462,7 @@ async def dedupe_nodes_bulk(
     extracted_nodes: list[list[EntityNode]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     entity_types: dict[str, type[BaseModel]] | None = None,
+    trace: 'ResolutionTrace | None' = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     """Resolve entity duplicates across an in-memory batch using a two-pass strategy.
 
@@ -467,8 +471,12 @@ async def dedupe_nodes_bulk(
     2. Re-run the deterministic similarity heuristics across the union of resolved nodes to catch
        duplicates that only co-occur inside this batch, emitting a canonical UUID map that callers
        can apply to edges and persistence.
+
+    When `trace` is given, the first pass records the candidates that each extracted node
+    saw and the stored nodes that an extracted node resolved to.
     """
 
+    trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
     first_pass_results = await semaphore_gather(
         *[
             resolve_extracted_nodes(
@@ -477,6 +485,7 @@ async def dedupe_nodes_bulk(
                 episode_tuples[i][0],
                 episode_tuples[i][1],
                 entity_types,
+                **trace_kwargs,
             )
             for i, nodes in enumerate(extracted_nodes)
         ],
