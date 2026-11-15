@@ -191,6 +191,7 @@ class ConcurrentIngestor:
         custom_extraction_instructions: str | None,
         saga: str | SagaNode | None,
         saga_previous_episode_uuid: str | None,
+        identity_properties: dict[str, list[str]] | None = None,
     ) -> 'AddEpisodeResults':
         from graphiti_core.graphiti import AddEpisodeResults
 
@@ -227,6 +228,7 @@ class ConcurrentIngestor:
                             edge_types=edge_types,
                             edge_type_map=edge_type_map,
                             custom_extraction_instructions=custom_extraction_instructions,
+                            identity_properties=identity_properties,
                         )
 
                     commit_result, nodes = await self._run_unit(
@@ -234,7 +236,11 @@ class ConcurrentIngestor:
                         unit,
                         span,
                         analyze,
-                        {'saga': saga, 'saga_previous_episode_uuid': saga_previous_episode_uuid},
+                        {
+                            'saga': saga,
+                            'saga_previous_episode_uuid': saga_previous_episode_uuid,
+                            'identity_properties': identity_properties,
+                        },
                         entity_types,
                     )
                 except Exception as error:
@@ -272,6 +278,7 @@ class ConcurrentIngestor:
         custom_extraction_instructions: str | None,
         saga: str | SagaNode | None,
         use_combined_extraction: bool,
+        identity_properties: dict[str, list[str]] | None = None,
     ) -> 'AddBulkEpisodeResults':
         from graphiti_core.graphiti import AddBulkEpisodeResults
 
@@ -303,12 +310,18 @@ class ConcurrentIngestor:
                             edge_types=edge_types,
                             edge_type_map=edge_type_map,
                             custom_extraction_instructions=custom_extraction_instructions,
+                            identity_properties=identity_properties,
                             strict_edge_types=strict_edge_types,
                             use_combined_extraction=use_combined_extraction,
                         )
 
                     commit_result, nodes = await self._run_unit(
-                        state, unit, span, analyze, {'saga': saga}, entity_types
+                        state,
+                        unit,
+                        span,
+                        analyze,
+                        {'saga': saga, 'identity_properties': identity_properties},
+                        entity_types,
                     )
                 except Exception as error:
                     span.set_status('error', str(error))

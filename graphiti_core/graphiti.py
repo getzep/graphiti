@@ -1705,6 +1705,7 @@ class Graphiti:
                 custom_extraction_instructions=custom_extraction_instructions,
                 saga=saga,
                 saga_previous_episode_uuid=saga_previous_episode_uuid,
+                identity_properties=identity_properties,
             )
 
         with self.tracer.start_span('add_episode') as span:
@@ -1963,6 +1964,8 @@ class Graphiti:
         if getattr(self, 'concurrent_ingestion', None) is not None:
             concurrent_group_id = self._resolve_request_scope(group_id)[0]
             if self._concurrent_ingestion_enabled(concurrent_group_id):
+                validate_entity_types(entity_types)
+                validate_identity_properties(identity_properties, entity_types)
                 return await self._get_concurrent_ingestor().add_episode_bulk(
                     bulk_episodes=bulk_episodes,
                     group_id=concurrent_group_id,
@@ -1974,6 +1977,7 @@ class Graphiti:
                     custom_extraction_instructions=custom_extraction_instructions,
                     saga=saga,
                     use_combined_extraction=use_combined_extraction,
+                    identity_properties=identity_properties,
                 )
 
         with self.tracer.start_span('add_episode_bulk') as bulk_span:

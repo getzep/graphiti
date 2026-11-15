@@ -82,7 +82,9 @@ from graphiti_core.utils.maintenance.edge_operations import (
     find_exact_duplicate_edge,
 )
 from graphiti_core.utils.maintenance.node_operations import (
+    _identity_type_for_node,
     extract_attributes_from_nodes,
+    extract_attributes_only_from_nodes,
     extract_nodes,
     resolve_extracted_nodes,
     resolve_nodes_with_candidates,
@@ -605,7 +607,7 @@ async def analyze_episode(
     """Run extraction and resolution for one episode and store the change set.
 
     The function writes nothing to the graph. It records the snapshot before its first
-    graph read. It does not extract node attributes or summaries.
+    graph read. It extracts identity attributes when identity properties are configured.
     """
     group_id, _driver, clients = graphiti._resolve_request_scope(unit.group_id)
     episode = unit.episodes[0]
@@ -625,6 +627,24 @@ async def analyze_episode(
                 excluded_entity_types,
                 custom_extraction_instructions,
             )
+            identity_nodes = (
+                [
+                    node
+                    for node in extracted_nodes
+                    if _identity_type_for_node(node, identity_properties) is not None
+                ]
+                if identity_properties
+                else []
+            )
+            if identity_nodes:
+                await extract_attributes_only_from_nodes(
+                    clients,
+                    identity_nodes,
+                    episode,
+                    previous_episodes,
+                    entity_types,
+                    validate_shape=False,
+                )
             nodes, uuid_map, _ = await resolve_extracted_nodes(
                 clients,
                 extracted_nodes,
@@ -649,6 +669,7 @@ async def analyze_episode(
                 uuid_map,
                 custom_extraction_instructions=custom_extraction_instructions,
                 entity_types=entity_types,
+                identity_properties=identity_properties,
                 clients=clients,
                 trace=trace,
             )
@@ -710,7 +731,7 @@ async def analyze_bulk(
     """Run the batch pipeline for one bulk unit and store the change set.
 
     The items of the unit are compared with each other here, as today. The function
-    writes nothing to the graph and extracts no node attributes or summaries.
+    writes nothing to the graph and extracts configured identity attributes.
     """
     group_id, _driver, clients = graphiti._resolve_request_scope(unit.group_id)
     episode_context = list(zip(unit.episodes, unit.previous_episodes, strict=True))
@@ -738,6 +759,7 @@ async def analyze_bulk(
                 clients=clients,
                 # The first pass also resolves extracted nodes to stored nodes.
                 trace=trace,
+                identity_properties=identity_properties,
             )
 
             episodic_edges: list[EpisodicEdge] = []
