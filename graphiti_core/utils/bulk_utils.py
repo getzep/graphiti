@@ -35,10 +35,12 @@ from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
 from graphiti_core.helpers import normalize_l2, semaphore_gather
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
+    get_entity_edge_update_bulk_query,
     get_episodic_edge_save_bulk_query,
 )
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_save_bulk_query,
+    get_entity_node_update_bulk_query,
     get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
@@ -193,6 +195,117 @@ async def execute_write_with_timeout(
         await session.close()
 
 
+async def _entity_node_record(
+    node: EntityNode, embedder: EmbedderClient, driver: GraphDriver
+) -> dict[str, Any]:
+    """Return the query parameters of one entity node for a bulk save or a bulk update."""
+    if node.name_embedding is None:
+        await node.generate_name_embedding(embedder)
+
+    entity_data: dict[str, Any] = {
+        'uuid': node.uuid,
+        'name': node.name,
+        'group_id': node.group_id,
+        'summary': node.summary,
+        'created_at': node.created_at,
+        'name_embedding': node.name_embedding,
+        'labels': list(set(node.labels + ['Entity'])),
+    }
+
+    if driver.provider == GraphProvider.KUZU:
+        attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
+        entity_data['attributes'] = json.dumps(attributes)
+    else:
+        for k, v in (node.attributes or {}).items():
+            if k not in entity_data:
+                entity_data[k] = v
+
+    return entity_data
+
+
+async def _entity_edge_record(
+    edge: EntityEdge, embedder: EmbedderClient, driver: GraphDriver
+) -> dict[str, Any]:
+    """Return the query parameters of one entity edge for a bulk save or a bulk update."""
+    if edge.fact_embedding is None:
+        await edge.generate_embedding(embedder)
+    edge_data: dict[str, Any] = {
+        'uuid': edge.uuid,
+        'source_node_uuid': edge.source_node_uuid,
+        'target_node_uuid': edge.target_node_uuid,
+        'name': edge.name,
+        'fact': edge.fact,
+        'group_id': edge.group_id,
+        'episodes': edge.episodes,
+        'created_at': edge.created_at,
+        'expired_at': edge.expired_at,
+        'valid_at': edge.valid_at,
+        'invalid_at': edge.invalid_at,
+        'reference_time': edge.reference_time,
+        'fact_embedding': edge.fact_embedding,
+    }
+
+    if driver.provider == GraphProvider.KUZU:
+        attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
+        edge_data['attributes'] = json.dumps(attributes)
+    else:
+        # Merge attributes without overwriting explicit edge fields.
+        # Attributes may contain stale string versions of typed fields
+        # (e.g. reference_time as ISO string) that would replace the
+        # datetime values set above.
+        for k, v in (edge.attributes or {}).items():
+            if k not in edge_data:
+                edge_data[k] = v
+
+    return edge_data
+
+
+def _require_cypher_updates(driver: GraphDriver) -> None:
+    if driver.graph_operations_interface:
+        raise NotImplementedError(
+            'the update of a stored record has no implementation for a driver with '
+            'graph_operations_interface'
+        )
+
+
+async def update_entity_edges_tx(
+    tx: GraphDriverSession,
+    entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
+):
+    """Update entity edges that exist. An edge that does not exist is not created."""
+    _require_cypher_updates(driver)
+    if not entity_edges:
+        return
+    edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
+    query = get_entity_edge_update_bulk_query(driver.provider)
+    if driver.provider == GraphProvider.KUZU:
+        for edge in edges:
+            await tx.run(query, **edge)
+    else:
+        await tx.run(query, entity_edges=edges)
+
+
+async def update_entity_nodes_tx(
+    tx: GraphDriverSession,
+    entity_nodes: list[EntityNode],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
+):
+    """Update entity nodes that exist. A node that does not exist is not created."""
+    _require_cypher_updates(driver)
+    if not entity_nodes:
+        return
+    nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
+    query = get_entity_node_update_bulk_query(driver.provider, nodes)
+    if driver.provider == GraphProvider.KUZU:
+        for node in nodes:
+            await tx.run(query, **node)
+    else:
+        await tx.run(query, nodes=nodes)
+
+
 async def add_nodes_and_edges_bulk_tx(
     tx: GraphDriverSession,
     episodic_nodes: list[EpisodicNode],
@@ -207,65 +320,8 @@ async def add_nodes_and_edges_bulk_tx(
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
 
-    nodes = []
-
-    for node in entity_nodes:
-        if node.name_embedding is None:
-            await node.generate_name_embedding(embedder)
-
-        entity_data: dict[str, Any] = {
-            'uuid': node.uuid,
-            'name': node.name,
-            'group_id': node.group_id,
-            'summary': node.summary,
-            'created_at': node.created_at,
-            'name_embedding': node.name_embedding,
-            'labels': list(set(node.labels + ['Entity'])),
-        }
-
-        if driver.provider == GraphProvider.KUZU:
-            attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
-            entity_data['attributes'] = json.dumps(attributes)
-        else:
-            for k, v in (node.attributes or {}).items():
-                if k not in entity_data:
-                    entity_data[k] = v
-
-        nodes.append(entity_data)
-
-    edges = []
-    for edge in entity_edges:
-        if edge.fact_embedding is None:
-            await edge.generate_embedding(embedder)
-        edge_data: dict[str, Any] = {
-            'uuid': edge.uuid,
-            'source_node_uuid': edge.source_node_uuid,
-            'target_node_uuid': edge.target_node_uuid,
-            'name': edge.name,
-            'fact': edge.fact,
-            'group_id': edge.group_id,
-            'episodes': edge.episodes,
-            'created_at': edge.created_at,
-            'expired_at': edge.expired_at,
-            'valid_at': edge.valid_at,
-            'invalid_at': edge.invalid_at,
-            'reference_time': edge.reference_time,
-            'fact_embedding': edge.fact_embedding,
-        }
-
-        if driver.provider == GraphProvider.KUZU:
-            attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
-            edge_data['attributes'] = json.dumps(attributes)
-        else:
-            # Merge attributes without overwriting explicit edge fields.
-            # Attributes may contain stale string versions of typed fields
-            # (e.g. reference_time as ISO string) that would replace the
-            # datetime values set above.
-            for k, v in (edge.attributes or {}).items():
-                if k not in edge_data:
-                    edge_data[k] = v
-
-        edges.append(edge_data)
+    nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
+    edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
 
     if driver.graph_operations_interface:
         await driver.graph_operations_interface.episodic_node_save_bulk(None, driver, tx, episodes)
