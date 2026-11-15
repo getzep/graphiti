@@ -26,7 +26,12 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge, HasEpisodeEdge, NextEpisodeEdge
-from graphiti_core.errors import StaleCommitError, UnitExpiredError, UnitInProgressError
+from graphiti_core.errors import (
+    NodeNotFoundError,
+    StaleCommitError,
+    UnitExpiredError,
+    UnitInProgressError,
+)
 from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.ingestion.change_set import (
@@ -1241,11 +1246,16 @@ async def _write_saga_links(
     if not links or change_set.saga_node is None:
         return
     driver = clients.driver
-    saga_node = change_set.saga_node.model_copy()
-    if change_set.create_saga:
-        # The saga is new. Its node is the first saga write, and a second apply writes
-        # the same node.
-        await asyncio.wait_for(saga_node.save(driver), await write_budget())
+    try:
+        # The saga is in the graph. The apply changes only the episode fields of the
+        # stored node, so the summary and its dates stay.
+        saga_node = await SagaNode.get_by_uuid(driver, change_set.saga_node.uuid)
+    except NodeNotFoundError:
+        saga_node = change_set.saga_node.model_copy()
+        if change_set.create_saga:
+            # The saga is new. Its node is the first saga write. A second apply reads
+            # the node that the first apply wrote.
+            await asyncio.wait_for(saga_node.save(driver), await write_budget())
     for link in links:
         if link.previous_episode_uuid is not None and link.next_episode_edge_uuid is not None:
             next_episode_edge = NextEpisodeEdge(

@@ -765,6 +765,59 @@ async def test_c7a_saga_object_that_is_not_in_the_graph_is_saved_as_in_serial_in
     assert result.report['apply.attempts'] == 1
 
 
+@pytest.mark.parametrize('saga_input', ['name', 'object'])
+async def test_c7a_append_keeps_the_stored_fields_of_the_saga_node(monkeypatch, saga_input):
+    h = Harness(monkeypatch)
+    stored = SagaNode(
+        uuid='saga1',
+        name='thread',
+        group_id=GROUP,
+        created_at=T0,
+        summary='The summary of the thread.',
+        first_episode_uuid='ep0',
+        last_episode_uuid='ep0',
+        last_summarized_at=T1,
+        last_summarized_episode_valid_at=T0,
+    )
+    saved_nodes: list[SagaNode] = []
+
+    async def save_edge(self, driver):
+        return None
+
+    async def save_saga(self, driver):
+        saved_nodes.append(self.model_copy())
+
+    monkeypatch.setattr(NextEpisodeEdge, 'save', save_edge)
+    monkeypatch.setattr(HasEpisodeEdge, 'save', save_edge)
+    monkeypatch.setattr(SagaNode, 'save', save_saga)
+    monkeypatch.setattr(
+        SagaNode, 'get_by_uuid', AsyncMock(side_effect=lambda driver, uuid: stored.model_copy())
+    )
+    # The lookup by name returns no summary field, as the query of `_find_saga` does.
+    h.graphiti._find_saga = AsyncMock(
+        return_value=SagaNode(
+            uuid='saga1',
+            name='thread',
+            group_id=GROUP,
+            created_at=T0,
+            first_episode_uuid='ep0',
+            last_episode_uuid='ep0',
+        )
+    )
+    h.graphiti._saga_get_previous_episode_uuid = AsyncMock(return_value='ep0')
+    # A caller can give a saga object that does not have the stored fields.
+    saga = 'thread' if saga_input == 'name' else SagaNode(uuid='saga1', name='x', group_id=GROUP)
+
+    unit = await h.admit('u1')
+    change_set = await h.analyze(unit)
+    await h.commit(unit, change_set, saga=saga)
+
+    (written,) = saved_nodes
+    expected = stored.model_dump()
+    expected['last_episode_uuid'] = 'ep-u1'
+    assert written.model_dump() == expected
+
+
 async def test_c7b_hook_output_is_the_stored_final_change_set(monkeypatch):
     seen_by_hook: list[int] = []
 

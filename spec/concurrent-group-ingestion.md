@@ -479,11 +479,26 @@ UUIDs of the `NEXT_EPISODE` and `HAS_EPISODE` edges and stores them in
 `saga_links`. This step writes nothing. If no saga has the name, the commit
 makes the saga node in memory and sets `create_saga` in the change set. The
 change set keeps the saga node in `saga_node`. The apply of step C9 writes
-the saga records after the entity records: the new saga node if `create_saga`
-is set, then the edges, then the saga node with its first and last episode.
-A `SagaNode` object of the caller is saved after the edges, as in serial
-ingestion, and it does not need to be in the graph. A unit that the hook of
-step C7b rejects thus leaves no saga node.
+the saga records after the entity records. The apply first reads the saga
+node from the graph by its UUID.
+
+- If the saga node is in the graph, the apply writes the edges and then saves
+  the node that it read. It changes only `last_episode_uuid`, and
+  `first_episode_uuid` when that field is empty. The summary of the saga and
+  the dates of the summary thus stay. The fields of a `SagaNode` object of
+  the caller do not replace the stored fields.
+- If the saga node is not in the graph and `create_saga` is set, the apply
+  writes the new saga node, then the edges, then the saga node with its first
+  and last episode. A second apply reads the node that the first apply wrote.
+- If the saga node is not in the graph and the caller gave a `SagaNode`
+  object, the apply writes the edges and then saves that object, as serial
+  ingestion does.
+
+A unit that the hook of step C7b rejects thus leaves no saga node.
+
+The save of the saga node replaces each property with the value that the
+apply read. A writer outside the sequence that changes the saga node between
+the read and the save of one apply loses its change.
 
 **C7b. Host hook.** If `before_commit_write` is set, the commit calls it with
 the change set. The hook returns the change set to write. The hook can raise
