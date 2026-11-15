@@ -500,21 +500,21 @@ class Graphiti:
             finally:
                 graphiti.close()
         """
-        if self.concurrent_ingestion is not None:
-            state_store = self.concurrent_ingestion.state_store
-            if state_store is not None:
-                await state_store.close()
+        concurrent_ingestion = getattr(self, 'concurrent_ingestion', None)
+        if concurrent_ingestion is not None and concurrent_ingestion.state_store is not None:
+            await concurrent_ingestion.state_store.close()
         await self.driver.close()
 
     def _concurrent_ingestion_enabled(self, group_id: str) -> bool:
         """Return True when a call for the graph must use concurrent ingestion."""
-        config = self.concurrent_ingestion
+        # An object that a test made with no call of `__init__` has no configuration.
+        config = getattr(self, 'concurrent_ingestion', None)
         if config is None:
             return False
         return config.enabled_for_group is None or config.enabled_for_group(group_id)
 
     def _get_concurrent_ingestor(self) -> 'ConcurrentIngestor':
-        if self._concurrent_ingestor is None:
+        if getattr(self, '_concurrent_ingestor', None) is None:
             from graphiti_core.ingestion.scheduler import ConcurrentIngestor
 
             assert self.concurrent_ingestion is not None
@@ -1745,7 +1745,7 @@ class Graphiti:
         ``resolve_extracted_edges`` just like in ``add_episode``, and any invalidated
         edges are persisted alongside the newly resolved ones.
         """
-        if self.concurrent_ingestion is not None:
+        if getattr(self, 'concurrent_ingestion', None) is not None:
             concurrent_group_id = self._resolve_request_scope(group_id)[0]
             if self._concurrent_ingestion_enabled(concurrent_group_id):
                 return await self._get_concurrent_ingestor().add_episode_bulk(
