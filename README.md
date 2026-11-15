@@ -779,6 +779,48 @@ use it for extraction, summaries, or other generation tasks.
 See the [OpenAI Decisions FalkorDB example](examples/openai_decisions/) for a
 runnable example.
 
+## Concurrent Ingestion for One Graph
+
+By default, Graphiti ingests the episodes of one graph (`group_id`) one at a time, because each episode must see
+the entities and the facts of the episodes before it. Concurrent ingestion is an opt-in mode that runs the
+extraction and the resolution of up to `window` episodes of one graph at the same time. Each episode then commits
+in the order of its `add_episode` call. At the commit, Graphiti compares the result of the episode with the commits
+that the analysis did not see, and repairs only the items that collide.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.ingestion import ConcurrentIngestionConfig
+
+graphiti = Graphiti(
+    graph_driver=driver,
+    concurrent_ingestion=ConcurrentIngestionConfig(window=4),
+)
+
+# Start the calls in the order of the episodes. Each call returns after its commit and its enrichment.
+results = await asyncio.gather(*[graphiti.add_episode(**episode) for episode in episodes])
+```
+
+Notes:
+
+- The mode is off when `concurrent_ingestion` is `None`. Serial ingestion is then the same as before.
+- `enabled_for_group` selects the graphs that use the mode. The other graphs use serial ingestion.
+- `window` is the number of episodes of one graph that are in progress at one time. Each episode also uses up to
+  `SEMAPHORE_LIMIT` concurrent LLM calls, so the mode can send `window x SEMAPHORE_LIMIT` calls at one time.
+  Decrease one of the two values if your LLM provider returns `429` rate limit errors.
+- The default state store is in memory and is for one process. `SQLiteIngestionStateStore` keeps the state in a
+  file, so that more than one process on one machine can ingest into the same graph. A host application can supply
+  its own store with the `IngestionStateStore` interface.
+- `update_communities=True` is not available in this mode. Call `build_communities` after the ingestion.
+- The graph of a window larger than 1 can be different from the graph of serial ingestion, because the LLM sees the
+  episodes in a different context. The mode does not guarantee an equal graph.
+- The tests of this mode run on an in-memory graph and on embedded FalkorDB. The mode is not tested on Neo4j, Kuzu,
+  or Amazon Neptune.
+
+See the [specification](spec/concurrent-group-ingestion.md) for the design, the phase functions for a host
+application with its own orchestration, the telemetry, and the limits. See the
+[example](examples/concurrent_ingestion/) for a script that ingests a JSONL file with serial or concurrent
+ingestion.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
