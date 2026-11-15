@@ -71,19 +71,16 @@ stores, and it ships no other store:
 | Only Neo4j has a real `transaction()` | `neo4j_driver.py` 148-158 overrides it. The base class returns a wrapper that runs each query immediately (`driver.py` 146-166, 213-220). No ingestion code calls `transaction()`. | Verified |
 | `sqlite3` is already in use | `llm_client/cache.py` 21 and 37. | Verified |
 
-### 2.3. Check of the first hypothesis
+### 2.3. What the state must hold
 
-The first description of the state store was a hypothesis. This table gives
-each part of it and the result of the check.
-
-| Part of the hypothesis | Result |
+| Subject | Design |
 |---|---|
-| The state is a sequence number, the change sets, a log of each commit, and a commit owner. | Incomplete. The commit log and the change sets are one record in two states. Two more pieces are necessary: a lease for admission, and the enrichment order for each node (section 8.1). |
-| Memory can hold the state in one process. | Correct. |
-| A durable store is necessary only for more than one process or for crash safety. | Correct. |
-| The graph database cannot hold the state, because only Neo4j has a real `transaction()`. | The conclusion is kept. The reason is different. Each store method needs one atomic statement, and a multi-statement transaction is not necessary. The reasons are: `GraphDriver` has no compare-and-set operation, each of the four query dialects needs its own implementation, the isolation rules of FalkorDB and Neptune are not verified, and the payloads contain embeddings. |
-| The commit owner is a lease for each graph. | Changed. The unit at the head of the sequence is the only unit that can commit. A fence number on that unit rejects a stale attempt (section 8.3). |
-| The request names `contradiction_invalid_at`. | This commit has no function with that name. The date rules are in `_apply_temporal_invalidation` and `resolve_edge_contradictions` (`edge_operations.py` 715-783). |
+| The parts of the state | A sequence number, the change sets, and the commit order are not sufficient. The commit log and the change sets are one record in two states. Two more parts are necessary: a lease for admission, and the enrichment order for each node (section 8.1). |
+| One process | Memory can hold the state. |
+| A durable store | It is necessary only for more than one process or for crash safety. |
+| The graph database as the store | The graph database does not hold the state. Each store method needs one atomic statement, and a multi-statement transaction is not necessary. The reasons are: `GraphDriver` has no compare-and-set operation, each query dialect needs its own implementation, the isolation rules of FalkorDB and Neptune are not verified, and the payloads contain embeddings. |
+| The commit owner | No lease for each graph is necessary. The unit at the head of the sequence is the only unit that can commit. A fence number on that unit rejects a stale attempt (section 8.3). |
+| The end date of a contradicted fact | The date rules of serial ingestion apply. They are in `_apply_temporal_invalidation` and `resolve_edge_contradictions` (`edge_operations.py`). A fact that starts later ends a fact that starts earlier: the `invalid_at` of the earlier fact becomes the `valid_at` of the later fact. Step C7 applies the rules in the two directions. |
 
 ## 3. Terms
 
