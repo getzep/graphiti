@@ -150,6 +150,18 @@ async def test_edge_resolution_trace_records_candidates_and_operations(monkeypat
     ]
 
 
+def test_serial_date_rule_ends_a_fact_at_the_earliest_later_contradiction():
+    """The date rule of serial ingestion, for a fact with two contradictions that start later."""
+    fact = make_edge('new', 'a', 'b', 'Ana works at Acme', valid_at=T0)
+    late = make_edge('late', 'a', 'c', 'Ana works at Bolt', valid_at=T1 + timedelta(days=10))
+    early = make_edge('early', 'a', 'd', 'Ana works at Core', valid_at=T1)
+
+    edge_ops._apply_temporal_invalidation(fact, [late, early])
+
+    assert fact.invalid_at == T1
+    assert fact.expired_at is not None
+
+
 def test_find_exact_duplicate_edge_rules():
     seen: dict = {}
     first = make_edge('e1', 'a', 'b', 'Ana works at Acme')

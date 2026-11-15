@@ -67,7 +67,7 @@ from graphiti_core.utils.bulk_utils import (
     update_entity_edges_tx,
     update_entity_nodes_tx,
 )
-from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.dedup_helpers import _promote_resolved_node
 from graphiti_core.utils.maintenance.edge_operations import (
     _apply_temporal_invalidation,
@@ -663,6 +663,7 @@ async def analyze_episode(
                 node_first_episode={node.uuid: episode.uuid for node in nodes},
                 seen_node_candidates=trace.seen_node_candidates,
                 seen_node_labels=trace.seen_node_labels,
+                edges_ended_by_candidate=sorted(trace.ended_by_candidate),
                 seen_duplicate_candidates=trace.seen_duplicate_candidates,
                 seen_invalidation_candidates=trace.seen_invalidation_candidates,
             )
@@ -809,6 +810,7 @@ async def analyze_bulk(
                 node_first_episode=node_first_episode,
                 seen_node_candidates=trace.seen_node_candidates,
                 seen_node_labels=trace.seen_node_labels,
+                edges_ended_by_candidate=sorted(trace.ended_by_candidate),
                 seen_duplicate_candidates=trace.seen_duplicate_candidates,
                 seen_invalidation_candidates=trace.seen_invalidation_candidates,
             )
@@ -1001,6 +1003,20 @@ def _remap_edges(final: ChangeSet, report: dict[str, float]) -> None:
     report['repair.c4a.edge_removed'] = len(replaced)
 
 
+def _move_end_date_to_earliest_contradiction(
+    edge: EntityEdge, contradicted: list[EntityEdge]
+) -> None:
+    valid_at = ensure_utc(edge.valid_at)
+    invalid_at = ensure_utc(edge.invalid_at)
+    if valid_at is None or invalid_at is None:
+        return
+    for candidate in contradicted:
+        candidate_valid_at = ensure_utc(candidate.valid_at)
+        if candidate_valid_at is not None and valid_at < candidate_valid_at < invalid_at:
+            edge.invalid_at = candidate.valid_at
+            invalid_at = candidate_valid_at
+
+
 async def _repair_edges(
     clients: GraphitiClients,
     reader: GraphReader,
@@ -1097,6 +1113,7 @@ async def _repair_edges(
         ]
     )
     replaced: dict[str, str] = {}
+    ended_by_candidate = set(final.edges_ended_by_candidate)
     ended_uuids: list[str] = []
     ended_count = 0
     for (edge, _, _), decision in zip(collided, decisions, strict=True):
@@ -1113,6 +1130,11 @@ async def _repair_edges(
         # The date rules apply in the two directions: a candidate that starts later
         # ends the edge, and the edge ends a candidate that starts earlier.
         was_open = resolved_edge.expired_at is None
+        if resolved_edge is edge and edge.uuid in ended_by_candidate:
+            # The analysis ended the edge at the start of a contradiction that it saw.
+            # Serial ingestion ends an edge at the earliest contradiction that starts
+            # later, so an earlier one of this commit moves the end date.
+            _move_end_date_to_earliest_contradiction(edge, decision.contradicted)
         invalidated = _apply_temporal_invalidation(resolved_edge, list(decision.contradicted))
         trace.mark_ended_as_candidate(invalidated)
         ended_uuids.extend(candidate.uuid for candidate in invalidated)

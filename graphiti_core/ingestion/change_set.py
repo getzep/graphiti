@@ -109,6 +109,9 @@ class ChangeSet(BaseModel):
     seen_node_labels: dict[str, list[str]] = Field(default_factory=dict)
     seen_duplicate_candidates: dict[str, list[str]] = Field(default_factory=dict)
     seen_invalidation_candidates: dict[str, list[str]] = Field(default_factory=dict)
+    # The created edges whose end date is the start of a contradiction that the
+    # analysis saw. An end date that the episode gave is not in this list.
+    edges_ended_by_candidate: list[str] = Field(default_factory=list)
     uuid_map: dict[str, str] = Field(default_factory=dict)
     saga_links: list[SagaLink] = Field(default_factory=list)
     # The saga node of `saga_links`, as the commit read it or made it. With
@@ -163,6 +166,8 @@ class ResolutionTrace:
     seen_invalidation_candidates: dict[str, list[str]] = field(default_factory=dict)
     operations: list[Any] = field(default_factory=list)
     stored_node_uuids: set[str] = field(default_factory=set)
+    # The edges whose end date is the start of a contradicted candidate.
+    ended_by_candidate: set[str] = field(default_factory=set)
     # The number of model calls that node resolution made for the trace.
     node_llm_calls: int = 0
     _edge_states: dict[int, _EdgeState] = field(default_factory=dict)

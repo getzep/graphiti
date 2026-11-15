@@ -563,6 +563,42 @@ async def test_c7_a_candidate_that_starts_later_ends_the_new_fact(monkeypatch):
     assert result_2.report['edge.ended'] == 1
 
 
+@pytest.mark.parametrize(
+    ('ended_by_candidate', 'expected_invalid_at'),
+    [(True, T1), (False, T2)],
+    ids=['end-date-from-a-candidate', 'end-date-from-the-episode'],
+)
+async def test_c7_an_earlier_contradiction_of_the_delta_moves_the_end_date_of_the_new_fact(
+    monkeypatch, ended_by_candidate, expected_invalid_at
+):
+    """The analysis ended the new fact at T2, the start of a stored fact that it saw.
+
+    A fact of an earlier unit of the window contradicts the new fact and starts at T1.
+    Serial ingestion ends the new fact at the earliest contradiction that starts later.
+    An end date that the episode gave stays.
+    """
+    h = Harness(monkeypatch)
+    stored_people(h)
+    use_llm(h, {'duplicate_facts': [], 'contradicted_facts': [0]})
+    new_fact = make_edge(
+        'e2', 'ana', 'bolt', 'Ana works at Bolt', NEAR_X, valid_at=T0, invalid_at=T2, expired_at=T2
+    )
+    _, (_, result_2) = await commit_two(
+        h,
+        {'create_edges': [make_edge('e1', 'ana', 'acme', 'Ana works at Acme', valid_at=T1)]},
+        {
+            'create_edges': [new_fact],
+            'edges_ended_by_candidate': ['e2'] if ended_by_candidate else [],
+        },
+    )
+
+    assert result_2.report['edge.collided'] == 1
+    assert h.graph.edges['e2'].invalid_at == expected_invalid_at
+    assert h.graph.edges['e2'].expired_at == T2
+    # The fact of the earlier unit starts later. It stays open.
+    assert h.graph.edges['e1'].invalid_at is None
+
+
 async def test_c6_finds_a_delta_edge_that_the_search_does_not_return(monkeypatch):
     h = Harness(monkeypatch)
     stored_people(h)

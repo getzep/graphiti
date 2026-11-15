@@ -450,6 +450,13 @@ it one candidate or more. For each collided edge, call
    candidate that starts earlier. A change to an edge that the unit creates
    changes that edge in `create_edges`. A change to a candidate becomes an
    `EndEdge` operation, because the candidate is a stored record.
+   When the analysis already ended the edge of the unit at the start of a
+   contradiction that it saw, a contradicted candidate of the commit that
+   starts later than the edge and earlier than that end date moves the end
+   date to its start. Serial ingestion gives the same date, because it ends
+   an edge at the earliest contradiction that starts later. The change set
+   names these edges in `edges_ended_by_candidate`. An end date that the
+   episode gave does not move.
 
 The decisions for different edges run at the same time with
 `semaphore_gather`. An edge with no collision makes no model call.

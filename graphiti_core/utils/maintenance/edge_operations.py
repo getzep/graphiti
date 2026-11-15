@@ -640,10 +640,13 @@ async def resolve_extracted_edges(
     for resolved_edge, _duplicates, candidates in dedupe_results:
         if candidates is None:
             continue
+        had_end_date = resolved_edge.invalid_at is not None
         invalidated = _apply_temporal_invalidation(resolved_edge, candidates)
         invalidated_edges.extend(invalidated)
         if trace is not None:
             trace.mark_ended_as_candidate(invalidated)
+            if not had_end_date and resolved_edge.invalid_at is not None:
+                trace.ended_by_candidate.add(resolved_edge.uuid)
         if invalidated_by is not None:
             for edge in invalidated:
                 invalidated_by.setdefault(edge.uuid, []).append(resolved_edge.uuid)
