@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import json
 import logging
 import typing
@@ -132,7 +133,27 @@ async def add_nodes_and_edges_bulk(
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
+    write_timeout: float | None = None,
 ):
+    """Write the records in one session.
+
+    `write_timeout` is a time limit in seconds for the write. With the default `None`,
+    the write has no time limit.
+    """
+    if write_timeout is not None:
+        await execute_write_with_timeout(
+            driver,
+            write_timeout,
+            add_nodes_and_edges_bulk_tx,
+            episodic_nodes,
+            episodic_edges,
+            entity_nodes,
+            entity_edges,
+            embedder,
+            driver=driver,
+        )
+        return
+
     session = driver.session()
     try:
         await session.execute_write(
@@ -144,6 +165,30 @@ async def add_nodes_and_edges_bulk(
             embedder,
             driver=driver,
         )
+    finally:
+        await session.close()
+
+
+async def execute_write_with_timeout(
+    graph_driver: GraphDriver, timeout: float, func: Any, /, *args: Any, **kwargs: Any
+) -> Any:
+    """Run a write function in a new session with a time limit in seconds.
+
+    On Neo4j, the limit is the transaction timeout, which the server applies. On
+    FalkorDB, each query gets the limit as its query timeout. The server applies it to
+    a write only when its `TIMEOUT_MAX` setting is not zero. On each provider other
+    than Neo4j, the call is also cancelled at the limit. The database can then complete
+    a write that it already started.
+    """
+    session = graph_driver.session()
+    try:
+        if graph_driver.provider == GraphProvider.NEO4J:
+            from neo4j import unit_of_work
+
+            return await session.execute_write(unit_of_work(timeout=timeout)(func), *args, **kwargs)
+        if hasattr(session, 'query_timeout_ms'):
+            session.query_timeout_ms = max(1, int(timeout * 1000))  # type: ignore[attr-defined]
+        return await asyncio.wait_for(session.execute_write(func, *args, **kwargs), timeout)
     finally:
         await session.close()
 
