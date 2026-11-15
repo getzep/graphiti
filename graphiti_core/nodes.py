@@ -599,7 +599,7 @@ class EntityNode(Node):
         labels: list[str] | None = None,
         limit: int = NODE_DEDUP_CANDIDATE_LIMIT,
     ) -> list['EntityNode']:
-        """Retrieve nodes by attributes. Kuzu and Neptune do not support this lookup."""
+        """Retrieve nodes by attributes. Neptune does not support this lookup."""
         if not attributes:
             return []
 

@@ -160,7 +160,7 @@ async def test_get_by_attribute_values_rejects_unsafe_label():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('provider', ['kuzu', 'neptune'])
+@pytest.mark.parametrize('provider', ['neptune'])
 async def test_identity_candidate_collection_ignores_unsupported_provider(provider):
     driver = MagicMock()
     driver.provider = SimpleNamespace(value=provider)
