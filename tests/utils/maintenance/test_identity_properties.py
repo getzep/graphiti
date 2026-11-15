@@ -616,6 +616,54 @@ async def test_bulk_resolution_hydrates_multi_mention_identity_with_all_episodes
 
 
 @pytest.mark.asyncio
+async def test_bulk_resolution_sorts_mixed_timezone_identity_episodes_by_utc(monkeypatch):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    episode_one = _make_bulk_hydration_episode(
+        'episode one',
+        'Alex started a new role.',
+        datetime(2024, 1, 2),
+    )
+    episode_two = _make_bulk_hydration_episode(
+        'episode two',
+        'Alex moved to a new team.',
+        datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    previous_one = [
+        _make_bulk_hydration_episode('previous one', 'Earlier context.', datetime(2023, 1, 1))
+    ]
+    previous_two = [
+        _make_bulk_hydration_episode(
+            'previous two',
+            'Alex joined the company.',
+            datetime(2023, 12, 31, tzinfo=timezone.utc),
+        )
+    ]
+    alex = EntityNode(
+        name='Alex',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        attributes={'email': 'alex@example.com'},
+    )
+
+    _, extract_attributes = await _run_bulk_hydration_test(
+        monkeypatch,
+        graphiti,
+        clients,
+        [(episode_one, previous_one), (episode_two, previous_two)],
+        {
+            episode_one.uuid: [alex],
+            episode_two.uuid: [alex],
+        },
+        {'Person': ['email']},
+    )
+
+    alex_calls = [call for call in extract_attributes.await_args_list if call.args[1] == [alex]]
+    assert len(alex_calls) == 1
+    assert alex_calls[0].args[2] == [episode_two, episode_one]
+    assert alex_calls[0].args[3] == previous_two
+
+
+@pytest.mark.asyncio
 async def test_bulk_resolution_without_identity_properties_keeps_episode_hydration(
     monkeypatch,
 ):

@@ -92,7 +92,7 @@ from graphiti_core.utils.bulk_utils import (
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
-from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.community_operations import (
     build_communities,
     remove_communities,
@@ -1348,17 +1348,16 @@ class Graphiti:
                 mentioning_episodes = sorted(
                     (episodes_by_uuid[episode_uuid] for episode_uuid in episode_uuids),
                     key=lambda episode: (
-                        episode.valid_at,
+                        ensure_utc(episode.valid_at),
                         episode_context_indices[episode.uuid],
                     ),
                 )
-                first_mention_episode_uuid = episode_uuids[0]
                 identity_hydration_calls.append(
                     extract_attributes_from_nodes(
                         clients,
                         nodes,
                         mentioning_episodes,
-                        previous_episodes_by_uuid[first_mention_episode_uuid],
+                        previous_episodes_by_uuid[mentioning_episodes[0].uuid],
                         entity_types,
                     )
                 )
