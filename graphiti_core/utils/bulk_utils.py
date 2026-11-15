@@ -390,6 +390,7 @@ async def dedupe_nodes_bulk(
     extracted_nodes: list[list[EntityNode]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     entity_types: dict[str, type[BaseModel]] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     """Resolve entity duplicates across an in-memory batch using a two-pass strategy.
 
@@ -400,14 +401,34 @@ async def dedupe_nodes_bulk(
        can apply to edges and persistence.
     """
 
+    async def resolve_nodes(
+        nodes: list[EntityNode],
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+    ):
+        if identity_properties:
+            return await resolve_extracted_nodes(
+                clients,
+                nodes,
+                episode,
+                previous_episodes,
+                entity_types,
+                identity_properties=identity_properties,
+            )
+        return await resolve_extracted_nodes(
+            clients,
+            nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+        )
+
     first_pass_results = await semaphore_gather(
         *[
-            resolve_extracted_nodes(
-                clients,
+            resolve_nodes(
                 nodes,
                 episode_tuples[i][0],
                 episode_tuples[i][1],
-                entity_types,
             )
             for i, nodes in enumerate(extracted_nodes)
         ],

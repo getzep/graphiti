@@ -27,6 +27,7 @@ from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import (
+    NODE_DEDUP_CANDIDATE_LIMIT,
     EntityNode,
     EpisodeType,
     EpisodicNode,
@@ -64,7 +65,6 @@ logger = logging.getLogger(__name__)
 
 # Maximum number of nodes to summarize in a single LLM call
 MAX_NODES = 30
-NODE_DEDUP_CANDIDATE_LIMIT = 15
 NODE_DEDUP_COSINE_MIN_SCORE = 0.6
 
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
@@ -494,11 +494,6 @@ async def _collect_identity_property_candidate_nodes(
     if not identity_properties:
         return [[] for _ in extracted_nodes]
 
-    graph_operations = getattr(clients.driver, 'graph_operations_interface', None)
-    lookup = getattr(graph_operations, 'node_get_by_attribute_values', None)
-    if lookup is None:
-        return [[] for _ in extracted_nodes]
-
     async def _lookup_node(node: EntityNode) -> list[EntityNode]:
         identity_type = _identity_type_for_node(node, identity_properties)
         identity_key = _identity_key_for_node(node, identity_properties)
@@ -507,8 +502,7 @@ async def _collect_identity_property_candidate_nodes(
 
         _, identity_values = identity_key
         try:
-            return await lookup(
-                EntityNode,
+            return await EntityNode.get_by_attribute_values(
                 clients.driver,
                 node.group_id,
                 dict(identity_values),

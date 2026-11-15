@@ -642,6 +642,37 @@ When using smaller or local models:
 - Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
   servers and some providers have limited concurrency.
 
+## Identity properties
+
+Use `identity_properties` to match entities by one or more attributes. Each entity type must exist in
+`entity_types`, and each identity property must be a field on that type. Graphiti extracts these fields
+before it resolves nodes. This lookup is supported by Neo4j and FalkorDB.
+
+After you create a `Graphiti` instance, pass the entity model and its identity fields to `add_episode`:
+
+```python
+from datetime import datetime, timezone
+
+from pydantic import BaseModel
+
+from graphiti_core.nodes import EpisodeType
+
+
+class Person(BaseModel):
+    email: str
+
+
+await graphiti.add_episode(
+    name='Conversation',
+    episode_body='Alex uses alex@example.com.',
+    source_description='chat',
+    reference_time=datetime.now(timezone.utc),
+    source=EpisodeType.message,
+    entity_types={'Person': Person},
+    identity_properties={'Person': ['email']},
+)
+```
+
 ## Configurable Prompts
 
 Graphiti lets you override LLM prompt builders per client instance. Override callables must return

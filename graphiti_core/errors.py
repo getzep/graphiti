@@ -75,6 +75,14 @@ class EntityTypeValidationError(GraphitiError):
         super().__init__(self.message)
 
 
+class IdentityPropertyValidationError(GraphitiError):
+    """Raised when identity properties do not match the configured entity types."""
+
+    def __init__(self, entity_type: str, reason: str):
+        self.message = f'Invalid identity properties for {entity_type}: {reason}'
+        super().__init__(self.message)
+
+
 class GroupIdValidationError(GraphitiError):
     """Raised when a group_id contains invalid characters."""
 

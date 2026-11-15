@@ -114,10 +114,14 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
 from graphiti_core.utils.maintenance.node_operations import (
     _extract_entity_summaries_batch,
     extract_attributes_from_nodes,
+    extract_attributes_only_from_nodes,
     extract_nodes,
     resolve_extracted_nodes,
 )
-from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
+from graphiti_core.utils.ontology_utils.entity_types_utils import (
+    validate_entity_types,
+    validate_identity_properties,
+)
 from graphiti_core.utils.text_utils import (
     SAGA_SUMMARY_MAX_CHARS,
     truncate_at_sentence,
@@ -842,6 +846,7 @@ class Graphiti:
         previous_episodes: list[EpisodicNode],
         entity_types: dict[str, type[BaseModel]] | None,
         excluded_entity_types: list[str] | None,
+        identity_properties: dict[str, list[str]] | None = None,
     ) -> tuple[
         list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]], dict[str, list[int]]
     ]:
@@ -853,13 +858,32 @@ class Graphiti:
             self.clients, episode, previous_episodes, entity_types, excluded_entity_types
         )
 
-        nodes, uuid_map, duplicates = await resolve_extracted_nodes(
-            self.clients,
-            extracted_nodes,
-            primary_episode,
-            previous_episodes,
-            entity_types,
-        )
+        if identity_properties:
+            await extract_attributes_only_from_nodes(
+                self.clients,
+                extracted_nodes,
+                episode,
+                previous_episodes,
+                entity_types,
+            )
+
+        if identity_properties:
+            nodes, uuid_map, duplicates = await resolve_extracted_nodes(
+                self.clients,
+                extracted_nodes,
+                primary_episode,
+                previous_episodes,
+                entity_types,
+                identity_properties=identity_properties,
+            )
+        else:
+            nodes, uuid_map, duplicates = await resolve_extracted_nodes(
+                self.clients,
+                extracted_nodes,
+                primary_episode,
+                previous_episodes,
+                entity_types,
+            )
 
         return nodes, uuid_map, duplicates, node_episode_index_map
 
@@ -871,6 +895,7 @@ class Graphiti:
         entity_types: dict[str, type[BaseModel]] | None,
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
+        identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
     ) -> None:
         """Fold endpoints materialized by ``extract_edges`` into the resolved node set.
@@ -898,13 +923,23 @@ class Graphiti:
         if not unresolved:
             return
 
-        resolved_nodes, materialized_uuid_map, _ = await resolve_extracted_nodes(
-            clients,
-            unresolved,
-            episode,
-            previous_episodes,
-            entity_types,
-        )
+        if identity_properties:
+            resolved_nodes, materialized_uuid_map, _ = await resolve_extracted_nodes(
+                clients,
+                unresolved,
+                episode,
+                previous_episodes,
+                entity_types,
+                identity_properties=identity_properties,
+            )
+        else:
+            resolved_nodes, materialized_uuid_map, _ = await resolve_extracted_nodes(
+                clients,
+                unresolved,
+                episode,
+                previous_episodes,
+                entity_types,
+            )
         uuid_map.update(materialized_uuid_map)
 
         for resolved_node in resolved_nodes:
@@ -926,6 +961,7 @@ class Graphiti:
         strict_edge_types: bool = False,
         custom_extraction_instructions: str | None = None,
         entity_types: dict[str, type[BaseModel]] | None = None,
+        identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
     ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode(s) and resolve against existing graph.
@@ -965,6 +1001,7 @@ class Graphiti:
                 entity_types,
                 nodes,
                 uuid_map,
+                identity_properties=identity_properties,
                 clients=clients,
             )
 
@@ -1103,6 +1140,7 @@ class Graphiti:
         strict_edge_types: bool = False,
         custom_extraction_instructions: str | None = None,
         use_combined_extraction: bool = True,
+        identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
     ) -> tuple[
         dict[str, list[EntityNode]],
@@ -1124,9 +1162,28 @@ class Graphiti:
             use_combined_extraction=use_combined_extraction,
         )
 
+        if identity_properties:
+            await semaphore_gather(
+                *[
+                    extract_attributes_only_from_nodes(
+                        clients,
+                        extracted_nodes_bulk[index],
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                    )
+                    for index, (episode, previous_episodes) in enumerate(episode_context)
+                ],
+                max_coroutines=self.max_coroutines,
+            )
+
         # Dedupe extracted nodes in memory
         nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
-            clients, extracted_nodes_bulk, episode_context, entity_types
+            clients,
+            extracted_nodes_bulk,
+            episode_context,
+            entity_types,
+            identity_properties=identity_properties,
         )
 
         return nodes_by_episode, uuid_map, extracted_edges_bulk
@@ -1140,6 +1197,7 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None,
         edge_type_map: dict[tuple[str, str], list[str]],
         episodes: list[EpisodicNode],
+        identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
     ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
         """Resolve nodes and edges against the existing graph."""
@@ -1160,15 +1218,31 @@ class Graphiti:
                     nodes_uuid_set.add(node.uuid)
 
         # Resolve nodes
-        node_results = await semaphore_gather(
-            *[
-                resolve_extracted_nodes(
+        async def resolve_nodes(
+            episode: EpisodicNode,
+            previous_episodes: list[EpisodicNode],
+        ):
+            nodes = nodes_by_episode_unique[episode.uuid]
+            if identity_properties:
+                return await resolve_extracted_nodes(
                     clients,
-                    nodes_by_episode_unique[episode.uuid],
+                    nodes,
                     episode,
                     previous_episodes,
                     entity_types,
+                    identity_properties=identity_properties,
                 )
+            return await resolve_extracted_nodes(
+                clients,
+                nodes,
+                episode,
+                previous_episodes,
+                entity_types,
+            )
+
+        node_results = await semaphore_gather(
+            *[
+                resolve_nodes(episode, previous_episodes)
                 for episode, previous_episodes in episode_context
             ],
             max_coroutines=self.max_coroutines,
@@ -1194,15 +1268,31 @@ class Graphiti:
             nodes_by_episode_unique[episode_uuid] = updated_nodes
 
         # Extract attributes for resolved nodes
-        hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
-            *[
-                extract_attributes_from_nodes(
+        async def hydrate_nodes(
+            episode: EpisodicNode,
+            previous_episodes: list[EpisodicNode],
+        ) -> list[EntityNode]:
+            nodes = nodes_by_episode_unique[episode.uuid]
+            if identity_properties:
+                return await extract_attributes_from_nodes(
                     clients,
-                    nodes_by_episode_unique[episode.uuid],
+                    nodes,
                     episode,
                     previous_episodes,
                     entity_types,
+                    skip_attribute_extraction=True,
                 )
+            return await extract_attributes_from_nodes(
+                clients,
+                nodes,
+                episode,
+                previous_episodes,
+                entity_types,
+            )
+
+        hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
+            *[
+                hydrate_nodes(episode, previous_episodes)
                 for episode, previous_episodes in episode_context
             ],
             max_coroutines=self.max_coroutines,
@@ -1349,6 +1439,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
+        identity_properties: dict[str, list[str]] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1396,6 +1487,9 @@ class Graphiti:
             query to find the most recent episode. Useful for efficiently adding multiple episodes
             to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
             as this parameter for the next episode.
+        identity_properties : dict[str, list[str]] | None
+            Optional. Map entity type names to attribute names that identify entities.
+            Graphiti extracts these attributes before node resolution.
 
         Returns
         -------
@@ -1422,6 +1516,7 @@ class Graphiti:
         now = utc_now()
 
         validate_entity_types(entity_types)
+        validate_identity_properties(identity_properties, entity_types)
         validate_excluded_entity_types(excluded_entity_types, entity_types)
 
         # Resolve a request-scoped driver/clients bundle rather than mutating the
@@ -1477,12 +1572,22 @@ class Graphiti:
                     custom_extraction_instructions,
                 )
 
+                if identity_properties:
+                    await extract_attributes_only_from_nodes(
+                        clients,
+                        extracted_nodes,
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                    )
+
                 nodes, uuid_map, _ = await resolve_extracted_nodes(
                     clients,
                     extracted_nodes,
                     episode,
                     previous_episodes,
                     entity_types,
+                    identity_properties=identity_properties,
                 )
 
                 # Extract and resolve edges in parallel with attribute extraction
@@ -1501,6 +1606,7 @@ class Graphiti:
                     uuid_map,
                     custom_extraction_instructions=custom_extraction_instructions,
                     entity_types=entity_types,
+                    identity_properties=identity_properties,
                     clients=clients,
                 )
 
@@ -1508,14 +1614,25 @@ class Graphiti:
 
                 # Extract node attributes - only pass new edges for summary generation
                 # to avoid duplicating facts that already exist in the graph
-                hydrated_nodes = await extract_attributes_from_nodes(
-                    clients,
-                    nodes,
-                    episode,
-                    previous_episodes,
-                    entity_types,
-                    edges=new_edges,
-                )
+                if identity_properties:
+                    hydrated_nodes = await extract_attributes_from_nodes(
+                        clients,
+                        nodes,
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                        edges=new_edges,
+                        skip_attribute_extraction=True,
+                    )
+                else:
+                    hydrated_nodes = await extract_attributes_from_nodes(
+                        clients,
+                        nodes,
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                        edges=new_edges,
+                    )
 
                 # Process and save episode data (including saga association if provided)
                 episodic_edges, episode = await self._process_episode_data(
@@ -1597,6 +1714,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         use_combined_extraction: bool = True,
+        identity_properties: dict[str, list[str]] | None = None,
     ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
@@ -1633,6 +1751,9 @@ class Graphiti:
         use_combined_extraction : bool
             If True, use one combined node-and-edge LLM call per episode. If False, use separate
             node and edge extraction.
+        identity_properties : dict[str, list[str]] | None
+            Optional. Map entity type names to attribute names that identify entities.
+            Graphiti extracts these attributes before node resolution.
 
         Returns
         -------
@@ -1664,6 +1785,8 @@ class Graphiti:
             try:
                 start = time()
                 now = utc_now()
+                validate_entity_types(entity_types)
+                validate_identity_properties(identity_properties, entity_types)
 
                 # Resolve a request-scoped driver/clients bundle rather than mutating
                 # the shared ``self.driver``, so concurrent calls for different
@@ -1722,6 +1845,7 @@ class Graphiti:
                     strict_edge_types=strict_edge_types,
                     custom_extraction_instructions=custom_extraction_instructions,
                     use_combined_extraction=use_combined_extraction,
+                    identity_properties=identity_properties,
                     clients=clients,
                 )
 
@@ -1758,6 +1882,7 @@ class Graphiti:
                     edge_types,
                     edge_type_map or edge_type_map_default,
                     episodes,
+                    identity_properties=identity_properties,
                     clients=clients,
                 )
 
@@ -2036,7 +2161,13 @@ class Graphiti:
         edge: EntityEdge,
         target_node: EntityNode,
         episode: EpisodicNode | None = None,
+        identity_properties: dict[str, list[str]] | None = None,
     ) -> AddTripletResults:
+        """Add a node-edge-node triplet and resolve nodes by configured identity properties.
+
+        Pass ``identity_properties`` to match caller-provided node attributes against
+        existing entities. The caller must supply these attributes on the nodes.
+        """
         if source_node.name_embedding is None:
             await source_node.generate_name_embedding(self.embedder)
         if target_node.name_embedding is None:
@@ -2047,19 +2178,33 @@ class Graphiti:
         try:
             resolved_source = await EntityNode.get_by_uuid(self.driver, source_node.uuid)
         except NodeNotFoundError:
-            resolved_source_nodes, _, _ = await resolve_extracted_nodes(
-                self.clients,
-                [source_node],
-            )
+            if identity_properties:
+                resolved_source_nodes, _, _ = await resolve_extracted_nodes(
+                    self.clients,
+                    [source_node],
+                    identity_properties=identity_properties,
+                )
+            else:
+                resolved_source_nodes, _, _ = await resolve_extracted_nodes(
+                    self.clients,
+                    [source_node],
+                )
             resolved_source = resolved_source_nodes[0]
 
         try:
             resolved_target = await EntityNode.get_by_uuid(self.driver, target_node.uuid)
         except NodeNotFoundError:
-            resolved_target_nodes, _, _ = await resolve_extracted_nodes(
-                self.clients,
-                [target_node],
-            )
+            if identity_properties:
+                resolved_target_nodes, _, _ = await resolve_extracted_nodes(
+                    self.clients,
+                    [target_node],
+                    identity_properties=identity_properties,
+                )
+            else:
+                resolved_target_nodes, _, _ = await resolve_extracted_nodes(
+                    self.clients,
+                    [target_node],
+                )
             resolved_target = resolved_target_nodes[0]
 
         nodes = [resolved_source, resolved_target]

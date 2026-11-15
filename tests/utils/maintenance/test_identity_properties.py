@@ -1,0 +1,475 @@
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from pydantic import BaseModel
+
+from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.edges import EntityEdge
+from graphiti_core.errors import IdentityPropertyValidationError
+from graphiti_core.graphiti import Graphiti
+from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.maintenance.node_operations import (
+    _collect_identity_property_candidate_nodes,
+)
+from graphiti_core.utils.ontology_utils.entity_types_utils import validate_identity_properties
+
+
+class Person(BaseModel):
+    email: str
+
+
+@pytest.mark.parametrize(
+    ('identity_properties', 'entity_types', 'message'),
+    [
+        ({'Person': ['email']}, {'Company': Person}, 'entity type is not defined'),
+        ({'Person': []}, {'Person': Person}, 'non-empty list'),
+        ({'Person': ['phone']}, {'Person': Person}, 'not a field'),
+        ({'Person': ['email']}, None, 'entity type is not defined'),
+    ],
+)
+def test_validate_identity_properties_rejects_invalid_configuration(
+    identity_properties,
+    entity_types,
+    message,
+):
+    with pytest.raises(IdentityPropertyValidationError, match=message):
+        validate_identity_properties(identity_properties, entity_types)
+
+
+def test_validate_identity_properties_accepts_configured_fields():
+    assert validate_identity_properties({'Person': ['email']}, {'Person': Person})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', [GraphProvider.NEO4J, GraphProvider.FALKORDB])
+async def test_get_by_attribute_values_builds_safe_query(provider):
+    driver = MagicMock()
+    driver.provider = provider
+    driver._database = 'group'
+    driver.graph_operations_interface = None
+    driver.execute_query = AsyncMock(return_value=([], [], None))
+
+    result = await EntityNode.get_by_attribute_values(
+        driver,
+        'group',
+        {'email': 'alex@example.com', 'employee_id': '42'},
+        labels=['Person'],
+        limit=7,
+    )
+
+    query = driver.execute_query.await_args.args[0]
+    parameters = driver.execute_query.await_args.kwargs
+    assert result == []
+    assert 'MATCH (n:Entity:Person)' in query
+    assert 'n.group_id = $group_id' in query
+    assert 'n.`email` = $attribute_0' in query
+    assert 'n.`employee_id` = $attribute_1' in query
+    assert 'alex@example.com' not in query
+    assert parameters['attribute_0'] == 'alex@example.com'
+    assert parameters['attribute_1'] == '42'
+    assert parameters['group_id'] == 'group'
+    assert parameters['limit'] == 7
+
+
+@pytest.mark.asyncio
+async def test_get_by_attribute_values_returns_empty_for_empty_attributes():
+    driver = MagicMock()
+
+    assert await EntityNode.get_by_attribute_values(driver, 'group', {}) == []
+    driver.execute_query.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_by_attribute_values_clones_falkordb_driver_for_group():
+    driver = MagicMock()
+    driver.provider = GraphProvider.FALKORDB
+    driver._database = 'default_db'
+    driver.graph_operations_interface = None
+    scoped_driver = MagicMock()
+    scoped_driver.provider = GraphProvider.FALKORDB
+    scoped_driver.execute_query = AsyncMock(return_value=([], [], None))
+    driver.clone.return_value = scoped_driver
+
+    await EntityNode.get_by_attribute_values(
+        driver,
+        'group',
+        {'email': 'alex@example.com'},
+        labels=['Person'],
+    )
+
+    driver.clone.assert_called_once_with(database='group')
+    scoped_driver.execute_query.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_by_attribute_values_rejects_unsafe_attribute_name():
+    driver = MagicMock()
+    driver.provider = GraphProvider.NEO4J
+    driver.graph_operations_interface = None
+    driver.execute_query = AsyncMock(return_value=([], [], None))
+
+    with pytest.raises(ValueError, match='Invalid attribute name'):
+        await EntityNode.get_by_attribute_values(
+            driver,
+            'group',
+            {'email` OR true //': 'alex@example.com'},
+        )
+
+    driver.execute_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_by_attribute_values_rejects_unsafe_label():
+    driver = MagicMock()
+    driver.provider = GraphProvider.NEO4J
+    driver.graph_operations_interface = None
+    driver.execute_query = AsyncMock(return_value=([], [], None))
+
+    with pytest.raises(ValueError, match='node_labels'):
+        await EntityNode.get_by_attribute_values(
+            driver,
+            'group',
+            {'email': 'alex@example.com'},
+            labels=['Person` MATCH (n)'],
+        )
+
+    driver.execute_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', [GraphProvider.KUZU, GraphProvider.NEPTUNE])
+async def test_identity_candidate_collection_ignores_unsupported_provider(provider):
+    driver = MagicMock()
+    driver.provider = provider
+    driver.graph_operations_interface = None
+    driver.execute_query = AsyncMock()
+    clients = GraphitiClients.model_construct(
+        driver=driver,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+        llm_client=MagicMock(),
+        max_coroutines=1,
+    )
+    node = EntityNode(
+        name='Alex',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        attributes={'email': 'alex@example.com'},
+    )
+
+    result = await _collect_identity_property_candidate_nodes(
+        clients,
+        [node],
+        {'Person': ['email']},
+    )
+
+    assert result == [[]]
+    driver.execute_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_identity_candidate_collection_calls_entity_attribute_lookup(monkeypatch):
+    driver = MagicMock()
+    driver.graph_operations_interface = None
+    clients = GraphitiClients.model_construct(
+        driver=driver,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+        llm_client=MagicMock(),
+        max_coroutines=1,
+    )
+    node = EntityNode(
+        name='Alex',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        attributes={'email': 'alex@example.com'},
+    )
+    candidate = EntityNode(name='Alex', group_id='group', labels=['Entity', 'Person'])
+    lookup = AsyncMock(return_value=[candidate])
+    monkeypatch.setattr(EntityNode, 'get_by_attribute_values', lookup)
+
+    result = await _collect_identity_property_candidate_nodes(
+        clients,
+        [node],
+        {'Person': ['email']},
+    )
+
+    assert result == [[candidate]]
+    lookup.assert_awaited_once_with(
+        driver,
+        'group',
+        {'email': 'alex@example.com'},
+        ['Person'],
+        15,
+    )
+
+
+def _make_graphiti_for_episode_test():
+    driver = MagicMock()
+    clients = GraphitiClients.model_construct(
+        driver=driver,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+        llm_client=MagicMock(),
+        max_coroutines=1,
+    )
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = driver
+    graphiti.clients = clients
+    graphiti.tracer = MagicMock()
+    graphiti.tracer.start_span.return_value.__enter__.return_value = MagicMock()
+    graphiti.max_coroutines = 1
+    graphiti._resolve_request_scope = MagicMock(return_value=('group', driver, clients))
+    graphiti.retrieve_episodes = AsyncMock(return_value=[])
+    graphiti._extract_and_resolve_edges = AsyncMock(return_value=([], [], []))
+
+    async def process_episode(episode, *_args, **_kwargs):
+        return [], episode
+
+    graphiti._process_episode_data = AsyncMock(side_effect=process_episode)
+    return graphiti, clients
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('configured', [True, False])
+async def test_add_episode_extracts_identity_attributes_before_resolution(
+    monkeypatch,
+    configured,
+):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    node = EntityNode(
+        name='Alex',
+        group_id='group',
+        labels=['Entity', 'Person'],
+    )
+    episode = EpisodicNode(
+        name='conversation',
+        group_id='group',
+        source=EpisodeType.message,
+        source_description='test',
+        content='Alex uses alex@example.com.',
+        valid_at=datetime.now(timezone.utc),
+    )
+    order = []
+    extract_nodes = AsyncMock(return_value=([node], {node.uuid: [0]}))
+    monkeypatch.setattr('graphiti_core.graphiti.extract_nodes', extract_nodes)
+
+    async def extract_identity_attributes(_clients, nodes, *_args):
+        order.append('extract')
+        nodes[0].attributes = {'email': 'alex@example.com'}
+        return nodes
+
+    extract_attributes = AsyncMock(side_effect=extract_identity_attributes)
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.extract_attributes_only_from_nodes',
+        extract_attributes,
+    )
+
+    async def resolve_nodes(_clients, nodes, *_args, **kwargs):
+        order.append('resolve')
+        if configured:
+            assert nodes[0].attributes == {'email': 'alex@example.com'}
+        assert kwargs['identity_properties'] == ({'Person': ['email']} if configured else None)
+        return nodes, {node.uuid: node.uuid}, []
+
+    resolve = AsyncMock(side_effect=resolve_nodes)
+    monkeypatch.setattr('graphiti_core.graphiti.resolve_extracted_nodes', resolve)
+
+    async def extract_late_attributes(_clients, nodes, *_args, **kwargs):
+        order.append('late')
+        if configured:
+            assert kwargs['skip_attribute_extraction'] is True
+        else:
+            assert 'skip_attribute_extraction' not in kwargs
+        return nodes
+
+    late_extract = AsyncMock(side_effect=extract_late_attributes)
+    monkeypatch.setattr('graphiti_core.graphiti.extract_attributes_from_nodes', late_extract)
+
+    await graphiti.add_episode(
+        name='conversation',
+        episode_body=episode.content,
+        source_description='test',
+        reference_time=episode.valid_at,
+        group_id='group',
+        entity_types={'Person': Person},
+        identity_properties={'Person': ['email']} if configured else None,
+    )
+
+    if configured:
+        assert order == ['extract', 'resolve', 'late']
+        extract_attributes.assert_awaited_once()
+    else:
+        assert order == ['resolve', 'late']
+        extract_attributes.assert_not_awaited()
+    assert clients is graphiti.clients
+
+
+@pytest.mark.asyncio
+async def test_bulk_extraction_gets_identity_attributes_before_deduplication(monkeypatch):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    node = EntityNode(name='Alex', group_id='group', labels=['Entity', 'Person'])
+    episode = EpisodicNode(
+        name='conversation',
+        group_id='group',
+        source=EpisodeType.message,
+        source_description='test',
+        content='Alex uses alex@example.com.',
+        valid_at=utc_now(),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.extract_nodes_and_edges_bulk',
+        AsyncMock(return_value=([[node]], [[]])),
+    )
+
+    async def extract_identity_attributes(_clients, nodes, *_args):
+        nodes[0].attributes = {'email': 'alex@example.com'}
+        return nodes
+
+    extract_attributes = AsyncMock(side_effect=extract_identity_attributes)
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.extract_attributes_only_from_nodes',
+        extract_attributes,
+    )
+
+    async def dedupe(_clients, node_groups, _episodes, _types, **kwargs):
+        assert node_groups[0][0].attributes == {'email': 'alex@example.com'}
+        assert kwargs['identity_properties'] == {'Person': ['email']}
+        return {episode.uuid: [node]}, {node.uuid: node.uuid}
+
+    dedupe_nodes = AsyncMock(side_effect=dedupe)
+    monkeypatch.setattr('graphiti_core.graphiti.dedupe_nodes_bulk', dedupe_nodes)
+
+    result = await graphiti._extract_and_dedupe_nodes_bulk(
+        [(episode, [])],
+        {},
+        None,
+        {'Person': Person},
+        None,
+        identity_properties={'Person': ['email']},
+        clients=clients,
+    )
+
+    assert result[0][episode.uuid] == [node]
+    extract_attributes.assert_awaited_once()
+    dedupe_nodes.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_bulk_resolution_skips_second_attribute_extraction(monkeypatch):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    node = EntityNode(name='Alex', group_id='group', labels=['Entity', 'Person'])
+    episode = EpisodicNode(
+        name='conversation',
+        group_id='group',
+        source=EpisodeType.message,
+        source_description='test',
+        content='Alex uses alex@example.com.',
+        valid_at=utc_now(),
+    )
+    resolve = AsyncMock(return_value=([node], {node.uuid: node.uuid}, []))
+    monkeypatch.setattr('graphiti_core.graphiti.resolve_extracted_nodes', resolve)
+    late_extract = AsyncMock(return_value=[node])
+    monkeypatch.setattr('graphiti_core.graphiti.extract_attributes_from_nodes', late_extract)
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.resolve_extracted_edges',
+        AsyncMock(return_value=([], [], [])),
+    )
+
+    await graphiti._resolve_nodes_and_edges_bulk(
+        {episode.uuid: [node]},
+        {episode.uuid: []},
+        [(episode, [])],
+        {'Person': Person},
+        None,
+        {},
+        [episode],
+        identity_properties={'Person': ['email']},
+        clients=clients,
+    )
+
+    resolve.assert_awaited_once()
+    assert resolve.await_args.kwargs['identity_properties'] == {'Person': ['email']}
+    late_extract.assert_awaited_once()
+    assert late_extract.await_args.kwargs['skip_attribute_extraction'] is True
+
+
+@pytest.mark.asyncio
+async def test_add_triplet_passes_identity_properties_to_both_node_resolutions(monkeypatch):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    graphiti.embedder = clients.embedder
+    graphiti.llm_client = clients.llm_client
+    source = EntityNode(
+        name='Alex',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        name_embedding=[0.1],
+        attributes={'email': 'alex@example.com'},
+    )
+    target = EntityNode(
+        name='Sam',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        name_embedding=[0.2],
+        attributes={'email': 'sam@example.com'},
+    )
+    edge = EntityEdge(
+        name='KNOWS',
+        fact='Alex knows Sam',
+        group_id='group',
+        source_node_uuid=source.uuid,
+        target_node_uuid=target.uuid,
+        fact_embedding=[0.3],
+        created_at=utc_now(),
+    )
+    node_lookup = AsyncMock(side_effect=lambda _driver, uuid: _raise_node_not_found(uuid))
+    edge_lookup = AsyncMock(side_effect=lambda _driver, uuid: _raise_edge_not_found(uuid))
+    monkeypatch.setattr(EntityNode, 'get_by_uuid', node_lookup)
+    monkeypatch.setattr(EntityEdge, 'get_by_uuid', edge_lookup)
+    resolve = AsyncMock(side_effect=lambda _clients, nodes, **_kwargs: (nodes, {}, []))
+    monkeypatch.setattr('graphiti_core.graphiti.resolve_extracted_nodes', resolve)
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.search',
+        AsyncMock(return_value=MagicMock(edges=[])),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.resolve_extracted_edge',
+        AsyncMock(return_value=(edge, [], [])),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.create_entity_edge_embeddings',
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.create_entity_node_embeddings',
+        AsyncMock(),
+    )
+    monkeypatch.setattr('graphiti_core.graphiti.add_nodes_and_edges_bulk', AsyncMock())
+
+    await graphiti.add_triplet(
+        source,
+        edge,
+        target,
+        identity_properties={'Person': ['email']},
+    )
+
+    assert resolve.await_count == 2
+    assert all(
+        call.kwargs['identity_properties'] == {'Person': ['email']}
+        for call in resolve.await_args_list
+    )
+
+
+def _raise_node_not_found(uuid: str):
+    from graphiti_core.errors import NodeNotFoundError
+
+    raise NodeNotFoundError(uuid)
+
+
+def _raise_edge_not_found(uuid: str):
+    from graphiti_core.errors import EdgeNotFoundError
+
+    raise EdgeNotFoundError(uuid)

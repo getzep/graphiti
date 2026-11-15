@@ -32,7 +32,11 @@ from graphiti_core.driver.driver import (
 )
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date, validate_node_labels
+from graphiti_core.helpers import (
+    SAFE_CYPHER_IDENTIFIER_PATTERN,
+    parse_db_date,
+    validate_node_labels,
+)
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     COMMUNITY_NODE_RETURN_NEPTUNE,
@@ -49,6 +53,8 @@ from graphiti_core.models.nodes.node_db_queries import (
 from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
+
+NODE_DEDUP_CANDIDATE_LIMIT = 15
 
 
 class EpisodeType(Enum):
@@ -670,6 +676,80 @@ class EntityNode(Node):
         nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
 
         return nodes
+
+    @classmethod
+    async def get_by_attribute_values(
+        cls,
+        driver: GraphDriver,
+        group_id: str,
+        attributes: dict[str, Any],
+        labels: list[str] | None = None,
+        limit: int = NODE_DEDUP_CANDIDATE_LIMIT,
+    ) -> list['EntityNode']:
+        """Retrieve nodes by attributes. Kuzu and Neptune do not support this lookup."""
+        if not attributes:
+            return []
+
+        property_names = list(attributes)
+        for property_name in property_names:
+            if not SAFE_CYPHER_IDENTIFIER_PATTERN.fullmatch(property_name):
+                raise ValueError(f'Invalid attribute name: {property_name}')
+
+        node_labels = list(labels or [])
+        validate_node_labels(node_labels)
+        filtered_labels = [label for label in node_labels if label != 'Entity']
+        label_query = ''.join(f':{label}' for label in filtered_labels)
+
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.node_get_by_attribute_values(
+                    cls,
+                    driver,
+                    group_id,
+                    attributes,
+                    node_labels,
+                    limit,
+                )
+            except NotImplementedError:
+                pass
+
+        if driver.provider not in (GraphProvider.NEO4J, GraphProvider.FALKORDB):
+            raise NotImplementedError(
+                f'Attribute lookup is not supported for {driver.provider.value}'
+            )
+
+        if (
+            driver.provider == GraphProvider.FALKORDB
+            and getattr(driver, '_database', None) != group_id
+        ):
+            driver = driver.clone(database=group_id)
+
+        attribute_conditions = [
+            f'AND n.`{property_name}` = $attribute_{index}'
+            for index, property_name in enumerate(property_names)
+        ]
+        query = (
+            f"""
+            MATCH (n:Entity{label_query})
+            WHERE n.group_id = $group_id
+            {' '.join(attribute_conditions)}
+            RETURN
+            """
+            + get_entity_node_return_query(driver.provider)
+            + """
+            LIMIT $limit
+            """
+        )
+        parameters = {
+            f'attribute_{index}': attributes[property_name]
+            for index, property_name in enumerate(property_names)
+        }
+        parameters.update(group_id=group_id, limit=limit)
+        if driver.provider == GraphProvider.NEO4J:
+            parameters['routing_'] = 'r'
+
+        records, _, _ = await driver.execute_query(query, **parameters)
+        return [get_entity_node_from_record(record, driver.provider) for record in records]
 
     @classmethod
     async def get_by_group_ids(
