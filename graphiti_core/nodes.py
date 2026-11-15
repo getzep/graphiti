@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -23,7 +22,7 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import (
@@ -129,31 +128,6 @@ class Node(BaseModel, ABC):
                     uuid=self.uuid,
                 )
 
-            case GraphProvider.KUZU:
-                for label in ['Episodic', 'Community']:
-                    await driver.execute_query(
-                        f"""
-                        MATCH (n:{label} {{uuid: $uuid}})
-                        DETACH DELETE n
-                        """,
-                        uuid=self.uuid,
-                    )
-                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
-                # Explicitly delete the "edge" nodes first, then the entity node.
-                await driver.execute_query(
-                    """
-                    MATCH (n:Entity {uuid: $uuid})-[:RELATES_TO]->(e:RelatesToNode_)
-                    DETACH DELETE e
-                    """,
-                    uuid=self.uuid,
-                )
-                await driver.execute_query(
-                    """
-                    MATCH (n:Entity {uuid: $uuid})
-                    DETACH DELETE n
-                    """,
-                    uuid=self.uuid,
-                )
             case _:  # FalkorDB, Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
@@ -198,31 +172,6 @@ class Node(BaseModel, ABC):
                         batch_size=batch_size,
                     )
 
-            case GraphProvider.KUZU:
-                for label in ['Episodic', 'Community']:
-                    await driver.execute_query(
-                        f"""
-                        MATCH (n:{label} {{group_id: $group_id}})
-                        DETACH DELETE n
-                        """,
-                        group_id=group_id,
-                    )
-                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
-                # Explicitly delete the "edge" nodes first, then the entity node.
-                await driver.execute_query(
-                    """
-                    MATCH (n:Entity {group_id: $group_id})-[:RELATES_TO]->(e:RelatesToNode_)
-                    DETACH DELETE e
-                    """,
-                    group_id=group_id,
-                )
-                await driver.execute_query(
-                    """
-                    MATCH (n:Entity {group_id: $group_id})
-                    DETACH DELETE n
-                    """,
-                    group_id=group_id,
-                )
             case _:  # FalkorDB, Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
@@ -254,34 +203,6 @@ class Node(BaseModel, ABC):
                         """,
                         uuids=uuids,
                     )
-            case GraphProvider.KUZU:
-                for label in ['Episodic', 'Community']:
-                    await driver.execute_query(
-                        f"""
-                        MATCH (n:{label})
-                        WHERE n.uuid IN $uuids
-                        DETACH DELETE n
-                        """,
-                        uuids=uuids,
-                    )
-                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
-                # Explicitly delete the "edge" nodes first, then the entity node.
-                await driver.execute_query(
-                    """
-                    MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_)
-                    WHERE n.uuid IN $uuids
-                    DETACH DELETE e
-                    """,
-                    uuids=uuids,
-                )
-                await driver.execute_query(
-                    """
-                    MATCH (n:Entity)
-                    WHERE n.uuid IN $uuids
-                    DETACH DELETE n
-                    """,
-                    uuids=uuids,
-                )
             case _:  # Neo4J, Neptune
                 async with driver.session() as session:
                     # Collect all edge UUIDs before deleting nodes
@@ -559,23 +480,15 @@ class EntityNode(Node):
             'created_at': self.created_at,
         }
 
-        if driver.provider == GraphProvider.KUZU:
-            entity_data['attributes'] = json.dumps(self.attributes)
-            entity_data['labels'] = list(set(self.labels + ['Entity']))
-            result = await driver.execute_query(
-                get_entity_node_save_query(driver.provider, labels=''),
-                **entity_data,
-            )
-        else:
-            for k, v in (self.attributes or {}).items():
-                if k not in entity_data:
-                    entity_data[k] = v
-            labels = ':'.join(self.labels + ['Entity'])
+        for k, v in (self.attributes or {}).items():
+            if k not in entity_data:
+                entity_data[k] = v
+        labels = ':'.join(self.labels + ['Entity'])
 
-            result = await driver.execute_query(
-                get_entity_node_save_query(driver.provider, labels),
-                entity_data=entity_data,
-            )
+        result = await driver.execute_query(
+            get_entity_node_save_query(driver.provider, labels),
+            entity_data=entity_data,
+        )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
@@ -624,6 +537,46 @@ class EntityNode(Node):
             """
             + get_entity_node_return_query(driver.provider),
             uuids=uuids,
+            routing_='r',
+        )
+
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
+
+        return nodes
+
+    @classmethod
+    async def get_by_names(
+        cls,
+        driver: GraphDriver,
+        names: list[str],
+        group_ids: list[str],
+    ):
+        if not names or not group_ids:
+            return []
+
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.node_get_by_names(
+                    cls, driver, names, group_ids
+                )
+            except NotImplementedError:
+                pass
+
+        unique_names = sorted({name for name in names if name})
+        unique_group_ids = sorted({group_id for group_id in group_ids if group_id})
+        if not unique_names or not unique_group_ids:
+            return []
+
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Entity)
+            WHERE n.group_id IN $group_ids
+            AND n.name IN $names
+            RETURN
+            """
+            + get_entity_node_return_query(driver.provider),
+            names=unique_names,
+            group_ids=unique_group_ids,
             routing_='r',
         )
 
@@ -696,8 +649,8 @@ class CommunityNode(Node):
                 pass
 
         if driver.provider == GraphProvider.NEPTUNE:
-            await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'communities',
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'community_name',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
         result = await driver.execute_query(
@@ -870,10 +823,14 @@ class SagaNode(Node):
     last_episode_uuid: str | None = None
     last_summarized_at: datetime | None = None
     # Maximum ``valid_at`` (episode reference time) across all episodes covered
-    # by the most recent summary. ``last_summarized_at`` is wall-clock and is
-    # used as the watermark for the next incremental summarize run; this field
+    # by the most recent summary. ``last_summarized_at`` is the ingestion-time
+    # filter watermark for the next incremental summarize run; this field
     # carries the episode-time semantics for public/temporal consumers.
     last_summarized_episode_valid_at: datetime | None = None
+    _summary_episodes_fetched: int = PrivateAttr(default=0)
+    _summary_episodes_selected: int = PrivateAttr(default=0)
+    _summary_episodes_skipped: int = PrivateAttr(default=0)
+    _summary_selected_episode_bytes: int = PrivateAttr(default=0)
 
     async def save(self, driver: GraphDriver):
         if driver.graph_operations_interface:
@@ -1048,17 +1005,14 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 
 
 def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
-    if provider == GraphProvider.KUZU:
-        attributes = json.loads(record['attributes']) if record['attributes'] else {}
-    else:
-        attributes = record['attributes']
-        attributes.pop('uuid', None)
-        attributes.pop('name', None)
-        attributes.pop('group_id', None)
-        attributes.pop('name_embedding', None)
-        attributes.pop('summary', None)
-        attributes.pop('created_at', None)
-        attributes.pop('labels', None)
+    attributes = record['attributes']
+    attributes.pop('uuid', None)
+    attributes.pop('name', None)
+    attributes.pop('group_id', None)
+    attributes.pop('name_embedding', None)
+    attributes.pop('summary', None)
+    attributes.pop('created_at', None)
+    attributes.pop('labels', None)
 
     labels = record.get('labels', [])
     group_id = record.get('group_id')

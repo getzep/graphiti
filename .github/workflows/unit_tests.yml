@@ -27,14 +27,13 @@ jobs:
         with:
           version: "latest"
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --extra dev
       - name: Run unit tests (no external dependencies)
         env:
           PYTHONPATH: ${{ github.workspace }}
           DISABLE_NEPTUNE: 1
           DISABLE_NEO4J: 1
           DISABLE_FALKORDB: 1
-          DISABLE_KUZU: 1
         run: |
           uv run pytest tests/ -m "not integration" \
             --ignore=tests/test_graphiti_int.py \
@@ -79,7 +78,7 @@ jobs:
             -e NEO4J_PLUGINS='["apoc"]' \
             neo4j:5.26-community
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --extra dev --extra sentence-transformers
       - name: Wait for databases
         run: |
           for i in $(seq 1 30); do

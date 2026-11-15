@@ -21,8 +21,8 @@ automatically unless an OpenAI API key is available AND FalkorDB is reachable:
 - CI: ``OPENAI_API_KEY`` comes from the GitHub environment and FalkorDB runs as a
   container (see .github/workflows/server-tests.yml).
 
-The model is taken from ``MODEL_NAME`` (CI pins a lighter, broadly-available
-model for speed/reliability), falling back to the server's configured default.
+The model is taken from ``MODEL_NAME``. CI sets ``gpt-6-luna`` for the live run.
+The server uses its configured default when ``MODEL_NAME`` is unset.
 """
 
 import contextlib

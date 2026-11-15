@@ -16,13 +16,6 @@ NEO4J_TO_FALKORDB_MAPPING = {
     'episode_content': 'Episodic',
     'edge_name_and_fact': 'RELATES_TO',
 }
-# Mapping from fulltext index names to Kuzu node labels
-INDEX_TO_LABEL_KUZU_MAPPING = {
-    'node_name_and_summary': 'Entity',
-    'community_name': 'Community',
-    'episode_content': 'Episodic',
-    'edge_name_and_fact': 'RelatesToNode_',
-}
 
 
 def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
@@ -47,9 +40,6 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
             # NEXT_EPISODE edge
             'CREATE INDEX FOR ()-[e:NEXT_EPISODE]-() ON (e.uuid, e.group_id)',
         ]
-
-    if provider == GraphProvider.KUZU:
-        return []
 
     return [
         'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
@@ -95,38 +85,18 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
         return cast(
             list[LiteralString],
             [
-                f"""CALL db.idx.fulltext.createNodeIndex(
-                                                {{
-                                                    label: 'Episodic',
-                                                    stopwords: {stopwords_str}
-                                                }},
-                                                'content', 'source', 'source_description', 'group_id'
-                                                )""",
-                f"""CALL db.idx.fulltext.createNodeIndex(
-                                                {{
-                                                    label: 'Entity',
-                                                    stopwords: {stopwords_str}
-                                                }},
-                                                'name', 'summary', 'group_id'
-                                                )""",
-                f"""CALL db.idx.fulltext.createNodeIndex(
-                                                {{
-                                                    label: 'Community',
-                                                    stopwords: {stopwords_str}
-                                                }},
-                                                'name', 'group_id'
-                                                )""",
+                f"""CREATE FULLTEXT INDEX FOR (n:Episodic)
+                ON (n.content, n.source, n.source_description, n.group_id)
+                OPTIONS {{stopwords: {stopwords_str}}}""",
+                f"""CREATE FULLTEXT INDEX FOR (n:Entity)
+                ON (n.name, n.summary, n.group_id)
+                OPTIONS {{stopwords: {stopwords_str}}}""",
+                f"""CREATE FULLTEXT INDEX FOR (n:Community)
+                ON (n.name, n.group_id)
+                OPTIONS {{stopwords: {stopwords_str}}}""",
                 """CREATE FULLTEXT INDEX FOR ()-[e:RELATES_TO]-() ON (e.name, e.fact, e.group_id)""",
             ],
         )
-
-    if provider == GraphProvider.KUZU:
-        return [
-            "CALL CREATE_FTS_INDEX('Episodic', 'episode_content', ['content', 'source', 'source_description']);",
-            "CALL CREATE_FTS_INDEX('Entity', 'node_name_and_summary', ['name', 'summary']);",
-            "CALL CREATE_FTS_INDEX('Community', 'community_name', ['name']);",
-            "CALL CREATE_FTS_INDEX('RelatesToNode_', 'edge_name_and_fact', ['name', 'fact']);",
-        ]
 
     return [
         """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS
@@ -145,10 +115,6 @@ def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) 
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryNodes('{label}', {query})"
 
-    if provider == GraphProvider.KUZU:
-        label = INDEX_TO_LABEL_KUZU_MAPPING[name]
-        return f"CALL QUERY_FTS_INDEX('{label}', '{name}', {query}, TOP := $limit)"
-
     return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
 
@@ -157,9 +123,6 @@ def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
         # FalkorDB uses a different syntax for regular cosine similarity and Neo4j uses normalized cosine similarity
         return f'(2 - vec.cosineDistance({vec1}, vecf32({vec2})))/2'
 
-    if provider == GraphProvider.KUZU:
-        return f'array_cosine_similarity({vec1}, {vec2})'
-
     return f'vector.similarity.cosine({vec1}, {vec2})'
 
 
@@ -167,9 +130,5 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
     if provider == GraphProvider.FALKORDB:
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
-
-    if provider == GraphProvider.KUZU:
-        label = INDEX_TO_LABEL_KUZU_MAPPING[name]
-        return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'

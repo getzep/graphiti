@@ -64,6 +64,12 @@ class SearchFilters(BaseModel):
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
     edge_uuids: list[str] | None = Field(default=None)
+    edge_source_node_uuids: list[str] | None = Field(
+        default=None, description='Restrict edge results to these source node UUIDs'
+    )
+    edge_target_node_uuids: list[str] | None = Field(
+        default=None, description='Restrict edge results to these target node UUIDs'
+    )
     property_filters: list[PropertyFilter] | None = Field(default=None)
 
     @field_validator('node_labels')
@@ -93,12 +99,8 @@ def node_search_filter_query_constructor(
     if filters.node_labels is not None:
         # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
-        if provider == GraphProvider.KUZU:
-            node_label_filter = 'list_has_all(n.labels, $labels)'
-            filter_params['labels'] = filters.node_labels
-        else:
-            node_labels = '|'.join(filters.node_labels)
-            node_label_filter = 'n:' + node_labels
+        node_labels = '|'.join(filters.node_labels)
+        node_label_filter = 'n:' + node_labels
         filter_queries.append(node_label_filter)
 
     return filter_queries, filter_params
@@ -133,17 +135,22 @@ def edge_search_filter_query_constructor(
         filter_queries.append('e.uuid in $edge_uuids')
         filter_params['edge_uuids'] = filters.edge_uuids
 
+    # Edge endpoint filters: every edge query binds n as the source and m as
+    # the target endpoint. Backends that can push these down pre-rank an
+    # endpoint-scoped candidate set instead of scanning the graph.
+    if filters.edge_source_node_uuids is not None:
+        filter_queries.append('n.uuid IN $edge_source_node_uuids')
+        filter_params['edge_source_node_uuids'] = filters.edge_source_node_uuids
+
+    if filters.edge_target_node_uuids is not None:
+        filter_queries.append('m.uuid IN $edge_target_node_uuids')
+        filter_params['edge_target_node_uuids'] = filters.edge_target_node_uuids
+
     if filters.node_labels is not None:
         # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
-        if provider == GraphProvider.KUZU:
-            node_label_filter = (
-                'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
-            )
-            filter_params['labels'] = filters.node_labels
-        else:
-            node_labels = '|'.join(filters.node_labels)
-            node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels
+        node_labels = '|'.join(filters.node_labels)
+        node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels
         filter_queries.append(node_label_filter)
 
     if filters.valid_at is not None:

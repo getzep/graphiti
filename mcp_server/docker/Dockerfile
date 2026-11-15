@@ -42,7 +42,7 @@ RUN set -eux; \
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
-    MCP_SERVER_HOST="0.0.0.0" \
+    SERVER__HOST="0.0.0.0" \
     PYTHONUNBUFFERED=1
 
 # Set up MCP server directory
@@ -169,7 +169,7 @@ EOF
 RUN chmod +x /start-services.sh
 
 # Add Docker labels with version information
-ARG MCP_SERVER_VERSION=1.0.2
+ARG MCP_SERVER_VERSION=1.1.3
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL org.opencontainers.image.title="FalkorDB + Graphiti MCP Server" \

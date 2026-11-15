@@ -43,7 +43,7 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
             await executor.execute_query('MATCH (n) DETACH DELETE n')
         else:
             # FalkorDB: iterate labels individually
-            for label in ['Entity', 'Episodic', 'Community']:
+            for label in ['Entity', 'Episodic', 'Community', 'Saga']:
                 await executor.execute_query(
                     f"""
                     MATCH (n:{label})
@@ -66,6 +66,7 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
         index_queries = range_indices + fulltext_indices
 
         # FalkorDB executes indices sequentially (catches "already indexed" in execute_query)
+        # Keep range indexes first; FalkorDB 6.x range lookups fail if fulltext indexes cover a property first.
         for query in index_queries:
             await executor.execute_query(query)
 

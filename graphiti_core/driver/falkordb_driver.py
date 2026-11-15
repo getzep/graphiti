@@ -70,7 +70,7 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings, ensure_utc
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +245,7 @@ class FalkorDriver(GraphDriver):
         try:
             result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
         except Exception as e:
-            if 'already indexed' in str(e):
+            if 'already indexed' in str(e) or 'Stopwords are already set' in str(e):
                 # check if index already exists
                 logger.info(f'Index already exists: {e}')
                 return None
@@ -324,7 +324,10 @@ class FalkorDriver(GraphDriver):
     async def build_indices_and_constraints(self, delete_existing=False):
         if delete_existing:
             await self.delete_all_indexes()
-        index_queries = get_range_indices(self.provider) + get_fulltext_indices(self.provider)
+        range_indices = get_range_indices(self.provider)
+        fulltext_indices = get_fulltext_indices(self.provider)
+        # Keep range indexes first; FalkorDB 6.x range lookups fail if fulltext indexes cover a property first.
+        index_queries = range_indices + fulltext_indices
         for query in index_queries:
             await self.execute_query(query)
 
@@ -360,8 +363,8 @@ class FalkorDriver(GraphDriver):
             return [FalkorDriver.convert_datetimes_to_strings(item) for item in obj]
         elif isinstance(obj, tuple):
             return tuple(FalkorDriver.convert_datetimes_to_strings(item) for item in obj)
-        elif isinstance(obj, datetime):
-            return obj.isoformat()
+        elif isinstance(obj, datetime.datetime):
+            return ensure_utc(obj).isoformat()  # type: ignore[union-attr]
         else:
             return obj
 

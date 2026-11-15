@@ -113,6 +113,7 @@ async def search(
     embedder = clients.embedder
     cross_encoder = clients.cross_encoder
     search_tracer = _resolve_tracer(getattr(clients, 'tracer', None))
+    max_coroutines = getattr(clients, 'max_coroutines', None)
 
     if query.strip() == '':
         return SearchResults()
@@ -184,6 +185,7 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
             node_search(
                 driver,
@@ -198,6 +200,7 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
             episode_search(
                 driver,
@@ -210,6 +213,7 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
             community_search(
                 driver,
@@ -221,7 +225,9 @@ async def search(
                 config.limit,
                 config.reranker_min_score,
                 search_tracer,
+                max_coroutines=max_coroutines,
             ),
+            max_coroutines=max_coroutines,
         )
         span.add_attributes(
             {
@@ -263,6 +269,7 @@ async def edge_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[EntityEdge], list[float]]:
     if config is None:
         return [], []
@@ -321,7 +328,9 @@ async def edge_search(
                     'candidate_limit': 2 * limit,
                 },
             ) as method_span:
-                search_results = list(await semaphore_gather(*search_tasks))
+                search_results = list(
+                    await semaphore_gather(*search_tasks, max_coroutines=max_coroutines)
+                )
                 method_span.add_attributes(
                     {
                         'result_set_count': len(search_results),
@@ -474,6 +483,7 @@ async def node_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[EntityNode], list[float]]:
     if config is None:
         return [], []
@@ -530,7 +540,9 @@ async def node_search(
                     'candidate_limit': 2 * limit,
                 },
             ) as method_span:
-                search_results = list(await semaphore_gather(*search_tasks))
+                search_results = list(
+                    await semaphore_gather(*search_tasks, max_coroutines=max_coroutines)
+                )
                 method_span.add_attributes(
                     {
                         'result_set_count': len(search_results),
@@ -672,6 +684,7 @@ async def episode_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[EpisodicNode], list[float]]:
     if config is None:
         return [], []
@@ -695,7 +708,8 @@ async def episode_search(
                 await semaphore_gather(
                     *[
                         episode_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
-                    ]
+                    ],
+                    max_coroutines=max_coroutines,
                 )
             )
 
@@ -771,6 +785,7 @@ async def community_search(
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
     search_tracer: Tracer | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[CommunityNode], list[float]]:
     if config is None:
         return [], []
@@ -797,7 +812,8 @@ async def community_search(
                         community_similarity_search(
                             driver, query_vector, group_ids, 2 * limit, config.sim_min_score
                         ),
-                    ]
+                    ],
+                    max_coroutines=max_coroutines,
                 )
             )
 

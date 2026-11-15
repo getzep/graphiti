@@ -164,5 +164,4 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
     @staticmethod
     def _supports_reasoning_features(model: str) -> bool:
         """Return True when the Azure model supports reasoning/verbosity options."""
-        reasoning_prefixes = ('o1', 'o3', 'gpt-5')
-        return model.startswith(reasoning_prefixes)
+        return BaseOpenAIClient._is_reasoning_model(model)

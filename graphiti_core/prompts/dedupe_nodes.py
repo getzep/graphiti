@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 
 
@@ -223,3 +224,25 @@ Result:
 
 
 versions: Versions = {'node': node, 'node_list': node_list, 'nodes': nodes}
+
+
+class DedupeNodesPrompts(ABC):
+    @abstractmethod
+    def node(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def node_list(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def nodes(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultDedupeNodesPrompts(DedupeNodesPrompts):
+    def node(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(node(context))
+
+    def node_list(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(node_list(context))
+
+    def nodes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(nodes(context))

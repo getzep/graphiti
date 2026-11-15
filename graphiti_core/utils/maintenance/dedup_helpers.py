@@ -34,6 +34,7 @@ _MIN_TOKEN_COUNT = 2
 _FUZZY_JACCARD_THRESHOLD = 0.9
 _MINHASH_PERMUTATIONS = 32
 _MINHASH_BAND_SIZE = 4
+ENTITY_BASE_LABEL = 'Entity'
 
 
 def _normalize_string_exact(name: str) -> str:
@@ -171,22 +172,122 @@ def _promote_resolved_node(
     extracted_node: EntityNode,
     resolved_node: EntityNode,
 ) -> EntityNode:
-    """Upgrade a generic canonical node when a duplicate carries a specific type."""
-    resolved_specific_labels = [label for label in resolved_node.labels if label != 'Entity']
-    if resolved_specific_labels:
-        return resolved_node
+    """Merge useful extracted data into the canonical node and promote its type if needed."""
+    _merge_non_empty_attributes(resolved_node, extracted_node)
 
+    resolved_specific_labels = [label for label in resolved_node.labels if label != 'Entity']
     extracted_specific_labels = [label for label in extracted_node.labels if label != 'Entity']
-    if not extracted_specific_labels:
+    if not set(resolved_specific_labels) < set(extracted_specific_labels):
         return resolved_node
 
     promoted_labels: list[str] = []
-    for label in ['Entity', *resolved_node.labels, *extracted_specific_labels]:
+    for label in ['Entity', *resolved_specific_labels, *extracted_specific_labels]:
         if label not in promoted_labels:
             promoted_labels.append(label)
 
     resolved_node.labels = promoted_labels
     return resolved_node
+
+
+def _merge_non_empty_attributes(resolved_node: EntityNode, extracted_node: EntityNode) -> None:
+    """Overlay extracted attributes without letting null/empty values erase existing data."""
+    if not extracted_node.attributes:
+        return
+
+    merged = dict(resolved_node.attributes or {})
+    for key, value in extracted_node.attributes.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        merged[key] = value
+    resolved_node.attributes = merged
+
+
+def _identity_type_for_node(
+    node: EntityNode,
+    identity_properties: dict[str, list[str]] | None,
+) -> str | None:
+    if not identity_properties:
+        return None
+
+    for label in reversed(node.labels):
+        if label != ENTITY_BASE_LABEL and label in identity_properties:
+            return label
+
+    return None
+
+
+def _normalize_identity_value(value: object) -> object | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized if normalized else None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        return value
+    return None
+
+
+def _identity_key_for_node(
+    node: EntityNode,
+    identity_properties: dict[str, list[str]] | None,
+) -> tuple[str, tuple[tuple[str, object], ...]] | None:
+    identity_type = _identity_type_for_node(node, identity_properties)
+    if identity_type is None or identity_properties is None:
+        return None
+
+    property_names = identity_properties.get(identity_type) or []
+    if not property_names:
+        return None
+
+    attributes = node.attributes or {}
+    values: list[tuple[str, object]] = []
+    for property_name in property_names:
+        value = _normalize_identity_value(attributes.get(property_name))
+        if value is None:
+            return None
+        values.append((property_name, value))
+
+    return identity_type, tuple(values)
+
+
+def _resolve_with_identity_properties(
+    extracted_nodes: list[EntityNode],
+    indexes: DedupCandidateIndexes,
+    state: DedupResolutionState,
+    identity_properties: dict[str, list[str]] | None,
+) -> None:
+    """Resolve nodes whose configured identity properties exactly match a candidate."""
+    if not identity_properties:
+        return
+
+    for idx, node in enumerate(extracted_nodes):
+        if state.resolved_nodes[idx] is not None:
+            continue
+
+        identity_key = _identity_key_for_node(node, identity_properties)
+        if identity_key is None:
+            continue
+
+        matches = [
+            candidate
+            for candidate in indexes.existing_nodes
+            if candidate.uuid != node.uuid
+            and _identity_key_for_node(candidate, identity_properties) == identity_key
+        ]
+        if not matches:
+            continue
+
+        matches.sort(key=lambda candidate: (candidate.created_at, candidate.uuid))
+        match = _promote_resolved_node(node, matches[0])
+        state.resolved_nodes[idx] = match
+        state.uuid_map[node.uuid] = match.uuid
+        state.duplicate_pairs.append((node, match))
 
 
 def _build_candidate_indexes(existing_nodes: list[EntityNode]) -> DedupCandidateIndexes:
@@ -292,5 +393,8 @@ __all__ = [
     '_FUZZY_JACCARD_THRESHOLD',
     '_build_candidate_indexes',
     '_promote_resolved_node',
+    '_identity_key_for_node',
+    '_identity_type_for_node',
+    '_resolve_with_identity_properties',
     '_resolve_with_similarity',
 ]

@@ -57,7 +57,8 @@ class GraphitiTestClient:
 
         self.client_context = stdio_client(server_params)
         read, write = await self.client_context.__aenter__()
-        self.session = ClientSession(read, write)
+        self.session_context = ClientSession(read, write)
+        self.session = await self.session_context.__aenter__()
         await self.session.initialize()
 
         # Wait for server to be fully ready
@@ -67,8 +68,8 @@ class GraphitiTestClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Clean up client session."""
-        if self.session:
-            await self.session.close()
+        if hasattr(self, 'session_context'):
+            await self.session_context.__aexit__(exc_type, exc_val, exc_tb)
         if hasattr(self, 'client_context'):
             await self.client_context.__aexit__(exc_type, exc_val, exc_tb)
 

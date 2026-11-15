@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from graphiti_core.utils.text_utils import concatenate_episodes
+from graphiti_core.utils.text_utils import concatenate_episodes, concatenate_timeline
 
 
 def _make_episode(content: str, valid_at: datetime | None = None) -> MagicMock:
@@ -50,3 +50,23 @@ class TestConcatenateEpisodes:
         result = concatenate_episodes(eps)
         assert f'(timestamp: {ts.isoformat()})' in result
         assert '(timestamp: unknown)' in result
+
+
+class TestConcatenateTimeline:
+    def test_numbers_extraction_targets_and_marks_context_turns(self):
+        a = _make_episode('user says hi', datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc))
+        a.uuid = 'a'
+        b = _make_episode('assistant replies', datetime(2025, 1, 1, 10, 1, 0, tzinfo=timezone.utc))
+        b.uuid = 'b'
+        c = _make_episode('user follows up', datetime(2025, 1, 1, 10, 2, 0, tzinfo=timezone.utc))
+        c.uuid = 'c'
+
+        result = concatenate_timeline([a, c], [a, b, c])
+
+        episode_0 = result.index('[Episode 0] (timestamp: 2025-01-01T10:00:00+00:00)')
+        context = result.index('[CONTEXT EPISODE] (timestamp: 2025-01-01T10:01:00+00:00)')
+        episode_1 = result.index('[Episode 1] (timestamp: 2025-01-01T10:02:00+00:00)')
+        assert episode_0 < context < episode_1
+        assert 'user says hi' in result
+        assert 'assistant replies' in result
+        assert 'user follows up' in result

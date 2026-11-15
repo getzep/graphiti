@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
-from .models import Message, PromptFunction, PromptVersion
+from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 
 
@@ -39,11 +40,11 @@ class Edge(BaseModel):
     )
     valid_at: str | None = Field(
         None,
-        description='The date and time when the relationship described by the edge fact became true or was established. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
+        description='The date and time when the relationship or assertion described by the edge fact became true or was established. Future-tense plans/promises use the statement reference time, not the future occurrence date. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
     )
     invalid_at: str | None = Field(
         None,
-        description='The date and time when the relationship described by the edge fact stopped being true or ended. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
+        description='The date and time when the relationship described by the edge fact stopped being true or ended. Soft deadlines are not invalid_at values. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
     )
     episode_indices: list[int] = Field(
         default_factory=lambda: [0],
@@ -61,11 +62,11 @@ class EdgeTimestamps(BaseModel):
 
     valid_at: str | None = Field(
         None,
-        description='When the fact became true. ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z)',
+        description='When the fact became true. Future-tense plans/promises use the reference time, not the future occurrence date. ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z)',
     )
     invalid_at: str | None = Field(
         None,
-        description='When the fact stopped being true. ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z)',
+        description='When the fact stopped being true. Soft deadlines are not invalid_at values. ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z)',
     )
 
 
@@ -94,10 +95,25 @@ class Versions(TypedDict):
 def edge(context: dict[str, Any]) -> list[Message]:
     edge_types_section = ''
     if context.get('edge_types'):
+        relation_type_rules = (
+            '- Use one of the provided fact_type_name values as the relation_type.\n'
+            '- If a relationship does not match any FACT_TYPE, skip it. Do not derive a new '
+            'relation_type.'
+            if context.get('strict_edge_types', False)
+            else '- If FACT_TYPES are provided and the relationship matches one of the types '
+            '(considering the entity type signature), use that fact_type_name as the '
+            '`relation_type`.\n'
+            '- Otherwise, derive a `relation_type` from the relationship predicate in '
+            'SCREAMING_SNAKE_CASE (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).'
+        )
         edge_types_section = f"""
 <FACT_TYPES>
 {to_prompt_json(context['edge_types'])}
 </FACT_TYPES>
+
+# RELATION TYPE RULES
+
+{relation_type_rules}
 """
 
     return [
@@ -160,19 +176,21 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week"). When the CURRENT_MESSAGE contains multiple episodes with per-episode timestamps, prefer the timestamp of the specific episode the fact originates from.
 7. Do **not** hallucinate or infer temporal bounds from unrelated events.
 
-# RELATION TYPE RULES
-
-- If FACT_TYPES are provided and the relationship matches one of the types (considering the entity type signature), use that fact_type_name as the `relation_type`.
-- Otherwise, derive a `relation_type` from the relationship predicate in SCREAMING_SNAKE_CASE (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).
-
 # DATETIME RULES
 
 - Use ISO 8601 with "Z" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).
 - If the fact is ongoing (present tense), set `valid_at` to the timestamp of the episode the fact originates from. If no per-episode timestamp is available, use REFERENCE_TIME.
+- If the fact is a future-tense plan, promise, scheduled event, or deadline, set `valid_at` to the episode timestamp / REFERENCE_TIME. Do NOT set `valid_at` to the future occurrence date.
+- Preserve future occurrence dates and deadlines in the `fact` text. Do NOT use a soft deadline ("by March 2026", "by the end of Q3 2025") as `invalid_at`.
+- Use a future date as `invalid_at` only when the fact describes an ongoing state that ends then (for example, "is unavailable until December 25, 2024" or "works at Acme until January 15, 2027").
 - If a change/termination is expressed, set `invalid_at` to the relevant timestamp.
 - Leave both fields `null` if no explicit or resolvable time is stated.
 - If only a date is mentioned (no time), assume 00:00:00.
 - If only a year is mentioned, use January 1st at 00:00:00.
+- Examples with REFERENCE_TIME 2020-01-01T00:00:00Z:
+  - "Emma will relocate to Tokyo on December 25, 2022" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
+  - "Alice will complete the project by July 30, 2024" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
+  - "The team will ship version 2.0 by the end of Q3 2025" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
         """,
         ),
     ]
@@ -253,11 +271,17 @@ def extract_timestamps(context: dict[str, Any]) -> list[Message]:
 Rules:
 - Resolve relative expressions ("last week", "2 years ago", "yesterday") using REFERENCE TIME.
 - If the fact is ongoing (present tense), set valid_at to REFERENCE TIME.
+- If the fact is a future-tense plan, promise, scheduled event, or deadline, set valid_at to REFERENCE TIME. Do NOT set valid_at to the future occurrence date.
+- Preserve future occurrence dates and deadlines in the fact text. Do NOT use a soft deadline ("by March 2026", "by the end of Q3 2025") as invalid_at.
+- Use a future date as invalid_at only when the fact describes an ongoing state that ends then (for example, "is unavailable until December 25, 2024" or "works at Acme until January 15, 2027").
 - If a change or end is expressed, set invalid_at to the relevant time.
 - Leave both null if no time is stated or resolvable.
 - If only a date is mentioned (no time), assume 00:00:00.
 - Use ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z).
 - Do NOT hallucinate or infer dates from unrelated events.
+- Examples with REFERENCE_TIME 2020-01-01T00:00:00Z:
+  - "Emma will relocate to Tokyo on December 25, 2022" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
+  - "Alice will complete the project by July 30, 2024" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
 
 <FACT>
 {context['fact']}
@@ -285,11 +309,18 @@ became true (valid_at) and when it stopped being true (invalid_at).
 Rules:
 - Resolve relative expressions ("last week", "2 years ago", "yesterday") using each fact's REFERENCE TIME.
 - If the fact is ongoing (present tense), set valid_at to its REFERENCE TIME.
+- If the fact is a future-tense plan, promise, scheduled event, or deadline, set valid_at to its REFERENCE TIME. Do NOT set valid_at to the future occurrence date.
+- Preserve future occurrence dates and deadlines in the fact text. Do NOT use a soft deadline ("by March 2026", "by the end of Q3 2025") as invalid_at.
+- Use a future date as invalid_at only when the fact describes an ongoing state that ends then (for example, "is unavailable until December 25, 2024" or "works at Acme until January 15, 2027").
 - If a change or end is expressed, set invalid_at to the relevant time.
 - Leave both null if no time is stated or resolvable.
 - If only a date is mentioned (no time), assume 00:00:00.
 - Use ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z).
 - Do NOT hallucinate or infer dates from unrelated events.
+- Examples with REFERENCE_TIME 2020-01-01T00:00:00Z:
+  - "Emma will relocate to Tokyo on December 25, 2022" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
+  - "Alice will complete the project by July 30, 2024" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
+  - "The team will ship version 2.0 by the end of Q3 2025" -> valid_at 2020-01-01T00:00:00Z, invalid_at null.
 
 Return one timestamps entry per fact, in the same order.
 
@@ -307,3 +338,31 @@ versions: Versions = {
     'extract_timestamps': extract_timestamps,
     'extract_timestamps_batch': extract_timestamps_batch,
 }
+
+
+class ExtractEdgesPrompts(ABC):
+    @abstractmethod
+    def edge(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_timestamps(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+    @abstractmethod
+    def extract_timestamps_batch(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultExtractEdgesPrompts(ExtractEdgesPrompts):
+    def edge(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(edge(context))
+
+    def extract_attributes(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_attributes(context))
+
+    def extract_timestamps(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_timestamps(context))
+
+    def extract_timestamps_batch(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(extract_timestamps_batch(context))

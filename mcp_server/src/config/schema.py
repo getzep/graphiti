@@ -80,7 +80,7 @@ class ServerConfig(BaseModel):
         default='http',
         description='Transport type: http (default, recommended), stdio, or sse (deprecated)',
     )
-    host: str = Field(default='0.0.0.0', description='Server host')
+    host: str = Field(default='127.0.0.1', description='Server host')
     port: int = Field(default=8000, description='Server port')
 
 
@@ -147,7 +147,7 @@ class LLMConfig(BaseModel):
     """LLM configuration."""
 
     provider: str = Field(default='openai', description='LLM provider')
-    model: str = Field(default='gpt-5.5', description='Model name')
+    model: str = Field(default='gpt-6-luna', description='Model name')
     temperature: float | None = Field(
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )
