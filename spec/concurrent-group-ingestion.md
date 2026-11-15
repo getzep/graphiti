@@ -453,10 +453,18 @@ it one candidate or more. For each collided edge, call
 The decisions for different edges run at the same time with
 `semaphore_gather`. An edge with no collision makes no model call.
 
-**C7a. Sagas.** When the unit has a saga, the commit gets or creates the saga
-node and reads the previous episode of the saga, as `graphiti.py` 1049-1067
-does. It mints the UUIDs of the `NEXT_EPISODE` and `HAS_EPISODE` edges and
-stores them in `saga_links`.
+**C7a. Sagas.** When the unit has a saga, the commit finds the saga node by
+its name, or it uses the `SagaNode` object of the caller. It reads the
+previous episode of the saga, as `graphiti.py` 1049-1067 does. It mints the
+UUIDs of the `NEXT_EPISODE` and `HAS_EPISODE` edges and stores them in
+`saga_links`. This step writes nothing. If no saga has the name, the commit
+makes the saga node in memory and sets `create_saga` in the change set. The
+change set keeps the saga node in `saga_node`. The apply of step C9 writes
+the saga records after the entity records: the new saga node if `create_saga`
+is set, then the edges, then the saga node with its first and last episode.
+A `SagaNode` object of the caller is saved after the edges, as in serial
+ingestion, and it does not need to be in the graph. A unit that the hook of
+step C7b rejects thus leaves no saga node.
 
 **C7b. Host hook.** If `before_commit_write` is set, the commit calls it with
 the change set. The hook returns the change set to write. The hook can raise

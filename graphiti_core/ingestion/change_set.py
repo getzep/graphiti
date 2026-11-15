@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodicNode, SagaNode
 from graphiti_core.utils.datetime_utils import ensure_utc
 
 
@@ -109,6 +109,10 @@ class ChangeSet(BaseModel):
     seen_invalidation_candidates: dict[str, list[str]] = Field(default_factory=dict)
     uuid_map: dict[str, str] = Field(default_factory=dict)
     saga_links: list[SagaLink] = Field(default_factory=list)
+    # The saga node of `saga_links`, as the commit read it or made it. With
+    # `create_saga`, the node is new and the apply of the commit writes it first.
+    saga_node: SagaNode | None = None
+    create_saga: bool = False
 
     def to_bytes(self) -> bytes:
         """Return the compressed JSON of the change set."""

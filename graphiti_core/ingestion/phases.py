@@ -1179,9 +1179,14 @@ async def _write_saga_links(
     write_budget: Callable[[], Awaitable[float]],
 ) -> None:
     links = change_set.saga_links
-    if not links:
+    if not links or change_set.saga_node is None:
         return
     driver = clients.driver
+    saga_node = change_set.saga_node.model_copy()
+    if change_set.create_saga:
+        # The saga is new. Its node is the first saga write, and a second apply writes
+        # the same node.
+        await asyncio.wait_for(saga_node.save(driver), await write_budget())
     for link in links:
         if link.previous_episode_uuid is not None and link.next_episode_edge_uuid is not None:
             next_episode_edge = NextEpisodeEdge(
@@ -1201,8 +1206,7 @@ async def _write_saga_links(
         )
         await asyncio.wait_for(has_episode_edge.save(driver), await write_budget())
 
-    # Track the first and the last episode on the current saga node.
-    saga_node = await SagaNode.get_by_uuid(driver, links[0].saga_uuid)
+    # Track the first and the last episode on the saga node, as serial ingestion does.
     if saga_node.first_episode_uuid is None:
         saga_node.first_episode_uuid = links[0].episode_uuid
     saga_node.last_episode_uuid = links[-1].episode_uuid
@@ -1394,10 +1398,14 @@ async def _build_saga_links(
     unit: AdmittedUnit,
     saga: 'str | SagaNode | None',
     saga_previous_episode_uuid: str | None,
-) -> list[SagaLink]:
-    """Step C7a: get or create the saga, read its last episode, and mint the edge UUIDs."""
+) -> tuple[list[SagaLink], SagaNode | None, bool]:
+    """Step C7a: find or make the saga node, read its last episode, and mint the edge UUIDs.
+
+    The function writes nothing. It returns the links, the saga node, and True when the
+    saga node is new and the apply of the commit must create it.
+    """
     if saga is None:
-        return []
+        return [], None, False
     driver = clients.driver
     now = unit.created_at
     if unit.bulk:
@@ -1412,13 +1420,15 @@ async def _build_saga_links(
         current_episode_uuid = episodes[0].uuid
         previous_episode_uuid = saga_previous_episode_uuid
 
+    create_saga = False
     if isinstance(saga, str):
-        saga_node = await graphiti._get_or_create_saga(
-            saga, unit.group_id, saga_created_at, driver=driver
-        )
+        found = await graphiti._find_saga(saga, unit.group_id, driver=driver)
+        create_saga = found is None
+        saga_node = found or SagaNode(name=saga, group_id=unit.group_id, created_at=saga_created_at)
     else:
-        saga_node = saga
-    if previous_episode_uuid is None:
+        # Serial ingestion uses the object of the caller and saves it after the edges.
+        saga_node = saga.model_copy()
+    if previous_episode_uuid is None and not create_saga:
         previous_episode_uuid = await graphiti._saga_get_previous_episode_uuid(
             saga_node.uuid, current_episode_uuid, driver=driver
         )
@@ -1436,7 +1446,7 @@ async def _build_saga_links(
             )
         )
         previous_episode_uuid = episode.uuid
-    return links
+    return links, saga_node, create_saga
 
 
 async def commit_unit(
@@ -1525,7 +1535,11 @@ async def commit_unit(
                     identity_properties=identity_properties,
                     report=report,
                 )
-                final.saga_links = await _build_saga_links(
+                (
+                    final.saga_links,
+                    final.saga_node,
+                    final.create_saga,
+                ) = await _build_saga_links(
                     graphiti, clients, unit, saga, saga_previous_episode_uuid
                 )
                 if config.before_commit_write is not None:

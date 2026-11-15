@@ -550,6 +550,23 @@ class Graphiti:
         SagaNode
             The existing or newly created saga node.
         """
+        driver = driver or self.driver
+
+        existing = await self._find_saga(saga_name, group_id, driver=driver)
+        if existing is not None:
+            return existing
+
+        saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
+        await saga.save(driver)
+        return saga
+
+    async def _find_saga(
+        self,
+        saga_name: str,
+        group_id: str,
+        driver: GraphDriver | None = None,
+    ) -> SagaNode | None:
+        """Return the saga with the name, or None. The method writes nothing."""
         from graphiti_core.helpers import parse_db_date
 
         driver = driver or self.driver
@@ -576,9 +593,7 @@ class Graphiti:
                 last_episode_uuid=record['last_episode_uuid'],
             )
 
-        saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
-        await saga.save(driver)
-        return saga
+        return None
 
     async def _saga_get_previous_episode_uuid(
         self, saga_uuid: str, current_episode_uuid: str, driver: GraphDriver | None = None

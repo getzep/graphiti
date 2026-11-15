@@ -24,7 +24,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from graphiti_core.errors import ChangeSetRejected, UnitExpiredError
+from graphiti_core.edges import HasEpisodeEdge, NextEpisodeEdge
+from graphiti_core.errors import ChangeSetRejected, NodeNotFoundError, UnitExpiredError
 from graphiti_core.ingestion.change_set import (
     AddEpisodesToEdge,
     ChangeSet,
@@ -549,14 +550,9 @@ async def test_c7_an_edge_with_no_new_candidate_makes_no_model_call(monkeypatch)
 # --- C7a to C7c ------------------------------------------------------------------
 
 
-async def test_c7a_saga_links_are_in_the_final_change_set(monkeypatch):
-    from graphiti_core.edges import HasEpisodeEdge, NextEpisodeEdge
-
-    h = Harness(monkeypatch)
-    saga_node = SagaNode(uuid='saga1', name='thread', group_id=GROUP)
-    h.graphiti._get_or_create_saga = AsyncMock(return_value=saga_node)
-    h.graphiti._saga_get_previous_episode_uuid = AsyncMock(return_value='ep0')
-    saved: list[tuple[str, str]] = []
+def record_saga_writes(monkeypatch) -> list[tuple[str, str | None]]:
+    """Record each saga write. A read of a saga node by UUID finds no node."""
+    saved: list[tuple[str, str | None]] = []
 
     async def save_edge(self, driver):
         saved.append((type(self).__name__, self.uuid))
@@ -567,7 +563,16 @@ async def test_c7a_saga_links_are_in_the_final_change_set(monkeypatch):
     monkeypatch.setattr(NextEpisodeEdge, 'save', save_edge)
     monkeypatch.setattr(HasEpisodeEdge, 'save', save_edge)
     monkeypatch.setattr(SagaNode, 'save', save_saga)
-    monkeypatch.setattr(SagaNode, 'get_by_uuid', AsyncMock(return_value=saga_node))
+    monkeypatch.setattr(SagaNode, 'get_by_uuid', AsyncMock(side_effect=NodeNotFoundError('saga')))
+    return saved
+
+
+async def test_c7a_saga_links_are_in_the_final_change_set(monkeypatch):
+    h = Harness(monkeypatch)
+    saga_node = SagaNode(uuid='saga1', name='thread', group_id=GROUP)
+    h.graphiti._find_saga = AsyncMock(return_value=saga_node)
+    h.graphiti._saga_get_previous_episode_uuid = AsyncMock(return_value='ep0')
+    saved = record_saga_writes(monkeypatch)
 
     unit = await h.admit('u1')
     change_set = await h.analyze(unit)
@@ -579,12 +584,91 @@ async def test_c7a_saga_links_are_in_the_final_change_set(monkeypatch):
         'ep-u1',
         'ep0',
     )
+    assert result.change_set.create_saga is False
     assert saved == [
         ('NextEpisodeEdge', link.next_episode_edge_uuid),
         ('HasEpisodeEdge', link.has_episode_edge_uuid),
         ('SagaNode', 'ep-u1'),
     ]
-    assert saga_node.first_episode_uuid == 'ep-u1'
+
+
+async def test_c7a_new_saga_is_written_in_the_apply_and_not_before(monkeypatch):
+    events: list[str] = []
+
+    async def hook(change_set: ChangeSet) -> ChangeSet:
+        events.append('hook')
+        return change_set
+
+    h = Harness(monkeypatch, before_commit_write=hook)
+    h.graphiti._find_saga = AsyncMock(return_value=None)
+    h.graphiti._saga_get_previous_episode_uuid = AsyncMock(
+        side_effect=AssertionError('a new saga has no previous episode')
+    )
+    saved = record_saga_writes(monkeypatch)
+    real_save_final = h.store.save_final
+
+    async def save_final(*args):
+        events.append(f'save_final after {len(saved)} saga writes')
+        await real_save_final(*args)
+
+    monkeypatch.setattr(h.store, 'save_final', save_final)
+    unit = await h.admit('u1')
+    change_set = await h.analyze(unit)
+    result = await h.commit(unit, change_set, saga='thread')
+
+    final = result.change_set
+    (link,) = final.saga_links
+    assert events == ['hook', 'save_final after 0 saga writes']
+    assert final.create_saga is True
+    assert final.saga_node.name == 'thread'
+    assert link.saga_uuid == final.saga_node.uuid
+    # The apply creates the saga node, then the edge, then it records the episode.
+    assert saved == [
+        ('SagaNode', None),
+        ('HasEpisodeEdge', link.has_episode_edge_uuid),
+        ('SagaNode', 'ep-u1'),
+    ]
+
+
+async def test_c7a_rejected_unit_leaves_no_saga_node(monkeypatch):
+    async def reject(change_set: ChangeSet) -> ChangeSet:
+        raise ChangeSetRejected('policy')
+
+    h = Harness(monkeypatch, before_commit_write=reject)
+    h.graphiti._find_saga = AsyncMock(return_value=None)
+    saved = record_saga_writes(monkeypatch)
+    h.graphiti._get_or_create_saga = AsyncMock(
+        side_effect=lambda *args, **kwargs: saved.append(('created before the hook', None))
+    )
+    unit = await h.admit('u1')
+    change_set = await h.analyze(unit)
+
+    with pytest.raises(ChangeSetRejected):
+        await h.commit(unit, change_set, saga='thread')
+
+    assert saved == []
+    assert 'write:bulk' not in h.graph.log
+
+
+async def test_c7a_saga_object_that_is_not_in_the_graph_is_saved_as_in_serial_ingestion(
+    monkeypatch,
+):
+    h = Harness(monkeypatch)
+    h.graphiti._saga_get_previous_episode_uuid = AsyncMock(return_value=None)
+    saved = record_saga_writes(monkeypatch)
+    saga_node = SagaNode(uuid='saga-object', name='thread', group_id=GROUP)
+
+    unit = await h.admit('u1')
+    change_set = await h.analyze(unit)
+    result = await h.commit(unit, change_set, saga=saga_node)
+
+    final = result.change_set
+    (link,) = final.saga_links
+    assert link.saga_uuid == 'saga-object'
+    assert final.create_saga is False
+    # Serial ingestion saves the edge and then the object that the caller gave.
+    assert saved == [('HasEpisodeEdge', link.has_episode_edge_uuid), ('SagaNode', 'ep-u1')]
+    assert result.report['apply.attempts'] == 1
 
 
 async def test_c7b_hook_output_is_the_stored_final_change_set(monkeypatch):
