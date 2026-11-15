@@ -23,7 +23,7 @@ import pytest
 
 from graphiti_core.errors import StaleCommitError, UnitExpiredError
 from graphiti_core.ingestion import phases
-from graphiti_core.ingestion.change_set import ChangeSet, PatchNode
+from graphiti_core.ingestion.change_set import AddEpisodesToEdge, ChangeSet, EndEdge, PatchNode
 from graphiti_core.ingestion.phases import UnitLease, admit_episode, analyze_episode
 from graphiti_core.ingestion.state_store import (
     STATUS_ANALYZED,
@@ -35,9 +35,12 @@ from graphiti_core.ingestion.state_store import (
 from tests.ingestion.ingestion_fixtures import (
     GROUP,
     T0,
+    T1,
+    T2,
     FakeClock,
     Harness,
     Y,
+    make_edge,
     make_node,
 )
 
@@ -316,6 +319,59 @@ async def test_lease_heartbeat_is_stale_after_a_different_attempt_gets_the_turn(
     assert budget > 0
     with pytest.raises(UnitExpiredError):
         first_lease.write_budget()
+
+
+async def test_attempt_checks_its_turn_before_each_graph_write(monkeypatch):
+    """The clock of the first attempt stops, for example on a machine that was suspended.
+
+    Its local deadline is thus in the future after a later unit recovered it. The check of
+    the fence before each graph write stops the write of the old record.
+    """
+    store_clock = FakeClock()
+    local_clock = FakeClock()
+    h = Harness(monkeypatch, clock=store_clock)
+    h.graph.add(make_node('a', 'A'), make_node('b', 'B', Y))
+    h.graph.add(make_edge('S', 'a', 'b', 'A works at B', valid_at=T0))
+    unit_1 = await h.admit('u1')
+    change_set_1 = await h.analyze(
+        unit_1, operations=[AddEpisodesToEdge(edge_uuid='S', episode_uuids=['ep-u1'])]
+    )
+    unit_2 = await h.admit('u2')
+    change_set_2 = await h.analyze(
+        unit_2,
+        operations=[EndEdge(edge_uuid='S', invalid_at=T1, expired_at=T2, only_if_open=False)],
+    )
+    lease_1 = UnitLease(h.store, h.config, GROUP, unit_1.seq, clock=local_clock)
+    lease_2 = UnitLease(h.store, h.config, GROUP, unit_2.seq, clock=store_clock)
+    real_bulk = h.graph.add_nodes_and_edges_bulk
+    paused = False
+
+    async def paused_bulk(*args, **kwargs):
+        nonlocal paused
+        await real_bulk(*args, **kwargs)
+        if paused:
+            return
+        paused = True
+        # Unit 1 stops after the first write of step C9 for longer than `lease_seconds`.
+        store_clock.advance(h.config.lease_seconds / 2)
+        await lease_2.heartbeat()
+        store_clock.advance(h.config.lease_seconds / 2 + 1)
+        # Unit 2 recovers unit 1 and then commits its own change set.
+        result_2 = await h.commit(unit_2, change_set_2, lease=lease_2)
+        assert result_2.report['recovered.count'] == 1
+        assert h.graph.edges['S'].invalid_at == T1
+
+    monkeypatch.setattr(phases, 'add_nodes_and_edges_bulk', paused_bulk)
+    assert lease_1.fence is None
+    with pytest.raises(StaleCommitError):
+        await h.commit(unit_1, change_set_1, lease=lease_1)
+
+    # The local deadline of unit 1 did not stop the write. The fence did.
+    assert lease_1.write_budget() > 0
+    edge = h.graph.edges['S']
+    assert (edge.invalid_at, edge.expired_at) == (T1, T2)
+    assert edge.episodes == ['ep-u1']
+    assert h.graph.log.count('write:edge_update') == 2
 
 
 async def test_expired_unit_stops_at_the_next_store_call(monkeypatch):

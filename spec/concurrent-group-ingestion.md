@@ -540,6 +540,14 @@ protection:
    driver with no such limit, the unit cancels the call at the limit. The
    database can then complete a write that it already started (section 12.3).
 
+4. Immediately before each graph write of step C9, the unit calls
+   `heartbeat` with the fence of its turn. If a different attempt has the
+   turn, the store raises `StaleCommitError`, and the unit does not write.
+   This check also stops an attempt whose local clock did not move while the
+   deadline in the store passed, for example on a machine that was suspended.
+   If the store gives no answer, rules 1 to 3 apply. The recovery of an
+   earlier unit uses the same check with the fence of the recovery.
+
 A different attempt gets the turn only when the deadline in the store is in
 the past (section 8.3). This is true for a later unit that recovers the unit,
 and for a second attempt of the same unit. Only the attempt with the turn can

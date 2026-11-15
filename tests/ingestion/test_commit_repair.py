@@ -20,6 +20,8 @@ limitations under the License.
 # in-memory graph, and checks the repair. The model client raises an error on a call
 # that a test does not expect.
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from graphiti_core.errors import ChangeSetRejected, UnitExpiredError
@@ -548,8 +550,6 @@ async def test_c7_an_edge_with_no_new_candidate_makes_no_model_call(monkeypatch)
 
 
 async def test_c7a_saga_links_are_in_the_final_change_set(monkeypatch):
-    from unittest.mock import AsyncMock
-
     from graphiti_core.edges import HasEpisodeEdge, NextEpisodeEdge
 
     h = Harness(monkeypatch)
@@ -737,6 +737,28 @@ async def test_c9_update_does_not_create_again_an_edge_that_a_writer_deleted(mon
     assert h.graph.edges == {}
 
 
+async def test_c9_check_of_the_turn_renews_the_deadline_before_a_write(monkeypatch):
+    clock = FakeClock()
+    h = Harness(monkeypatch, clock=clock, lease_seconds=30.0, write_margin_seconds=4.0)
+    unit = await h.admit('u1')
+    change_set = await h.analyze(unit, create_nodes=[make_node('a1', 'Acme')])
+    lease = UnitLease(h.store, h.config, GROUP, unit.seq, clock=clock)
+
+    class SlowReader:
+        def __getattr__(self, name):
+            return getattr(h.graph, name)
+
+        async def node_candidates(self, nodes, identity_properties=None):
+            clock.advance(27.0)
+            return await h.graph.node_candidates(nodes, identity_properties)
+
+    # The unit has the turn. The heartbeat with its fence gives the write a new deadline.
+    await h.commit(unit, change_set, lease=lease, reader=SlowReader())
+
+    assert set(h.graph.nodes) == {'a1'}
+    assert lease.fence == 1
+
+
 async def test_c9_no_write_starts_after_the_local_deadline(monkeypatch):
     clock = FakeClock()
     h = Harness(monkeypatch, clock=clock, lease_seconds=30.0, write_margin_seconds=4.0)
@@ -754,6 +776,9 @@ async def test_c9_no_write_starts_after_the_local_deadline(monkeypatch):
             clock.advance(27.0)
             return await h.graph.node_candidates(nodes, identity_properties)
 
+    # The store gives no answer to the check of the turn before the write. The local
+    # deadline then stops the write.
+    monkeypatch.setattr(h.store, 'heartbeat', AsyncMock(side_effect=RuntimeError('no answer')))
     with pytest.raises(UnitExpiredError):
         await h.commit(unit, change_set, lease=lease, reader=SlowReader())
 

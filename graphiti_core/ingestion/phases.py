@@ -1042,7 +1042,9 @@ class ApplyResult(BaseModel):
 
 
 async def _write_saga_links(
-    clients: GraphitiClients, change_set: ChangeSet, write_budget: Callable[[], float]
+    clients: GraphitiClients,
+    change_set: ChangeSet,
+    write_budget: Callable[[], Awaitable[float]],
 ) -> None:
     links = change_set.saga_links
     if not links:
@@ -1057,7 +1059,7 @@ async def _write_saga_links(
                 group_id=change_set.group_id,
                 created_at=link.created_at,
             )
-            await asyncio.wait_for(next_episode_edge.save(driver), write_budget())
+            await asyncio.wait_for(next_episode_edge.save(driver), await write_budget())
         has_episode_edge = HasEpisodeEdge(
             uuid=link.has_episode_edge_uuid,
             source_node_uuid=link.saga_uuid,
@@ -1065,14 +1067,14 @@ async def _write_saga_links(
             group_id=change_set.group_id,
             created_at=link.created_at,
         )
-        await asyncio.wait_for(has_episode_edge.save(driver), write_budget())
+        await asyncio.wait_for(has_episode_edge.save(driver), await write_budget())
 
     # Track the first and the last episode on the current saga node.
     saga_node = await SagaNode.get_by_uuid(driver, links[0].saga_uuid)
     if saga_node.first_episode_uuid is None:
         saga_node.first_episode_uuid = links[0].episode_uuid
     saga_node.last_episode_uuid = links[-1].episode_uuid
-    await asyncio.wait_for(saga_node.save(driver), write_budget())
+    await asyncio.wait_for(saga_node.save(driver), await write_budget())
 
 
 async def apply_change_set(
@@ -1081,16 +1083,35 @@ async def apply_change_set(
     *,
     write_budget: Callable[[], float],
     reader: GraphReader | None = None,
+    check_turn: Callable[[], Awaitable[None]] | None = None,
 ) -> ApplyResult:
     """Apply a final change set to the graph (steps C8 and C9).
 
     Each operation applies to the current state of its stored edge. An operation on an
     edge that does not exist is dropped. `write_budget` returns the time limit in
-    seconds of a write that starts now, or raises `UnitExpiredError`. The function
-    mints no UUID and no date, so a second call writes the same records.
+    seconds of a write that starts now, or raises `UnitExpiredError`. `check_turn`
+    runs before each graph write. It raises `StaleCommitError` when a different
+    attempt has the turn of the unit. The function mints no UUID and no date, so a
+    second call writes the same records.
     """
     driver = clients.driver
     reader = reader or GraphReader(clients)
+
+    async def checked_budget() -> float:
+        if check_turn is not None:
+            try:
+                await check_turn()
+            except (StaleCommitError, UnitExpiredError):
+                raise
+            except Exception:
+                # The store gave no answer. The local deadline then limits the write.
+                logger.warning(
+                    'the turn of ingestion unit %s of group %s was not checked before a write',
+                    change_set.seq,
+                    change_set.group_id,
+                    exc_info=True,
+                )
+        return write_budget()
 
     operations = change_set.edge_operations()
     edge_uuids = list(dict.fromkeys(operation.edge_uuid for operation in operations))
@@ -1118,18 +1139,18 @@ async def apply_change_set(
         change_set.create_nodes,
         change_set.create_edges,
         clients.embedder,
-        write_timeout=write_budget(),
+        write_timeout=await checked_budget(),
     )
     if changed:
         await execute_write_with_timeout(
             driver,
-            write_budget(),
+            await checked_budget(),
             update_entity_edges_tx,
             result.changed_edges,
             clients.embedder,
             driver=driver,
         )
-    await _write_saga_links(clients, change_set, write_budget)
+    await _write_saga_links(clients, change_set, checked_budget)
     return result
 
 
@@ -1140,6 +1161,7 @@ async def _apply_with_retries(
     max_attempts: int,
     report: dict[str, float],
     reader: GraphReader,
+    check_turn: Callable[[], Awaitable[None]],
 ) -> list[EntityEdge]:
     """Apply the same final change set until one attempt succeeds. No model call is made."""
     changed: dict[str, EntityEdge] = {}
@@ -1148,7 +1170,7 @@ async def _apply_with_retries(
         report['apply.attempts'] = attempt
         try:
             result = await apply_change_set(
-                clients, final, write_budget=write_budget, reader=reader
+                clients, final, write_budget=write_budget, reader=reader, check_turn=check_turn
             )
         except (UnitExpiredError, StaleCommitError):
             raise
@@ -1191,7 +1213,7 @@ async def _recover_unit(
     config: ConcurrentIngestionConfig,
     group_id: str,
     recover: CommitRecover,
-    deadline: float,
+    call_started_at: float,
     clock: Callable[[], float],
     turns: dict[int, int],
     report: dict[str, float],
@@ -1202,21 +1224,21 @@ async def _recover_unit(
     The nodes of the recovered unit get no enrichment from that unit.
     """
 
-    def write_budget() -> float:
-        budget = deadline - clock() - config.write_margin_seconds
-        if budget <= 0:
-            raise UnitExpiredError(group_id, recover.seq)
-        return budget
+    # The recovery has the turn of the earlier unit, with the fence of `recover`.
+    lease = UnitLease(store, config, group_id, recover.seq, clock)
+    lease.fence = recover.fence
+    lease.renewed(call_started_at)
 
     turns[recover.seq] = turns.get(recover.seq, 0) + 1
     try:
         await _apply_with_retries(
             clients,
             ChangeSet.from_bytes(recover.final_payload),
-            write_budget,
+            lease.write_budget,
             config.max_apply_attempts,
             new_report(),
             reader,
+            lease.heartbeat,
         )
         await store.finish_commit(
             group_id, recover.seq, recover.fence, [], config.index_lag_seconds
@@ -1336,7 +1358,7 @@ async def commit_unit(
                         config,
                         group_id,
                         turn,
-                        call_started_at + config.lease_seconds,
+                        call_started_at,
                         lease.clock,
                         recover_turns,
                         report,
@@ -1386,7 +1408,13 @@ async def commit_unit(
 
         try:
             changed_edges = await _apply_with_retries(
-                clients, final, lease.write_budget, config.max_apply_attempts, report, reader
+                clients,
+                final,
+                lease.write_budget,
+                config.max_apply_attempts,
+                report,
+                reader,
+                lease.heartbeat,
             )
         except (UnitExpiredError, StaleCommitError):
             raise
