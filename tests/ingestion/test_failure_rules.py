@@ -40,6 +40,7 @@ from graphiti_core.ingestion.state_store import (
     STATUS_COMMITTED,
     STATUS_FAILED,
     CommitWait,
+    InMemoryIngestionStateStore,
 )
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
@@ -52,6 +53,7 @@ from tests.ingestion.ingestion_fixtures import (
     Harness,
     Y,
     make_edge,
+    make_episode,
     make_node,
 )
 
@@ -236,6 +238,51 @@ async def test_admission_retry_after_a_failed_unit_gets_a_new_position(monkeypat
     assert second.created_at == first.created_at
     assert second.previous_episodes == [[]]
     assert h.graph.log.count('write:bulk') == 1
+
+
+@pytest.mark.parametrize('bulk', [False, True], ids=['episode', 'bulk'])
+async def test_admission_does_not_change_an_episode_node_that_is_in_the_graph(monkeypatch, bulk):
+    h = Harness(monkeypatch)
+    patch_bulk_context(monkeypatch)
+    admit = admit_bulk_task if bulk else admit_task
+    first = await admit(h, 'task-1')
+    # The unit committed, and the commit recorded the edges on each episode node.
+    for episode in h.graph.episodes.values():
+        episode.entity_edges = ['e1']
+    stored = {uuid: episode.model_dump() for uuid, episode in h.graph.episodes.items()}
+    writes = h.graph.log.count('write:bulk')
+
+    # The store has no record of the unit: the store deleted the unit after the
+    # retention time. The host then runs the admit task again with the same `unit_id`.
+    h.store = InMemoryIngestionStateStore()
+    second = await admit(h, 'task-1')
+
+    assert [episode.uuid for episode in second.episodes] == [e.uuid for e in first.episodes]
+    # A node compares equal by UUID only, so the test compares each field.
+    assert {uuid: e.model_dump() for uuid, e in h.graph.episodes.items()} == stored
+    assert h.graph.log.count('write:bulk') == writes
+
+
+async def test_commit_keeps_the_links_that_the_stored_episode_node_has(monkeypatch):
+    h = Harness(monkeypatch)
+    episode = make_episode('ep-u1')
+    stored = episode.model_copy(deep=True)
+    stored.entity_edges = ['e-old', 'e-new']
+    h.graph.episodes[episode.uuid] = stored
+    h.graph.nodes.update({'a': make_node('a', 'Alice'), 'b': make_node('b', 'Bob')})
+
+    unit = await h.admit('u1', episode)
+    change_set = await h.analyze(
+        unit,
+        create_edges=[
+            make_edge('e-new', 'a', 'b', 'Alice knows Bob'),
+            make_edge('e-2', 'a', 'b', 'Alice likes Bob', Y),
+        ],
+    )
+    await h.commit(unit, change_set)
+
+    # The link list is the stored list and then the new links of the change set.
+    assert h.graph.episodes[episode.uuid].entity_edges == ['e-old', 'e-new', 'e-2']
 
 
 @pytest.mark.parametrize('store_kind', ['memory', 'sqlite'])

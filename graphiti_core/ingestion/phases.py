@@ -323,11 +323,14 @@ def _episode_uuid(group_id: str, unit_id: str, index: int = 0) -> str:
     return str(uuid5(NAMESPACE_URL, f'graphiti:ingest:{group_id}:{unit_id}:{index}'))
 
 
-async def _written_episodes(
-    driver: Any, admission: Admission, episode_uuids: list[str]
-) -> dict[str, EpisodicNode]:
-    """Return the episode nodes that an earlier admission of the `unit_id` wrote."""
-    if not episode_uuids or not (admission.existing or admission.previous_seq is not None):
+async def _written_episodes(driver: Any, episode_uuids: list[str]) -> dict[str, EpisodicNode]:
+    """Return the episode nodes of the `unit_id` that are in the graph.
+
+    The read does not use the state store: the store can have no record of a unit that
+    wrote its episode nodes. The admission writes only the nodes that this read does
+    not return, so it does not change a stored node or its `entity_edges`.
+    """
+    if not episode_uuids:
         return {}
     episodes = await EpisodicNode.get_by_uuids(driver, episode_uuids)
     return {episode.uuid: episode for episode in episodes}
@@ -394,10 +397,10 @@ async def admit_episode(
                     episode = await EpisodicNode.get_by_uuid(driver, uuid)
                 else:
                     episode_uuid = _episode_uuid(group_id, unit_id)
-                    written = await _written_episodes(driver, admission, [episode_uuid])
+                    written = await _written_episodes(driver, [episode_uuid])
                     if episode_uuid in written:
-                        # An earlier admission of this `unit_id` wrote the node. The unit
-                        # keeps the content in memory.
+                        # The node is in the graph, and the admission does not change it.
+                        # The unit keeps the content in memory.
                         episode = written[episode_uuid]
                         episode.content = episode_body
                         now = episode.created_at
@@ -481,7 +484,6 @@ async def admit_bulk(
                 new_episodes: list[EpisodicNode] = []
                 written = await _written_episodes(
                     driver,
-                    admission,
                     [
                         _episode_uuid(group_id, unit_id, index)
                         for index, raw_episode in enumerate(bulk_episodes)
@@ -494,7 +496,7 @@ async def admit_bulk(
                         continue
                     episode_uuid = _episode_uuid(group_id, unit_id, index)
                     if episode_uuid in written:
-                        # An earlier admission of this `unit_id` wrote the node.
+                        # The node is in the graph, and the admission does not change it.
                         episode = written[episode_uuid]
                         episode.content = raw_episode.content
                         episodes.append(episode)
@@ -1198,6 +1200,30 @@ async def rebase_change_set(
     return final
 
 
+async def _episodes_with_stored_links(
+    reader: GraphReader, episodes: list[EpisodicNode]
+) -> list[EpisodicNode]:
+    """Return copies of the episodes that keep the `entity_edges` of the stored nodes.
+
+    The `entity_edges` of each copy is the stored list and then the new UUIDs of the
+    change set. A commit thus removes no link that an earlier commit wrote, and a
+    second apply writes the same list.
+    """
+    stored = {
+        episode.uuid: episode
+        for episode in await reader.episodes_by_uuids([episode.uuid for episode in episodes])
+    }
+    written: list[EpisodicNode] = []
+    for episode in episodes:
+        stored_episode = stored.get(episode.uuid)
+        if stored_episode is None or not stored_episode.entity_edges:
+            written.append(episode)
+            continue
+        links = list(dict.fromkeys([*stored_episode.entity_edges, *episode.entity_edges]))
+        written.append(episode.model_copy(update={'entity_edges': links}))
+    return written
+
+
 class ApplyResult(BaseModel):
     """The result of `apply_change_set`: the stored edges that changed, and the counts."""
 
@@ -1303,7 +1329,7 @@ async def apply_change_set(
 
     await add_nodes_and_edges_bulk(
         driver,
-        change_set.episodes,
+        await _episodes_with_stored_links(reader, change_set.episodes),
         change_set.episodic_edges,
         change_set.create_nodes,
         change_set.create_edges,

@@ -18,7 +18,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.errors import EdgeNotFoundError, EdgesNotFoundError, NodeNotFoundError
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
-from graphiti_core.nodes import EntityNode
+from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
@@ -99,6 +99,12 @@ class GraphReader:
             return await EntityNode.get_by_uuids(self.clients.driver, uuids, group_id=group_id)
         except NodeNotFoundError:
             return []
+
+    async def episodes_by_uuids(self, uuids: list[str]) -> list[EpisodicNode]:
+        """Return the current state of the episode nodes that exist."""
+        if not uuids:
+            return []
+        return await EpisodicNode.get_by_uuids(self.clients.driver, uuids)
 
     async def edges_by_uuids(self, uuids: list[str]) -> list[EntityEdge]:
         """Return the current state of the edges that exist."""

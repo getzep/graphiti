@@ -210,7 +210,9 @@ context to later units.
 3. With the lease, the caller writes the episode nodes with an empty
    `entity_edges` list. When `store_raw_episode_content` is `False`, the
    written node has empty content, as today. The unit keeps the content in
-   memory.
+   memory. The write is create-only: the caller first reads the nodes by
+   their UUIDs, and it writes only the nodes that are not in the graph. The
+   admission does not change a stored episode node.
 4. The caller releases the lease: `end_admit(group_id, seq)`.
 
 Steps 2 and 3 run in `seq` order, because one unit has the lease at a time and
@@ -233,9 +235,12 @@ the same `unit_id`.
   time, `begin_admit` gives a new sequence number, as the third item below
   describes. If the unit is committed, the host does not try again.
 - The UUID of an episode node that the unit writes is a function of
-  `group_id`, `unit_id`, and the position of the episode in the unit. A retry
-  reads the node with that UUID. If the node is in the graph, the retry does
-  not save it again, and it keeps the content of the episode in memory.
+  `group_id`, `unit_id`, and the position of the episode in the unit. Each
+  admission reads the node with that UUID from the graph. The read does not
+  use the state store, because the store deletes the record of a completed
+  unit after the retention time. If the node is in the graph, the admission
+  does not save it again, and it keeps the content of the episode in memory.
+  The stored node keeps its `entity_edges`.
 - A unit is not live when its status is `failed` or `apply_failed`, or when
   its deadline is in the past and it has no stored final change set.
   `begin_admit` marks such an expired unit `failed`. The `unit_id` then gets
@@ -548,7 +553,11 @@ after a partial write is thus safe.
 **C9. Write.** Two writes, then the saga writes of `saga_links`:
 
 1. One call of `add_nodes_and_edges_bulk` with the episodes, the episodic
-   edges, `create_nodes`, and `create_edges`.
+   edges, `create_nodes`, and `create_edges`. Before the call, the commit
+   reads the stored episode nodes by UUID. The `entity_edges` of each written
+   episode is the stored list and then the UUIDs of the change set that are
+   not in the stored list. A commit thus removes no link from an episode
+   node. Serial ingestion replaces the list.
 2. One update of the changed stored edges with a new query that uses `MATCH`
    on the edge `uuid` and has no `MERGE` (section 13.2, item 6). If a writer
    deleted the edge after the read of step C8, the query matches nothing and

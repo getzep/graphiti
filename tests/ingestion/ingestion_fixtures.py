@@ -233,6 +233,9 @@ class FakeGraph:
             if uuid in self.nodes
         ]
 
+    async def episodes_by_uuids(self, uuids):
+        return [deepcopy(self.episodes[uuid]) for uuid in uuids if uuid in self.episodes]
+
     async def edges_by_uuids(self, uuids):
         return [deepcopy(self.edges[uuid]) for uuid in uuids if uuid in self.edges]
 
