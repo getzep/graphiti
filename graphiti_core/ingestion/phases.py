@@ -272,6 +272,47 @@ async def _begin_admit(
         await wait()
 
 
+@contextlib.asynccontextmanager
+async def _admit_heartbeat(
+    store: IngestionStateStore,
+    config: ConcurrentIngestionConfig,
+    group_id: str,
+    admission: Admission,
+):
+    """Renew the deadline of a unit while its admission reads and writes the graph.
+
+    The caller of the Admit phase does not have the `seq` before the phase returns, so
+    the phase renews the deadline itself. A unit of a different attempt gets no
+    heartbeat from this call.
+    """
+    if admission.existing:
+        yield
+        return
+
+    async def beat() -> None:
+        while True:
+            await asyncio.sleep(config.lease_seconds / 3)
+            try:
+                await store.heartbeat(group_id, admission.seq, config.lease_seconds)
+            except (UnitExpiredError, StaleCommitError):
+                # The unit is expired or failed. `end_admit` raises the error.
+                return
+            except Exception:
+                logger.warning(
+                    'heartbeat of ingestion unit %s of group %s failed in the admission',
+                    admission.seq,
+                    group_id,
+                    exc_info=True,
+                )
+
+    task = asyncio.create_task(beat())
+    try:
+        yield
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 def _episode_uuid(group_id: str, unit_id: str, index: int = 0) -> str:
     """Return the UUID of an episode that a unit writes.
 
@@ -332,54 +373,55 @@ async def admit_episode(
         seq = admission.seq
         admitted_at = time.time()
         try:
-            now = utc_now()
-            previous_episodes = (
-                await graphiti.retrieve_episodes(
-                    reference_time,
-                    last_n=RELEVANT_SCHEMA_LIMIT,
-                    group_ids=[group_id],
-                    source=source,
-                    driver=driver,
-                )
-                if previous_episode_uuids is None
-                else await EpisodicNode.get_by_uuids(driver, previous_episode_uuids)
-            )
-            if uuid is not None:
-                episode = await EpisodicNode.get_by_uuid(driver, uuid)
-            else:
-                episode_uuid = _episode_uuid(group_id, unit_id)
-                written = await _written_episodes(driver, admission, [episode_uuid])
-                if episode_uuid in written:
-                    # An earlier admission of this `unit_id` wrote the node. The unit
-                    # keeps the content in memory.
-                    episode = written[episode_uuid]
-                    episode.content = episode_body
-                    now = episode.created_at
-                else:
-                    episode = EpisodicNode(
-                        uuid=episode_uuid,
-                        name=name,
-                        group_id=group_id,
-                        labels=[],
+            async with _admit_heartbeat(store, config, group_id, admission):
+                now = utc_now()
+                previous_episodes = (
+                    await graphiti.retrieve_episodes(
+                        reference_time,
+                        last_n=RELEVANT_SCHEMA_LIMIT,
+                        group_ids=[group_id],
                         source=source,
-                        content=episode_body,
-                        source_description=source_description,
-                        created_at=now,
-                        valid_at=reference_time,
+                        driver=driver,
                     )
-                    await add_nodes_and_edges_bulk(
-                        driver,
-                        [_written_episode(graphiti, episode, [])],
-                        [],
-                        [],
-                        [],
-                        clients.embedder,
-                    )
-            # After a retry, the node of the unit is in the graph. It is not its own context.
-            previous_episodes = [
-                previous for previous in previous_episodes if previous.uuid != episode.uuid
-            ]
-            await store.end_admit(group_id, seq)
+                    if previous_episode_uuids is None
+                    else await EpisodicNode.get_by_uuids(driver, previous_episode_uuids)
+                )
+                if uuid is not None:
+                    episode = await EpisodicNode.get_by_uuid(driver, uuid)
+                else:
+                    episode_uuid = _episode_uuid(group_id, unit_id)
+                    written = await _written_episodes(driver, admission, [episode_uuid])
+                    if episode_uuid in written:
+                        # An earlier admission of this `unit_id` wrote the node. The unit
+                        # keeps the content in memory.
+                        episode = written[episode_uuid]
+                        episode.content = episode_body
+                        now = episode.created_at
+                    else:
+                        episode = EpisodicNode(
+                            uuid=episode_uuid,
+                            name=name,
+                            group_id=group_id,
+                            labels=[],
+                            source=source,
+                            content=episode_body,
+                            source_description=source_description,
+                            created_at=now,
+                            valid_at=reference_time,
+                        )
+                        await add_nodes_and_edges_bulk(
+                            driver,
+                            [_written_episode(graphiti, episode, [])],
+                            [],
+                            [],
+                            [],
+                            clients.embedder,
+                        )
+                # After a retry, the node of the unit is in the graph. It is not its own context.
+                previous_episodes = [
+                    previous for previous in previous_episodes if previous.uuid != episode.uuid
+                ]
+                await store.end_admit(group_id, seq)
         except BaseException as error:
             await _fail_admission(store, group_id, admission, error)
             raise
@@ -426,56 +468,57 @@ async def admit_bulk(
         seq = admission.seq
         admitted_at = time.time()
         try:
-            now = utc_now()
-            episodes: list[EpisodicNode] = []
-            new_episodes: list[EpisodicNode] = []
-            written = await _written_episodes(
-                driver,
-                admission,
-                [
-                    _episode_uuid(group_id, unit_id, index)
-                    for index, raw_episode in enumerate(bulk_episodes)
-                    if raw_episode.uuid is None
-                ],
-            )
-            for index, raw_episode in enumerate(bulk_episodes):
-                if raw_episode.uuid is not None:
-                    episodes.append(await EpisodicNode.get_by_uuid(driver, raw_episode.uuid))
-                    continue
-                episode_uuid = _episode_uuid(group_id, unit_id, index)
-                if episode_uuid in written:
-                    # An earlier admission of this `unit_id` wrote the node.
-                    episode = written[episode_uuid]
-                    episode.content = raw_episode.content
-                    episodes.append(episode)
-                    continue
-                episode = EpisodicNode(
-                    uuid=episode_uuid,
-                    name=raw_episode.name,
-                    labels=[],
-                    source=raw_episode.source,
-                    content=raw_episode.content,
-                    source_description=raw_episode.source_description,
-                    group_id=group_id,
-                    created_at=now,
-                    valid_at=raw_episode.reference_time,
-                )
-                episodes.append(episode)
-                new_episodes.append(episode)
-
-            if new_episodes:
-                await add_nodes_and_edges_bulk(
+            async with _admit_heartbeat(store, config, group_id, admission):
+                now = utc_now()
+                episodes: list[EpisodicNode] = []
+                new_episodes: list[EpisodicNode] = []
+                written = await _written_episodes(
                     driver,
-                    [_written_episode(graphiti, episode, []) for episode in new_episodes],
-                    [],
-                    [],
-                    [],
-                    clients.embedder,
+                    admission,
+                    [
+                        _episode_uuid(group_id, unit_id, index)
+                        for index, raw_episode in enumerate(bulk_episodes)
+                        if raw_episode.uuid is None
+                    ],
                 )
-            episode_context = await retrieve_previous_episodes_bulk(
-                driver, episodes, max_coroutines=graphiti.max_coroutines
-            )
-            await store.end_admit(group_id, seq)
+                for index, raw_episode in enumerate(bulk_episodes):
+                    if raw_episode.uuid is not None:
+                        episodes.append(await EpisodicNode.get_by_uuid(driver, raw_episode.uuid))
+                        continue
+                    episode_uuid = _episode_uuid(group_id, unit_id, index)
+                    if episode_uuid in written:
+                        # An earlier admission of this `unit_id` wrote the node.
+                        episode = written[episode_uuid]
+                        episode.content = raw_episode.content
+                        episodes.append(episode)
+                        continue
+                    episode = EpisodicNode(
+                        uuid=episode_uuid,
+                        name=raw_episode.name,
+                        labels=[],
+                        source=raw_episode.source,
+                        content=raw_episode.content,
+                        source_description=raw_episode.source_description,
+                        group_id=group_id,
+                        created_at=now,
+                        valid_at=raw_episode.reference_time,
+                    )
+                    episodes.append(episode)
+                    new_episodes.append(episode)
+
+                if new_episodes:
+                    await add_nodes_and_edges_bulk(
+                        driver,
+                        [_written_episode(graphiti, episode, []) for episode in new_episodes],
+                        [],
+                        [],
+                        [],
+                        clients.embedder,
+                    )
+                episode_context = await retrieve_previous_episodes_bulk(
+                    driver, episodes, max_coroutines=graphiti.max_coroutines
+                )
+                await store.end_admit(group_id, seq)
         except BaseException as error:
             await _fail_admission(store, group_id, admission, error)
             raise

@@ -644,7 +644,10 @@ One call of `add_episode_bulk` is one unit with one `seq`.
 | A unit with an expired deadline calls the store | The store raises `UnitExpiredError` or `StaleCommitError`. The unit stops. |
 
 A unit renews its deadline with `heartbeat` each `lease_seconds / 3` from
-admission to the end of enrichment.
+admission to the end of enrichment. The Admit phase renews the deadline
+itself between `begin_admit` and `end_admit`, because the caller does not have
+the `seq` before the phase returns. An admission that takes more time than
+`lease_seconds`, for example a large bulk unit, thus keeps its lease.
 
 One slow unit delays the commits behind it. The analysis of those units
 continues.

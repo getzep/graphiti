@@ -244,6 +244,46 @@ async def test_cancellation_in_begin_admit_releases_the_admit_lease(
     await h.store.close()
 
 
+@pytest.mark.parametrize('bulk', [False, True], ids=['episode', 'bulk'])
+async def test_admission_renews_its_lease_while_it_writes(monkeypatch, bulk):
+    h = Harness(monkeypatch, lease_seconds=0.15, write_margin_seconds=0.01)
+    real_write = h.graph.add_nodes_and_edges_bulk
+
+    async def slow_write(*args, **kwargs):
+        # The write of the episode nodes takes more time than the lease.
+        await asyncio.sleep(0.4)
+        await real_write(*args, **kwargs)
+
+    monkeypatch.setattr(phases, 'add_nodes_and_edges_bulk', slow_write)
+    monkeypatch.setattr(
+        phases,
+        'retrieve_previous_episodes_bulk',
+        AsyncMock(side_effect=lambda driver, episodes, **kwargs: [(e, []) for e in episodes]),
+    )
+    if bulk:
+        unit = await admit_bulk(
+            h.graphiti,
+            h.store,
+            h.config,
+            unit_id='task-1',
+            group_id=GROUP,
+            bulk_episodes=[
+                RawEpisode(
+                    name='episode',
+                    content='content',
+                    source_description='test',
+                    source=EpisodeType.text,
+                    reference_time=T0,
+                )
+            ],
+        )
+    else:
+        unit = await admit_task(h, 'task-1')
+
+    assert status(h, unit.seq) == STATUS_ADMITTED
+    assert len(h.graph.episodes) == 1
+
+
 async def test_commit_waits_for_the_earlier_unit(monkeypatch):
     h = Harness(monkeypatch)
     unit_1 = await h.admit('u1')
