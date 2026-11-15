@@ -220,11 +220,18 @@ thus the same as in serial ingestion.
 When the caller gives `uuid` for an existing episode, step 3 loads that
 episode and does not write it (`graphiti.py` 1448-1450).
 
-Admission is idempotent for a live `unit_id`. A host that retries a task must
-use the same `unit_id`.
+One attempt at a time has a `unit_id`. A host that retries a task must use
+the same `unit_id`.
 
-- A second call with the `unit_id` of a live unit returns the same `seq` with
-  `existing=True`. The caller gets no admit lease.
+- A second admission with the `unit_id` of a live unit raises
+  `UnitInProgressError(group_id, unit_id, seq)`. `begin_admit` returns the
+  `seq` of the live unit with `existing=True` and gives no lease. The Admit
+  phase then writes nothing to the graph, and it calls no store method that
+  changes state. The first attempt keeps its lease and its unit.
+- After `UnitInProgressError`, the host tries the admission again after the
+  lease time (`lease_seconds`). If the first attempt is not live at that
+  time, `begin_admit` gives a new sequence number, as the third item below
+  describes. If the unit is committed, the host does not try again.
 - The UUID of an episode node that the unit writes is a function of
   `group_id`, `unit_id`, and the position of the episode in the unit. A retry
   reads the node with that UUID. If the node is in the graph, the retry does
@@ -234,7 +241,6 @@ use the same `unit_id`.
   `begin_admit` marks such an expired unit `failed`. The `unit_id` then gets
   a new sequence number. The new unit uses the episode node of the earlier
   unit, so a retry adds no episode node.
-- An error in the retry of a live unit does not fail that unit.
 
 ### 6.2. Analyze
 
@@ -901,9 +907,8 @@ enrich_unit(graphiti, store, config, unit, commit_result, *, entity_types, ...)
 - `commit_unit` handles `CommitRecover` itself: it applies the stored final
   change set of the earlier unit and records that commit.
 - The host calls `heartbeat` for a unit while a task of that unit runs.
-- A retry of a host task is safe. `begin_admit` returns the same `seq` for the
-  `unit_id` of a live unit, and the Admit phase writes no second episode node
-  (section 6.1). A second `save_change_set` raises `StaleCommitError` and
+- A retry of a host task is safe. For the `unit_id` of a live unit, the
+  Admit phase raises `UnitInProgressError` and writes nothing (section 6.1). A second `save_change_set` raises `StaleCommitError` and
   keeps the stored change set.
   `begin_commit` returns the stored final change set when one exists, and the
   fence rejects the older attempt. The retry gets the turn only after the
@@ -994,7 +999,8 @@ not change. `AddEpisodeResults.nodes` has the nodes after enrichment.
 commit changed.
 
 Errors, in `graphiti_core/errors.py`, each a subclass of `GraphitiError`:
-`UnitExpiredError`, `StaleCommitError`, `ChangeSetRejected`.
+`UnitExpiredError`, `UnitInProgressError`, `StaleCommitError`,
+`ChangeSetRejected`.
 
 ## 11. Opt-in and limited test
 

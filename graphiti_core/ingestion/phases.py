@@ -26,7 +26,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge, HasEpisodeEdge, NextEpisodeEdge
-from graphiti_core.errors import StaleCommitError, UnitExpiredError
+from graphiti_core.errors import StaleCommitError, UnitExpiredError, UnitInProgressError
 from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.ingestion.change_set import (
@@ -267,9 +267,14 @@ async def _begin_admit(
                 if admission is not None:
                     await _fail_admission(store, group_id, admission, error)
             raise
-        if admission is not None:
-            return admission
-        await wait()
+        if admission is None:
+            await wait()
+            continue
+        if admission.existing:
+            # A different attempt has the unit. This attempt writes nothing, and it calls
+            # no store method that changes state.
+            raise UnitInProgressError(group_id, unit_id, admission.seq)
+        return admission
 
 
 @contextlib.asynccontextmanager
@@ -282,12 +287,8 @@ async def _admit_heartbeat(
     """Renew the deadline of a unit while its admission reads and writes the graph.
 
     The caller of the Admit phase does not have the `seq` before the phase returns, so
-    the phase renews the deadline itself. A unit of a different attempt gets no
-    heartbeat from this call.
+    the phase renews the deadline itself.
     """
-    if admission.existing:
-        yield
-        return
 
     async def beat() -> None:
         while True:
@@ -362,6 +363,9 @@ async def admit_episode(
     function reads the previous episodes and writes the episode node with an empty
     `entity_edges` list. With `uuid`, the function loads the episode and does not
     write it.
+
+    When the `unit_id` has a live unit, the function raises `UnitInProgressError`. It
+    then writes nothing, and it calls no store method that changes state.
     """
     group_id, driver, clients = graphiti._resolve_request_scope(group_id)
     _check_driver(driver)
@@ -457,6 +461,9 @@ async def admit_bulk(
 
     The function writes each new episode node and then reads the previous episodes of
     each episode, in the order of the bulk call of today.
+
+    When the `unit_id` has a live unit, the function raises `UnitInProgressError`. It
+    then writes nothing, and it calls no store method that changes state.
     """
     group_id, driver, clients = graphiti._resolve_request_scope(group_id)
     _check_driver(driver)

@@ -114,11 +114,16 @@ class IngestionStateStore(ABC):
         """Give the admit lease and the next sequence number to a unit.
 
         For a `unit_id` that has a live unit, the call returns the `seq` of that unit
-        with `existing=True` and gives no lease. A unit is not live when its status is
-        `failed` or `apply_failed`, or when its deadline is in the past and it has no
-        stored final change set. The call marks such an expired unit `failed`. The
-        `unit_id` then gets a new sequence number, and `previous_seq` is the `seq` of
-        the unit that is not live.
+        with `existing=True`. It gives no lease, and it changes no state. The caller
+        must then write nothing and call no method that changes the state of that
+        unit: a different attempt has the unit. The Admit phase raises
+        `UnitInProgressError` for this result. The host can call `begin_admit` again
+        after the lease time.
+
+        A unit is not live when its status is `failed` or `apply_failed`, or when its
+        deadline is in the past and it has no stored final change set. The call marks
+        such an expired unit `failed`. The `unit_id` then gets a new sequence number,
+        and `previous_seq` is the `seq` of the unit that is not live.
 
         Returns None when a different unit has the lease and its deadline is in the
         future.

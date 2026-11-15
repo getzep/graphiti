@@ -103,6 +103,22 @@ class UnitExpiredError(GraphitiError):
         super().__init__(self.message)
 
 
+class UnitInProgressError(GraphitiError):
+    """Raised when an admission names the `unit_id` of an ingestion unit that is in progress.
+
+    The admission writes nothing. The host can try again after the lease time of the unit.
+    """
+
+    def __init__(self, group_id: str, unit_id: str, seq: int):
+        self.group_id = group_id
+        self.unit_id = unit_id
+        self.seq = seq
+        self.message = (
+            f'ingestion unit {seq} of group {group_id} with the unit_id {unit_id} is in progress'
+        )
+        super().__init__(self.message)
+
+
 class StaleCommitError(GraphitiError):
     """Raised when a commit attempt uses a fence that is not the current fence of the unit."""
 

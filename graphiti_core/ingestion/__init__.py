@@ -16,7 +16,12 @@ limitations under the License.
 
 # Concurrent ingestion for one graph: change sets, state stores, phases, and the scheduler.
 
-from graphiti_core.errors import ChangeSetRejected, StaleCommitError, UnitExpiredError
+from graphiti_core.errors import (
+    ChangeSetRejected,
+    StaleCommitError,
+    UnitExpiredError,
+    UnitInProgressError,
+)
 
 from .change_set import (
     AddEpisodesToEdge,
@@ -82,6 +87,7 @@ __all__ = [
     'SetEdgeAttributes',
     'StaleCommitError',
     'UnitExpiredError',
+    'UnitInProgressError',
     'UnitLease',
     'admit_bulk',
     'admit_episode',
