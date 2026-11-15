@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -140,10 +141,10 @@ async def test_get_by_attribute_values_rejects_unsafe_label():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('provider', [GraphProvider.KUZU, GraphProvider.NEPTUNE])
+@pytest.mark.parametrize('provider', ['kuzu', 'neptune'])
 async def test_identity_candidate_collection_ignores_unsupported_provider(provider):
     driver = MagicMock()
-    driver.provider = provider
+    driver.provider = SimpleNamespace(value=provider)
     driver.graph_operations_interface = None
     driver.execute_query = AsyncMock()
     clients = GraphitiClients.model_construct(
