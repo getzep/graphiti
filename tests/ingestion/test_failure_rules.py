@@ -31,6 +31,7 @@ from graphiti_core.ingestion.phases import (
     admit_episode,
     analyze_episode,
 )
+from graphiti_core.ingestion.sqlite_state_store import SQLiteIngestionStateStore
 from graphiti_core.ingestion.state_store import (
     STATUS_ADMITTED,
     STATUS_ANALYZED,
@@ -205,6 +206,42 @@ async def test_bulk_admission_retry_writes_no_second_episode_node(monkeypatch):
     assert list(h.graph.episodes) == [e.uuid for e in first.episodes]
     assert h.graph.log.count('write:bulk') == 1
     assert [e.content for e in second.episodes] == ['content-0', 'content-1']
+
+
+@pytest.mark.parametrize('store_kind', ['memory', 'sqlite'])
+async def test_cancellation_in_begin_admit_releases_the_admit_lease(
+    monkeypatch, tmp_path, store_kind
+):
+    h = Harness(monkeypatch)
+    if store_kind == 'sqlite':
+        h.store = SQLiteIngestionStateStore(str(tmp_path / 'state.db'))
+    real_begin_admit = h.store.begin_admit
+    started = asyncio.Event()
+
+    async def slow_begin_admit(group_id, unit_id, ttl):
+        # The store call completes after the cancellation of the caller, as a call
+        # in a worker thread does.
+        admission = await real_begin_admit(group_id, unit_id, ttl)
+        started.set()
+        await asyncio.sleep(0.05)
+        return admission
+
+    monkeypatch.setattr(h.store, 'begin_admit', slow_begin_admit)
+    task = asyncio.ensure_future(admit_task(h, 'task-1'))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    monkeypatch.setattr(h.store, 'begin_admit', real_begin_admit)
+
+    # The cancelled unit does not hold the admit lease, and it wrote no episode node.
+    second = await h.store.begin_admit(GROUP, 'task-2', h.config.lease_seconds)
+    assert second is not None
+    assert second.seq == 2
+    with pytest.raises(UnitExpiredError):
+        await h.store.end_admit(GROUP, 1)
+    assert h.graph.episodes == {}
+    await h.store.close()
 
 
 async def test_commit_waits_for_the_earlier_unit(monkeypatch):

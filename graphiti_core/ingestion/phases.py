@@ -256,7 +256,17 @@ async def _begin_admit(
     wait: WaitFn,
 ) -> Admission:
     while True:
-        admission = await store.begin_admit(group_id, unit_id, config.lease_seconds)
+        # A store call in a worker thread completes after a cancellation of the caller.
+        # The call is thus shielded, and a cancelled caller releases the unit.
+        call = asyncio.ensure_future(store.begin_admit(group_id, unit_id, config.lease_seconds))
+        try:
+            admission = await asyncio.shield(call)
+        except asyncio.CancelledError as error:
+            with contextlib.suppress(Exception):
+                admission = await call
+                if admission is not None:
+                    await _fail_admission(store, group_id, admission, error)
+            raise
         if admission is not None:
             return admission
         await wait()
