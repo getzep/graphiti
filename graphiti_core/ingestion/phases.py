@@ -151,6 +151,10 @@ class UnitLease:
     The local deadline is the time of the last successful `heartbeat` or
     `begin_commit` call, read before the call, plus `lease_seconds`. It is thus never
     later than the deadline in the store.
+
+    `fence` is the fence of the commit turn of this attempt. `commit_unit` sets it.
+    With a fence, a heartbeat raises `StaleCommitError` when a different attempt has
+    the turn of the unit.
     """
 
     def __init__(
@@ -166,6 +170,7 @@ class UnitLease:
         self.group_id = group_id
         self.seq = seq
         self.clock = clock
+        self.fence: int | None = None
         self._deadline: float | None = None
 
     def renewed(self, call_started_at: float) -> None:
@@ -174,7 +179,15 @@ class UnitLease:
 
     async def heartbeat(self) -> None:
         started_at = self.clock()
-        await self.store.heartbeat(self.group_id, self.seq, self.config.lease_seconds)
+        fence = self.fence
+        try:
+            await self.store.heartbeat(self.group_id, self.seq, self.config.lease_seconds, fence)
+        except StaleCommitError:
+            if fence is not None:
+                raise
+            # A different attempt applies the final change set of the unit. This attempt
+            # waits for the turn and does not set the deadline.
+            return
         self.renewed(started_at)
 
     def write_budget(self) -> float:
@@ -1305,6 +1318,7 @@ async def commit_unit(
                 call_started_at = lease.clock()
                 turn = await store.begin_commit(group_id, unit.seq, config.lease_seconds)
                 if isinstance(turn, CommitTurn):
+                    lease.fence = turn.fence
                     lease.renewed(call_started_at)
                     break
                 if isinstance(turn, CommitRecover):

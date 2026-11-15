@@ -249,6 +249,69 @@ async def test_stale_attempt_cannot_record_the_commit(monkeypatch):
         await h.store.save_final(GROUP, unit.seq, stale_turn.fence, b'x')
 
 
+async def test_second_attempt_waits_for_the_deadline_of_the_applying_attempt(monkeypatch):
+    clock = FakeClock()
+    h = Harness(monkeypatch, clock=clock)
+    unit, first_turn = await stop_after_final(h, 'u1', create_nodes=[make_node('a1', 'Acme')])
+    final = ChangeSet.from_bytes(h.store._groups[GROUP].units[unit.seq].payload)
+    first_deadline = h.store._groups[GROUP].units[unit.seq].deadline
+    waits: list[float] = []
+
+    async def wait() -> None:
+        # The second attempt writes nothing while the first attempt has the turn. Its
+        # heartbeat does not move the deadline of the unit.
+        assert 'write:bulk' not in h.graph.log
+        assert h.store._groups[GROUP].units[unit.seq].deadline == first_deadline
+        assert len(waits) < 10
+        waits.append(clock())
+        clock.advance(h.config.lease_seconds / 2)
+
+    result = await h.commit(unit, final, wait=wait)
+
+    assert len(waits) == 2
+    assert result.report['retry'] == 1
+    assert set(h.graph.nodes) == {'a1'}
+    with pytest.raises(StaleCommitError):
+        await h.store.heartbeat(GROUP, unit.seq, h.config.lease_seconds, first_turn.fence)
+
+
+async def test_second_analysis_of_a_unit_keeps_the_stored_final_change_set(monkeypatch):
+    clock = FakeClock()
+    h = Harness(monkeypatch, clock=clock)
+    unit, _ = await stop_after_final(h, 'u1', create_nodes=[make_node('a1', 'Acme')])
+
+    # A retry of the unit runs the analysis again. The result has different records.
+    second = await h.analyze(unit, create_nodes=[make_node('other', 'Acme')])
+    clock.advance(h.config.lease_seconds + 1)
+    result = await h.commit(unit, second)
+
+    assert result.report['retry'] == 1
+    assert set(h.graph.nodes) == {'a1'}
+    assert status(h, unit.seq) == STATUS_COMMITTED
+    h.llm.assert_not_awaited()
+
+
+async def test_lease_heartbeat_is_stale_after_a_different_attempt_gets_the_turn(monkeypatch):
+    clock = FakeClock()
+    h = Harness(monkeypatch, clock=clock)
+    unit, first_turn = await stop_after_final(h, 'u1', create_nodes=[make_node('a1', 'Acme')])
+    first_lease = UnitLease(h.store, h.config, GROUP, unit.seq, clock=clock)
+    first_lease.fence = first_turn.fence
+    await first_lease.heartbeat()
+    budget = first_lease.write_budget()
+
+    clock.advance(h.config.lease_seconds + 1)
+    retry = await h.store.begin_commit(GROUP, unit.seq, h.config.lease_seconds)
+    assert retry.fence == first_turn.fence + 1
+
+    # The first attempt cannot renew its local deadline, and it cannot write.
+    with pytest.raises(StaleCommitError):
+        await first_lease.heartbeat()
+    assert budget > 0
+    with pytest.raises(UnitExpiredError):
+        first_lease.write_budget()
+
+
 async def test_expired_unit_stops_at_the_next_store_call(monkeypatch):
     clock = FakeClock()
     h = Harness(monkeypatch, clock=clock)

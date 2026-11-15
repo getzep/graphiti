@@ -77,6 +77,13 @@ class DeltaUnit:
     payload: bytes
 
 
+def is_stale_heartbeat(status: str, unit_fence: int, fence: int | None) -> bool:
+    """Return True when a heartbeat with `fence` must not set the deadline of the unit."""
+    if fence is None:
+        return status == STATUS_APPLYING
+    return fence != unit_fence
+
+
 class IngestionStateStore(ABC):
     """The state of concurrent ingestion: the sequence, the change sets, and the enrichment order.
 
@@ -102,17 +109,34 @@ class IngestionStateStore(ABC):
 
     @abstractmethod
     async def save_change_set(self, group_id: str, seq: int, payload: bytes) -> None:
-        """Store the payload of the analysis and set the status `analyzed`."""
+        """Store the payload of the analysis and set the status `analyzed`.
+
+        The call changes nothing for a unit with the status `applying` or `committed`.
+        The stored final change set of that unit stays.
+        """
 
     @abstractmethod
-    async def heartbeat(self, group_id: str, seq: int, ttl: float) -> None:
-        """Set the deadline of a unit to the current time plus `ttl`."""
+    async def heartbeat(
+        self, group_id: str, seq: int, ttl: float, fence: int | None = None
+    ) -> None:
+        """Set the deadline of a unit to the current time plus `ttl`.
+
+        `fence` is the fence of the commit turn of the caller, or None for a caller
+        with no turn. A `fence` that is not the fence of the unit raises
+        `StaleCommitError`. For a unit with the status `applying`, only the attempt
+        with the turn can set the deadline: a call with no `fence` also raises
+        `StaleCommitError`.
+        """
 
     @abstractmethod
     async def begin_commit(
         self, group_id: str, seq: int, ttl: float
     ) -> CommitTurn | CommitWait | CommitRecover:
-        """Give the commit turn to a unit when each earlier unit is committed or failed."""
+        """Give the commit turn to a unit when each earlier unit is committed or failed.
+
+        Returns `CommitWait` also when the unit has the status `applying` and a deadline
+        in the future. A different attempt then applies its final change set.
+        """
 
     @abstractmethod
     async def load_delta(
@@ -289,12 +313,19 @@ class InMemoryIngestionStateStore(IngestionStateStore):
         return AnalysisStart(snapshot_seq=unit.snapshot_seq, started_at=unit.started_at)
 
     async def save_change_set(self, group_id: str, seq: int, payload: bytes) -> None:
-        unit = self._live_unit(group_id, seq)
+        unit = self._live_unit(group_id, seq, applying_exempt=True)
+        if unit.status in (STATUS_APPLYING, STATUS_COMMITTED):
+            # The stored final change set stays. A second analysis does not replace it.
+            return
         unit.payload = payload
         unit.status = STATUS_ANALYZED
 
-    async def heartbeat(self, group_id: str, seq: int, ttl: float) -> None:
+    async def heartbeat(
+        self, group_id: str, seq: int, ttl: float, fence: int | None = None
+    ) -> None:
         unit = self._live_unit(group_id, seq, applying_exempt=True)
+        if is_stale_heartbeat(unit.status, unit.fence, fence):
+            raise StaleCommitError(group_id, seq)
         unit.deadline = self._clock() + ttl
 
     async def begin_commit(
@@ -320,6 +351,9 @@ class InMemoryIngestionStateStore(IngestionStateStore):
                 )
             self._fail_unit(group, earlier, REASON_EXPIRED, keep_payload=False)
 
+        if unit.status == STATUS_APPLYING and unit.deadline > now:
+            # A different attempt applies the final change set of the unit.
+            return CommitWait()
         unit.fence += 1
         unit.deadline = now + ttl
         final_payload = unit.payload if unit.status == STATUS_APPLYING else None

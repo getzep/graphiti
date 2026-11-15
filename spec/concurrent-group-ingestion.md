@@ -541,8 +541,12 @@ protection:
    database can then complete a write that it already started (section 12.3).
 
 A different attempt gets the turn only when the deadline in the store is in
-the past (section 8.3). With rules 1 to 3, the write of the earlier attempt is
-complete or stopped at that time, on a driver that applies the limit.
+the past (section 8.3). This is true for a later unit that recovers the unit,
+and for a second attempt of the same unit. Only the attempt with the turn can
+move the deadline of a unit in the status `applying`, because `heartbeat`
+needs the fence of the turn. With rules 1 to 3, the write of the earlier
+attempt is complete or stopped at that time, on a driver that applies the
+limit.
 
 **C10. Record.** `finish_commit(group_id, seq, fence, node_uuids,
 retain_seconds)`, with `retain_seconds` equal to `index_lag_seconds`. The
@@ -670,7 +674,7 @@ class IngestionStateStore(ABC):
     async def end_admit(group_id, seq) -> None
     async def start_analysis(group_id, seq) -> AnalysisStart
     async def save_change_set(group_id, seq, payload: bytes) -> None
-    async def heartbeat(group_id, seq, ttl) -> None
+    async def heartbeat(group_id, seq, ttl, fence: int | None = None) -> None
     async def begin_commit(group_id, seq, ttl) -> CommitTurn | CommitWait | CommitRecover
     async def load_delta(group_id, after_seq, before_seq, since: float) -> list[DeltaUnit]
     async def save_final(group_id, seq, fence, payload: bytes) -> None
@@ -700,13 +704,23 @@ than one host must compare deadlines with the clock of that store.
   its deadline, give it the lease, and return.
 - `end_admit`: Set the status `admitted` and release the lease.
 - `start_analysis`: Store and return the watermark and the current time.
-- `save_change_set`: Store the payload and set the status `analyzed`.
+- `save_change_set`: Store the payload and set the status `analyzed`. If the
+  status is `applying` or `committed`, change nothing. A retry of a unit can
+  run the analysis again, and the stored final change set must stay.
 - `heartbeat`: Set the deadline of a unit to the current time plus `ttl`.
+  `fence` is the fence of the commit turn of the caller, or no value for a
+  caller with no turn. If `fence` has a value that is not the fence of the
+  unit, raise `StaleCommitError`. If the status is `applying` and `fence` has
+  no value, raise `StaleCommitError`. Thus only the attempt with the turn
+  keeps the deadline of an `applying` unit in the future.
 - `begin_commit`: Find the earliest unit before `seq` that is not `committed`
   and not `failed`.
-  - If there is none: add 1 to the fence of the unit, set its deadline, and
-    return `CommitTurn`. `final_payload` has a value only when the status is
-    `applying`.
+  - If there is none, and the unit has the status `applying` and a deadline
+    in the future: return `CommitWait`. A different attempt applies the final
+    change set of the unit.
+  - If there is none, in each other case: add 1 to the fence of the unit, set
+    its deadline, and return `CommitTurn`. `final_payload` has a value only
+    when the status is `applying`.
   - If that unit has a deadline in the future: return `CommitWait`.
   - If that unit has a deadline in the past and the status `applying`: add 1
     to its fence, set its deadline, and return `CommitRecover` with its
@@ -843,8 +857,13 @@ enrich_unit(graphiti, store, config, unit, commit_result, *, entity_types, ...)
   change set of the earlier unit and records that commit.
 - The host calls `heartbeat` for a unit while a task of that unit runs.
 - A retry of a host task is safe. `begin_admit` returns the same `seq` for the
-  same `unit_id`. `begin_commit` returns the stored final change set when one
-  exists, and the fence rejects the older attempt.
+  same `unit_id`. `save_change_set` keeps a stored final change set.
+  `begin_commit` returns the stored final change set when one exists, and the
+  fence rejects the older attempt. The retry gets the turn only after the
+  deadline of the older attempt, so the host must stop the heartbeat of an
+  attempt that ended.
+- After `commit_unit` has the turn, the host passes the fence of the turn to
+  `heartbeat`. `UnitLease` does this.
 - A host that assigns sequence numbers before admission (for example in the
   request that accepts the episode) implements `begin_admit` to return that
   number, and to give the admit lease in number order.
@@ -1239,6 +1258,11 @@ for the SQLite store. A host runs the same class for its store.
   expired earlier unit in the status `applying` gives `CommitRecover` with its
   payload.
 - `save_final` and `finish_commit` with an old fence raise `StaleCommitError`.
+- A second `begin_commit` for a unit in the status `applying` returns
+  `CommitWait` while the deadline is in the future. A `heartbeat` with no
+  fence, or with an old fence, raises `StaleCommitError` for that unit.
+- `save_change_set` does not replace the final change set of a unit in the
+  status `applying` or `committed`.
 - `load_delta` returns the committed units in the range, and the units inside
   the `since` time. It also returns a unit with the status `apply_failed`,
   with its status and its final payload.

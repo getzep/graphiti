@@ -75,7 +75,8 @@ def use_llm(h: Harness, response: dict) -> None:
 
 
 async def test_c1_retry_applies_the_stored_final_change_set(monkeypatch):
-    h = Harness(monkeypatch)
+    clock = FakeClock()
+    h = Harness(monkeypatch, clock=clock)
     unit = await h.admit('u1')
     change_set = await h.analyze(unit, create_nodes=[make_node('a1', 'Acme')])
     # An earlier attempt stored the final change set and stopped before the write.
@@ -84,6 +85,8 @@ async def test_c1_retry_applies_the_stored_final_change_set(monkeypatch):
     final.create_nodes = [make_node('final', 'Final Node')]
     final.node_uuids = ['final']
     await h.store.save_final(GROUP, unit.seq, turn.fence, final.to_bytes())
+    # The retry gets the turn only after the deadline of the earlier attempt.
+    clock.advance(h.config.lease_seconds + 1)
 
     result = await h.commit(unit, change_set)
 

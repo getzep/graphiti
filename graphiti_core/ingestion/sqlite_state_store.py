@@ -41,6 +41,7 @@ from graphiti_core.ingestion.state_store import (
     CommitWait,
     DeltaUnit,
     IngestionStateStore,
+    is_stale_heartbeat,
 )
 
 T = TypeVar('T')
@@ -310,14 +311,21 @@ class SQLiteIngestionStateStore(IngestionStateStore):
 
     async def save_change_set(self, group_id: str, seq: int, payload: bytes) -> None:
         def work(conn: sqlite3.Connection) -> None:
-            self._live_unit(conn, group_id, seq)
+            unit = self._live_unit(conn, group_id, seq, applying_exempt=True)
+            if unit['status'] in (STATUS_APPLYING, STATUS_COMMITTED):
+                # The stored final change set stays. A second analysis does not replace it.
+                return
             self._update_unit(conn, group_id, seq, payload=payload, status=STATUS_ANALYZED)
 
         await self._run(work)
 
-    async def heartbeat(self, group_id: str, seq: int, ttl: float) -> None:
+    async def heartbeat(
+        self, group_id: str, seq: int, ttl: float, fence: int | None = None
+    ) -> None:
         def work(conn: sqlite3.Connection) -> None:
-            self._live_unit(conn, group_id, seq, applying_exempt=True)
+            unit = self._live_unit(conn, group_id, seq, applying_exempt=True)
+            if is_stale_heartbeat(unit['status'], unit['fence'], fence):
+                raise StaleCommitError(group_id, seq)
             self._update_unit(conn, group_id, seq, deadline=self._clock() + ttl)
 
         await self._run(work)
@@ -351,6 +359,9 @@ class SQLiteIngestionStateStore(IngestionStateStore):
                     )
                 self._fail_unit(conn, group_id, earlier['seq'], REASON_EXPIRED, keep_payload=False)
 
+            if unit['status'] == STATUS_APPLYING and unit['deadline'] > now:
+                # A different attempt applies the final change set of the unit.
+                return CommitWait()
             fence = unit['fence'] + 1
             self._update_unit(conn, group_id, seq, fence=fence, deadline=now + ttl)
             final_payload = (

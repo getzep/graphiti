@@ -24,7 +24,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from graphiti_core.errors import UnitExpiredError
+from graphiti_core.errors import StaleCommitError, UnitExpiredError
 from graphiti_core.ingestion.config import ConcurrentIngestionConfig
 from graphiti_core.ingestion.phases import (
     AdmittedUnit,
@@ -101,8 +101,9 @@ class ConcurrentIngestor:
             await asyncio.sleep(interval)
             try:
                 await lease.heartbeat()
-            except UnitExpiredError:
-                # The unit is expired or failed. Its next store call raises the error.
+            except (UnitExpiredError, StaleCommitError):
+                # The unit is expired or failed, or a different attempt has its turn.
+                # The next store call of the unit raises the error.
                 return
             except Exception:
                 logger.warning(

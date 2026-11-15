@@ -186,6 +186,64 @@ class StoreConformance:
         assert retry.final_payload == b'final-1'
         assert retry.fence == turn.fence + 1
 
+    async def test_second_attempt_waits_while_the_applying_attempt_has_a_live_deadline(
+        self, store, clock
+    ):
+        seq1 = await admit(store, 'u1')
+        turn = await store.begin_commit(G, seq1, TTL)
+        await store.save_final(G, seq1, turn.fence, b'final-1')
+
+        # A second attempt of the same unit gets no turn and no new fence.
+        assert isinstance(await store.begin_commit(G, seq1, TTL), CommitWait)
+        # The second attempt has no fence. It cannot set the deadline of the unit.
+        with pytest.raises(StaleCommitError):
+            await store.heartbeat(G, seq1, TTL)
+        # The attempt with the turn keeps the deadline in the future.
+        clock.advance(TTL - 1)
+        await store.heartbeat(G, seq1, TTL, turn.fence)
+        clock.advance(TTL - 1)
+        assert isinstance(await store.begin_commit(G, seq1, TTL), CommitWait)
+        await store.finish_commit(G, seq1, turn.fence, [], 0.0)
+
+    async def test_heartbeat_with_an_old_fence_is_stale(self, store, clock):
+        seq1 = await admit(store, 'u1')
+        turn = await store.begin_commit(G, seq1, TTL)
+        await store.save_final(G, seq1, turn.fence, b'final-1')
+        clock.advance(TTL + 1)
+        retry = await store.begin_commit(G, seq1, TTL)
+        assert isinstance(retry, CommitTurn)
+
+        # The old attempt cannot set the deadline after a different attempt has the turn.
+        with pytest.raises(StaleCommitError):
+            await store.heartbeat(G, seq1, TTL, turn.fence)
+        await store.heartbeat(G, seq1, TTL, retry.fence)
+        await store.finish_commit(G, seq1, retry.fence, [], 0.0)
+        # The enrichment of the unit sets the deadline with the same fence.
+        await store.heartbeat(G, seq1, TTL, retry.fence)
+
+    async def test_second_analysis_does_not_replace_the_final_change_set(self, store, clock):
+        seq1 = await admit(store, 'u1')
+        await store.save_change_set(G, seq1, b'analysis-1')
+        turn = await store.begin_commit(G, seq1, TTL)
+        await store.save_final(G, seq1, turn.fence, b'final-1')
+
+        # A retry of the unit runs the analysis again.
+        await store.save_change_set(G, seq1, b'analysis-2')
+        clock.advance(TTL + 1)
+        await store.save_change_set(G, seq1, b'analysis-3')
+        retry = await store.begin_commit(G, seq1, TTL)
+        assert isinstance(retry, CommitTurn)
+        assert retry.final_payload == b'final-1'
+
+        await store.finish_commit(G, seq1, retry.fence, [], 0.0)
+        await store.save_change_set(G, seq1, b'analysis-4')
+        seq2 = await admit(store, 'u2')
+        assert [(unit.seq, unit.payload) for unit in await store.load_delta(G, 0, seq2, 0.0)] == [
+            (seq1, b'final-1')
+        ]
+        with pytest.raises(StaleCommitError):
+            await store.begin_commit(G, seq1, TTL)
+
     async def test_fail_is_not_permitted_for_applying(self, store):
         seq1 = await admit(store, 'u1')
         turn = await store.begin_commit(G, seq1, TTL)
