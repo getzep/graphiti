@@ -1450,6 +1450,8 @@ class Graphiti:
             hydrated_nodes_results = [
                 nodes_by_episode_unique[episode.uuid] for episode, _ in episode_context
             ]
+            if identity_properties:
+                hydrated_nodes_results.extend(identity_nodes_by_episode_uuids.values())
 
         final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
         if identity_properties:
