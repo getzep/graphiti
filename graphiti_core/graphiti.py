@@ -514,12 +514,14 @@ class Graphiti:
         return config.enabled_for_group is None or config.enabled_for_group(group_id)
 
     def _get_concurrent_ingestor(self) -> 'ConcurrentIngestor':
-        if getattr(self, '_concurrent_ingestor', None) is None:
+        ingestor = getattr(self, '_concurrent_ingestor', None)
+        if ingestor is None:
             from graphiti_core.ingestion.scheduler import ConcurrentIngestor
 
             assert self.concurrent_ingestion is not None
-            self._concurrent_ingestor = ConcurrentIngestor(self, self.concurrent_ingestion)
-        return self._concurrent_ingestor
+            ingestor = ConcurrentIngestor(self, self.concurrent_ingestion)
+            self._concurrent_ingestor = ingestor
+        return ingestor
 
     async def _get_or_create_saga(
         self,
