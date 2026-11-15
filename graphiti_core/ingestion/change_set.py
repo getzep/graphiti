@@ -105,6 +105,8 @@ class ChangeSet(BaseModel):
     node_uuids: list[str] = Field(default_factory=list)
     node_first_episode: dict[str, str] = Field(default_factory=dict)
     seen_node_candidates: dict[str, list[str]] = Field(default_factory=dict)
+    # The labels of each node candidate at the time when the analysis read it.
+    seen_node_labels: dict[str, list[str]] = Field(default_factory=dict)
     seen_duplicate_candidates: dict[str, list[str]] = Field(default_factory=dict)
     seen_invalidation_candidates: dict[str, list[str]] = Field(default_factory=dict)
     uuid_map: dict[str, str] = Field(default_factory=dict)
@@ -156,6 +158,7 @@ class ResolutionTrace:
     """
 
     seen_node_candidates: dict[str, list[str]] = field(default_factory=dict)
+    seen_node_labels: dict[str, list[str]] = field(default_factory=dict)
     seen_duplicate_candidates: dict[str, list[str]] = field(default_factory=dict)
     seen_invalidation_candidates: dict[str, list[str]] = field(default_factory=dict)
     operations: list[Any] = field(default_factory=list)
@@ -169,6 +172,8 @@ class ResolutionTrace:
         for candidate in candidates:
             if candidate.uuid not in seen:
                 seen.append(candidate.uuid)
+            # The first read of a candidate is before a promotion of its labels in memory.
+            self.seen_node_labels.setdefault(candidate.uuid, list(candidate.labels))
 
     def record_node_resolution(self, extracted_node: EntityNode, resolved_uuid: str) -> None:
         """Record that an extracted node resolved to a stored node."""

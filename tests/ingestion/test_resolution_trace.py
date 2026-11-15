@@ -214,6 +214,8 @@ async def test_node_resolution_trace_records_candidates_and_patch(monkeypatch):
 
     assert trace.seen_node_candidates == {'x1': ['stored', 'other'], 'x2': []}
     assert trace.stored_node_uuids == {'stored'}
+    # The trace keeps the labels of each candidate at the time of the analysis.
+    assert trace.seen_node_labels == {'stored': ['Entity'], 'other': ['Entity']}
     assert trace.operations == [
         PatchNode(
             node_uuid='stored',

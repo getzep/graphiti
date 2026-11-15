@@ -280,6 +280,7 @@ ChangeSet(
   node_uuids: list[str],                   # each node of the unit, created or stored
   node_first_episode: dict[str, str],      # node UUID -> episode UUID for enrichment
   seen_node_candidates: dict[str, list[str]],
+  seen_node_labels: dict[str, list[str]],
   seen_duplicate_candidates: dict[str, list[str]],
   seen_invalidation_candidates: dict[str, list[str]],
   uuid_map: dict[str, str],                # filled by the commit
@@ -372,7 +373,10 @@ thus also not a candidate.
    `seen_node_candidates` for the node, with one exception: a stored node that
    a `PatchNode` of the delta names stays a candidate, because the analysis
    saw it before the patch. The exception applies only when the patch has
-   attributes, or when the patch changes the labels of the current node. A
+   attributes, or when the labels of the node with the patch are different
+   from the labels that the analysis saw. The change set keeps those labels
+   in `seen_node_labels`, because the Enrich phase of the earlier unit can
+   write the promoted label before this commit reads the node. A
    patch that changes nothing gives the analysis no new data. Without this
    limit, a node that many units use is a candidate in almost each commit,
    and each such commit makes a model call in the serial phase.

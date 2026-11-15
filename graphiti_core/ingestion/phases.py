@@ -662,6 +662,7 @@ async def analyze_episode(
                 node_uuids=[node.uuid for node in nodes],
                 node_first_episode={node.uuid: episode.uuid for node in nodes},
                 seen_node_candidates=trace.seen_node_candidates,
+                seen_node_labels=trace.seen_node_labels,
                 seen_duplicate_candidates=trace.seen_duplicate_candidates,
                 seen_invalidation_candidates=trace.seen_invalidation_candidates,
             )
@@ -807,6 +808,7 @@ async def analyze_bulk(
                 node_uuids=[node.uuid for node in nodes],
                 node_first_episode=node_first_episode,
                 seen_node_candidates=trace.seen_node_candidates,
+                seen_node_labels=trace.seen_node_labels,
                 seen_duplicate_candidates=trace.seen_duplicate_candidates,
                 seen_invalidation_candidates=trace.seen_invalidation_candidates,
             )
@@ -898,7 +900,9 @@ async def _repair_nodes(
         delta_patches = delta.patches.get(node_uuid)
         if not delta_patches:
             continue
-        labels_before = set(node.labels)
+        # The labels that the analysis saw, when the analysis read the node. The Enrich
+        # phase of an earlier unit possibly wrote a promoted label after that read.
+        labels_before = set(final.seen_node_labels.get(node_uuid, node.labels))
         for patch in delta_patches:
             _promote_resolved_node(patch_as_node(node, patch), node)
         patch_changed[node_uuid] = (

@@ -868,6 +868,11 @@ async def resolve_extracted_nodes(
         existing_nodes_override=existing_nodes_override,
         identity_properties=identity_properties,
     )
+
+    # The record is before the resolution, which promotes labels of candidates in memory.
+    if trace is not None:
+        for node, candidates in zip(extracted_nodes, candidate_nodes_by_extracted, strict=True):
+            trace.record_node_candidates(node.uuid, candidates)
     return await resolve_nodes_with_candidates(
         clients,
         extracted_nodes,
@@ -936,10 +941,6 @@ async def resolve_nodes_with_candidates(
             continue
 
         state.unresolved_indices.append(idx)
-
-    if trace is not None:
-        for node, candidates in zip(extracted_nodes, candidate_nodes_by_extracted, strict=True):
-            trace.record_node_candidates(node.uuid, candidates)
 
     if state.unresolved_indices:
         llm_candidate_nodes = _merge_candidate_nodes(

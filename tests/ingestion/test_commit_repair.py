@@ -329,6 +329,64 @@ async def test_c3_a_delta_patch_that_promotes_a_label_keeps_a_seen_candidate(mon
     assert result_2.change_set.uuid_map == {'a2': 's1'}
 
 
+async def test_c3_a_label_promotion_that_the_enrichment_wrote_keeps_a_seen_candidate(
+    monkeypatch,
+):
+    """The enrichment of unit 1 wrote the promoted label before the repair of unit 2.
+
+    The analysis of unit 2 saw the candidate with no type label. The candidate must
+    stay a candidate, because its labels changed after the analysis saw it.
+    """
+    h = Harness(monkeypatch)
+    h.graph.add(make_node('s1', 'Zenith Corporation'))
+    use_llm(
+        h,
+        {'entity_resolutions': [{'id': 0, 'name': 'Zenith GmbH', 'duplicate_candidate_id': 0}]},
+    )
+    unit_1 = await h.admit('u1')
+    unit_2 = await h.admit('u2')
+    change_set_1 = await h.analyze(
+        unit_1,
+        operations=[PatchNode(node_uuid='s1', labels=['Entity', 'Company'])],
+        node_uuids=['s1'],
+    )
+    change_set_2 = await h.analyze(
+        unit_2,
+        create_nodes=[make_node('a2', 'Zenith GmbH', NEAR_X, labels=['Entity', 'Company'])],
+        seen_node_candidates={'a2': ['s1']},
+        seen_node_labels={'s1': ['Entity']},
+    )
+    result_1 = await h.commit(unit_1, change_set_1, entity_types={'Company': object})
+    await h.enrich(unit_1, result_1, entity_types={'Company': object})
+    assert h.graph.nodes['s1'].labels == ['Entity', 'Company']
+
+    result_2 = await h.commit(unit_2, change_set_2, entity_types={'Company': object})
+
+    assert result_2.report['node.collided'] == 1
+    assert result_2.change_set.uuid_map == {'a2': 's1'}
+
+
+async def test_c3_a_label_that_the_analysis_saw_does_not_make_a_collision(monkeypatch):
+    h = Harness(monkeypatch)
+    h.graph.add(make_node('s1', 'Zenith Corporation'))
+    _, (_, result_2) = await commit_two(
+        h,
+        {
+            'operations': [PatchNode(node_uuid='s1', labels=['Entity', 'Company'])],
+            'node_uuids': ['s1'],
+        },
+        {
+            'create_nodes': [make_node('a2', 'Zenith GmbH', NEAR_X)],
+            'seen_node_candidates': {'a2': ['s1']},
+            # The analysis of unit 2 read the node after the label was in the graph.
+            'seen_node_labels': {'s1': ['Entity', 'Company']},
+        },
+    )
+
+    assert result_2.report['node.collided'] == 0
+    h.llm.assert_not_awaited()
+
+
 # --- C2a -------------------------------------------------------------------------
 
 
