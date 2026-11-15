@@ -1,9 +1,24 @@
-"""Replay tests for the commit of concurrent ingestion (steps C1 to C10).
-
-Each test makes change sets with no model call, commits them in sequence order on an
-in-memory graph, and checks the repair. The model client raises an error on a call
-that a test does not expect.
 """
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+# Replay tests for the commit of concurrent ingestion (steps C1 to C10).
+#
+# Each test makes change sets with no model call, commits them in sequence order on an
+# in-memory graph, and checks the repair. The model client raises an error on a call
+# that a test does not expect.
 
 import pytest
 
