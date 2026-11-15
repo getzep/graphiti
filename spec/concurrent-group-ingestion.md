@@ -704,9 +704,11 @@ than one host must compare deadlines with the clock of that store.
   its deadline, give it the lease, and return.
 - `end_admit`: Set the status `admitted` and release the lease.
 - `start_analysis`: Store and return the watermark and the current time.
-- `save_change_set`: Store the payload and set the status `analyzed`. If the
-  status is `applying` or `committed`, change nothing. A retry of a unit can
-  run the analysis again, and the stored final change set must stay.
+- `save_change_set`: Store the payload and set the status `analyzed`. The
+  call is permitted only for the status `admitted`. For each other status,
+  raise `StaleCommitError` and keep the stored payload. A retry of a unit can
+  run the analysis again, and a stored change set must stay. The Analyze phase
+  does not call `fail` after this error, so the unit keeps its position.
 - `heartbeat`: Set the deadline of a unit to the current time plus `ttl`.
   `fence` is the fence of the commit turn of the caller, or no value for a
   caller with no turn. If `fence` has a value that is not the fence of the
@@ -857,7 +859,8 @@ enrich_unit(graphiti, store, config, unit, commit_result, *, entity_types, ...)
   change set of the earlier unit and records that commit.
 - The host calls `heartbeat` for a unit while a task of that unit runs.
 - A retry of a host task is safe. `begin_admit` returns the same `seq` for the
-  same `unit_id`. `save_change_set` keeps a stored final change set.
+  same `unit_id`. A second `save_change_set` raises `StaleCommitError` and
+  keeps the stored change set.
   `begin_commit` returns the stored final change set when one exists, and the
   fence rejects the older attempt. The retry gets the turn only after the
   deadline of the older attempt, so the host must stop the heartbeat of an
@@ -1261,8 +1264,8 @@ for the SQLite store. A host runs the same class for its store.
 - A second `begin_commit` for a unit in the status `applying` returns
   `CommitWait` while the deadline is in the future. A `heartbeat` with no
   fence, or with an old fence, raises `StaleCommitError` for that unit.
-- `save_change_set` does not replace the final change set of a unit in the
-  status `applying` or `committed`.
+- `save_change_set` is permitted only for the status `admitted`. For each
+  other status it raises `StaleCommitError`, and the stored payload stays.
 - `load_delta` returns the committed units in the range, and the units inside
   the `since` time. It also returns a unit with the status `apply_failed`,
   with its status and its final payload.

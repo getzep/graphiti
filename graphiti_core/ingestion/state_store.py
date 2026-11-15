@@ -111,8 +111,8 @@ class IngestionStateStore(ABC):
     async def save_change_set(self, group_id: str, seq: int, payload: bytes) -> None:
         """Store the payload of the analysis and set the status `analyzed`.
 
-        The call changes nothing for a unit with the status `applying` or `committed`.
-        The stored final change set of that unit stays.
+        The call is permitted only for a unit with the status `admitted`. For each other
+        status it raises `StaleCommitError`, and the stored payload stays.
         """
 
     @abstractmethod
@@ -314,9 +314,9 @@ class InMemoryIngestionStateStore(IngestionStateStore):
 
     async def save_change_set(self, group_id: str, seq: int, payload: bytes) -> None:
         unit = self._live_unit(group_id, seq, applying_exempt=True)
-        if unit.status in (STATUS_APPLYING, STATUS_COMMITTED):
-            # The stored final change set stays. A second analysis does not replace it.
-            return
+        if unit.status != STATUS_ADMITTED:
+            # A second analysis does not replace a stored payload.
+            raise StaleCommitError(group_id, seq)
         unit.payload = payload
         unit.status = STATUS_ANALYZED
 

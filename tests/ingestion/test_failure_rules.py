@@ -26,6 +26,7 @@ from graphiti_core.ingestion import phases
 from graphiti_core.ingestion.change_set import ChangeSet, PatchNode
 from graphiti_core.ingestion.phases import UnitLease, admit_episode, analyze_episode
 from graphiti_core.ingestion.state_store import (
+    STATUS_ANALYZED,
     STATUS_APPLY_FAILED,
     STATUS_COMMITTED,
     STATUS_FAILED,
@@ -275,20 +276,25 @@ async def test_second_attempt_waits_for_the_deadline_of_the_applying_attempt(mon
         await h.store.heartbeat(GROUP, unit.seq, h.config.lease_seconds, first_turn.fence)
 
 
-async def test_second_analysis_of_a_unit_keeps_the_stored_final_change_set(monkeypatch):
-    clock = FakeClock()
-    h = Harness(monkeypatch, clock=clock)
-    unit, _ = await stop_after_final(h, 'u1', create_nodes=[make_node('a1', 'Acme')])
+async def test_second_analysis_of_a_unit_does_not_fail_the_unit(monkeypatch):
+    h = Harness(monkeypatch)
+    extracted = make_node('a1', 'Acme')
+    monkeypatch.setattr(phases, 'extract_nodes', AsyncMock(return_value=([extracted], {})))
+    monkeypatch.setattr(
+        phases, 'resolve_extracted_nodes', AsyncMock(return_value=([extracted], {}, []))
+    )
+    h.graphiti._extract_and_resolve_edges = AsyncMock(return_value=([], [], []))
+    unit = await h.admit('u1')
+    first = await analyze_episode(h.graphiti, h.store, h.config, unit)
 
-    # A retry of the unit runs the analysis again. The result has different records.
-    second = await h.analyze(unit, create_nodes=[make_node('other', 'Acme')])
-    clock.advance(h.config.lease_seconds + 1)
-    result = await h.commit(unit, second)
+    # A retry of the analysis task gets an error, and the unit keeps its position.
+    with pytest.raises(StaleCommitError):
+        await analyze_episode(h.graphiti, h.store, h.config, unit)
 
-    assert result.report['retry'] == 1
+    assert status(h, unit.seq) == STATUS_ANALYZED
+    result = await h.commit(unit, first)
     assert set(h.graph.nodes) == {'a1'}
-    assert status(h, unit.seq) == STATUS_COMMITTED
-    h.llm.assert_not_awaited()
+    assert result.report['retry'] == 0
 
 
 async def test_lease_heartbeat_is_stale_after_a_different_attempt_gets_the_turn(monkeypatch):

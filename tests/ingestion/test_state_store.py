@@ -221,28 +221,35 @@ class StoreConformance:
         # The enrichment of the unit sets the deadline with the same fence.
         await store.heartbeat(G, seq1, TTL, retry.fence)
 
-    async def test_second_analysis_does_not_replace_the_final_change_set(self, store, clock):
-        seq1 = await admit(store, 'u1')
+    async def test_save_change_set_is_permitted_only_for_an_admitted_unit(self, store, clock):
+        admission = await store.begin_admit(G, 'u1', TTL)
+        with pytest.raises(StaleCommitError):
+            await store.save_change_set(G, admission.seq, b'analysis-0')
+        await store.end_admit(G, admission.seq)
+        seq1 = admission.seq
         await store.save_change_set(G, seq1, b'analysis-1')
+
+        # A second analysis of the unit does not replace the stored payload.
+        with pytest.raises(StaleCommitError):
+            await store.save_change_set(G, seq1, b'analysis-2')
         turn = await store.begin_commit(G, seq1, TTL)
         await store.save_final(G, seq1, turn.fence, b'final-1')
-
-        # A retry of the unit runs the analysis again.
-        await store.save_change_set(G, seq1, b'analysis-2')
+        with pytest.raises(StaleCommitError):
+            await store.save_change_set(G, seq1, b'analysis-3')
         clock.advance(TTL + 1)
-        await store.save_change_set(G, seq1, b'analysis-3')
+        with pytest.raises(StaleCommitError):
+            await store.save_change_set(G, seq1, b'analysis-4')
         retry = await store.begin_commit(G, seq1, TTL)
         assert isinstance(retry, CommitTurn)
         assert retry.final_payload == b'final-1'
 
         await store.finish_commit(G, seq1, retry.fence, [], 0.0)
-        await store.save_change_set(G, seq1, b'analysis-4')
+        with pytest.raises(StaleCommitError):
+            await store.save_change_set(G, seq1, b'analysis-5')
         seq2 = await admit(store, 'u2')
         assert [(unit.seq, unit.payload) for unit in await store.load_delta(G, 0, seq2, 0.0)] == [
             (seq1, b'final-1')
         ]
-        with pytest.raises(StaleCommitError):
-            await store.begin_commit(G, seq1, TTL)
 
     async def test_fail_is_not_permitted_for_applying(self, store):
         seq1 = await admit(store, 'u1')

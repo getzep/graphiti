@@ -534,6 +534,10 @@ async def analyze_episode(
                 seen_invalidation_candidates=trace.seen_invalidation_candidates,
             )
             await _save_analysis(graphiti, store, unit, change_set, clients, span, start)
+        except StaleCommitError:
+            # The unit has a stored change set from a different attempt. It keeps its
+            # position.
+            raise
         except BaseException as error:
             await _fail_unit(store, group_id, unit.seq, error)
             raise
@@ -675,6 +679,10 @@ async def analyze_bulk(
                 seen_invalidation_candidates=trace.seen_invalidation_candidates,
             )
             await _save_analysis(graphiti, store, unit, change_set, clients, span, start)
+        except StaleCommitError:
+            # The unit has a stored change set from a different attempt. It keeps its
+            # position.
+            raise
         except BaseException as error:
             await _fail_unit(store, group_id, unit.seq, error)
             raise

@@ -312,9 +312,9 @@ class SQLiteIngestionStateStore(IngestionStateStore):
     async def save_change_set(self, group_id: str, seq: int, payload: bytes) -> None:
         def work(conn: sqlite3.Connection) -> None:
             unit = self._live_unit(conn, group_id, seq, applying_exempt=True)
-            if unit['status'] in (STATUS_APPLYING, STATUS_COMMITTED):
-                # The stored final change set stays. A second analysis does not replace it.
-                return
+            if unit['status'] != STATUS_ADMITTED:
+                # A second analysis does not replace a stored payload.
+                raise StaleCommitError(group_id, seq)
             self._update_unit(conn, group_id, seq, payload=payload, status=STATUS_ANALYZED)
 
         await self._run(work)
