@@ -163,7 +163,7 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
-  Serverless collection (serves as the full text search backend) / Kuzu 0.11.2 (**deprecated**, see below)
+  Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -207,22 +207,6 @@ uv add graphiti-core[falkordb]
 pip install graphiti-core[falkordblite]
 # or with uv
 uv add graphiti-core[falkordblite]
-```
-
-### Installing with Kuzu Support
-
-> [!WARNING]
-> **Kuzu is deprecated** and will be removed in a future release — the upstream Kuzu project is no longer
-> maintained. New projects should use Neo4j or FalkorDB. The driver still ships for now but emits a
-> `DeprecationWarning`.
-
-If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
-
-```bash
-pip install graphiti-core[kuzu]
-
-# or with uv
-uv add graphiti-core[kuzu]
 ```
 
 ### Installing with Amazon Neptune Support
@@ -283,7 +267,7 @@ performance.
 For a complete working example, see the [Quickstart Example](examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
 
-1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
+1. Connecting to a Neo4j, Amazon Neptune, or FalkorDB database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -417,23 +401,6 @@ driver = FalkorDriver(
 # from redislite.async_falkordb_client import AsyncFalkorDB
 # falkordb_client = AsyncFalkorDB(dbfilename='/path/to/database.db')
 # driver = FalkorDriver(falkor_db=falkordb_client)
-
-# Pass the driver to Graphiti
-graphiti = Graphiti(graph_driver=driver)
-```
-
-#### Kuzu
-
-> [!WARNING]
-> Kuzu is **deprecated** (upstream project unmaintained) and will be removed in a future release. Prefer Neo4j or
-> FalkorDB.
-
-```python
-from graphiti_core import Graphiti
-from graphiti_core.driver.kuzu_driver import KuzuDriver
-
-# Create a Kuzu driver
-driver = KuzuDriver(db="/tmp/graphiti.kuzu")
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
@@ -799,7 +766,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
+  - Database backend (Neo4j, FalkorDB, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
