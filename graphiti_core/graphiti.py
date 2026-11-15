@@ -18,6 +18,7 @@ import json
 import logging
 from datetime import datetime
 from time import time
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -129,6 +130,11 @@ from graphiti_core.utils.text_utils import (
     truncate_utf8_to_bytes,
 )
 
+if TYPE_CHECKING:
+    from graphiti_core.ingestion.change_set import ResolutionTrace
+    from graphiti_core.ingestion.config import ConcurrentIngestionConfig
+    from graphiti_core.ingestion.scheduler import ConcurrentIngestor
+
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -227,6 +233,7 @@ class Graphiti:
         trace_span_prefix: str = 'graphiti',
         prompt_library: ChatPromptLibrary | None = None,
         llm_runtime: LLMRuntime | None = None,
+        concurrent_ingestion: 'ConcurrentIngestionConfig | None' = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -303,6 +310,12 @@ class Graphiti:
             on the runtime path. Route lightweight prompts to a smaller model.
             GLiNER2 does not support per-prompt routing. Cannot be combined
             with ``llm_client`` or ``prompt_library``.
+        concurrent_ingestion : ConcurrentIngestionConfig | None, optional
+            The configuration of concurrent ingestion for one graph. With a value,
+            ``add_episode`` and ``add_episode_bulk`` run the extraction and the
+            resolution of many units of one ``group_id`` at the same time, and they
+            commit the units in sequence order. With the default ``None``, the two
+            methods run serial ingestion.
 
         Returns
         -------
@@ -385,6 +398,11 @@ class Graphiti:
             llm_runtime=self.llm_runtime,
             max_coroutines=self.max_coroutines,
         )
+
+        # Concurrent ingestion is off when there is no configuration. The scheduler
+        # and the state store are made on the first call that uses the mode.
+        self.concurrent_ingestion = concurrent_ingestion
+        self._concurrent_ingestor: ConcurrentIngestor | None = None
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
         self.nodes = NodeNamespace(self.driver, self.embedder)
@@ -487,7 +505,28 @@ class Graphiti:
             finally:
                 graphiti.close()
         """
+        concurrent_ingestion = getattr(self, 'concurrent_ingestion', None)
+        if concurrent_ingestion is not None and concurrent_ingestion.state_store is not None:
+            await concurrent_ingestion.state_store.close()
         await self.driver.close()
+
+    def _concurrent_ingestion_enabled(self, group_id: str) -> bool:
+        """Return True when a call for the graph must use concurrent ingestion."""
+        # An object that a test made with no call of `__init__` has no configuration.
+        config = getattr(self, 'concurrent_ingestion', None)
+        if config is None:
+            return False
+        return config.enabled_for_group is None or config.enabled_for_group(group_id)
+
+    def _get_concurrent_ingestor(self) -> 'ConcurrentIngestor':
+        ingestor = getattr(self, '_concurrent_ingestor', None)
+        if ingestor is None:
+            from graphiti_core.ingestion.scheduler import ConcurrentIngestor
+
+            assert self.concurrent_ingestion is not None
+            ingestor = ConcurrentIngestor(self, self.concurrent_ingestion)
+            self._concurrent_ingestor = ingestor
+        return ingestor
 
     async def _get_or_create_saga(
         self,
@@ -516,6 +555,23 @@ class Graphiti:
         SagaNode
             The existing or newly created saga node.
         """
+        driver = driver or self.driver
+
+        existing = await self._find_saga(saga_name, group_id, driver=driver)
+        if existing is not None:
+            return existing
+
+        saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
+        await saga.save(driver)
+        return saga
+
+    async def _find_saga(
+        self,
+        saga_name: str,
+        group_id: str,
+        driver: GraphDriver | None = None,
+    ) -> SagaNode | None:
+        """Return the saga with the name, or None. The method writes nothing."""
         from graphiti_core.helpers import parse_db_date
 
         driver = driver or self.driver
@@ -542,9 +598,7 @@ class Graphiti:
                 last_episode_uuid=record['last_episode_uuid'],
             )
 
-        saga = SagaNode(name=saga_name, group_id=group_id, created_at=created_at)
-        await saga.save(driver)
-        return saga
+        return None
 
     async def _saga_get_previous_episode_uuid(
         self, saga_uuid: str, current_episode_uuid: str, driver: GraphDriver | None = None
@@ -907,6 +961,7 @@ class Graphiti:
         uuid_map: dict[str, str],
         identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
+        trace: 'ResolutionTrace | None' = None,
     ) -> None:
         """Fold endpoints materialized by ``extract_edges`` into the resolved node set.
 
@@ -917,6 +972,8 @@ class Graphiti:
         ``resolve_extracted_nodes``. ``nodes`` and ``uuid_map`` are updated in place.
         """
         clients = clients or self.clients
+        # Pass `trace` only when it is set, so the serial path makes the calls of today.
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         nodes_by_name = {_normalize_string_exact(node.name): node for node in nodes}
         known_uuids = {node.uuid for node in nodes}
 
@@ -941,6 +998,7 @@ class Graphiti:
                 previous_episodes,
                 entity_types,
                 identity_properties=identity_properties,
+                **trace_kwargs,
             )
         else:
             resolved_nodes, materialized_uuid_map, _ = await resolve_extracted_nodes(
@@ -949,6 +1007,7 @@ class Graphiti:
                 episode,
                 previous_episodes,
                 entity_types,
+                **trace_kwargs,
             )
         uuid_map.update(materialized_uuid_map)
 
@@ -973,6 +1032,7 @@ class Graphiti:
         entity_types: dict[str, type[BaseModel]] | None = None,
         identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
+        trace: 'ResolutionTrace | None' = None,
     ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode(s) and resolve against existing graph.
 
@@ -985,6 +1045,7 @@ class Graphiti:
             - new_edges: Only edges that are new to the graph (not duplicates)
         """
         clients = clients or self.clients
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         episodes = episode if isinstance(episode, list) else [episode]
         primary_episode = episodes[0]
 
@@ -1013,6 +1074,7 @@ class Graphiti:
                 uuid_map,
                 identity_properties=identity_properties,
                 clients=clients,
+                trace=trace,
             )
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -1024,6 +1086,7 @@ class Graphiti:
             nodes,
             edge_types or {},
             edge_type_map,
+            **trace_kwargs,
         )
 
         return resolved_edges, invalidated_edges, new_edges
@@ -1152,6 +1215,7 @@ class Graphiti:
         use_combined_extraction: bool = True,
         identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
+        trace: 'ResolutionTrace | None' = None,
     ) -> tuple[
         dict[str, list[EntityNode]],
         dict[str, str],
@@ -1198,12 +1262,14 @@ class Graphiti:
                 )
 
         # Dedupe extracted nodes in memory
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
             clients,
             extracted_nodes_bulk,
             episode_context,
             entity_types,
             identity_properties=identity_properties,
+            **trace_kwargs,
         )
 
         return nodes_by_episode, uuid_map, extracted_edges_bulk
@@ -1219,9 +1285,15 @@ class Graphiti:
         episodes: list[EpisodicNode],
         identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
+        hydrate: bool = True,
+        trace: 'ResolutionTrace | None' = None,
     ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
-        """Resolve nodes and edges against the existing graph."""
+        """Resolve nodes and edges against the existing graph.
+
+        With ``hydrate=False``, the method does not extract node attributes and summaries.
+        """
         clients = clients or self.clients
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         nodes_by_uuid: dict[str, EntityNode] = {
             node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
         }
@@ -1251,6 +1323,7 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                     identity_properties=identity_properties,
+                    **trace_kwargs,
                 )
             return await resolve_extracted_nodes(
                 clients,
@@ -1258,6 +1331,7 @@ class Graphiti:
                 episode,
                 previous_episodes,
                 entity_types,
+                **trace_kwargs,
             )
 
         node_results = await semaphore_gather(
@@ -1324,54 +1398,61 @@ class Graphiti:
                     ]
 
         # Extract attributes for resolved nodes
-        async def hydrate_nodes(
-            episode: EpisodicNode,
-            previous_episodes: list[EpisodicNode],
-        ) -> list[EntityNode]:
-            nodes = nodes_by_episode_unique[episode.uuid]
-            return await extract_attributes_from_nodes(
-                clients,
-                nodes,
-                episode,
-                previous_episodes,
-                entity_types,
-            )
-
-        episode_hydration_calls = [
-            hydrate_nodes(episode, previous_episodes)
-            for episode, previous_episodes in episode_context
-        ]
-        if identity_properties:
-            # Attribute calls stay one per node; summary calls can increase by the number of groups.
-            identity_hydration_calls = []
-            for episode_uuids, nodes in identity_nodes_by_episode_uuids.items():
-                mentioning_episodes = sorted(
-                    (episodes_by_uuid[episode_uuid] for episode_uuid in episode_uuids),
-                    key=lambda episode: (
-                        ensure_utc(episode.valid_at),
-                        episode_context_indices[episode.uuid],
-                    ),
+        hydrated_nodes_results: list[list[EntityNode]]
+        if hydrate:
+            episode_hydration_calls = [
+                extract_attributes_from_nodes(
+                    clients,
+                    nodes_by_episode_unique[episode.uuid],
+                    episode,
+                    previous_episodes,
+                    entity_types,
                 )
-                identity_hydration_calls.append(
-                    extract_attributes_from_nodes(
-                        clients,
-                        nodes,
-                        mentioning_episodes,
-                        previous_episodes_by_uuid[mentioning_episodes[0].uuid],
-                        entity_types,
+                for episode, previous_episodes in episode_context
+            ]
+            if identity_properties:
+                episodes_by_uuid = {episode.uuid: episode for episode, _ in episode_context}
+                episode_context_indices = {
+                    episode.uuid: index for index, (episode, _) in enumerate(episode_context)
+                }
+                previous_episodes_by_uuid = {
+                    episode.uuid: previous_episodes
+                    for episode, previous_episodes in episode_context
+                }
+                identity_hydration_calls = []
+                for episode_uuids, nodes in identity_nodes_by_episode_uuids.items():
+                    mentioning_episodes = sorted(
+                        (episodes_by_uuid[episode_uuid] for episode_uuid in episode_uuids),
+                        key=lambda episode: (
+                            ensure_utc(episode.valid_at),
+                            episode_context_indices[episode.uuid],
+                        ),
                     )
+                    identity_hydration_calls.append(
+                        extract_attributes_from_nodes(
+                            clients,
+                            nodes,
+                            mentioning_episodes,
+                            previous_episodes_by_uuid[mentioning_episodes[0].uuid],
+                            entity_types,
+                        )
+                    )
+                hydrated_nodes_results = await semaphore_gather(
+                    *episode_hydration_calls,
+                    *identity_hydration_calls,
+                    max_coroutines=self.max_coroutines,
                 )
-
-            hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
-                *episode_hydration_calls,
-                *identity_hydration_calls,
-                max_coroutines=self.max_coroutines,
-            )
+            else:
+                hydrated_nodes_results = await semaphore_gather(
+                    *episode_hydration_calls,
+                    max_coroutines=self.max_coroutines,
+                )
         else:
-            hydrated_nodes_results = await semaphore_gather(
-                *episode_hydration_calls,
-                max_coroutines=self.max_coroutines,
-            )
+            hydrated_nodes_results = [
+                nodes_by_episode_unique[episode.uuid] for episode, _ in episode_context
+            ]
+            if identity_properties:
+                hydrated_nodes_results.extend(identity_nodes_by_episode_uuids.values())
 
         final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
         if identity_properties:
@@ -1401,6 +1482,7 @@ class Graphiti:
                     final_hydrated_nodes,
                     edge_types or {},
                     edge_type_map,
+                    **trace_kwargs,
                 )
                 for episode in episodes
             ],
@@ -1603,6 +1685,31 @@ class Graphiti:
         # shared ``self.driver``, so concurrent calls for different group_ids cannot
         # clobber each other's database target mid-execution (issue #1676).
         group_id, driver, clients = self._resolve_request_scope(group_id)
+
+        if self._concurrent_ingestion_enabled(group_id):
+            if update_communities:
+                raise ValueError(
+                    'update_communities=True has no support in concurrent ingestion. '
+                    'Call build_communities after the ingestion.'
+                )
+            return await self._get_concurrent_ingestor().add_episode(
+                name=name,
+                episode_body=episode_body,
+                source_description=source_description,
+                reference_time=reference_time,
+                source=source,
+                group_id=group_id,
+                uuid=uuid,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
+                previous_episode_uuids=previous_episode_uuids,
+                edge_types=edge_types,
+                edge_type_map=edge_type_map,
+                custom_extraction_instructions=custom_extraction_instructions,
+                saga=saga,
+                saga_previous_episode_uuid=saga_previous_episode_uuid,
+                identity_properties=identity_properties,
+            )
 
         with self.tracer.start_span('add_episode') as span:
             try:
@@ -1857,6 +1964,25 @@ class Graphiti:
         ``resolve_extracted_edges`` just like in ``add_episode``, and any invalidated
         edges are persisted alongside the newly resolved ones.
         """
+        if getattr(self, 'concurrent_ingestion', None) is not None:
+            concurrent_group_id = self._resolve_request_scope(group_id)[0]
+            if self._concurrent_ingestion_enabled(concurrent_group_id):
+                validate_entity_types(entity_types)
+                validate_identity_properties(identity_properties, entity_types)
+                return await self._get_concurrent_ingestor().add_episode_bulk(
+                    bulk_episodes=bulk_episodes,
+                    group_id=concurrent_group_id,
+                    entity_types=entity_types,
+                    excluded_entity_types=excluded_entity_types,
+                    edge_types=edge_types,
+                    edge_type_map=edge_type_map,
+                    strict_edge_types=strict_edge_types,
+                    custom_extraction_instructions=custom_extraction_instructions,
+                    saga=saga,
+                    use_combined_extraction=use_combined_extraction,
+                    identity_properties=identity_properties,
+                )
+
         with self.tracer.start_span('add_episode_bulk') as bulk_span:
             bulk_span.add_attributes({'episode.count': len(bulk_episodes)})
 

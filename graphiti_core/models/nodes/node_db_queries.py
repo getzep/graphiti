@@ -216,6 +216,30 @@ def get_entity_node_save_bulk_query(
             )
 
 
+def get_entity_node_update_bulk_query(
+    provider: GraphProvider, nodes: list[dict], has_aoss: bool = False
+) -> str | Any:
+    """Return the bulk save query of the provider, with `MATCH` in the place of `MERGE`.
+
+    The query changes a node that exists and creates nothing. Concurrent ingestion
+    uses it to update a stored node, so that a node that a different writer deleted
+    is not created again. The result has the form of `get_entity_node_save_bulk_query`.
+    """
+
+    def to_update(query: str) -> str:
+        if query.count('MERGE (n:Entity {uuid: ') != 1:
+            raise ValueError(f'no update query for the entity node save query of {provider}')
+        return query.replace('MERGE (n:Entity {uuid: ', 'MATCH (n:Entity {uuid: ')
+
+    queries = get_entity_node_save_bulk_query(provider, nodes, has_aoss)
+    if isinstance(queries, str):
+        return to_update(queries)
+    return [
+        (to_update(query[0]), query[1]) if isinstance(query, tuple) else to_update(query)
+        for query in queries
+    ]
+
+
 def get_entity_node_return_query(provider: GraphProvider) -> str:
     # `name_embedding` is not returned by default and must be loaded manually using `load_name_embedding()`.
     return """

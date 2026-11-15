@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import logging
 import typing
 from datetime import datetime
@@ -25,17 +26,21 @@ from typing_extensions import Any
 from graphiti_core.driver.driver import (
     GraphDriver,
     GraphDriverSession,
+    GraphProvider,
 )
+from graphiti_core.driver.graph_operations.graph_operations import GraphOperationsInterface
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
 from graphiti_core.helpers import normalize_l2, semaphore_gather
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
+    get_entity_edge_update_bulk_query,
     get_episodic_edge_save_bulk_query,
 )
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_save_bulk_query,
+    get_entity_node_update_bulk_query,
     get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
@@ -56,6 +61,9 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
+
+if typing.TYPE_CHECKING:
+    from graphiti_core.ingestion.change_set import ResolutionTrace
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +139,27 @@ async def add_nodes_and_edges_bulk(
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
+    write_timeout: float | None = None,
 ):
+    """Write the records in one session.
+
+    `write_timeout` is a time limit in seconds for the write. With the default `None`,
+    the write has no time limit.
+    """
+    if write_timeout is not None:
+        await execute_write_with_timeout(
+            driver,
+            write_timeout,
+            add_nodes_and_edges_bulk_tx,
+            episodic_nodes,
+            episodic_edges,
+            entity_nodes,
+            entity_edges,
+            embedder,
+            driver=driver,
+        )
+        return
+
     session = driver.session()
     try:
         await session.execute_write(
@@ -145,6 +173,149 @@ async def add_nodes_and_edges_bulk(
         )
     finally:
         await session.close()
+
+
+async def execute_write_with_timeout(
+    graph_driver: GraphDriver, timeout: float, func: Any, /, *args: Any, **kwargs: Any
+) -> Any:
+    """Run a write function in a new session with a time limit in seconds.
+
+    On Neo4j, the limit is the transaction timeout, which the server applies. On
+    FalkorDB, each query gets the limit as its query timeout. The server applies it to
+    a write only when its `TIMEOUT_MAX` setting is not zero. On each provider other
+    than Neo4j, the call is also cancelled at the limit. The database can then complete
+    a write that it already started.
+    """
+    session = graph_driver.session()
+    try:
+        if graph_driver.provider == GraphProvider.NEO4J:
+            from neo4j import unit_of_work
+
+            return await session.execute_write(unit_of_work(timeout=timeout)(func), *args, **kwargs)
+        if hasattr(session, 'query_timeout_ms'):
+            session.query_timeout_ms = max(1, int(timeout * 1000))  # type: ignore[attr-defined]
+        return await asyncio.wait_for(session.execute_write(func, *args, **kwargs), timeout)
+    finally:
+        await session.close()
+
+
+async def _entity_node_record(
+    node: EntityNode, embedder: EmbedderClient, driver: GraphDriver
+) -> dict[str, Any]:
+    """Return the query parameters of one entity node for a bulk save or a bulk update."""
+    if node.name_embedding is None:
+        await node.generate_name_embedding(embedder)
+
+    entity_data: dict[str, Any] = {
+        'uuid': node.uuid,
+        'name': node.name,
+        'group_id': node.group_id,
+        'summary': node.summary,
+        'created_at': node.created_at,
+        'name_embedding': node.name_embedding,
+        'labels': list(set(node.labels + ['Entity'])),
+    }
+
+    for k, v in (node.attributes or {}).items():
+        if k not in entity_data:
+            entity_data[k] = v
+
+    return entity_data
+
+
+async def _entity_edge_record(
+    edge: EntityEdge, embedder: EmbedderClient, driver: GraphDriver
+) -> dict[str, Any]:
+    """Return the query parameters of one entity edge for a bulk save or a bulk update."""
+    if edge.fact_embedding is None:
+        await edge.generate_embedding(embedder)
+    edge_data: dict[str, Any] = {
+        'uuid': edge.uuid,
+        'source_node_uuid': edge.source_node_uuid,
+        'target_node_uuid': edge.target_node_uuid,
+        'name': edge.name,
+        'fact': edge.fact,
+        'group_id': edge.group_id,
+        'episodes': edge.episodes,
+        'created_at': edge.created_at,
+        'expired_at': edge.expired_at,
+        'valid_at': edge.valid_at,
+        'invalid_at': edge.invalid_at,
+        'reference_time': edge.reference_time,
+        'fact_embedding': edge.fact_embedding,
+    }
+
+    # Merge attributes without overwriting explicit edge fields.
+    # Attributes may contain stale string versions of typed fields
+    # (e.g. reference_time as ISO string) that would replace the
+    # datetime values set above.
+    for k, v in (edge.attributes or {}).items():
+        if k not in edge_data:
+            edge_data[k] = v
+
+    return edge_data
+
+
+# The operations of `graph_operations_interface` that the commit and the enrichment of
+# concurrent ingestion call. These operations have no Cypher fallback.
+INGESTION_INTERFACE_OPERATIONS = (
+    'episodic_node_save_bulk',
+    'node_save_bulk',
+    'episodic_edge_save_bulk',
+    'edge_save_bulk',
+    'node_update_bulk',
+    'edge_update_bulk',
+)
+
+
+def missing_ingestion_interface_operations(driver: GraphDriver) -> list[str]:
+    """Return the operations of concurrent ingestion that the interface of the driver lacks.
+
+    An operation that the interface class does not override is missing. The result is
+    empty for a driver with no `graph_operations_interface`.
+    """
+    interface = driver.graph_operations_interface
+    if not interface:
+        return []
+    return sorted(
+        name
+        for name in INGESTION_INTERFACE_OPERATIONS
+        if getattr(type(interface), name, None) in (None, getattr(GraphOperationsInterface, name))
+    )
+
+
+async def update_entity_edges_tx(
+    tx: GraphDriverSession,
+    entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
+):
+    """Update entity edges that exist. An edge that does not exist is not created."""
+    if not entity_edges:
+        return
+    edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.edge_update_bulk(None, driver, tx, edges)
+        return
+    query = get_entity_edge_update_bulk_query(driver.provider)
+    await tx.run(query, entity_edges=edges)
+
+
+async def update_entity_nodes_tx(
+    tx: GraphDriverSession,
+    entity_nodes: list[EntityNode],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
+):
+    """Update entity nodes that exist. A node that does not exist is not created."""
+    if not entity_nodes:
+        return
+    nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.node_update_bulk(None, driver, tx, nodes)
+        return
+    query = get_entity_node_update_bulk_query(driver.provider, nodes)
+    await tx.run(query, nodes=nodes)
 
 
 async def add_nodes_and_edges_bulk_tx(
@@ -161,57 +332,8 @@ async def add_nodes_and_edges_bulk_tx(
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
 
-    nodes = []
-
-    for node in entity_nodes:
-        if node.name_embedding is None:
-            await node.generate_name_embedding(embedder)
-
-        entity_data: dict[str, Any] = {
-            'uuid': node.uuid,
-            'name': node.name,
-            'group_id': node.group_id,
-            'summary': node.summary,
-            'created_at': node.created_at,
-            'name_embedding': node.name_embedding,
-            'labels': list(set(node.labels + ['Entity'])),
-        }
-
-        for k, v in (node.attributes or {}).items():
-            if k not in entity_data:
-                entity_data[k] = v
-
-        nodes.append(entity_data)
-
-    edges = []
-    for edge in entity_edges:
-        if edge.fact_embedding is None:
-            await edge.generate_embedding(embedder)
-        edge_data: dict[str, Any] = {
-            'uuid': edge.uuid,
-            'source_node_uuid': edge.source_node_uuid,
-            'target_node_uuid': edge.target_node_uuid,
-            'name': edge.name,
-            'fact': edge.fact,
-            'group_id': edge.group_id,
-            'episodes': edge.episodes,
-            'created_at': edge.created_at,
-            'expired_at': edge.expired_at,
-            'valid_at': edge.valid_at,
-            'invalid_at': edge.invalid_at,
-            'reference_time': edge.reference_time,
-            'fact_embedding': edge.fact_embedding,
-        }
-
-        # Merge attributes without overwriting explicit edge fields.
-        # Attributes may contain stale string versions of typed fields
-        # (e.g. reference_time as ISO string) that would replace the
-        # datetime values set above.
-        for k, v in (edge.attributes or {}).items():
-            if k not in edge_data:
-                edge_data[k] = v
-
-        edges.append(edge_data)
+    nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
+    edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
 
     if driver.graph_operations_interface:
         await driver.graph_operations_interface.episodic_node_save_bulk(None, driver, tx, episodes)
@@ -368,6 +490,7 @@ async def dedupe_nodes_bulk(
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     entity_types: dict[str, type[BaseModel]] | None = None,
     identity_properties: dict[str, list[str]] | None = None,
+    trace: 'ResolutionTrace | None' = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     """Resolve entity duplicates across an in-memory batch using a two-pass strategy.
 
@@ -376,7 +499,12 @@ async def dedupe_nodes_bulk(
     2. Re-run the deterministic similarity heuristics across the union of resolved nodes to catch
        duplicates that only co-occur inside this batch, emitting a canonical UUID map that callers
        can apply to edges and persistence.
+
+    When `trace` is given, the first pass records the candidates that each extracted node
+    saw and the stored nodes that an extracted node resolved to.
     """
+
+    trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
 
     async def resolve_nodes(
         nodes: list[EntityNode],
@@ -391,6 +519,7 @@ async def dedupe_nodes_bulk(
                 previous_episodes,
                 entity_types,
                 identity_properties=identity_properties,
+                **trace_kwargs,
             )
         return await resolve_extracted_nodes(
             clients,
@@ -398,6 +527,7 @@ async def dedupe_nodes_bulk(
             episode,
             previous_episodes,
             entity_types,
+            **trace_kwargs,
         )
 
     first_pass_results = await semaphore_gather(

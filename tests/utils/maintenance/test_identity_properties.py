@@ -558,6 +558,7 @@ async def _run_bulk_hydration_test(
     episode_context,
     nodes_by_episode,
     identity_properties,
+    hydrate=True,
 ):
     async def resolve_nodes(_clients, nodes, *_args, **_kwargs):
         return nodes, {node.uuid: node.uuid for node in nodes}, []
@@ -583,6 +584,7 @@ async def _run_bulk_hydration_test(
         episodes,
         identity_properties=identity_properties,
         clients=clients,
+        hydrate=hydrate,
     )
     return result, extract_attributes
 
@@ -603,6 +605,7 @@ async def test_bulk_resolution_hydrates_multi_mention_identity_with_all_episodes
             episode_two.uuid: [alex],
         },
         {'Person': ['email']},
+        hydrate=True,
     )
 
     alex_calls = [call for call in extract_attributes.await_args_list if call.args[1] == [alex]]
@@ -612,6 +615,26 @@ async def test_bulk_resolution_hydrates_multi_mention_identity_with_all_episodes
     assert alex_calls[0].args[3] == previous_one
     assert len(acme_calls) == 1
     assert acme_calls[0].args[2] is episode_one
+    assert sum(node.uuid == alex.uuid for node in result[0]) == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_resolution_keeps_multi_mention_identity_without_hydration(monkeypatch):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    episode_one, episode_two, previous_one, previous_two, alex, _ = _make_bulk_hydration_test_data()
+    result, _ = await _run_bulk_hydration_test(
+        monkeypatch,
+        graphiti,
+        clients,
+        [(episode_one, previous_one), (episode_two, previous_two)],
+        {
+            episode_one.uuid: [alex],
+            episode_two.uuid: [alex],
+        },
+        {'Person': ['email']},
+        hydrate=False,
+    )
+
     assert sum(node.uuid == alex.uuid for node in result[0]) == 1
 
 
