@@ -208,12 +208,18 @@ class ResolutionTrace:
             if state is not None:
                 state.ended_as_candidate = True
 
-    def collect_edge_operations(self) -> list[EdgeOperation]:
-        """Make one operation for each change to a watched edge, and stop the watch."""
+    def collect_edge_operations(self, edges: list[EntityEdge] | None = None) -> list[EdgeOperation]:
+        """Make one operation for each change to a watched edge, and stop the watch.
+
+        With `edges`, only the watch of those edge objects stops. Calls that run at the
+        same time on one trace thus do not collect the edges of each other.
+        """
+        keys = list(self._edge_states) if edges is None else [id(edge) for edge in edges]
         operations: list[EdgeOperation] = []
-        for state in self._edge_states.values():
-            operations.extend(_diff_edge_state(state))
-        self._edge_states = {}
+        for key in keys:
+            state = self._edge_states.pop(key, None)
+            if state is not None:
+                operations.extend(_diff_edge_state(state))
         self.operations.extend(operations)
         return operations
 

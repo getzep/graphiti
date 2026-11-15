@@ -18,6 +18,7 @@ import json
 import logging
 from datetime import datetime
 from time import time
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -123,6 +124,9 @@ from graphiti_core.utils.text_utils import (
     truncate_at_sentence,
     truncate_utf8_to_bytes,
 )
+
+if TYPE_CHECKING:
+    from graphiti_core.ingestion.change_set import ResolutionTrace
 
 logger = logging.getLogger(__name__)
 
@@ -872,6 +876,7 @@ class Graphiti:
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
         clients: GraphitiClients | None = None,
+        trace: 'ResolutionTrace | None' = None,
     ) -> None:
         """Fold endpoints materialized by ``extract_edges`` into the resolved node set.
 
@@ -882,6 +887,8 @@ class Graphiti:
         ``resolve_extracted_nodes``. ``nodes`` and ``uuid_map`` are updated in place.
         """
         clients = clients or self.clients
+        # Pass `trace` only when it is set, so the serial path makes the calls of today.
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         nodes_by_name = {_normalize_string_exact(node.name): node for node in nodes}
         known_uuids = {node.uuid for node in nodes}
 
@@ -904,6 +911,7 @@ class Graphiti:
             episode,
             previous_episodes,
             entity_types,
+            **trace_kwargs,
         )
         uuid_map.update(materialized_uuid_map)
 
@@ -927,6 +935,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         entity_types: dict[str, type[BaseModel]] | None = None,
         clients: GraphitiClients | None = None,
+        trace: 'ResolutionTrace | None' = None,
     ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode(s) and resolve against existing graph.
 
@@ -939,6 +948,7 @@ class Graphiti:
             - new_edges: Only edges that are new to the graph (not duplicates)
         """
         clients = clients or self.clients
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         episodes = episode if isinstance(episode, list) else [episode]
         primary_episode = episodes[0]
 
@@ -966,6 +976,7 @@ class Graphiti:
                 nodes,
                 uuid_map,
                 clients=clients,
+                trace=trace,
             )
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -977,6 +988,7 @@ class Graphiti:
             nodes,
             edge_types or {},
             edge_type_map,
+            **trace_kwargs,
         )
 
         return resolved_edges, invalidated_edges, new_edges
@@ -1141,9 +1153,15 @@ class Graphiti:
         edge_type_map: dict[tuple[str, str], list[str]],
         episodes: list[EpisodicNode],
         clients: GraphitiClients | None = None,
+        hydrate: bool = True,
+        trace: 'ResolutionTrace | None' = None,
     ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
-        """Resolve nodes and edges against the existing graph."""
+        """Resolve nodes and edges against the existing graph.
+
+        With ``hydrate=False``, the method does not extract node attributes and summaries.
+        """
         clients = clients or self.clients
+        trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
         nodes_by_uuid: dict[str, EntityNode] = {
             node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
         }
@@ -1168,6 +1186,7 @@ class Graphiti:
                     episode,
                     previous_episodes,
                     entity_types,
+                    **trace_kwargs,
                 )
                 for episode, previous_episodes in episode_context
             ],
@@ -1194,19 +1213,25 @@ class Graphiti:
             nodes_by_episode_unique[episode_uuid] = updated_nodes
 
         # Extract attributes for resolved nodes
-        hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
-            *[
-                extract_attributes_from_nodes(
-                    clients,
-                    nodes_by_episode_unique[episode.uuid],
-                    episode,
-                    previous_episodes,
-                    entity_types,
-                )
-                for episode, previous_episodes in episode_context
-            ],
-            max_coroutines=self.max_coroutines,
-        )
+        hydrated_nodes_results: list[list[EntityNode]]
+        if hydrate:
+            hydrated_nodes_results = await semaphore_gather(
+                *[
+                    extract_attributes_from_nodes(
+                        clients,
+                        nodes_by_episode_unique[episode.uuid],
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                    )
+                    for episode, previous_episodes in episode_context
+                ],
+                max_coroutines=self.max_coroutines,
+            )
+        else:
+            hydrated_nodes_results = [
+                nodes_by_episode_unique[episode.uuid] for episode, _ in episode_context
+            ]
 
         final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
 
@@ -1231,6 +1256,7 @@ class Graphiti:
                     final_hydrated_nodes,
                     edge_types or {},
                     edge_type_map,
+                    **trace_kwargs,
                 )
                 for episode in episodes
             ],
