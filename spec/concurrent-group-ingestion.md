@@ -1071,6 +1071,14 @@ Consequences and rules:
 - The window is for one process. With a shared store and more than one
   process, each process has its own window.
 - After a failed unit, the episode node stays in the graph with no entities.
+- A driver with `graph_operations_interface` must implement six operations
+  of the interface: `episodic_node_save_bulk`, `node_save_bulk`,
+  `episodic_edge_save_bulk`, `edge_save_bulk`, `node_update_bulk`, and
+  `edge_update_bulk`. The last two are new. They update records that exist and
+  create no record. The Admit phase examines the interface before
+  `begin_admit`. An operation that the interface class does not override is
+  missing. If an operation is missing, the phase raises `ValueError` with the
+  names of the missing operations, and the unit writes nothing to the graph.
 - The repair runs in the serial phase. If most units of a graph collide, the
   gain is small. A graph in which each episode uses the same nodes and facts
   is the probable worst case.

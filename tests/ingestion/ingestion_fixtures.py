@@ -327,8 +327,10 @@ class Harness:
         llm_client.generate_response = self.llm
         embedder = MagicMock()
         embedder.create_batch = AsyncMock(side_effect=lambda names: [X for _ in names])
+        driver = MagicMock()
+        driver.graph_operations_interface = None
         self.clients = SimpleNamespace(
-            driver=MagicMock(),
+            driver=driver,
             llm_client=llm_client,
             embedder=embedder,
             cross_encoder=MagicMock(),

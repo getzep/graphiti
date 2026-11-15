@@ -28,6 +28,7 @@ from graphiti_core.driver.driver import (
     GraphDriverSession,
     GraphProvider,
 )
+from graphiti_core.driver.graph_operations.graph_operations import GraphOperationsInterface
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
@@ -253,12 +254,32 @@ async def _entity_edge_record(
     return edge_data
 
 
-def _require_cypher_updates(driver: GraphDriver) -> None:
-    if driver.graph_operations_interface:
-        raise NotImplementedError(
-            'the update of a stored record has no implementation for a driver with '
-            'graph_operations_interface'
-        )
+# The operations of `graph_operations_interface` that the commit and the enrichment of
+# concurrent ingestion call. These operations have no Cypher fallback.
+INGESTION_INTERFACE_OPERATIONS = (
+    'episodic_node_save_bulk',
+    'node_save_bulk',
+    'episodic_edge_save_bulk',
+    'edge_save_bulk',
+    'node_update_bulk',
+    'edge_update_bulk',
+)
+
+
+def missing_ingestion_interface_operations(driver: GraphDriver) -> list[str]:
+    """Return the operations of concurrent ingestion that the interface of the driver lacks.
+
+    An operation that the interface class does not override is missing. The result is
+    empty for a driver with no `graph_operations_interface`.
+    """
+    interface = driver.graph_operations_interface
+    if not interface:
+        return []
+    return sorted(
+        name
+        for name in INGESTION_INTERFACE_OPERATIONS
+        if getattr(type(interface), name, None) in (None, getattr(GraphOperationsInterface, name))
+    )
 
 
 async def update_entity_edges_tx(
@@ -268,10 +289,12 @@ async def update_entity_edges_tx(
     driver: GraphDriver,
 ):
     """Update entity edges that exist. An edge that does not exist is not created."""
-    _require_cypher_updates(driver)
     if not entity_edges:
         return
     edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.edge_update_bulk(None, driver, tx, edges)
+        return
     query = get_entity_edge_update_bulk_query(driver.provider)
     await tx.run(query, entity_edges=edges)
 
@@ -283,10 +306,12 @@ async def update_entity_nodes_tx(
     driver: GraphDriver,
 ):
     """Update entity nodes that exist. A node that does not exist is not created."""
-    _require_cypher_updates(driver)
     if not entity_nodes:
         return
     nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.node_update_bulk(None, driver, tx, nodes)
+        return
     query = get_entity_node_update_bulk_query(driver.provider, nodes)
     await tx.run(query, nodes=nodes)
 

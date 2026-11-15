@@ -60,6 +60,7 @@ from graphiti_core.utils.bulk_utils import (
     add_nodes_and_edges_bulk,
     dedupe_edges_bulk,
     execute_write_with_timeout,
+    missing_ingestion_interface_operations,
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
     update_entity_edges_tx,
@@ -236,6 +237,16 @@ def _written_episode(graphiti: 'Graphiti', episode: EpisodicNode, entity_edges: 
     return written
 
 
+def _check_driver(driver: Any) -> None:
+    """Raise an error before the admission when the driver cannot write a commit."""
+    missing = missing_ingestion_interface_operations(driver)
+    if missing:
+        raise ValueError(
+            'concurrent ingestion needs these operations of graph_operations_interface, '
+            f'and the interface of the driver does not have them: {", ".join(missing)}'
+        )
+
+
 async def _begin_admit(
     store: IngestionStateStore,
     config: ConcurrentIngestionConfig,
@@ -274,6 +285,7 @@ async def admit_episode(
     write it.
     """
     group_id, driver, clients = graphiti._resolve_request_scope(group_id)
+    _check_driver(driver)
     wait = wait or _default_wait(config)
 
     with graphiti.tracer.start_span('ingest.admit') as span:
@@ -347,6 +359,7 @@ async def admit_bulk(
     each episode, in the order of the bulk call of today.
     """
     group_id, driver, clients = graphiti._resolve_request_scope(group_id)
+    _check_driver(driver)
     wait = wait or _default_wait(config)
 
     with graphiti.tracer.start_span('ingest.admit') as span:
