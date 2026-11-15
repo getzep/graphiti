@@ -809,6 +809,8 @@ Notes:
   file, so that more than one process on one machine can ingest into the same graph. A host application can supply
   its own store with the `IngestionStateStore` interface.
 - `update_communities=True` is not available in this mode. Call `build_communities` after the ingestion.
+- `identity_properties` works in this mode. Give the same value in each call for one graph, because the commit of a
+  recovered unit uses the value of the call that recovers it.
 - The graph of a window larger than 1 can be different from the graph of serial ingestion, because the LLM sees the
   episodes in a different context. The mode does not guarantee an equal graph.
 - The tests of this mode run on an in-memory graph and on embedded FalkorDB. The mode is not tested on Neo4j or
