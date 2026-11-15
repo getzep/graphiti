@@ -114,7 +114,7 @@ async def test_write_is_cancelled_at_the_limit_on_a_driver_with_no_server_limit(
             self.execute_write = slow
 
     session = SlowSession()
-    driver = SimpleNamespace(provider=GraphProvider.KUZU, session=lambda: session)
+    driver = SimpleNamespace(provider=GraphProvider.NEPTUNE, session=lambda: session)
     with pytest.raises(asyncio.TimeoutError):
         await execute_write_with_timeout(driver, 0.05, AsyncMock())
     session.close.assert_awaited_once()

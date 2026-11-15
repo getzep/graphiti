@@ -5,7 +5,7 @@ Category	Graphiti Core
 Drafted At	2026-11-14
 Status	Implemented as an opt-in mode. The default is off.
 Authors
-Daniel Chalef, Devin
+Daniel Chalef
 
 ## 1. Overview
 
@@ -67,7 +67,7 @@ stores, and it ships no other store:
 
 | Subject | Evidence | Status |
 |---|---|---|
-| Ingestion write is atomic only on Neo4j | The write uses `session.execute_write` (`bulk_utils.py` 136-148). On Neo4j that call is a managed transaction of the `neo4j` package. The FalkorDB, Kuzu, and Neptune sessions await the function directly (`falkordb_driver.py` 107-109, `kuzu_driver.py` 281-283, `neptune_driver.py` 381-383). | Verified |
+| Ingestion write is atomic only on Neo4j | The write uses `session.execute_write` (`bulk_utils.py` 136-148). On Neo4j that call is a managed transaction of the `neo4j` package. The FalkorDB and Neptune sessions await the function directly (`falkordb_driver.py` 107-109, `neptune_driver.py` 381-383). | Verified |
 | Only Neo4j has a real `transaction()` | `neo4j_driver.py` 148-158 overrides it. The base class returns a wrapper that runs each query immediately (`driver.py` 146-166, 213-220). No ingestion code calls `transaction()`. | Verified |
 | `sqlite3` is already in use | `llm_client/cache.py` 21 and 37. | Verified |
 
@@ -171,7 +171,7 @@ each part of it and the result of the check.
   duplicate node gets new labels and attributes (`dedup_helpers.py` 171-204).
 - Each save query replaces the full record. Nodes: `MERGE` on `uuid`, then
   `SET n = node` (`node_db_queries.py` 194-269). Edges: `MERGE` on `uuid`,
-  then `SET e = edge` (`edge_db_queries.py` 65-186). Kuzu sets each field. The
+  then `SET e = edge` (`edge_db_queries.py` 65-186). The
   driver operation classes use the same query builders.
 - The invalidation rules compare dates only (`edge_operations.py` 715-783).
   When a writer has the correct candidates, the result does not depend on the
@@ -960,19 +960,17 @@ candidate reads use three kinds of query.
 | Query | How it reads | Can it miss a completed write? |
 |---|---|---|
 | Exact name of a node | A property match in the graph (`node_operations.py` 554). | No. It reads the graph data. |
-| Cosine search for nodes and edges | On Neo4j, FalkorDB, and Kuzu: a query function on the matched records (`graph_queries.py` 143-151, `search_utils.py` 422 and 760). On Neptune: the code reads the embeddings from the graph and computes the score in Python (`search_utils.py` 354-372, `driver/neptune/operations/search_ops.py` 135 and 325). No backend uses a vector index. | No. It reads the graph data. |
+| Cosine search for nodes and edges | On Neo4j and FalkorDB: a query function on the matched records (`graph_queries.py` 143-151, `search_utils.py` 422 and 760). On Neptune: the code reads the embeddings from the graph and computes the score in Python (`search_utils.py` 354-372, `driver/neptune/operations/search_ops.py` 135 and 325). No backend uses a vector index. | No. It reads the graph data. |
 | Full-text search | A full-text index of the database, or a separate search service. | See the next table. |
 
 | Backend | Full-text search | Result |
 |---|---|---|
 | Neo4j | `db.index.fulltext.queryNodes` and `queryRelationships` (`graph_queries.py` 140, 163). | The Graphiti code does not show when the database updates the index. Not verified. |
 | FalkorDB | `db.idx.fulltext.queryNodes` and `queryRelationships` (`graph_queries.py` 134, 157). | Not verified, for the same reason. |
-| Kuzu | `QUERY_FTS_INDEX` (`graph_queries.py` 138, 161). | Not verified, for the same reason. |
 | Neptune | A separate search service, read with `run_aoss_query` (`search_utils.py` 237 and 606). | Yes. `save_to_aoss` is called only for community nodes (`nodes.py` 739, `driver/neptune/operations/community_node_ops.py` 64). The ingestion write (`bulk_utils.py` 225-260) does not call it. The code gives no time after which a full-text search returns an entity record. |
 | A driver with `search_interface` | The implementation of the host (`search_utils.py` 192, 310, 579, 676). | Unknown. The host must set the value. |
 
-I could not verify the full-text freshness of any backend from the Graphiti
-code. The default of `index_lag_seconds` is thus the same safe value for each
+The Graphiti code does not show the full-text freshness of any backend. The default of `index_lag_seconds` is thus the same safe value for each
 backend: 300 seconds. With this value, the delta of a unit has each unit that
 committed in the 300 seconds before its analysis started, and the store keeps
 a committed unit for that time. The cost is storage in the store and, for
@@ -994,8 +992,7 @@ Limits that stay:
   concurrent tasks on one graph (node resolution reads, edge searches, reads
   by UUID, and bulk writes) completed with zero errors. The client uses a
   connection pool. A FalkorDB server was not tested.
-- Kuzu: the driver is deprecated. This backend was not tested.
-- On FalkorDB, Kuzu, and Neptune, the write of a commit is not atomic. The
+- On FalkorDB and Neptune, the write of a commit is not atomic. The
   delta contains each unit that commits after the snapshot, so an analysis
   that reads a part of a write gets the full unit at commit time.
 
@@ -1060,8 +1057,8 @@ Consequences and rules:
   | Default server configuration, the client cancels the call after 0.2 s | The client got `TimeoutError`. The server completed the write. |
   | `TIMEOUT_MAX` set to 600,000, query `timeout` of 300 ms | The server returned `Query timed out` and rolled the write back. |
 
-  The Kuzu and Neptune drivers have no time limit in their query calls. On
-  FalkorDB with `TIMEOUT_MAX` 0, on Kuzu, and on Neptune, a write that the
+  The Neptune driver has no time limit in its query calls. On
+  FalkorDB with `TIMEOUT_MAX` 0 and on Neptune, a write that the
   database already started can complete after the unit cancels the call. If a process
   stops for more than `lease_seconds` during such a write, and more than one
   process ingests into the graph, the late write can replace a newer value of
@@ -1332,7 +1329,7 @@ Version 2 answers three more findings from the review of version 1.
 |---|---|---|
 | R1 | `SetEdgeAttributes` replaced the attribute map with a map that the analysis computed from the snapshot. A change by a commit in the delta was lost. `PatchNode` needed the same check. | Section 6.3: the operation has `base_attributes`. Step C8: a merge by key with three maps, with the reasons. Section 6.5 shows why `PatchNode` does not have the defect. Tests: section 14.1. |
 | R2 | The spec did not say what each writer outside the sequence changes. A delete between the read of step C8 and the write of step C9 was created again by the `MERGE`. | Section 12.2 has each writer, its records, and the result for each kind of change. Step C9 and step 7 of section 6.5 use update queries with no `MERGE` (section 13.2, item 6). |
-| R3 | `index_lag_seconds` had a default of zero with no evidence. | Section 12.1 has the evidence for each backend. The default is 300 seconds for each backend, because I could not verify the full-text freshness of any backend. |
+| R3 | `index_lag_seconds` had a default of zero with no evidence. | Section 12.1 has the evidence for each backend. The default is 300 seconds for each backend, because the Graphiti code does not show the full-text freshness of any backend. |
 
 Version 3 limits the state stores to the two stores of section 2.1. It changes
 no other part of the design.
@@ -1349,7 +1346,8 @@ Version 4 answers four findings from a later review of the same approach.
 ## 17. Claims about the code
 
 Commit: `ed23196506eba8806fae6da831d73fcd2ad714d8` of this repository
-(`graphiti-core` 0.31.2). I read each line that this table names.
+(`graphiti-core` 0.31.2). The line numbers are the line numbers at that
+commit. Each line that this table names was read.
 
 | # | Claim | File and lines |
 |---|---|---|
@@ -1364,7 +1362,7 @@ Commit: `ed23196506eba8806fae6da831d73fcd2ad714d8` of this repository
 | 9 | The write computes an embedding that a record does not have. | `graphiti_core/utils/bulk_utils.py` 168-169, 193-194 |
 | 10 | The base `transaction()` runs each query immediately. | `graphiti_core/driver/driver.py` 146-166, 213-220 |
 | 11 | Neo4j overrides `transaction()` and returns its own session object. | `graphiti_core/driver/neo4j_driver.py` 148-158, 182-184 |
-| 12 | The FalkorDB, Kuzu, and Neptune sessions await the write function directly. | `graphiti_core/driver/falkordb_driver.py` 107-109; `kuzu_driver.py` 281-283; `neptune_driver.py` 381-383 |
+| 12 | The FalkorDB and Neptune sessions await the write function directly. | `graphiti_core/driver/falkordb_driver.py` 107-109; `neptune_driver.py` 381-383 |
 | 13 | Node save: `MERGE` on `uuid`, then a full replace. | `graphiti_core/models/nodes/node_db_queries.py` 194-269 |
 | 14 | Edge save: `MERGE` on `uuid`, then a full replace, for each provider. | `graphiti_core/models/edges/edge_db_queries.py` 65-186 |
 | 15 | The driver edge operations use the same query builders. | `graphiti_core/driver/*/operations/entity_edge_ops.py` 58, 92 |
@@ -1415,34 +1413,35 @@ Commit: `ed23196506eba8806fae6da831d73fcd2ad714d8` of this repository
 
 - The unit tests of `tests/ingestion/` run the phases against an in-memory
   graph. The integration tests run them on embedded FalkorDB. No test ran on
-  Neo4j, Kuzu, or Neptune.
+  Neo4j or Neptune.
 - "`extract_edges` and the combined extraction do not use the driver" comes
-  from a text search of the two files. I did not read each line of them.
+  from a text search of the two files. Each line of them was not read.
 - "No ingestion code calls `transaction()`" comes from a text search of
   `graphiti_core/`.
 - The `neo4j` package states that `execute_write` is a managed transaction
-  that can run the function more than one time. I read the docstring of
-  version 6.1.0. I did not test it.
-- I did not verify when Neo4j, FalkorDB, and Kuzu update a full-text index
-  after a write. The Graphiti code does not show it. The default
+  that can run the function more than one time. The source is the docstring
+  of version 6.1.0. No test ran it.
+- The time at which Neo4j and FalkorDB update a full-text index after a
+  write is not verified. The Graphiti code does not show it. The default
   `index_lag_seconds=300.0` does not depend on it.
 - "`save_to_aoss` is called only for community nodes" comes from a text search
   of `graphiti_core/`.
-- I did not verify the isolation rules of FalkorDB, Kuzu, or Neptune.
-- I read `add_triplet`, `remove_episode`, and `build_communities`. For the
-  namespace methods and the model methods of section 12.2, I read the method
-  names and the save queries. I did not read each delete query.
+- The isolation rules of FalkorDB and Neptune are not verified.
+- The statements about `add_triplet`, `remove_episode`, and
+  `build_communities` come from the code of these methods. For the namespace
+  methods and the model methods of section 12.2, the source is the method
+  names and the save queries. Each delete query was not read.
 - "An edge query writes no edge when an endpoint node does not exist" comes
-  from the `MATCH` clauses of the bulk edge query. I did not run it.
+  from the `MATCH` clauses of the bulk edge query. No test ran it.
 - The time limit of a Neo4j write comes from the docstring of the `neo4j`
-  package (`Query(timeout=...)` and `unit_of_work(timeout=...)`). I did not
-  test it. FalkorDB stops a write at a time limit only with `TIMEOUT_MAX` set
-  (section 12.3). Kuzu and Neptune are not verified.
+  package (`Query(timeout=...)` and `unit_of_work(timeout=...)`). No test ran
+  it. FalkorDB stops a write at a time limit only with `TIMEOUT_MAX` set
+  (section 12.3). Neptune is not verified.
 - A read by UUID returned a record immediately after its write on embedded
   FalkorDB. The other backends are not verified. Steps C2a and C3 depend on
   it.
-- I did not measure the cost of the candidate reads in the commit, the
-  collision rate, or the payload size for a real episode.
+- The cost of the candidate reads in the commit, the collision rate, and the
+  payload size for a real episode were not measured.
 - The statement in section 7 about the candidate set is an argument from the
   design. It has no proof. The tests show the rule for the scenarios of
   section 14 only.

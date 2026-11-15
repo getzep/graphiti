@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import asyncio
-import json
 import logging
 import typing
 from datetime import datetime
@@ -44,7 +43,6 @@ from graphiti_core.models.nodes.node_db_queries import (
     get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupResolutionState,
     _build_candidate_indexes,
@@ -212,13 +210,9 @@ async def _entity_node_record(
         'labels': list(set(node.labels + ['Entity'])),
     }
 
-    if driver.provider == GraphProvider.KUZU:
-        attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
-        entity_data['attributes'] = json.dumps(attributes)
-    else:
-        for k, v in (node.attributes or {}).items():
-            if k not in entity_data:
-                entity_data[k] = v
+    for k, v in (node.attributes or {}).items():
+        if k not in entity_data:
+            entity_data[k] = v
 
     return entity_data
 
@@ -245,17 +239,13 @@ async def _entity_edge_record(
         'fact_embedding': edge.fact_embedding,
     }
 
-    if driver.provider == GraphProvider.KUZU:
-        attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
-        edge_data['attributes'] = json.dumps(attributes)
-    else:
-        # Merge attributes without overwriting explicit edge fields.
-        # Attributes may contain stale string versions of typed fields
-        # (e.g. reference_time as ISO string) that would replace the
-        # datetime values set above.
-        for k, v in (edge.attributes or {}).items():
-            if k not in edge_data:
-                edge_data[k] = v
+    # Merge attributes without overwriting explicit edge fields.
+    # Attributes may contain stale string versions of typed fields
+    # (e.g. reference_time as ISO string) that would replace the
+    # datetime values set above.
+    for k, v in (edge.attributes or {}).items():
+        if k not in edge_data:
+            edge_data[k] = v
 
     return edge_data
 
@@ -280,11 +270,7 @@ async def update_entity_edges_tx(
         return
     edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
     query = get_entity_edge_update_bulk_query(driver.provider)
-    if driver.provider == GraphProvider.KUZU:
-        for edge in edges:
-            await tx.run(query, **edge)
-    else:
-        await tx.run(query, entity_edges=edges)
+    await tx.run(query, entity_edges=edges)
 
 
 async def update_entity_nodes_tx(
@@ -299,11 +285,7 @@ async def update_entity_nodes_tx(
         return
     nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
     query = get_entity_node_update_bulk_query(driver.provider, nodes)
-    if driver.provider == GraphProvider.KUZU:
-        for node in nodes:
-            await tx.run(query, **node)
-    else:
-        await tx.run(query, nodes=nodes)
+    await tx.run(query, nodes=nodes)
 
 
 async def add_nodes_and_edges_bulk_tx(
@@ -331,20 +313,6 @@ async def add_nodes_and_edges_bulk_tx(
         )
         await driver.graph_operations_interface.edge_save_bulk(None, driver, tx, edges)
 
-    elif driver.provider == GraphProvider.KUZU:
-        # FIXME: Kuzu's UNWIND does not currently support STRUCT[] type properly, so we insert the data one by one instead for now.
-        episode_query = get_episode_node_save_bulk_query(driver.provider)
-        for episode in episodes:
-            await tx.run(episode_query, **episode)
-        entity_node_query = get_entity_node_save_bulk_query(driver.provider, nodes)
-        for node in nodes:
-            await tx.run(entity_node_query, **node)
-        entity_edge_query = get_entity_edge_save_bulk_query(driver.provider)
-        for edge in edges:
-            await tx.run(entity_edge_query, **edge)
-        episodic_edge_query = get_episodic_edge_save_bulk_query(driver.provider)
-        for edge in episodic_edges:
-            await tx.run(episodic_edge_query, **edge.model_dump())
     else:
         await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
         await tx.run(

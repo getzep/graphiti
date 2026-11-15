@@ -1428,9 +1428,6 @@ async def test_get_communities_by_nodes(graph_driver, mock_embedder):
 async def test_edge_fulltext_search(
     graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
 ):
-    if graph_driver.provider == GraphProvider.KUZU:
-        pytest.skip('Skipping as fulltext indexing not supported for Kuzu')
-
     graphiti = Graphiti(
         graph_driver=graph_driver,
         llm_client=mock_llm_client,
@@ -1817,9 +1814,6 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
 async def test_node_fulltext_search(
     graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
 ):
-    if graph_driver.provider == GraphProvider.KUZU:
-        pytest.skip('Skipping as fulltext indexing not supported for Kuzu')
-
     graphiti = Graphiti(
         graph_driver=graph_driver,
         llm_client=mock_llm_client,
@@ -2026,9 +2020,6 @@ async def test_node_bfs_search(graph_driver, mock_embedder):
 async def test_episode_fulltext_search(
     graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
 ):
-    if graph_driver.provider == GraphProvider.KUZU:
-        pytest.skip('Skipping as fulltext indexing not supported for Kuzu')
-
     graphiti = Graphiti(
         graph_driver=graph_driver,
         llm_client=mock_llm_client,
@@ -2077,9 +2068,6 @@ async def test_episode_fulltext_search(
 async def test_community_fulltext_search(
     graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
 ):
-    if graph_driver.provider == GraphProvider.KUZU:
-        pytest.skip('Skipping as fulltext indexing not supported for Kuzu')
-
     graphiti = Graphiti(
         graph_driver=graph_driver,
         llm_client=mock_llm_client,
@@ -2166,9 +2154,6 @@ async def test_get_relevant_nodes(
 ):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
-
-    if graph_driver.provider == GraphProvider.KUZU:
-        pytest.skip('Skipping as tests fail on Kuzu')
 
     graphiti = Graphiti(
         graph_driver=graph_driver,
