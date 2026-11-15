@@ -1287,6 +1287,42 @@ class Graphiti:
                 updated_nodes.append(updated_node)
             nodes_by_episode_unique[episode_uuid] = updated_nodes
 
+        if identity_properties:
+            episodes_by_uuid = {episode.uuid: episode for episode, _ in episode_context}
+            episode_context_indices = {
+                episode.uuid: index for index, (episode, _) in enumerate(episode_context)
+            }
+            previous_episodes_by_uuid = {
+                episode.uuid: previous_episodes for episode, previous_episodes in episode_context
+            }
+            mentioning_episodes_by_node_uuid: dict[str, list[EpisodicNode]] = {}
+            for episode, _ in episode_context:
+                episode_node_uuids: set[str] = set()
+                for node in nodes_by_episode[episode.uuid]:
+                    node_uuid = uuid_map.get(node.uuid, node.uuid)
+                    if node_uuid in episode_node_uuids:
+                        continue
+                    episode_node_uuids.add(node_uuid)
+                    mentioning_episodes_by_node_uuid.setdefault(node_uuid, []).append(episode)
+
+            identity_nodes_by_episode_uuids: dict[tuple[str, ...], list[EntityNode]] = {}
+            multi_mention_identity_node_uuids: set[str] = set()
+            for node_uuid, mentioning_episodes in mentioning_episodes_by_node_uuid.items():
+                node = nodes_by_uuid[node_uuid]
+                if (
+                    len(mentioning_episodes) > 1
+                    and _identity_type_for_node(node, identity_properties) is not None
+                ):
+                    episode_uuids = tuple(episode.uuid for episode in mentioning_episodes)
+                    identity_nodes_by_episode_uuids.setdefault(episode_uuids, []).append(node)
+                    multi_mention_identity_node_uuids.add(node_uuid)
+
+            if multi_mention_identity_node_uuids:
+                for episode_uuid, nodes in nodes_by_episode_unique.items():
+                    nodes_by_episode_unique[episode_uuid] = [
+                        node for node in nodes if node.uuid not in multi_mention_identity_node_uuids
+                    ]
+
         # Extract attributes for resolved nodes
         async def hydrate_nodes(
             episode: EpisodicNode,
@@ -1301,15 +1337,49 @@ class Graphiti:
                 entity_types,
             )
 
-        hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
-            *[
-                hydrate_nodes(episode, previous_episodes)
-                for episode, previous_episodes in episode_context
-            ],
-            max_coroutines=self.max_coroutines,
-        )
+        episode_hydration_calls = [
+            hydrate_nodes(episode, previous_episodes)
+            for episode, previous_episodes in episode_context
+        ]
+        if identity_properties:
+            # Attribute calls stay one per node; summary calls can increase by the number of groups.
+            identity_hydration_calls = []
+            for episode_uuids, nodes in identity_nodes_by_episode_uuids.items():
+                mentioning_episodes = sorted(
+                    (episodes_by_uuid[episode_uuid] for episode_uuid in episode_uuids),
+                    key=lambda episode: (
+                        episode.valid_at,
+                        episode_context_indices[episode.uuid],
+                    ),
+                )
+                first_mention_episode_uuid = episode_uuids[0]
+                identity_hydration_calls.append(
+                    extract_attributes_from_nodes(
+                        clients,
+                        nodes,
+                        mentioning_episodes,
+                        previous_episodes_by_uuid[first_mention_episode_uuid],
+                        entity_types,
+                    )
+                )
+
+            hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
+                *episode_hydration_calls,
+                *identity_hydration_calls,
+                max_coroutines=self.max_coroutines,
+            )
+        else:
+            hydrated_nodes_results = await semaphore_gather(
+                *episode_hydration_calls,
+                max_coroutines=self.max_coroutines,
+            )
 
         final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
+        if identity_properties:
+            unique_hydrated_nodes: dict[str, EntityNode] = {}
+            for node in final_hydrated_nodes:
+                unique_hydrated_nodes.setdefault(node.uuid, node)
+            final_hydrated_nodes = list(unique_hydrated_nodes.values())
 
         # Resolve edges with updated pointers
         edges_by_episode_unique: dict[str, list[EntityEdge]] = {}

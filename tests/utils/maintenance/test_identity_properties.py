@@ -501,6 +501,173 @@ async def test_bulk_resolution_extracts_attributes_after_resolution(monkeypatch)
     assert 'skip_attribute_extraction' not in late_extract.await_args.kwargs
 
 
+def _make_bulk_hydration_episode(
+    name: str,
+    content: str,
+    valid_at: datetime,
+) -> EpisodicNode:
+    return EpisodicNode(
+        name=name,
+        group_id='group',
+        source=EpisodeType.message,
+        source_description='test',
+        content=content,
+        valid_at=valid_at,
+    )
+
+
+def _make_bulk_hydration_test_data():
+    episode_one = _make_bulk_hydration_episode(
+        'episode one',
+        'Alex works at Acme.',
+        datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    episode_two = _make_bulk_hydration_episode(
+        'episode two',
+        'Alex changed teams.',
+        datetime(2024, 1, 2, tzinfo=timezone.utc),
+    )
+    previous_one = [
+        _make_bulk_hydration_episode(
+            'previous one',
+            'Alex joined Acme.',
+            datetime(2023, 12, 30, tzinfo=timezone.utc),
+        )
+    ]
+    previous_two = [
+        _make_bulk_hydration_episode(
+            'previous two',
+            'Alex was a manager.',
+            datetime(2023, 12, 31, tzinfo=timezone.utc),
+        )
+    ]
+    alex = EntityNode(
+        name='Alex',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        attributes={'email': 'alex@example.com'},
+    )
+    acme = EntityNode(name='Acme', group_id='group', labels=['Entity'])
+    return episode_one, episode_two, previous_one, previous_two, alex, acme
+
+
+async def _run_bulk_hydration_test(
+    monkeypatch,
+    graphiti,
+    clients,
+    episode_context,
+    nodes_by_episode,
+    identity_properties,
+):
+    async def resolve_nodes(_clients, nodes, *_args, **_kwargs):
+        return nodes, {node.uuid: node.uuid for node in nodes}, []
+
+    monkeypatch.setattr('graphiti_core.graphiti.resolve_extracted_nodes', resolve_nodes)
+    extract_attributes = AsyncMock(side_effect=lambda _clients, nodes, *_args, **_kwargs: nodes)
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.extract_attributes_from_nodes',
+        extract_attributes,
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.resolve_extracted_edges',
+        AsyncMock(return_value=([], [], [])),
+    )
+    episodes = [episode for episode, _ in episode_context]
+    result = await graphiti._resolve_nodes_and_edges_bulk(
+        nodes_by_episode,
+        {episode.uuid: [] for episode in episodes},
+        episode_context,
+        {'Person': Person},
+        None,
+        {},
+        episodes,
+        identity_properties=identity_properties,
+        clients=clients,
+    )
+    return result, extract_attributes
+
+
+@pytest.mark.asyncio
+async def test_bulk_resolution_hydrates_multi_mention_identity_with_all_episodes(monkeypatch):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    episode_one, episode_two, previous_one, previous_two, alex, acme = (
+        _make_bulk_hydration_test_data()
+    )
+    result, extract_attributes = await _run_bulk_hydration_test(
+        monkeypatch,
+        graphiti,
+        clients,
+        [(episode_one, previous_one), (episode_two, previous_two)],
+        {
+            episode_one.uuid: [alex, acme],
+            episode_two.uuid: [alex],
+        },
+        {'Person': ['email']},
+    )
+
+    alex_calls = [call for call in extract_attributes.await_args_list if call.args[1] == [alex]]
+    acme_calls = [call for call in extract_attributes.await_args_list if call.args[1] == [acme]]
+    assert len(alex_calls) == 1
+    assert alex_calls[0].args[2] == [episode_one, episode_two]
+    assert alex_calls[0].args[3] == previous_one
+    assert len(acme_calls) == 1
+    assert acme_calls[0].args[2] is episode_one
+    assert sum(node.uuid == alex.uuid for node in result[0]) == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_resolution_without_identity_properties_keeps_episode_hydration(
+    monkeypatch,
+):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    episode_one, episode_two, previous_one, previous_two, alex, acme = (
+        _make_bulk_hydration_test_data()
+    )
+    _, extract_attributes = await _run_bulk_hydration_test(
+        monkeypatch,
+        graphiti,
+        clients,
+        [(episode_one, previous_one), (episode_two, previous_two)],
+        {
+            episode_one.uuid: [alex, acme],
+            episode_two.uuid: [alex],
+        },
+        None,
+    )
+
+    assert extract_attributes.await_count == 2
+    calls_by_episode = {call.args[2].uuid: call for call in extract_attributes.await_args_list}
+    assert calls_by_episode[episode_one.uuid].args[1] == [alex, acme]
+    assert calls_by_episode[episode_two.uuid].args[1] == []
+    assert all(
+        isinstance(call.args[2], EpisodicNode) for call in extract_attributes.await_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_bulk_resolution_hydrates_single_mention_identity_in_its_episode(monkeypatch):
+    graphiti, clients = _make_graphiti_for_episode_test()
+    episode = _make_bulk_hydration_episode(
+        'episode',
+        'Alex joined Acme.',
+        datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    alex = EntityNode(name='Alex', group_id='group', labels=['Entity', 'Person'])
+    result, extract_attributes = await _run_bulk_hydration_test(
+        monkeypatch,
+        graphiti,
+        clients,
+        [(episode, [])],
+        {episode.uuid: [alex]},
+        {'Person': ['email']},
+    )
+
+    extract_attributes.assert_awaited_once()
+    assert extract_attributes.await_args.args[1] == [alex]
+    assert extract_attributes.await_args.args[2] is episode
+    assert result[0] == [alex]
+
+
 @pytest.mark.asyncio
 async def test_add_triplet_passes_identity_properties_to_both_node_resolutions(monkeypatch):
     graphiti, clients = _make_graphiti_for_episode_test()

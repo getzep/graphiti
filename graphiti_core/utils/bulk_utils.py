@@ -437,11 +437,8 @@ async def dedupe_nodes_bulk(
 
             existing_candidates = list(canonical_nodes.values())
             if identity_properties:
-                # An identity match keeps the canonical values and adds attributes that only the
-                # duplicate has, so identity attributes from a later episode reach the saved node.
-                # Attribute and summary hydration after resolution then uses the first episode of
-                # the canonical node and merges into these attributes, as for name and
-                # similarity matches.
+                # Attribute and summary hydration uses all episodes that mention an identity-typed
+                # node; name and similarity matches use the first episode (#2156).
                 identity_type = _identity_type_for_node(node, identity_properties)
                 identity_key = _identity_key_for_node(node, identity_properties)
                 if identity_type is not None and identity_key is not None:
