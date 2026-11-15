@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 import typing
 from datetime import datetime
@@ -26,7 +25,6 @@ from typing_extensions import Any
 from graphiti_core.driver.driver import (
     GraphDriver,
     GraphDriverSession,
-    GraphProvider,
 )
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
@@ -41,7 +39,6 @@ from graphiti_core.models.nodes.node_db_queries import (
     get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupResolutionState,
     _build_candidate_indexes,
@@ -178,13 +175,9 @@ async def add_nodes_and_edges_bulk_tx(
             'labels': list(set(node.labels + ['Entity'])),
         }
 
-        if driver.provider == GraphProvider.KUZU:
-            attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
-            entity_data['attributes'] = json.dumps(attributes)
-        else:
-            for k, v in (node.attributes or {}).items():
-                if k not in entity_data:
-                    entity_data[k] = v
+        for k, v in (node.attributes or {}).items():
+            if k not in entity_data:
+                entity_data[k] = v
 
         nodes.append(entity_data)
 
@@ -208,17 +201,13 @@ async def add_nodes_and_edges_bulk_tx(
             'fact_embedding': edge.fact_embedding,
         }
 
-        if driver.provider == GraphProvider.KUZU:
-            attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
-            edge_data['attributes'] = json.dumps(attributes)
-        else:
-            # Merge attributes without overwriting explicit edge fields.
-            # Attributes may contain stale string versions of typed fields
-            # (e.g. reference_time as ISO string) that would replace the
-            # datetime values set above.
-            for k, v in (edge.attributes or {}).items():
-                if k not in edge_data:
-                    edge_data[k] = v
+        # Merge attributes without overwriting explicit edge fields.
+        # Attributes may contain stale string versions of typed fields
+        # (e.g. reference_time as ISO string) that would replace the
+        # datetime values set above.
+        for k, v in (edge.attributes or {}).items():
+            if k not in edge_data:
+                edge_data[k] = v
 
         edges.append(edge_data)
 
@@ -230,20 +219,6 @@ async def add_nodes_and_edges_bulk_tx(
         )
         await driver.graph_operations_interface.edge_save_bulk(None, driver, tx, edges)
 
-    elif driver.provider == GraphProvider.KUZU:
-        # FIXME: Kuzu's UNWIND does not currently support STRUCT[] type properly, so we insert the data one by one instead for now.
-        episode_query = get_episode_node_save_bulk_query(driver.provider)
-        for episode in episodes:
-            await tx.run(episode_query, **episode)
-        entity_node_query = get_entity_node_save_bulk_query(driver.provider, nodes)
-        for node in nodes:
-            await tx.run(entity_node_query, **node)
-        entity_edge_query = get_entity_edge_save_bulk_query(driver.provider)
-        for edge in edges:
-            await tx.run(entity_edge_query, **edge)
-        episodic_edge_query = get_episodic_edge_save_bulk_query(driver.provider)
-        for edge in episodic_edges:
-            await tx.run(episodic_edge_query, **edge.model_dump())
     else:
         await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
         await tx.run(
