@@ -92,7 +92,7 @@ async def test_dedupe_nodes_bulk_merges_identity_matches_before_name_comparison(
         name='Bob Jones',
         group_id='group',
         labels=['Entity', 'Person'],
-        attributes={'email': 'shared@example.com'},
+        attributes={'email': ' shared@example.com ', 'title': 'engineer'},
     )
 
     async def fake_resolve(
@@ -118,6 +118,8 @@ async def test_dedupe_nodes_bulk_merges_identity_matches_before_name_comparison(
     assert nodes_by_episode[episode_one.uuid] == [extracted_one]
     assert nodes_by_episode[episode_two.uuid] == [extracted_one]
     assert uuid_map[extracted_two.uuid] == extracted_one.uuid
+    assert extracted_one.attributes['email'] == 'shared@example.com'
+    assert extracted_one.attributes['title'] == 'engineer'
 
 
 @pytest.mark.asyncio

@@ -462,8 +462,7 @@ async def dedupe_nodes_bulk(
 
             existing_candidates = list(canonical_nodes.values())
             if identity_properties:
-                # An identity match merges like a name match: the canonical node is
-                # hydrated with the episode that first introduced it.
+                # An identity match keeps the canonical values and adds attributes that only the duplicate has.
                 identity_type = _identity_type_for_node(node, identity_properties)
                 identity_key = _identity_key_for_node(node, identity_properties)
                 if identity_type is not None and identity_key is not None:
@@ -479,6 +478,8 @@ async def dedupe_nodes_bulk(
                         None,
                     )
                     if identity_match is not None:
+                        for key, value in node.attributes.items():
+                            identity_match.attributes.setdefault(key, value)
                         if identity_match.uuid != node.uuid:
                             duplicate_pairs.append((node.uuid, identity_match.uuid))
                         continue
