@@ -718,12 +718,6 @@ class EntityNode(Node):
                 f'Attribute lookup is not supported for {driver.provider.value}'
             )
 
-        if (
-            driver.provider == GraphProvider.FALKORDB
-            and getattr(driver, '_database', None) != group_id
-        ):
-            driver = driver.clone(database=group_id)
-
         attribute_conditions = [
             f'AND n.`{property_name}` = $attribute_{index}'
             for index, property_name in enumerate(property_names)

@@ -90,15 +90,12 @@ async def test_get_by_attribute_values_returns_empty_for_empty_attributes():
 
 
 @pytest.mark.asyncio
-async def test_get_by_attribute_values_clones_falkordb_driver_for_group():
+async def test_get_by_attribute_values_uses_supplied_falkordb_driver():
     driver = MagicMock()
     driver.provider = GraphProvider.FALKORDB
     driver._database = 'default_db'
     driver.graph_operations_interface = None
-    scoped_driver = MagicMock()
-    scoped_driver.provider = GraphProvider.FALKORDB
-    scoped_driver.execute_query = AsyncMock(return_value=([], [], None))
-    driver.clone.return_value = scoped_driver
+    driver.execute_query = AsyncMock(return_value=([], [], None))
 
     await EntityNode.get_by_attribute_values(
         driver,
@@ -107,8 +104,8 @@ async def test_get_by_attribute_values_clones_falkordb_driver_for_group():
         labels=['Person'],
     )
 
-    driver.clone.assert_called_once_with(database='group')
-    scoped_driver.execute_query.assert_awaited_once()
+    driver.clone.assert_not_called()
+    driver.execute_query.assert_awaited_once()
 
 
 @pytest.mark.asyncio
