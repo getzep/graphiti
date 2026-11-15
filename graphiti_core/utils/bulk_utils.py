@@ -56,6 +56,8 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
+    _identity_key_for_node,
+    _identity_type_for_node,
     extract_nodes,
     resolve_extracted_nodes,
 )
@@ -487,6 +489,7 @@ async def dedupe_nodes_bulk(
     extracted_nodes: list[list[EntityNode]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     entity_types: dict[str, type[BaseModel]] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
     trace: 'ResolutionTrace | None' = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     """Resolve entity duplicates across an in-memory batch using a two-pass strategy.
@@ -502,15 +505,36 @@ async def dedupe_nodes_bulk(
     """
 
     trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
+
+    async def resolve_nodes(
+        nodes: list[EntityNode],
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+    ):
+        if identity_properties:
+            return await resolve_extracted_nodes(
+                clients,
+                nodes,
+                episode,
+                previous_episodes,
+                entity_types,
+                identity_properties=identity_properties,
+                **trace_kwargs,
+            )
+        return await resolve_extracted_nodes(
+            clients,
+            nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+            **trace_kwargs,
+        )
     first_pass_results = await semaphore_gather(
         *[
-            resolve_extracted_nodes(
-                clients,
+            resolve_nodes(
                 nodes,
                 episode_tuples[i][0],
                 episode_tuples[i][1],
-                entity_types,
-                **trace_kwargs,
             )
             for i, nodes in enumerate(extracted_nodes)
         ],
@@ -541,6 +565,30 @@ async def dedupe_nodes_bulk(
                 continue
 
             existing_candidates = list(canonical_nodes.values())
+            if identity_properties:
+                # Attribute and summary hydration uses all episodes that mention an identity-typed
+                # node; name and similarity matches use the first episode (#2156).
+                identity_type = _identity_type_for_node(node, identity_properties)
+                identity_key = _identity_key_for_node(node, identity_properties)
+                if identity_type is not None and identity_key is not None:
+                    identity_match = next(
+                        (
+                            candidate
+                            for candidate in existing_candidates
+                            if _identity_type_for_node(candidate, identity_properties)
+                            == identity_type
+                            and _identity_key_for_node(candidate, identity_properties)
+                            == identity_key
+                        ),
+                        None,
+                    )
+                    if identity_match is not None:
+                        for key, value in node.attributes.items():
+                            identity_match.attributes.setdefault(key, value)
+                        if identity_match.uuid != node.uuid:
+                            duplicate_pairs.append((node.uuid, identity_match.uuid))
+                        continue
+
             normalized = _normalize_string_exact(node.name)
             exact_match = next(
                 (

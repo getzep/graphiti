@@ -27,6 +27,7 @@ from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import (
+    NODE_DEDUP_CANDIDATE_LIMIT,
     EntityNode,
     EpisodeType,
     EpisodicNode,
@@ -67,7 +68,6 @@ logger = logging.getLogger(__name__)
 
 # Maximum number of nodes to summarize in a single LLM call
 MAX_NODES = 30
-NODE_DEDUP_CANDIDATE_LIMIT = 15
 NODE_DEDUP_COSINE_MIN_SCORE = 0.6
 
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
@@ -504,11 +504,6 @@ async def _collect_identity_property_candidate_nodes(
     if not identity_properties:
         return [[] for _ in extracted_nodes]
 
-    graph_operations = getattr(clients.driver, 'graph_operations_interface', None)
-    lookup = getattr(graph_operations, 'node_get_by_attribute_values', None)
-    if lookup is None:
-        return [[] for _ in extracted_nodes]
-
     async def _lookup_node(node: EntityNode) -> list[EntityNode]:
         identity_type = _identity_type_for_node(node, identity_properties)
         identity_key = _identity_key_for_node(node, identity_properties)
@@ -517,8 +512,7 @@ async def _collect_identity_property_candidate_nodes(
 
         _, identity_values = identity_key
         try:
-            return await lookup(
-                EntityNode,
+            return await EntityNode.get_by_attribute_values(
                 clients.driver,
                 node.group_id,
                 dict(identity_values),
@@ -1021,6 +1015,7 @@ async def extract_attributes_only_from_nodes(
     episode: EpisodicNode | list[EpisodicNode] | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
+    validate_shape: bool = True,
 ) -> list[EntityNode]:
     if not nodes or not entity_types:
         return nodes
@@ -1044,6 +1039,7 @@ async def extract_attributes_only_from_nodes(
                 previous_episodes,
                 entity_type,
                 clients=clients,
+                validate_shape=validate_shape,
             )
             for node, entity_type in extraction_inputs
         ],
@@ -1116,6 +1112,7 @@ async def _extract_entity_attributes(
     entity_type: type[BaseModel] | None,
     *,
     clients: GraphitiClients | None = None,
+    validate_shape: bool = True,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
         # No applicable type means nothing to extract, not "extracted nothing": return the
@@ -1160,7 +1157,8 @@ async def _extract_entity_attributes(
     # Shape validation only — we discard the validated instance because returning
     # `model_dump()` would expand defaults across all fields and clobber prior
     # values that the merge above just preserved.
-    entity_type(**merged)
+    if validate_shape:
+        entity_type(**merged)
 
     return merged
 
