@@ -935,6 +935,7 @@ async def extract_attributes_only_from_nodes(
     episode: EpisodicNode | list[EpisodicNode] | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
+    validate_shape: bool = True,
 ) -> list[EntityNode]:
     if not nodes or not entity_types:
         return nodes
@@ -958,6 +959,7 @@ async def extract_attributes_only_from_nodes(
                 previous_episodes,
                 entity_type,
                 clients=clients,
+                validate_shape=validate_shape,
             )
             for node, entity_type in extraction_inputs
         ],
@@ -1030,6 +1032,7 @@ async def _extract_entity_attributes(
     entity_type: type[BaseModel] | None,
     *,
     clients: GraphitiClients | None = None,
+    validate_shape: bool = True,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
         # No applicable type means nothing to extract, not "extracted nothing": return the
@@ -1074,7 +1077,8 @@ async def _extract_entity_attributes(
     # Shape validation only — we discard the validated instance because returning
     # `model_dump()` would expand defaults across all fields and clobber prior
     # values that the merge above just preserved.
-    entity_type(**merged)
+    if validate_shape:
+        entity_type(**merged)
 
     return merged
 

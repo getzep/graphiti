@@ -113,6 +113,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
 )
 from graphiti_core.utils.maintenance.node_operations import (
     _extract_entity_summaries_batch,
+    _identity_type_for_node,
     extract_attributes_from_nodes,
     extract_attributes_only_from_nodes,
     extract_nodes,
@@ -859,12 +860,21 @@ class Graphiti:
         )
 
         if identity_properties:
+            identity_nodes = [
+                node
+                for node in extracted_nodes
+                if _identity_type_for_node(node, identity_properties) is not None
+            ]
+        else:
+            identity_nodes = []
+        if identity_nodes:
             await extract_attributes_only_from_nodes(
                 self.clients,
-                extracted_nodes,
+                identity_nodes,
                 episode,
                 previous_episodes,
                 entity_types,
+                validate_shape=False,
             )
 
         if identity_properties:
@@ -1163,19 +1173,29 @@ class Graphiti:
         )
 
         if identity_properties:
-            await semaphore_gather(
-                *[
-                    extract_attributes_only_from_nodes(
-                        clients,
-                        extracted_nodes_bulk[index],
-                        episode,
-                        previous_episodes,
-                        entity_types,
+            extraction_calls = []
+            for index, (episode, previous_episodes) in enumerate(episode_context):
+                identity_nodes = [
+                    node
+                    for node in extracted_nodes_bulk[index]
+                    if _identity_type_for_node(node, identity_properties) is not None
+                ]
+                if identity_nodes:
+                    extraction_calls.append(
+                        extract_attributes_only_from_nodes(
+                            clients,
+                            identity_nodes,
+                            episode,
+                            previous_episodes,
+                            entity_types,
+                            validate_shape=False,
+                        )
                     )
-                    for index, (episode, previous_episodes) in enumerate(episode_context)
-                ],
-                max_coroutines=self.max_coroutines,
-            )
+            if extraction_calls:
+                await semaphore_gather(
+                    *extraction_calls,
+                    max_coroutines=self.max_coroutines,
+                )
 
         # Dedupe extracted nodes in memory
         nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
@@ -1273,15 +1293,6 @@ class Graphiti:
             previous_episodes: list[EpisodicNode],
         ) -> list[EntityNode]:
             nodes = nodes_by_episode_unique[episode.uuid]
-            if identity_properties:
-                return await extract_attributes_from_nodes(
-                    clients,
-                    nodes,
-                    episode,
-                    previous_episodes,
-                    entity_types,
-                    skip_attribute_extraction=True,
-                )
             return await extract_attributes_from_nodes(
                 clients,
                 nodes,
@@ -1573,12 +1584,21 @@ class Graphiti:
                 )
 
                 if identity_properties:
+                    identity_nodes = [
+                        node
+                        for node in extracted_nodes
+                        if _identity_type_for_node(node, identity_properties) is not None
+                    ]
+                else:
+                    identity_nodes = []
+                if identity_nodes:
                     await extract_attributes_only_from_nodes(
                         clients,
-                        extracted_nodes,
+                        identity_nodes,
                         episode,
                         previous_episodes,
                         entity_types,
+                        validate_shape=False,
                     )
 
                 nodes, uuid_map, _ = await resolve_extracted_nodes(
@@ -1614,25 +1634,14 @@ class Graphiti:
 
                 # Extract node attributes - only pass new edges for summary generation
                 # to avoid duplicating facts that already exist in the graph
-                if identity_properties:
-                    hydrated_nodes = await extract_attributes_from_nodes(
-                        clients,
-                        nodes,
-                        episode,
-                        previous_episodes,
-                        entity_types,
-                        edges=new_edges,
-                        skip_attribute_extraction=True,
-                    )
-                else:
-                    hydrated_nodes = await extract_attributes_from_nodes(
-                        clients,
-                        nodes,
-                        episode,
-                        previous_episodes,
-                        entity_types,
-                        edges=new_edges,
-                    )
+                hydrated_nodes = await extract_attributes_from_nodes(
+                    clients,
+                    nodes,
+                    episode,
+                    previous_episodes,
+                    entity_types,
+                    edges=new_edges,
+                )
 
                 # Process and save episode data (including saga association if provided)
                 episodic_edges, episode = await self._process_episode_data(

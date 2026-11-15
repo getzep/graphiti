@@ -14,12 +14,18 @@ from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.node_operations import (
     _collect_identity_property_candidate_nodes,
+    extract_attributes_only_from_nodes,
 )
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_identity_properties
 
 
 class Person(BaseModel):
     email: str
+
+
+class PersonWithRequiredFields(BaseModel):
+    email: str
+    full_name: str
 
 
 @pytest.mark.parametrize(
@@ -235,6 +241,27 @@ def _make_graphiti_for_episode_test():
 
 
 @pytest.mark.asyncio
+async def test_pre_resolution_attribute_extraction_skips_shape_validation(monkeypatch):
+    _, clients = _make_graphiti_for_episode_test()
+    node = EntityNode(name='Alex', group_id='group', labels=['Entity', 'Person'])
+    response = AsyncMock(return_value={'email': 'alex@example.com'})
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.generate_prompt_response',
+        response,
+    )
+
+    await extract_attributes_only_from_nodes(
+        clients,
+        [node],
+        entity_types={'Person': PersonWithRequiredFields},
+        validate_shape=False,
+    )
+
+    assert node.attributes == {'email': 'alex@example.com'}
+    response.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('configured', [True, False])
 async def test_add_episode_extracts_identity_attributes_before_resolution(
     monkeypatch,
@@ -246,6 +273,11 @@ async def test_add_episode_extracts_identity_attributes_before_resolution(
         group_id='group',
         labels=['Entity', 'Person'],
     )
+    generic_node = EntityNode(
+        name='Unknown entity',
+        group_id='group',
+        labels=['Entity'],
+    )
     episode = EpisodicNode(
         name='conversation',
         group_id='group',
@@ -255,11 +287,16 @@ async def test_add_episode_extracts_identity_attributes_before_resolution(
         valid_at=datetime.now(timezone.utc),
     )
     order = []
-    extract_nodes = AsyncMock(return_value=([node], {node.uuid: [0]}))
+    extracted_nodes = [node, generic_node]
+    extract_nodes = AsyncMock(
+        return_value=(extracted_nodes, {node.uuid: [0], generic_node.uuid: [0]})
+    )
     monkeypatch.setattr('graphiti_core.graphiti.extract_nodes', extract_nodes)
 
-    async def extract_identity_attributes(_clients, nodes, *_args):
+    async def extract_identity_attributes(_clients, nodes, *_args, **kwargs):
         order.append('extract')
+        assert nodes == [node]
+        assert kwargs['validate_shape'] is False
         nodes[0].attributes = {'email': 'alex@example.com'}
         return nodes
 
@@ -273,18 +310,16 @@ async def test_add_episode_extracts_identity_attributes_before_resolution(
         order.append('resolve')
         if configured:
             assert nodes[0].attributes == {'email': 'alex@example.com'}
+            assert nodes[1].attributes == {}
         assert kwargs['identity_properties'] == ({'Person': ['email']} if configured else None)
-        return nodes, {node.uuid: node.uuid}, []
+        return nodes, {node.uuid: node.uuid for node in nodes}, []
 
     resolve = AsyncMock(side_effect=resolve_nodes)
     monkeypatch.setattr('graphiti_core.graphiti.resolve_extracted_nodes', resolve)
 
     async def extract_late_attributes(_clients, nodes, *_args, **kwargs):
         order.append('late')
-        if configured:
-            assert kwargs['skip_attribute_extraction'] is True
-        else:
-            assert 'skip_attribute_extraction' not in kwargs
+        assert 'skip_attribute_extraction' not in kwargs
         return nodes
 
     late_extract = AsyncMock(side_effect=extract_late_attributes)
@@ -310,9 +345,62 @@ async def test_add_episode_extracts_identity_attributes_before_resolution(
 
 
 @pytest.mark.asyncio
+async def test_add_episode_extracts_attributes_after_generic_node_resolves_to_typed_node(
+    monkeypatch,
+):
+    graphiti, _ = _make_graphiti_for_episode_test()
+    generic_node = EntityNode(name='Alex', group_id='group', labels=['Entity'])
+    stored_node = EntityNode(
+        name='Alex Smith',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        attributes={'email': 'alex@example.com'},
+    )
+    episode = EpisodicNode(
+        name='conversation',
+        group_id='group',
+        source=EpisodeType.message,
+        source_description='test',
+        content='Alex uses alex@example.com.',
+        valid_at=utc_now(),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.extract_nodes',
+        AsyncMock(return_value=([generic_node], {generic_node.uuid: [0]})),
+    )
+    pre_extract = AsyncMock()
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.extract_attributes_only_from_nodes',
+        pre_extract,
+    )
+    monkeypatch.setattr(
+        'graphiti_core.graphiti.resolve_extracted_nodes',
+        AsyncMock(return_value=([stored_node], {generic_node.uuid: stored_node.uuid}, [])),
+    )
+    late_extract = AsyncMock(return_value=[stored_node])
+    monkeypatch.setattr('graphiti_core.graphiti.extract_attributes_from_nodes', late_extract)
+
+    await graphiti.add_episode(
+        name=episode.name,
+        episode_body=episode.content,
+        source_description='test',
+        reference_time=episode.valid_at,
+        group_id='group',
+        entity_types={'Person': Person},
+        identity_properties={'Person': ['email']},
+    )
+
+    pre_extract.assert_not_awaited()
+    late_extract.assert_awaited_once()
+    assert late_extract.await_args.args[1] == [stored_node]
+    assert 'skip_attribute_extraction' not in late_extract.await_args.kwargs
+
+
+@pytest.mark.asyncio
 async def test_bulk_extraction_gets_identity_attributes_before_deduplication(monkeypatch):
     graphiti, clients = _make_graphiti_for_episode_test()
     node = EntityNode(name='Alex', group_id='group', labels=['Entity', 'Person'])
+    generic_node = EntityNode(name='Unknown entity', group_id='group', labels=['Entity'])
     episode = EpisodicNode(
         name='conversation',
         group_id='group',
@@ -323,10 +411,12 @@ async def test_bulk_extraction_gets_identity_attributes_before_deduplication(mon
     )
     monkeypatch.setattr(
         'graphiti_core.graphiti.extract_nodes_and_edges_bulk',
-        AsyncMock(return_value=([[node]], [[]])),
+        AsyncMock(return_value=([[node, generic_node]], [[]])),
     )
 
-    async def extract_identity_attributes(_clients, nodes, *_args):
+    async def extract_identity_attributes(_clients, nodes, *_args, **kwargs):
+        assert nodes == [node]
+        assert kwargs['validate_shape'] is False
         nodes[0].attributes = {'email': 'alex@example.com'}
         return nodes
 
@@ -360,7 +450,7 @@ async def test_bulk_extraction_gets_identity_attributes_before_deduplication(mon
 
 
 @pytest.mark.asyncio
-async def test_bulk_resolution_skips_second_attribute_extraction(monkeypatch):
+async def test_bulk_resolution_extracts_attributes_after_resolution(monkeypatch):
     graphiti, clients = _make_graphiti_for_episode_test()
     node = EntityNode(name='Alex', group_id='group', labels=['Entity', 'Person'])
     episode = EpisodicNode(
@@ -395,7 +485,7 @@ async def test_bulk_resolution_skips_second_attribute_extraction(monkeypatch):
     resolve.assert_awaited_once()
     assert resolve.await_args.kwargs['identity_properties'] == {'Person': ['email']}
     late_extract.assert_awaited_once()
-    assert late_extract.await_args.kwargs['skip_attribute_extraction'] is True
+    assert 'skip_attribute_extraction' not in late_extract.await_args.kwargs
 
 
 @pytest.mark.asyncio
