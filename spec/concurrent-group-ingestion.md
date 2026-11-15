@@ -223,9 +223,21 @@ thus the same as in serial ingestion.
 When the caller gives `uuid` for an existing episode, step 3 loads that
 episode and does not write it (`graphiti.py` 1448-1450).
 
-`begin_admit` is idempotent for `unit_id`. A second call with the same
-`unit_id` returns the same `seq`. A host that retries a task must use the same
-`unit_id`.
+Admission is idempotent for a live `unit_id`. A host that retries a task must
+use the same `unit_id`.
+
+- A second call with the `unit_id` of a live unit returns the same `seq` with
+  `existing=True`. The caller gets no admit lease.
+- The UUID of an episode node that the unit writes is a function of
+  `group_id`, `unit_id`, and the position of the episode in the unit. A retry
+  reads the node with that UUID. If the node is in the graph, the retry does
+  not save it again, and it keeps the content of the episode in memory.
+- A unit is not live when its status is `failed` or `apply_failed`, or when
+  its deadline is in the past and it has no stored final change set.
+  `begin_admit` marks such an expired unit `failed`. The `unit_id` then gets
+  a new sequence number. The new unit uses the episode node of the earlier
+  unit, so a retry adds no episode node.
+- An error in the retry of a live unit does not fail that unit.
 
 ### 6.2. Analyze
 
@@ -692,7 +704,7 @@ class IngestionStateStore(ABC):
     async def finish_enrich(group_id, seq, node_uuids) -> None
     async def close() -> None
 
-Admission(seq: int)
+Admission(seq: int, existing: bool = False, previous_seq: int | None = None)
 AnalysisStart(snapshot_seq: int, started_at: float)
 CommitTurn(fence: int, final_payload: bytes | None)
 CommitWait()
@@ -705,7 +717,11 @@ DeltaUnit(seq: int, status: str, payload: bytes)
 Each method is atomic. A store that a host application implements for more
 than one host must compare deadlines with the clock of that store.
 
-- `begin_admit`: If `unit_id` exists, return its `Admission`. If another unit
+- `begin_admit`: If `unit_id` has a live unit, return its `seq` with
+  `existing=True` and give no lease. If the last unit of `unit_id` is not
+  live (section 6.1), mark it `failed` when it is not `failed` or
+  `apply_failed`, and continue. The `Admission` of the new unit then has the
+  `seq` of that unit in `previous_seq`. If another unit
   has the admit lease and its deadline is in the future, return `None`. If the
   deadline of that unit is in the past, mark that unit `failed` and continue.
   Then assign the next `seq`, create the unit with the status `admitting`, set
@@ -808,8 +824,8 @@ CREATE TABLE IF NOT EXISTS graphiti_ingest_unit (
   payload       BLOB,
   PRIMARY KEY (group_id, seq)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS graphiti_ingest_unit_id
-  ON graphiti_ingest_unit (group_id, unit_id);
+CREATE INDEX IF NOT EXISTS graphiti_ingest_unit_by_unit_id
+  ON graphiti_ingest_unit (group_id, unit_id, seq);
 CREATE TABLE IF NOT EXISTS graphiti_ingest_enrich (
   group_id      TEXT NOT NULL,
   node_uuid     TEXT NOT NULL,
@@ -867,7 +883,8 @@ enrich_unit(graphiti, store, config, unit, commit_result, *, entity_types, ...)
   change set of the earlier unit and records that commit.
 - The host calls `heartbeat` for a unit while a task of that unit runs.
 - A retry of a host task is safe. `begin_admit` returns the same `seq` for the
-  same `unit_id`. A second `save_change_set` raises `StaleCommitError` and
+  `unit_id` of a live unit, and the Admit phase writes no second episode node
+  (section 6.1). A second `save_change_set` raises `StaleCommitError` and
   keeps the stored change set.
   `begin_commit` returns the stored final change set when one exists, and the
   fence rejects the older attempt. The retry gets the turn only after the
@@ -1267,8 +1284,9 @@ database.
 One test class that takes a store factory. It runs for the in-memory store and
 for the SQLite store. A host runs the same class for its store.
 
-- Sequence numbers start at 1 and have no gap. The same `unit_id` gets the
-  same `seq`.
+- Sequence numbers start at 1 and have no gap. The `unit_id` of a live unit
+  gets the same `seq` with `existing=True`. The `unit_id` of a unit that
+  failed or expired gets a new `seq`.
 - A second unit gets no admit lease before `end_admit` of the first unit.
 - An expired unit in admission releases the lease and becomes `failed`.
 - `begin_commit` returns `CommitWait` when an earlier unit is in progress, and

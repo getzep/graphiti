@@ -349,6 +349,13 @@ class Harness:
                 node.summary = f'{node.summary}+{episode.uuid}'
             return nodes
 
+        async def episodes_by_uuids(driver, uuids):
+            return [
+                deepcopy(self.graph.episodes[uuid]) for uuid in uuids if uuid in self.graph.episodes
+            ]
+
+        self.graphiti.retrieve_episodes = AsyncMock(return_value=[])
+        monkeypatch.setattr(EpisodicNode, 'get_by_uuids', episodes_by_uuids)
         self.extract_attributes = AsyncMock(side_effect=extract_attributes)
         monkeypatch.setattr(phases, 'add_nodes_and_edges_bulk', self.graph.add_nodes_and_edges_bulk)
         monkeypatch.setattr(

@@ -91,7 +91,8 @@ class StoreConformance:
     async def test_same_unit_id_gets_same_seq(self, store):
         first = await store.begin_admit(G, 'u1', TTL)
         second = await store.begin_admit(G, 'u1', TTL)
-        assert first == second
+        assert (first.seq, first.existing) == (1, False)
+        assert (second.seq, second.existing) == (1, True)
         await store.end_admit(G, first.seq)
         assert (await store.begin_admit(G, 'u1', TTL)).seq == first.seq
 
@@ -115,6 +116,50 @@ class StoreConformance:
         await store.end_admit(G, second.seq)
         # The failed unit does not hold the commit order.
         assert isinstance(await store.begin_commit(G, second.seq, TTL), CommitTurn)
+
+    async def test_admission_of_a_live_unit_id_returns_the_same_unit(self, store, clock):
+        first = await store.begin_admit(G, 'u1', TTL)
+        assert (first.seq, first.existing, first.previous_seq) == (1, False, None)
+        # The unit has the admit lease. A second call with its `unit_id` gets the unit.
+        again = await store.begin_admit(G, 'u1', TTL)
+        assert (again.seq, again.existing) == (1, True)
+        await store.end_admit(G, first.seq)
+        await store.save_change_set(G, first.seq, b'analysis')
+        turn = await store.begin_commit(G, first.seq, TTL)
+        await store.save_final(G, first.seq, turn.fence, b'final')
+        # A unit with a stored final change set keeps its `seq` after its deadline.
+        clock.advance(TTL + 1)
+        again = await store.begin_admit(G, 'u1', TTL)
+        assert (again.seq, again.existing) == (1, True)
+        retry = await store.begin_commit(G, first.seq, TTL)
+        await store.finish_commit(G, first.seq, retry.fence, [], 0.0)
+        again = await store.begin_admit(G, 'u1', TTL)
+        assert (again.seq, again.existing) == (1, True)
+
+    async def test_admission_of_a_failed_unit_id_gives_a_new_seq(self, store, clock):
+        seq1 = await admit(store, 'u1')
+        await store.fail(G, seq1, 'error')
+        second = await store.begin_admit(G, 'u1', TTL)
+        assert (second.seq, second.existing, second.previous_seq) == (2, False, seq1)
+        await store.end_admit(G, second.seq)
+
+        # An expired unit with no stored final change set fails in the next admission.
+        clock.advance(TTL + 1)
+        third = await store.begin_admit(G, 'u1', TTL)
+        assert (third.seq, third.existing, third.previous_seq) == (3, False, second.seq)
+        with pytest.raises(UnitExpiredError):
+            await store.start_analysis(G, second.seq)
+        await store.end_admit(G, third.seq)
+
+        # A unit whose apply attempts failed also gives a new `seq`.
+        turn = await store.begin_commit(G, third.seq, TTL)
+        await store.save_final(G, third.seq, turn.fence, b'final')
+        await store.fail(G, third.seq, 'apply_failed', turn.fence)
+        fourth = await store.begin_admit(G, 'u1', TTL)
+        assert (fourth.seq, fourth.existing, fourth.previous_seq) == (4, False, third.seq)
+        # The payload of the failed unit stays in the delta.
+        await store.end_admit(G, fourth.seq)
+        assert [unit.seq for unit in await store.load_delta(G, 0, fourth.seq, 0.0)] == [third.seq]
 
     async def test_start_analysis_returns_watermark_and_time(self, store, clock):
         seq1 = await admit(store, 'u1')

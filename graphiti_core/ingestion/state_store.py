@@ -39,7 +39,16 @@ REASON_EXPIRED = 'expired'
 
 @dataclass(frozen=True)
 class Admission:
+    """The position of a unit.
+
+    `existing` is True when the store already had a live unit for the `unit_id`. The
+    caller then has no admit lease, and it must not write the episodes again.
+    `previous_seq` is the position of an earlier unit of the `unit_id` that failed.
+    """
+
     seq: int
+    existing: bool = False
+    previous_seq: int | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +86,15 @@ class DeltaUnit:
     payload: bytes
 
 
+def is_released(status: str, deadline: float, now: float) -> bool:
+    """Return True when a unit does not keep its `unit_id` for a retry of the admission."""
+    if status in FAILED_STATUSES:
+        return True
+    if status in (STATUS_APPLYING, STATUS_COMMITTED):
+        return False
+    return deadline <= now
+
+
 def is_stale_heartbeat(status: str, unit_fence: int, fence: int | None) -> bool:
     """Return True when a heartbeat with `fence` must not set the deadline of the unit."""
     if fence is None:
@@ -95,8 +113,15 @@ class IngestionStateStore(ABC):
     async def begin_admit(self, group_id: str, unit_id: str, ttl: float) -> Admission | None:
         """Give the admit lease and the next sequence number to a unit.
 
-        Returns the same `Admission` for a `unit_id` that exists. Returns None when a
-        different unit has the lease and its deadline is in the future.
+        For a `unit_id` that has a live unit, the call returns the `seq` of that unit
+        with `existing=True` and gives no lease. A unit is not live when its status is
+        `failed` or `apply_failed`, or when its deadline is in the past and it has no
+        stored final change set. The call marks such an expired unit `failed`. The
+        `unit_id` then gets a new sequence number, and `previous_seq` is the `seq` of
+        the unit that is not live.
+
+        Returns None when a different unit has the lease and its deadline is in the
+        future.
         """
 
     @abstractmethod
@@ -270,16 +295,21 @@ class InMemoryIngestionStateStore(IngestionStateStore):
                 and not group.enrich.get(seq)
             ):
                 del group.units[seq]
-                group.unit_ids.pop(unit.unit_id, None)
+                if group.unit_ids.get(unit.unit_id) == seq:
+                    del group.unit_ids[unit.unit_id]
                 group.enrich.pop(seq, None)
 
     async def begin_admit(self, group_id: str, unit_id: str, ttl: float) -> Admission | None:
         group = self._group(group_id)
-        existing_seq = group.unit_ids.get(unit_id)
-        if existing_seq is not None:
-            return Admission(seq=existing_seq)
-
         now = self._clock()
+        previous_seq = group.unit_ids.get(unit_id)
+        previous = group.units.get(previous_seq) if previous_seq is not None else None
+        if previous is not None:
+            if not is_released(previous.status, previous.deadline, now):
+                return Admission(seq=previous.seq, existing=True)
+            if previous.status not in TERMINAL_STATUSES:
+                self._fail_unit(group, previous, REASON_EXPIRED, keep_payload=False)
+
         if group.admit_seq is not None:
             holder = group.units.get(group.admit_seq)
             if holder is not None and holder.deadline > now:
@@ -295,7 +325,7 @@ class InMemoryIngestionStateStore(IngestionStateStore):
         )
         group.unit_ids[unit_id] = seq
         group.admit_seq = seq
-        return Admission(seq=seq)
+        return Admission(seq=seq, previous_seq=previous.seq if previous is not None else None)
 
     async def end_admit(self, group_id: str, seq: int) -> None:
         group = self._group(group_id)

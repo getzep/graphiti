@@ -41,6 +41,7 @@ from graphiti_core.ingestion.state_store import (
     CommitWait,
     DeltaUnit,
     IngestionStateStore,
+    is_released,
     is_stale_heartbeat,
 )
 
@@ -69,8 +70,8 @@ CREATE TABLE IF NOT EXISTS graphiti_ingest_unit (
   payload       BLOB,
   PRIMARY KEY (group_id, seq)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS graphiti_ingest_unit_id
-  ON graphiti_ingest_unit (group_id, unit_id);
+CREATE INDEX IF NOT EXISTS graphiti_ingest_unit_by_unit_id
+  ON graphiti_ingest_unit (group_id, unit_id, seq);
 CREATE TABLE IF NOT EXISTS graphiti_ingest_enrich (
   group_id      TEXT NOT NULL,
   node_uuid     TEXT NOT NULL,
@@ -253,14 +254,22 @@ class SQLiteIngestionStateStore(IngestionStateStore):
     async def begin_admit(self, group_id: str, unit_id: str, ttl: float) -> Admission | None:
         def work(conn: sqlite3.Connection) -> Admission | None:
             group = self._group(conn, group_id)
-            existing = conn.execute(
-                'SELECT seq FROM graphiti_ingest_unit WHERE group_id = ? AND unit_id = ?',
+            now = self._clock()
+            # A `unit_id` can have more than one unit. Only the last one can be live.
+            previous = conn.execute(
+                'SELECT seq, status, deadline FROM graphiti_ingest_unit '
+                'WHERE group_id = ? AND unit_id = ? ORDER BY seq DESC LIMIT 1',
                 (group_id, unit_id),
             ).fetchone()
-            if existing is not None:
-                return Admission(seq=existing['seq'])
+            if previous is not None:
+                if not is_released(previous['status'], previous['deadline'], now):
+                    return Admission(seq=previous['seq'], existing=True)
+                if previous['status'] not in TERMINAL_STATUSES:
+                    self._fail_unit(
+                        conn, group_id, previous['seq'], REASON_EXPIRED, keep_payload=False
+                    )
+                group = self._group(conn, group_id)
 
-            now = self._clock()
             if group['admit_seq'] is not None:
                 holder = self._unit(conn, group_id, group['admit_seq'])
                 if holder is not None and holder['deadline'] > now:
@@ -280,7 +289,9 @@ class SQLiteIngestionStateStore(IngestionStateStore):
                 'UPDATE graphiti_ingest_group SET next_seq = ?, admit_seq = ? WHERE group_id = ?',
                 (seq + 1, seq, group_id),
             )
-            return Admission(seq=seq)
+            return Admission(
+                seq=seq, previous_seq=previous['seq'] if previous is not None else None
+            )
 
         return await self._run(work)
 

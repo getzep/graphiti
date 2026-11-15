@@ -21,7 +21,7 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,7 @@ from graphiti_core.ingestion.delta import Delta, load_delta_digests, patch_as_no
 from graphiti_core.ingestion.graph_reader import GraphReader
 from graphiti_core.ingestion.state_store import (
     REASON_APPLY_FAILED,
+    Admission,
     CommitRecover,
     CommitTurn,
     CommitWait,
@@ -253,12 +254,39 @@ async def _begin_admit(
     group_id: str,
     unit_id: str,
     wait: WaitFn,
-) -> int:
+) -> Admission:
     while True:
         admission = await store.begin_admit(group_id, unit_id, config.lease_seconds)
         if admission is not None:
-            return admission.seq
+            return admission
         await wait()
+
+
+def _episode_uuid(group_id: str, unit_id: str, index: int = 0) -> str:
+    """Return the UUID of an episode that a unit writes.
+
+    The UUID is a function of the `unit_id`. A retry of the admission thus writes the
+    same episode node, and not one more node.
+    """
+    return str(uuid5(NAMESPACE_URL, f'graphiti:ingest:{group_id}:{unit_id}:{index}'))
+
+
+async def _written_episodes(
+    driver: Any, admission: Admission, episode_uuids: list[str]
+) -> dict[str, EpisodicNode]:
+    """Return the episode nodes that an earlier admission of the `unit_id` wrote."""
+    if not episode_uuids or not (admission.existing or admission.previous_seq is not None):
+        return {}
+    episodes = await EpisodicNode.get_by_uuids(driver, episode_uuids)
+    return {episode.uuid: episode for episode in episodes}
+
+
+async def _fail_admission(
+    store: IngestionStateStore, group_id: str, admission: Admission, error: BaseException
+) -> None:
+    # A unit that a different attempt admitted keeps its position.
+    if not admission.existing:
+        await _fail_unit(store, group_id, admission.seq, error)
 
 
 async def admit_episode(
@@ -290,7 +318,8 @@ async def admit_episode(
 
     with graphiti.tracer.start_span('ingest.admit') as span:
         start = time.time()
-        seq = await _begin_admit(store, config, group_id, unit_id, wait)
+        admission = await _begin_admit(store, config, group_id, unit_id, wait)
+        seq = admission.seq
         admitted_at = time.time()
         try:
             now = utc_now()
@@ -308,22 +337,41 @@ async def admit_episode(
             if uuid is not None:
                 episode = await EpisodicNode.get_by_uuid(driver, uuid)
             else:
-                episode = EpisodicNode(
-                    name=name,
-                    group_id=group_id,
-                    labels=[],
-                    source=source,
-                    content=episode_body,
-                    source_description=source_description,
-                    created_at=now,
-                    valid_at=reference_time,
-                )
-                await add_nodes_and_edges_bulk(
-                    driver, [_written_episode(graphiti, episode, [])], [], [], [], clients.embedder
-                )
+                episode_uuid = _episode_uuid(group_id, unit_id)
+                written = await _written_episodes(driver, admission, [episode_uuid])
+                if episode_uuid in written:
+                    # An earlier admission of this `unit_id` wrote the node. The unit
+                    # keeps the content in memory.
+                    episode = written[episode_uuid]
+                    episode.content = episode_body
+                    now = episode.created_at
+                else:
+                    episode = EpisodicNode(
+                        uuid=episode_uuid,
+                        name=name,
+                        group_id=group_id,
+                        labels=[],
+                        source=source,
+                        content=episode_body,
+                        source_description=source_description,
+                        created_at=now,
+                        valid_at=reference_time,
+                    )
+                    await add_nodes_and_edges_bulk(
+                        driver,
+                        [_written_episode(graphiti, episode, [])],
+                        [],
+                        [],
+                        [],
+                        clients.embedder,
+                    )
+            # After a retry, the node of the unit is in the graph. It is not its own context.
+            previous_episodes = [
+                previous for previous in previous_episodes if previous.uuid != episode.uuid
+            ]
             await store.end_admit(group_id, seq)
         except BaseException as error:
-            await _fail_unit(store, group_id, seq, error)
+            await _fail_admission(store, group_id, admission, error)
             raise
 
         span.add_attributes(
@@ -364,17 +412,35 @@ async def admit_bulk(
 
     with graphiti.tracer.start_span('ingest.admit') as span:
         start = time.time()
-        seq = await _begin_admit(store, config, group_id, unit_id, wait)
+        admission = await _begin_admit(store, config, group_id, unit_id, wait)
+        seq = admission.seq
         admitted_at = time.time()
         try:
             now = utc_now()
             episodes: list[EpisodicNode] = []
             new_episodes: list[EpisodicNode] = []
-            for raw_episode in bulk_episodes:
+            written = await _written_episodes(
+                driver,
+                admission,
+                [
+                    _episode_uuid(group_id, unit_id, index)
+                    for index, raw_episode in enumerate(bulk_episodes)
+                    if raw_episode.uuid is None
+                ],
+            )
+            for index, raw_episode in enumerate(bulk_episodes):
                 if raw_episode.uuid is not None:
                     episodes.append(await EpisodicNode.get_by_uuid(driver, raw_episode.uuid))
                     continue
+                episode_uuid = _episode_uuid(group_id, unit_id, index)
+                if episode_uuid in written:
+                    # An earlier admission of this `unit_id` wrote the node.
+                    episode = written[episode_uuid]
+                    episode.content = raw_episode.content
+                    episodes.append(episode)
+                    continue
                 episode = EpisodicNode(
+                    uuid=episode_uuid,
                     name=raw_episode.name,
                     labels=[],
                     source=raw_episode.source,
@@ -401,7 +467,7 @@ async def admit_bulk(
             )
             await store.end_admit(group_id, seq)
         except BaseException as error:
-            await _fail_unit(store, group_id, seq, error)
+            await _fail_admission(store, group_id, admission, error)
             raise
 
         span.add_attributes(

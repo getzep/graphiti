@@ -24,14 +24,23 @@ import pytest
 from graphiti_core.errors import StaleCommitError, UnitExpiredError
 from graphiti_core.ingestion import phases
 from graphiti_core.ingestion.change_set import AddEpisodesToEdge, ChangeSet, EndEdge, PatchNode
-from graphiti_core.ingestion.phases import UnitLease, admit_episode, analyze_episode
+from graphiti_core.ingestion.phases import (
+    AdmittedUnit,
+    UnitLease,
+    admit_bulk,
+    admit_episode,
+    analyze_episode,
+)
 from graphiti_core.ingestion.state_store import (
+    STATUS_ADMITTED,
     STATUS_ANALYZED,
     STATUS_APPLY_FAILED,
     STATUS_COMMITTED,
     STATUS_FAILED,
     CommitWait,
 )
+from graphiti_core.nodes import EpisodeType
+from graphiti_core.utils.bulk_utils import RawEpisode
 from tests.ingestion.ingestion_fixtures import (
     GROUP,
     T0,
@@ -95,6 +104,107 @@ async def test_admission_lease_expiry_fails_the_holder(monkeypatch):
     assert h.graph.episodes[unit_2.episodes[0].uuid].entity_edges == []
     (span,) = h.tracer.named('ingest.admit')
     assert span.attributes['ingest.seq'] == unit_2.seq
+
+
+async def admit_task(h: Harness, unit_id: str, **values):
+    return await admit_episode(
+        h.graphiti,
+        h.store,
+        h.config,
+        unit_id=unit_id,
+        group_id=GROUP,
+        name='episode',
+        episode_body='content',
+        source_description='test',
+        reference_time=T0,
+        **values,
+    )
+
+
+async def test_admission_retry_of_a_live_unit_writes_no_second_episode_node(monkeypatch):
+    h = Harness(monkeypatch)
+    h.graphiti.store_raw_episode_content = False
+    first = await admit_task(h, 'task-1')
+    # The host runs the admit task again with the same `unit_id`.
+    h.graphiti.retrieve_episodes = AsyncMock(return_value=list(h.graph.episodes.values()))
+    second = await admit_task(h, 'task-1')
+
+    assert second.seq == first.seq
+    assert second.episodes[0].uuid == first.episodes[0].uuid
+    assert list(h.graph.episodes) == [first.episodes[0].uuid]
+    assert h.graph.log.count('write:bulk') == 1
+    # The unit has the content in memory. The episode is not its own previous episode.
+    assert second.episodes[0].content == 'content'
+    assert second.created_at == first.created_at
+    assert second.previous_episodes == [[]]
+    assert status(h, first.seq) == STATUS_ADMITTED
+
+
+async def test_admission_retry_after_a_failed_unit_gets_a_new_position(monkeypatch):
+    h = Harness(monkeypatch)
+    first = await admit_task(h, 'task-1')
+    await h.store.fail(GROUP, first.seq, 'analysis error')
+
+    second = await admit_task(h, 'task-1')
+    third = await admit_task(h, 'task-1')
+
+    assert status(h, first.seq) == STATUS_FAILED
+    assert second.seq == first.seq + 1
+    assert third.seq == second.seq
+    assert status(h, second.seq) == STATUS_ADMITTED
+    # The retry uses the episode node of the failed unit.
+    assert list(h.graph.episodes) == [first.episodes[0].uuid]
+    assert second.episodes[0].uuid == first.episodes[0].uuid
+
+
+async def test_admission_error_of_a_retry_does_not_fail_the_live_unit(monkeypatch):
+    h = Harness(monkeypatch)
+    first = await admit_task(h, 'task-1')
+    h.graphiti.retrieve_episodes = AsyncMock(side_effect=RuntimeError('graph'))
+
+    with pytest.raises(RuntimeError):
+        await admit_task(h, 'task-1')
+
+    assert status(h, first.seq) == STATUS_ADMITTED
+
+
+async def test_bulk_admission_retry_writes_no_second_episode_node(monkeypatch):
+    h = Harness(monkeypatch)
+    monkeypatch.setattr(
+        phases,
+        'retrieve_previous_episodes_bulk',
+        AsyncMock(side_effect=lambda driver, episodes, **kwargs: [(e, []) for e in episodes]),
+    )
+    raw_episodes = [
+        RawEpisode(
+            name=f'episode-{index}',
+            content=f'content-{index}',
+            source_description='test',
+            source=EpisodeType.text,
+            reference_time=T0,
+        )
+        for index in range(2)
+    ]
+
+    async def admit() -> AdmittedUnit:
+        return await admit_bulk(
+            h.graphiti,
+            h.store,
+            h.config,
+            unit_id='task-1',
+            group_id=GROUP,
+            bulk_episodes=raw_episodes,
+        )
+
+    first = await admit()
+    second = await admit()
+
+    assert second.seq == first.seq
+    assert [e.uuid for e in second.episodes] == [e.uuid for e in first.episodes]
+    assert len({e.uuid for e in first.episodes}) == 2
+    assert list(h.graph.episodes) == [e.uuid for e in first.episodes]
+    assert h.graph.log.count('write:bulk') == 1
+    assert [e.content for e in second.episodes] == ['content-0', 'content-1']
 
 
 async def test_commit_waits_for_the_earlier_unit(monkeypatch):
