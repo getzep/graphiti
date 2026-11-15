@@ -953,6 +953,7 @@ async def resolve_nodes_with_candidates(
             # The dedupe prompt shows the merged candidates to each unresolved node.
             for idx in state.unresolved_indices:
                 trace.record_node_candidates(extracted_nodes[idx].uuid, llm_candidate_nodes)
+            trace.node_llm_calls += 1
         await _resolve_with_llm(
             llm_client,
             extracted_nodes,

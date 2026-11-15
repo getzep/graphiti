@@ -156,6 +156,8 @@ class ResolutionTrace:
     seen_invalidation_candidates: dict[str, list[str]] = field(default_factory=dict)
     operations: list[Any] = field(default_factory=list)
     stored_node_uuids: set[str] = field(default_factory=set)
+    # The number of model calls that node resolution made for the trace.
+    node_llm_calls: int = 0
     _edge_states: dict[int, _EdgeState] = field(default_factory=dict)
 
     def record_node_candidates(self, node_uuid: str, candidates: list[EntityNode]) -> None:

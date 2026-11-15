@@ -127,6 +127,8 @@ from graphiti_core.utils.text_utils import (
 
 if TYPE_CHECKING:
     from graphiti_core.ingestion.change_set import ResolutionTrace
+    from graphiti_core.ingestion.config import ConcurrentIngestionConfig
+    from graphiti_core.ingestion.scheduler import ConcurrentIngestor
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +228,7 @@ class Graphiti:
         trace_span_prefix: str = 'graphiti',
         prompt_library: ChatPromptLibrary | None = None,
         llm_runtime: LLMRuntime | None = None,
+        concurrent_ingestion: 'ConcurrentIngestionConfig | None' = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -302,6 +305,12 @@ class Graphiti:
             on the runtime path. Route lightweight prompts to a smaller model.
             GLiNER2 does not support per-prompt routing. Cannot be combined
             with ``llm_client`` or ``prompt_library``.
+        concurrent_ingestion : ConcurrentIngestionConfig | None, optional
+            The configuration of concurrent ingestion for one graph. With a value,
+            ``add_episode`` and ``add_episode_bulk`` run the extraction and the
+            resolution of many units of one ``group_id`` at the same time, and they
+            commit the units in sequence order. With the default ``None``, the two
+            methods run serial ingestion.
 
         Returns
         -------
@@ -384,6 +393,11 @@ class Graphiti:
             llm_runtime=self.llm_runtime,
             max_coroutines=self.max_coroutines,
         )
+
+        # Concurrent ingestion is off when there is no configuration. The scheduler
+        # and the state store are made on the first call that uses the mode.
+        self.concurrent_ingestion = concurrent_ingestion
+        self._concurrent_ingestor: ConcurrentIngestor | None = None
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
         self.nodes = NodeNamespace(self.driver, self.embedder)
@@ -486,7 +500,26 @@ class Graphiti:
             finally:
                 graphiti.close()
         """
+        if self.concurrent_ingestion is not None:
+            state_store = self.concurrent_ingestion.state_store
+            if state_store is not None:
+                await state_store.close()
         await self.driver.close()
+
+    def _concurrent_ingestion_enabled(self, group_id: str) -> bool:
+        """Return True when a call for the graph must use concurrent ingestion."""
+        config = self.concurrent_ingestion
+        if config is None:
+            return False
+        return config.enabled_for_group is None or config.enabled_for_group(group_id)
+
+    def _get_concurrent_ingestor(self) -> 'ConcurrentIngestor':
+        if self._concurrent_ingestor is None:
+            from graphiti_core.ingestion.scheduler import ConcurrentIngestor
+
+            assert self.concurrent_ingestion is not None
+            self._concurrent_ingestor = ConcurrentIngestor(self, self.concurrent_ingestion)
+        return self._concurrent_ingestor
 
     async def _get_or_create_saga(
         self,
@@ -1155,6 +1188,7 @@ class Graphiti:
         clients: GraphitiClients | None = None,
         hydrate: bool = True,
         trace: 'ResolutionTrace | None' = None,
+        identity_properties: dict[str, list[str]] | None = None,
     ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
         """Resolve nodes and edges against the existing graph.
 
@@ -1162,6 +1196,9 @@ class Graphiti:
         """
         clients = clients or self.clients
         trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
+        node_kwargs = dict(trace_kwargs)
+        if identity_properties is not None:
+            node_kwargs['identity_properties'] = identity_properties
         nodes_by_uuid: dict[str, EntityNode] = {
             node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
         }
@@ -1186,7 +1223,7 @@ class Graphiti:
                     episode,
                     previous_episodes,
                     entity_types,
-                    **trace_kwargs,
+                    **node_kwargs,
                 )
                 for episode, previous_episodes in episode_context
             ],
@@ -1455,6 +1492,30 @@ class Graphiti:
         # clobber each other's database target mid-execution (issue #1676).
         group_id, driver, clients = self._resolve_request_scope(group_id)
 
+        if self._concurrent_ingestion_enabled(group_id):
+            if update_communities:
+                raise ValueError(
+                    'update_communities=True has no support in concurrent ingestion. '
+                    'Call build_communities after the ingestion.'
+                )
+            return await self._get_concurrent_ingestor().add_episode(
+                name=name,
+                episode_body=episode_body,
+                source_description=source_description,
+                reference_time=reference_time,
+                source=source,
+                group_id=group_id,
+                uuid=uuid,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
+                previous_episode_uuids=previous_episode_uuids,
+                edge_types=edge_types,
+                edge_type_map=edge_type_map,
+                custom_extraction_instructions=custom_extraction_instructions,
+                saga=saga,
+                saga_previous_episode_uuid=saga_previous_episode_uuid,
+            )
+
         with self.tracer.start_span('add_episode') as span:
             try:
                 # Retrieve previous episodes for context
@@ -1684,6 +1745,22 @@ class Graphiti:
         ``resolve_extracted_edges`` just like in ``add_episode``, and any invalidated
         edges are persisted alongside the newly resolved ones.
         """
+        if self.concurrent_ingestion is not None:
+            concurrent_group_id = self._resolve_request_scope(group_id)[0]
+            if self._concurrent_ingestion_enabled(concurrent_group_id):
+                return await self._get_concurrent_ingestor().add_episode_bulk(
+                    bulk_episodes=bulk_episodes,
+                    group_id=concurrent_group_id,
+                    entity_types=entity_types,
+                    excluded_entity_types=excluded_entity_types,
+                    edge_types=edge_types,
+                    edge_type_map=edge_type_map,
+                    strict_edge_types=strict_edge_types,
+                    custom_extraction_instructions=custom_extraction_instructions,
+                    saga=saga,
+                    use_combined_extraction=use_combined_extraction,
+                )
+
         with self.tracer.start_span('add_episode_bulk') as bulk_span:
             bulk_span.add_attributes({'episode.count': len(bulk_episodes)})
 
