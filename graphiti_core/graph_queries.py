@@ -114,6 +114,8 @@ def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) 
     if provider == GraphProvider.FALKORDB:
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryNodes('{label}', {query})"
+    if provider == GraphProvider.RELATE:
+        return f'CALL db.index.fulltext.queryNodes("{name}", {query})\n'
 
     return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
@@ -130,5 +132,7 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
     if provider == GraphProvider.FALKORDB:
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
+    if provider == GraphProvider.RELATE:
+        return f'CALL db.index.fulltext.queryRelationships("{name}", $query)\n'
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
