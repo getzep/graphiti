@@ -92,6 +92,14 @@ class FalkorDriverSession(GraphDriverSession):
 
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
+        # A time limit in milliseconds for each query of the session. The server applies
+        # it to a write query only when its TIMEOUT_MAX setting is not zero.
+        self.query_timeout_ms: int | None = None
+
+    async def _query(self, cypher: str, params: Any) -> Any:
+        if self.query_timeout_ms is None:
+            return await self.graph.query(cypher, params)  # type: ignore[reportUnknownArgumentType]
+        return await self.graph.query(cypher, params, timeout=self.query_timeout_ms)  # type: ignore[reportUnknownArgumentType]
 
     async def __aenter__(self):
         return self
@@ -114,12 +122,12 @@ class FalkorDriverSession(GraphDriverSession):
             for cypher, params in query:
                 params = convert_datetimes_to_strings(params)
                 params = _strip_nul_bytes(params)
-                await self.graph.query(str(cypher), params)  # type: ignore[reportUnknownArgumentType]
+                await self._query(str(cypher), params)
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
             params = _strip_nul_bytes(params)
-            await self.graph.query(str(query), params)  # type: ignore[reportUnknownArgumentType]
+            await self._query(str(query), params)
         # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
         return None
 
