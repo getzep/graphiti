@@ -1182,6 +1182,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-xdist" },
+    { name = "relate-db" },
     { name = "ruff" },
     { name = "voyageai", version = "0.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "voyageai", version = "0.3.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1210,6 +1211,9 @@ neptune = [
     { name = "boto3" },
     { name = "langchain-aws" },
     { name = "opensearch-py" },
+]
+relate = [
+    { name = "relate-db", marker = "python_full_version >= '3.11'" },
 ]
 sentence-transformers = [
     { name = "sentence-transformers" },
@@ -1264,13 +1268,15 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "redis", marker = "python_full_version >= '3.12' and extra == 'falkordblite'", specifier = "<9" },
+    { name = "relate-db", marker = "python_full_version >= '3.11' and extra == 'relate'", specifier = "==1.0.1" },
+    { name = "relate-db", marker = "extra == 'dev'", specifier = "==1.0.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.2.1" },
     { name = "tenacity", specifier = ">=9.0.0" },
     { name = "voyageai", marker = "extra == 'dev'", specifier = ">=0.2.3" },
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["anthropic", "groq", "google-genai", "falkordb", "falkordblite", "voyageai", "gliner2", "neo4j-opensearch", "sentence-transformers", "neptune", "tracing", "dev"]
+provides-extras = ["anthropic", "groq", "google-genai", "falkordb", "falkordblite", "voyageai", "gliner2", "neo4j-opensearch", "sentence-transformers", "neptune", "relate", "tracing", "dev"]
 
 [[package]]
 name = "groq"
@@ -4048,6 +4054,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/67/90/8f37138181c9a7690e7e4cb388debbd389342db3c7381d636d2875940752/regex-2025.11.3-cp314-cp314t-win32.whl", hash = "sha256:4bf146dca15cdd53224a1bf46d628bd7590e4a07fbb69e720d561aea43a32b38", size = 274583, upload-time = "2025-11-03T21:33:41.302Z" },
     { url = "https://files.pythonhosted.org/packages/8f/cd/867f5ec442d56beb56f5f854f40abcfc75e11d10b11fdb1869dd39c63aaf/regex-2025.11.3-cp314-cp314t-win_amd64.whl", hash = "sha256:adad1a1bcf1c9e76346e091d22d23ac54ef28e1365117d99521631078dfec9de", size = 284286, upload-time = "2025-11-03T21:33:43.324Z" },
     { url = "https://files.pythonhosted.org/packages/20/31/32c0c4610cbc070362bf1d2e4ea86d1ea29014d400a6d6c2486fcfd57766/regex-2025.11.3-cp314-cp314t-win_arm64.whl", hash = "sha256:c54f768482cef41e219720013cd05933b6f971d9562544d691c68699bf2b6801", size = 274741, upload-time = "2025-11-03T21:33:45.557Z" },
+]
+
+[[package]]
+name = "relate-db"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/e2/efa661a67fd7c6189fd07157677265dc167419cb9c734ec1bc532ec41654/relate_db-1.0.1.tar.gz", hash = "sha256:1f08eb4e526bbf32fd614829b4eb5a7cee32c30c064e08bfface73b257bdd8c1", size = 4559462, upload-time = "2026-11-12T13:39:37.102Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/3d/6af9de99e14ebfa1ab47e7363d9ffb3667a3fe86ad213148fa3aa8ad23b1/relate_db-1.0.1-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:7e5688561a1dd9e40c63257ed5cdbad464a2afd0e22b4d348057a06aa33a52ad", size = 9987684, upload-time = "2026-11-12T13:39:24.964Z" },
+    { url = "https://files.pythonhosted.org/packages/88/f5/199a9a567509d58b0b42d0e64f448cdb67bde2fad6a0dac509cf2a4b5978/relate_db-1.0.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:0a5359d6fd3803c330240208963d1a15fcfecf3f2790e1df134d046f6e538c9b", size = 9204247, upload-time = "2026-11-12T13:39:27.304Z" },
+    { url = "https://files.pythonhosted.org/packages/19/98/f008bbf04c5ee9619c1e96abcc4efdefa376583f6665632e65344f908964/relate_db-1.0.1-cp39-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:66c6babd4f7402e0e86c150f1b791788e8b56c4c449ac4c04cb5a5788ba5fea6", size = 9662018, upload-time = "2026-11-12T13:39:29.666Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/d9/8defa020a133e2d5a78cf823170a64200d3d5eac403b74455db80f8857f4/relate_db-1.0.1-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:b4cd31772085cd2cd8485e7334ab877d6218a6cf74bbcb35665efaa4a6c37c9a", size = 10281034, upload-time = "2026-11-12T13:39:31.978Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/e0/1988c6a33f308f3bfa57c0cad97bcc24bbc42b566be0ee853e89e1893fa0/relate_db-1.0.1-cp39-abi3-win_amd64.whl", hash = "sha256:cae1e98c41420fac2d910b80ff0a38bfd2ac9cbaa206333eac3fd575e1dceec4", size = 9921219, upload-time = "2026-11-12T13:39:34.434Z" },
 ]
 
 [[package]]

@@ -70,6 +70,14 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                 SET e.episodes = join($edge_data.episodes, ",")
                 RETURN $edge_data.uuid AS uuid
             """
+        case GraphProvider.RELATE:
+            return """
+                MATCH (source:Entity {uuid: $edge_data.source_uuid})
+                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
+                SET e = $edge_data
+                RETURN e.uuid AS uuid
+            """
         case _:  # Neo4j
             save_embedding_query = (
                 """WITH e CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", $edge_data.fact_embedding)"""
@@ -114,6 +122,15 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                 SET r = removeKeyFromMap(removeKeyFromMap(edge, "fact_embedding"), "episodes")
                 SET r.fact_embedding = join([x IN coalesce(edge.fact_embedding, []) | toString(x) ], ",")
                 SET r.episodes = join(edge.episodes, ",")
+                RETURN edge.uuid AS uuid
+            """
+        case GraphProvider.RELATE:
+            return """
+                UNWIND $entity_edges AS edge
+                MATCH (source:Entity {uuid: edge.source_node_uuid})
+                MATCH (target:Entity {uuid: edge.target_node_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
+                SET e = edge
                 RETURN edge.uuid AS uuid
             """
         case _:
