@@ -49,7 +49,7 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import Transaction
-from graphiti_core.driver.relate._session import (
+from graphiti_core.driver.relate import (
     Node,
     Path,
     QueryResult,
