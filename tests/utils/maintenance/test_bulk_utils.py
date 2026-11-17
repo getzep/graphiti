@@ -78,6 +78,51 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_dedupe_nodes_bulk_merges_identity_matches_before_name_comparison(monkeypatch):
+    clients = _make_clients()
+    episode_one = _make_episode('identity-1')
+    episode_two = _make_episode('identity-2')
+    extracted_one = EntityNode(
+        name='Alice Smith',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        attributes={'email': 'shared@example.com'},
+    )
+    extracted_two = EntityNode(
+        name='Bob Jones',
+        group_id='group',
+        labels=['Entity', 'Person'],
+        attributes={'email': ' shared@example.com ', 'title': 'engineer'},
+    )
+
+    async def fake_resolve(
+        clients_arg,
+        nodes_arg,
+        episode_arg,
+        previous_episodes_arg,
+        entity_types_arg,
+        **kwargs,
+    ):
+        assert kwargs['identity_properties'] == {'Person': ['email']}
+        return nodes_arg, {node.uuid: node.uuid for node in nodes_arg}, []
+
+    monkeypatch.setattr(bulk_utils, 'resolve_extracted_nodes', fake_resolve)
+
+    nodes_by_episode, uuid_map = await bulk_utils.dedupe_nodes_bulk(
+        clients,
+        [[extracted_one], [extracted_two]],
+        [(episode_one, []), (episode_two, [])],
+        identity_properties={'Person': ['email']},
+    )
+
+    assert nodes_by_episode[episode_one.uuid] == [extracted_one]
+    assert nodes_by_episode[episode_two.uuid] == [extracted_one]
+    assert uuid_map[extracted_two.uuid] == extracted_one.uuid
+    assert extracted_one.attributes['email'] == 'shared@example.com'
+    assert extracted_one.attributes['title'] == 'engineer'
+
+
+@pytest.mark.asyncio
 async def test_dedupe_nodes_bulk_handles_empty_batch(monkeypatch):
     clients = _make_clients()
 
