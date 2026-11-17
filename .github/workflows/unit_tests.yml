@@ -34,7 +34,6 @@ jobs:
           DISABLE_NEPTUNE: 1
           DISABLE_NEO4J: 1
           DISABLE_FALKORDB: 1
-          DISABLE_KUZU: 1
         run: |
           uv run pytest tests/ -m "not integration" \
             --ignore=tests/test_graphiti_int.py \

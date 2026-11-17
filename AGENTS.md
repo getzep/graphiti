@@ -1,13 +1,13 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Graphiti's core library lives under `graphiti_core/`, split into domain modules such as `nodes.py`, `edges.py`, `models/`, and `search/` for retrieval pipelines. Database drivers in `graphiti_core/driver/` support Neo4j, FalkorDB, and Neptune (plus a deprecated Kuzu driver). Additional core modules include `cross_encoder/` (reranking via BGE, OpenAI, and Gemini), `telemetry/` (OpenTelemetry tracing), `namespaces/` (namespace management), and `migrations/` (database migrations). Service adapters and API glue reside in `server/graph_service/`, while the MCP integration lives in `mcp_server/` (with its own `src/`, `tests/`, `config/`, and `docker/` subdirectories). Shared assets sit in `images/` and `examples/`. Tests cover the core package via `tests/`, with configuration in `conftest.py`, `pytest.ini`, and Docker compose files for optional services. Specifications live in `spec/` and type signatures in `signatures/`. Tooling manifests live at the repo root, including `pyproject.toml`, `Makefile`, and deployment compose files.
+Graphiti's core library lives under `graphiti_core/`, split into domain modules such as `nodes.py`, `edges.py`, `models/`, and `search/` for retrieval pipelines. Database drivers in `graphiti_core/driver/` support Neo4j, FalkorDB, and Neptune. Additional core modules include `cross_encoder/` (reranking via BGE, OpenAI, and Gemini), `telemetry/` (OpenTelemetry tracing), `namespaces/` (namespace management), and `migrations/` (database migrations). Service adapters and API glue reside in `server/graph_service/`, while the MCP integration lives in `mcp_server/` (with its own `src/`, `tests/`, `config/`, and `docker/` subdirectories). Shared assets sit in `images/` and `examples/`. Tests cover the core package via `tests/`, with configuration in `conftest.py`, `pytest.ini`, and Docker compose files for optional services. Specifications live in `spec/` and type signatures in `signatures/`. Tooling manifests live at the repo root, including `pyproject.toml`, `Makefile`, and deployment compose files.
 
 ## Build, Test, and Development Commands
 - `make install`: install the dev environment (`uv sync --extra dev`).
 - `make format`: run `ruff` to sort imports and apply the canonical formatter.
 - `make lint`: execute `ruff` plus `pyright` type checks against `graphiti_core`.
-- `make test`: run unit tests only, excluding integration tests and disabling non-Neo4j drivers (`DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1 uv run pytest -m "not integration"`).
+- `make test`: run unit tests only, excluding integration tests and disabling non-Neo4j drivers (`DISABLE_FALKORDB=1 DISABLE_NEPTUNE=1 uv run pytest -m "not integration"`).
 - `make check`: run format, lint, and test in sequence.
 - `uv run pytest tests/path/test_file.py`: target a specific module or test selection.
 - `docker-compose -f docker-compose.test.yml up`: provision local graph/search dependencies for integration flows.
@@ -33,7 +33,7 @@ Docker has no systemd here — start the daemon manually once per VM: `sudo dock
 ### Tests (non-obvious)
 - `make test` does NOT set `DISABLE_NEO4J`, so the `graph_driver` fixture stays parametrized on Neo4j and the suite REQUIRES a reachable Neo4j at `bolt://localhost:7687`. With no Neo4j, those tests hang on the driver's connection retry (not an env bug). Run it as `NEO4J_PASSWORD=testpass make test`.
 - `tests/test_add_triplet.py` has pre-existing failures (its mock embedder doesn't stub `create_batch`, so `zip(strict=True)` raises). CI never runs this file, so ignore those 11 failures — they are unrelated to environment setup.
-- The authoritative, fully-green no-DB unit gate is the CI command in `.github/workflows/unit_tests.yml` (`DISABLE_NEO4J=1 DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1` plus the `--ignore` list). The DB-backed unit tests are the `database-integration-tests` job in the same file (needs Neo4j + FalkorDB, uses mock LLMs, no API key).
+- The authoritative, fully-green no-DB unit gate is the CI command in `.github/workflows/unit_tests.yml` (`DISABLE_NEO4J=1 DISABLE_FALKORDB=1 DISABLE_NEPTUNE=1` plus the `--ignore` list). The DB-backed unit tests are the `database-integration-tests` job in the same file (needs Neo4j + FalkorDB, uses mock LLMs, no API key).
 - `server/` and `mcp_server/` test suites are live end-to-end tests marked `integration`; they self-skip with exit code 5 when `OPENAI_API_KEY` is unset. This skip is expected, not a failure.
 
 ### Running the services (dev mode)

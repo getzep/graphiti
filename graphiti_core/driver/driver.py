@@ -59,7 +59,6 @@ ENTITY_EDGE_INDEX_NAME = os.environ.get('ENTITY_EDGE_INDEX_NAME', 'entity_edges'
 class GraphProvider(Enum):
     NEO4J = 'neo4j'
     FALKORDB = 'falkordb'
-    KUZU = 'kuzu'
     NEPTUNE = 'neptune'
 
 

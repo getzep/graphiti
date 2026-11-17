@@ -85,12 +85,7 @@ def calculate_cosine_similarity(vector1: list[float], vector2: list[float]) -> f
 def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver):
     validate_group_ids(group_ids)
 
-    if driver.provider == GraphProvider.KUZU:
-        # Kuzu only supports simple queries.
-        if len(query.split(' ')) > MAX_QUERY_LENGTH:
-            return ''
-        return query
-    elif driver.provider == GraphProvider.FALKORDB:
+    if driver.provider == GraphProvider.FALKORDB:
         return driver.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
     group_ids_filter_list = (
         [driver.fulltext_syntax + f'group_id:"{g}"' for g in group_ids]
@@ -215,12 +210,6 @@ async def edge_fulltext_search(
         WHERE n:Entity AND m:Entity
         WITH e, score, n, m
         """
-    if driver.provider == GraphProvider.KUZU:
-        match_query = """
-        YIELD node, score
-        MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: node.uuid})-[:RELATES_TO]->(m:Entity)
-        """
-
     filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
@@ -322,11 +311,6 @@ async def edge_similarity_search(
     match_query = """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
     """
-    if driver.provider == GraphProvider.KUZU:
-        match_query = """
-            MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(m:Entity)
-        """
-
     filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
@@ -348,8 +332,6 @@ async def edge_similarity_search(
         filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     search_vector_var = '$search_vector'
-    if driver.provider == GraphProvider.KUZU:
-        search_vector_var = f'CAST($search_vector AS FLOAT[{len(search_vector)}])'
 
     if driver.provider == GraphProvider.NEPTUNE:
         query = (
@@ -477,92 +459,52 @@ async def edge_bfs_search(
     if filter_queries:
         filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
-    if driver.provider == GraphProvider.KUZU:
-        # Kuzu stores entity edges twice with an intermediate node, so we need to match them
-        # separately for the correct BFS depth.
-        depth = bfs_max_depth * 2 - 1
-        match_queries = [
+    if driver.provider == GraphProvider.NEPTUNE:
+        query = (
             f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH path = (origin:Entity {{uuid: origin_uuid}})-[:RELATES_TO*1..{depth}]->(:RelatesToNode_)
-            UNWIND nodes(path) AS relNode
-            MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {{uuid: relNode.uuid}})-[:RELATES_TO]->(m:Entity)
-            """,
-        ]
-        if bfs_max_depth > 1:
-            depth = (bfs_max_depth - 1) * 2 - 1
-            match_queries.append(f"""
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin:Episodic {{uuid: origin_uuid}})-[:MENTIONS]->(:Entity)-[:RELATES_TO*1..{depth}]->(:RelatesToNode_)
-                UNWIND nodes(path) AS relNode
-                MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {{uuid: relNode.uuid}})-[:RELATES_TO]->(m:Entity)
-            """)
-
-        records = []
-        for match_query in match_queries:
-            sub_records, _, _ = await driver.execute_query(
-                match_query
-                + filter_query
-                + """
-                RETURN DISTINCT
-                """
-                + get_entity_edge_return_query(driver.provider)
-                + """
-                LIMIT $limit
-                """,
-                bfs_origin_node_uuids=bfs_origin_node_uuids,
-                limit=limit,
-                routing_='r',
-                **filter_params,
-            )
-            records.extend(sub_records)
-    else:
-        if driver.provider == GraphProvider.NEPTUNE:
-            query = (
-                f"""
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS *1..{bfs_max_depth}]->(n:Entity)
-                WHERE origin:Entity OR origin:Episodic
-                UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
-                """
-                + filter_query
-                + """
-                RETURN DISTINCT
-                """
-                + get_entity_edge_return_query(GraphProvider.NEPTUNE)
-                + """
-                LIMIT $limit
-                """
-            )
-        else:
-            query = (
-                f"""
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
-                UNWIND relationships(path) AS rel
-                WITH rel AS e, startNode(rel) AS n, endNode(rel) AS m
-                WHERE type(e) = 'RELATES_TO'
-                WITH e, n, m
-                """
-                + filter_query
-                + """
-                RETURN DISTINCT
-                """
-                + get_entity_edge_return_query(driver.provider)
-                + """
-                LIMIT $limit
-                """
-            )
-
-        records, _, _ = await driver.execute_query(
-            query,
-            bfs_origin_node_uuids=bfs_origin_node_uuids,
-            depth=bfs_max_depth,
-            limit=limit,
-            routing_='r',
-            **filter_params,
+            MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS *1..{bfs_max_depth}]->(n:Entity)
+            WHERE origin:Entity OR origin:Episodic
+            UNWIND relationships(path) AS rel
+            MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
+            """
+            + filter_query
+            + """
+            RETURN DISTINCT
+            """
+            + get_entity_edge_return_query(GraphProvider.NEPTUNE)
+            + """
+            LIMIT $limit
+            """
         )
+    else:
+        query = (
+            f"""
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
+            UNWIND relationships(path) AS rel
+            WITH rel AS e, startNode(rel) AS n, endNode(rel) AS m
+            WHERE type(e) = 'RELATES_TO'
+            WITH e, n, m
+            """
+            + filter_query
+            + """
+            RETURN DISTINCT
+            """
+            + get_entity_edge_return_query(driver.provider)
+            + """
+            LIMIT $limit
+            """
+        )
+
+    records, _, _ = await driver.execute_query(
+        query,
+        bfs_origin_node_uuids=bfs_origin_node_uuids,
+        depth=bfs_max_depth,
+        limit=limit,
+        routing_='r',
+        **filter_params,
+    )
 
     edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
 
@@ -599,9 +541,6 @@ async def node_fulltext_search(
         filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     yield_query = 'YIELD node AS n, score'
-    if driver.provider == GraphProvider.KUZU:
-        yield_query = 'WITH node AS n, score'
-
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('node_name_and_summary', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
         if res['hits']['total']['value'] > 0:
@@ -691,8 +630,6 @@ async def node_similarity_search(
         filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     search_vector_var = '$search_vector'
-    if driver.provider == GraphProvider.KUZU:
-        search_vector_var = f'CAST($search_vector AS FLOAT[{len(search_vector)}])'
 
     if driver.provider == GraphProvider.NEPTUNE:
         query = (
@@ -832,28 +769,6 @@ async def node_bfs_search(
             AND n.group_id = origin.group_id
             """
         ]
-
-    if driver.provider == GraphProvider.KUZU:
-        depth = bfs_max_depth * 2
-        match_queries = [
-            """
-            UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH (origin:Episodic {uuid: origin_uuid})-[:MENTIONS]->(n:Entity)
-            WHERE n.group_id = origin.group_id
-            """,
-            f"""
-            UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH (origin:Entity {{uuid: origin_uuid}})-[:RELATES_TO*2..{depth}]->(n:Entity)
-            WHERE n.group_id = origin.group_id
-            """,
-        ]
-        if bfs_max_depth > 1:
-            depth = (bfs_max_depth - 1) * 2
-            match_queries.append(f"""
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH (origin:Episodic {{uuid: origin_uuid}})-[:MENTIONS]->(:Entity)-[:RELATES_TO*2..{depth}]->(n:Entity)
-                WHERE n.group_id = origin.group_id
-            """)
 
     records = []
     for match_query in match_queries:
@@ -996,8 +911,6 @@ async def community_fulltext_search(
         filter_params['group_ids'] = group_ids
 
     yield_query = 'YIELD node AS c, score'
-    if driver.provider == GraphProvider.KUZU:
-        yield_query = 'WITH node AS c, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('community_name', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
@@ -1145,8 +1058,6 @@ async def community_similarity_search(
             return []
     else:
         search_vector_var = '$search_vector'
-        if driver.provider == GraphProvider.KUZU:
-            search_vector_var = f'CAST($search_vector AS FLOAT[{len(search_vector)}])'
 
         query = (
             """
@@ -1285,108 +1196,53 @@ async def get_relevant_nodes(
     if filter_queries:
         filter_query = 'WHERE ' + (' AND '.join(filter_queries))
 
-    if driver.provider == GraphProvider.KUZU:
-        embedding_size = len(nodes[0].name_embedding) if nodes[0].name_embedding is not None else 0
-        if embedding_size == 0:
-            return []
-
-        # FIXME: Kuzu currently does not support using variables such as `node.fulltext_query` as an input to FTS, which means `get_relevant_nodes()` won't work with Kuzu as the graph driver.
-        query = (
-            """
+    query = (
+        """
                                                                                                                                     UNWIND $nodes AS node
                                                                                                                                     MATCH (n:Entity {group_id: $group_id})
                                                                                                                                     """
-            + filter_query
-            + """
-            WITH node, n, """
-            + get_vector_cosine_func_query(
-                'n.name_embedding',
-                f'CAST(node.name_embedding AS FLOAT[{embedding_size}])',
-                driver.provider,
-            )
-            + """ AS score
-            WHERE score > $min_score
-            WITH node, collect(n)[:$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
-            """
-            + get_nodes_query(
-                'node_name_and_summary',
-                'node.fulltext_query',
-                limit=limit,
-                provider=driver.provider,
-            )
-            + """
-            WITH node AS m
-            WHERE m.group_id = $group_id AND NOT m.uuid IN vector_node_uuids
-            WITH node, top_vector_nodes, collect(m) AS fulltext_nodes
-
-            WITH node, list_concat(top_vector_nodes, fulltext_nodes) AS combined_nodes
-
-            UNWIND combined_nodes AS x
-            WITH node, collect(DISTINCT {
-                uuid: x.uuid,
-                name: x.name,
-                name_embedding: x.name_embedding,
-                group_id: x.group_id,
-                created_at: x.created_at,
-                summary: x.summary,
-                labels: x.labels,
-                attributes: x.attributes
-            }) AS matches
-
-            RETURN
-            node.uuid AS search_node_uuid, matches
-            """
+        + filter_query
+        + """
+        WITH node, n, """
+        + get_vector_cosine_func_query('n.name_embedding', 'node.name_embedding', driver.provider)
+        + """ AS score
+        WHERE score > $min_score
+        WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
+        """
+        + get_nodes_query(
+            'node_name_and_summary',
+            'node.fulltext_query',
+            limit=limit,
+            provider=driver.provider,
         )
-    else:
-        query = (
-            """
-                                                                                                                                    UNWIND $nodes AS node
-                                                                                                                                    MATCH (n:Entity {group_id: $group_id})
-                                                                                                                                    """
-            + filter_query
-            + """
-            WITH node, n, """
-            + get_vector_cosine_func_query(
-                'n.name_embedding', 'node.name_embedding', driver.provider
-            )
-            + """ AS score
-            WHERE score > $min_score
-            WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
-            """
-            + get_nodes_query(
-                'node_name_and_summary',
-                'node.fulltext_query',
-                limit=limit,
-                provider=driver.provider,
-            )
-            + """
-            YIELD node AS m
-            WHERE m.group_id = $group_id
-            WITH node, top_vector_nodes, vector_node_uuids, collect(m) AS fulltext_nodes
+        + """
+        YIELD node AS m
+        WHERE m.group_id = $group_id
+        WITH node, top_vector_nodes, vector_node_uuids, collect(m) AS fulltext_nodes
 
-            WITH node,
-                top_vector_nodes,
-                [m IN fulltext_nodes WHERE NOT m.uuid IN vector_node_uuids] AS filtered_fulltext_nodes
+        WITH node,
+            top_vector_nodes,
+            [m IN fulltext_nodes WHERE NOT m.uuid IN vector_node_uuids] AS filtered_fulltext_nodes
 
-            WITH node, top_vector_nodes + filtered_fulltext_nodes AS combined_nodes
+        WITH node, top_vector_nodes + filtered_fulltext_nodes AS combined_nodes
 
-            UNWIND combined_nodes AS combined_node
-            WITH node, collect(DISTINCT combined_node) AS deduped_nodes
+        UNWIND combined_nodes AS combined_node
+        WITH node, collect(DISTINCT combined_node) AS deduped_nodes
 
-            RETURN
-            node.uuid AS search_node_uuid,
-            [x IN deduped_nodes | {
-                uuid: x.uuid,
-                name: x.name,
-                name_embedding: x.name_embedding,
-                group_id: x.group_id,
-                created_at: x.created_at,
-                summary: x.summary,
-                labels: labels(x),
-                attributes: properties(x)
-            }] AS matches
-            """
-        )
+        RETURN
+        node.uuid AS search_node_uuid,
+        [x IN deduped_nodes | {
+            uuid: x.uuid,
+            name: x.name,
+            name_embedding: x.name_embedding,
+            group_id: x.group_id,
+            created_at: x.created_at,
+            summary: x.summary,
+            labels: labels(x),
+            attributes: properties(x)
+        }] AS matches
+        """
+    )
 
     results, _, _ = await driver.execute_query(
         query,
@@ -1494,85 +1350,40 @@ async def get_relevant_edges(
             **filter_params,
         )
     else:
-        if driver.provider == GraphProvider.KUZU:
-            embedding_size = (
-                len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
-            )
-            if embedding_size == 0:
-                return []
-
-            query = (
-                """
-                                                                                                                                        UNWIND $edges AS edge
-                                                                                                                                        MATCH (n:Entity {uuid: edge.source_node_uuid})-[:RELATES_TO]-(e:RelatesToNode_ {group_id: edge.group_id})-[:RELATES_TO]-(m:Entity {uuid: edge.target_node_uuid})
-                                                                                                                                        """
-                + filter_query
-                + """
-                WITH e, edge, n, m, """
-                + get_vector_cosine_func_query(
-                    'e.fact_embedding',
-                    f'CAST(edge.fact_embedding AS FLOAT[{embedding_size}])',
-                    driver.provider,
-                )
-                + """ AS score
-                WHERE score > $min_score
-                WITH e, edge, n, m, score
-                ORDER BY score DESC
-                LIMIT $limit
-                RETURN
-                    edge.uuid AS search_edge_uuid,
-                    collect({
-                        uuid: e.uuid,
-                        source_node_uuid: n.uuid,
-                        target_node_uuid: m.uuid,
-                        created_at: e.created_at,
-                        name: e.name,
-                        group_id: e.group_id,
-                        fact: e.fact,
-                        fact_embedding: e.fact_embedding,
-                        episodes: e.episodes,
-                        expired_at: e.expired_at,
-                        valid_at: e.valid_at,
-                        invalid_at: e.invalid_at,
-                        attributes: e.attributes
-                    }) AS matches
-                """
-            )
-        else:
-            query = (
-                """
+        query = (
+            """
                                                                                                                                         UNWIND $edges AS edge
                                                                                                                                         MATCH (n:Entity {uuid: edge.source_node_uuid})-[e:RELATES_TO {group_id: edge.group_id}]-(m:Entity {uuid: edge.target_node_uuid})
                                                                                                                                         """
-                + filter_query
-                + """
-                WITH e, edge, """
-                + get_vector_cosine_func_query(
-                    'e.fact_embedding', 'edge.fact_embedding', driver.provider
-                )
-                + """ AS score
-                WHERE score > $min_score
-                WITH edge, e, score
-                ORDER BY score DESC
-                RETURN
-                    edge.uuid AS search_edge_uuid,
-                    collect({
-                        uuid: e.uuid,
-                        source_node_uuid: startNode(e).uuid,
-                        target_node_uuid: endNode(e).uuid,
-                        created_at: e.created_at,
-                        name: e.name,
-                        group_id: e.group_id,
-                        fact: e.fact,
-                        fact_embedding: e.fact_embedding,
-                        episodes: e.episodes,
-                        expired_at: e.expired_at,
-                        valid_at: e.valid_at,
-                        invalid_at: e.invalid_at,
-                        attributes: properties(e)
-                    })[..$limit] AS matches
-                """
+            + filter_query
+            + """
+            WITH e, edge, """
+            + get_vector_cosine_func_query(
+                'e.fact_embedding', 'edge.fact_embedding', driver.provider
             )
+            + """ AS score
+            WHERE score > $min_score
+            WITH edge, e, score
+            ORDER BY score DESC
+            RETURN
+                edge.uuid AS search_edge_uuid,
+                collect({
+                    uuid: e.uuid,
+                    source_node_uuid: startNode(e).uuid,
+                    target_node_uuid: endNode(e).uuid,
+                    created_at: e.created_at,
+                    name: e.name,
+                    group_id: e.group_id,
+                    fact: e.fact,
+                    fact_embedding: e.fact_embedding,
+                    episodes: e.episodes,
+                    expired_at: e.expired_at,
+                    valid_at: e.valid_at,
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
+                })[..$limit] AS matches
+            """
+        )
 
         results, _, _ = await driver.execute_query(
             query,
@@ -1680,87 +1491,41 @@ async def get_edge_invalidation_candidates(
             **filter_params,
         )
     else:
-        if driver.provider == GraphProvider.KUZU:
-            embedding_size = (
-                len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
-            )
-            if embedding_size == 0:
-                return []
-
-            query = (
-                """
-                                                                                                                                        UNWIND $edges AS edge
-                                                                                                                                        MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {group_id: edge.group_id})-[:RELATES_TO]->(m:Entity)
-                                                                                                                                        WHERE (n.uuid IN [edge.source_node_uuid, edge.target_node_uuid] OR m.uuid IN [edge.target_node_uuid, edge.source_node_uuid])
-                                                                                                                                        """
-                + filter_query
-                + """
-                WITH edge, e, n, m, """
-                + get_vector_cosine_func_query(
-                    'e.fact_embedding',
-                    f'CAST(edge.fact_embedding AS FLOAT[{embedding_size}])',
-                    driver.provider,
-                )
-                + """ AS score
-                WHERE score > $min_score
-                WITH edge, e, n, m, score
-                ORDER BY score DESC
-                LIMIT $limit
-                RETURN
-                    edge.uuid AS search_edge_uuid,
-                    collect({
-                        uuid: e.uuid,
-                        source_node_uuid: n.uuid,
-                        target_node_uuid: m.uuid,
-                        created_at: e.created_at,
-                        name: e.name,
-                        group_id: e.group_id,
-                        fact: e.fact,
-                        fact_embedding: e.fact_embedding,
-                        episodes: e.episodes,
-                        expired_at: e.expired_at,
-                        valid_at: e.valid_at,
-                        invalid_at: e.invalid_at,
-                        attributes: e.attributes
-                    }) AS matches
-                """
-            )
-        else:
-            query = (
-                """
+        query = (
+            """
                                                                                                                                         UNWIND $edges AS edge
                                                                                                                                         MATCH (n:Entity)-[e:RELATES_TO {group_id: edge.group_id}]->(m:Entity)
                                                                                                                                         WHERE n.uuid IN [edge.source_node_uuid, edge.target_node_uuid] OR m.uuid IN [edge.target_node_uuid, edge.source_node_uuid]
                                                                                                                                         """
-                + filter_query
-                + """
-                WITH edge, e, """
-                + get_vector_cosine_func_query(
-                    'e.fact_embedding', 'edge.fact_embedding', driver.provider
-                )
-                + """ AS score
-                WHERE score > $min_score
-                WITH edge, e, score
-                ORDER BY score DESC
-                RETURN
-                    edge.uuid AS search_edge_uuid,
-                    collect({
-                        uuid: e.uuid,
-                        source_node_uuid: startNode(e).uuid,
-                        target_node_uuid: endNode(e).uuid,
-                        created_at: e.created_at,
-                        name: e.name,
-                        group_id: e.group_id,
-                        fact: e.fact,
-                        fact_embedding: e.fact_embedding,
-                        episodes: e.episodes,
-                        expired_at: e.expired_at,
-                        valid_at: e.valid_at,
-                        invalid_at: e.invalid_at,
-                        attributes: properties(e)
-                    })[..$limit] AS matches
-                """
+            + filter_query
+            + """
+            WITH edge, e, """
+            + get_vector_cosine_func_query(
+                'e.fact_embedding', 'edge.fact_embedding', driver.provider
             )
+            + """ AS score
+            WHERE score > $min_score
+            WITH edge, e, score
+            ORDER BY score DESC
+            RETURN
+                edge.uuid AS search_edge_uuid,
+                collect({
+                    uuid: e.uuid,
+                    source_node_uuid: startNode(e).uuid,
+                    target_node_uuid: endNode(e).uuid,
+                    created_at: e.created_at,
+                    name: e.name,
+                    group_id: e.group_id,
+                    fact: e.fact,
+                    fact_embedding: e.fact_embedding,
+                    episodes: e.episodes,
+                    expired_at: e.expired_at,
+                    valid_at: e.valid_at,
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
+                })[..$limit] AS matches
+            """
+        )
 
         results, _, _ = await driver.execute_query(
             query,
@@ -1824,13 +1589,6 @@ async def node_distance_reranker(
     MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
     RETURN 1 AS score, node_uuid AS uuid
     """
-    if driver.provider == GraphProvider.KUZU:
-        query = """
-        UNWIND $node_uuids AS node_uuid
-        MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(n:Entity {uuid: node_uuid})
-        RETURN 1 AS score, node_uuid AS uuid
-        """
-
     # Find the shortest path to center node
     results, header, _ = await driver.execute_query(
         query,
@@ -2042,23 +1800,13 @@ async def get_embeddings_for_edges(
             split(e.fact_embedding, ",") AS fact_embedding
         """
     else:
-        match_query = """
+        query = """
             MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
-        """
-        if driver.provider == GraphProvider.KUZU:
-            match_query = """
-                MATCH (n:Entity)-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m:Entity)
-            """
-
-        query = (
-            match_query
-            + """
         WHERE e.uuid IN $edge_uuids
         RETURN DISTINCT
             e.uuid AS uuid,
             e.fact_embedding AS fact_embedding
         """
-        )
     results, _, _ = await driver.execute_query(
         query,
         edge_uuids=[edge.uuid for edge in edges],
