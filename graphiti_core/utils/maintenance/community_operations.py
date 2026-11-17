@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from pydantic import BaseModel
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
@@ -59,10 +59,6 @@ async def get_community_clusters(
             match_query = """
                 MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
             """
-            if driver.provider == GraphProvider.KUZU:
-                match_query = """
-                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
-                """
             records, _, _ = await driver.execute_query(
                 match_query
                 + """
@@ -356,10 +352,6 @@ async def determine_entity_community(
     match_query = """
         MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     """
-    if driver.provider == GraphProvider.KUZU:
-        match_query = """
-            MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
-        """
     records, _, _ = await driver.execute_query(
         match_query
         + """

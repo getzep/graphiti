@@ -132,7 +132,6 @@ def transaction(self) -> AsyncContextManager[Transaction]: ...
 |--------|--------------------------|
 | **Neo4j** | Opens a real transaction via `session.begin_transaction()`. Commits on clean exit, rolls back on exception. |
 | **FalkorDB** | Returns a lightweight session wrapper. Queries execute immediately. No rollback on failure. |
-| **Kuzu** | Same as FalkorDB — session wrapper, no rollback. |
 | **Neptune** | Same as FalkorDB — session wrapper, no rollback. |
 
 Drivers that lack native transaction support are honest about it — the API is
