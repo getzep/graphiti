@@ -518,9 +518,7 @@ class FalkorGraphOperationsInterface(GraphOperationsInterface):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ) -> list[Any]:
-        return await self._episodic_edge_ops.get_by_group_ids(
-            driver, group_ids, limit, uuid_cursor
-        )
+        return await self._episodic_edge_ops.get_by_group_ids(driver, group_ids, limit, uuid_cursor)
 
     # ---------------------------
     # CommunityEdge: Save/Delete
@@ -755,7 +753,9 @@ class FalkorGraphOperationsInterface(GraphOperationsInterface):
         source_node_uuid: str,
         target_node_uuid: str,
     ) -> list[Any]:
-        return await self._entity_edge_ops.get_between_nodes(driver, source_node_uuid, target_node_uuid)
+        return await self._entity_edge_ops.get_between_nodes(
+            driver, source_node_uuid, target_node_uuid
+        )
 
     async def edge_get_by_node_uuid(
         self,
