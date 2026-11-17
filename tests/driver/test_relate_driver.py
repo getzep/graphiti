@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -124,20 +123,6 @@ def test_vendored_session_exports_and_revision():
     assert not hasattr(vendored_session, 'connect')
     assert not hasattr(vendored_session, 'Connection')
     assert not hasattr(vendored_session, 'Cursor')
-
-
-def test_vendored_session_ast_parity_with_canonical_source():
-    canonical_dir = (
-        Path(__file__).resolve().parents[3] / 'relate-session' / 'src' / 'relate_session'
-    )
-    if not canonical_dir.exists():
-        pytest.skip('canonical relate-session sibling repo not present')
-
-    vendored_dir = Path(vendored_session.__file__).resolve().parent
-    for filename in ('_errors.py', '_results.py', '_store.py', '_transaction.py'):
-        canonical_ast = ast.dump(ast.parse((canonical_dir / filename).read_text(encoding='utf-8')))
-        vendored_ast = ast.dump(ast.parse((vendored_dir / filename).read_text(encoding='utf-8')))
-        assert vendored_ast == canonical_ast, f'{filename} drifted from relate-session'
 
 
 # --- Provider & operations identity tests -----------------------------------

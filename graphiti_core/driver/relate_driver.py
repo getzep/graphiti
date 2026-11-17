@@ -26,7 +26,7 @@ from os import PathLike
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import relate as _relate  # noqa: F401
+    import relate as _relate  # noqa: F401  # pyright: ignore[reportMissingImports]
 else:
     try:
         import relate as _relate  # noqa: F401
