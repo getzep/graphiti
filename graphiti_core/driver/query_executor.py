@@ -27,7 +27,12 @@ class Transaction(ABC):
     """
 
     @abstractmethod
-    async def run(self, query: str, **kwargs: Any) -> Any: ...
+    async def run(self, query: str, **kwargs: Any) -> Any:
+        """Run a Cypher query inside the transaction.
+
+        The query string and the keyword parameters, and the return value, follow the
+        contract of `QueryExecutor.execute_query`.
+        """
 
 
 class QueryExecutor(ABC):
@@ -38,4 +43,15 @@ class QueryExecutor(ABC):
     """
 
     @abstractmethod
-    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Any: ...
+    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Any:
+        """Run a Cypher query.
+
+        Contract that graphiti core relies on (the types are `Any` today):
+
+        - `cypher_query_` is a Cypher string and the query parameters are keyword arguments.
+        - The return value is a 3-tuple. Core reads only the first element, a list of
+          dict-like records whose keys are the aliases of the `RETURN` clause.
+        - The Neo4j driver returns an `EagerResult`, which unpacks as `(records, summary,
+          keys)`. The FalkorDB driver returns `(records, header, None)`.
+        - `Transaction.run(query, **params)` follows the same rules.
+        """

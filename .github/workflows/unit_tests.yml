@@ -112,3 +112,39 @@ jobs:
             tests/cross_encoder/test_bge_reranker_client_int.py \
             tests/driver/test_falkordb_driver.py \
             -m "not integration"
+
+  relate-driver-tests:
+    # Relate is embedded and needs no database service, but it requires Python 3.11+, so it
+    # cannot run in the Python 3.10 jobs above.
+    runs-on: depot-ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Setup Socket Firewall wrapper
+        uses: ./.github/actions/setup-socket-firewall
+        with:
+          socket-api-key: ${{ secrets.SOCKET_API_KEY }}
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
+        with:
+          version: "latest"
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Run Relate driver and database tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DISABLE_NEO4J: 1
+          DISABLE_FALKORDB: 1
+          DISABLE_NEPTUNE: 1
+        run: |
+          uv run pytest \
+            tests/driver/test_relate_driver.py \
+            tests/test_graphiti_mock.py \
+            tests/test_node_int.py \
+            tests/test_edge_int.py \
+            -m "not integration"
