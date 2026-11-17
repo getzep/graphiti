@@ -72,12 +72,22 @@ class RelateEpisodicEdgeOperations(EpisodicEdgeOperations):
     ) -> None:
         if not edges:
             return
+        await self.save_bulk_records(executor, [e.model_dump() for e in edges], tx)
+
+    async def save_bulk_records(
+        self,
+        executor: QueryExecutor,
+        records: list[dict[str, Any]],
+        tx: Transaction | None = None,
+    ) -> None:
+        """Write episodic edge records in a single query."""
+        if not records:
+            return
         query = get_episodic_edge_save_bulk_query(GraphProvider.RELATE)
-        edge_dicts = [e.model_dump() for e in edges]
         if tx is not None:
-            await tx.run(query, episodic_edges=edge_dicts)
+            await tx.run(query, episodic_edges=records)
         else:
-            await executor.execute_query(query, episodic_edges=edge_dicts)
+            await executor.execute_query(query, episodic_edges=records)
 
     async def delete(
         self,

@@ -60,6 +60,9 @@ from graphiti_core.driver.relate._session import (
     Temporal,
     Vector,
 )
+from graphiti_core.driver.relate.graph_operations_interface import (
+    RelateGraphOperationsInterface,
+)
 from graphiti_core.driver.relate.operations import (
     RelateCommunityEdgeOperations,
     RelateCommunityNodeOperations,
@@ -73,6 +76,7 @@ from graphiti_core.driver.relate.operations import (
     RelateSagaNodeOperations,
     RelateSearchOperations,
 )
+from graphiti_core.driver.relate.search_interface import RelateSearchInterface
 from graphiti_core.driver.relate.translation import translate_relate_query
 from graphiti_core.utils.datetime_utils import ensure_utc
 
@@ -231,6 +235,10 @@ class RelateDriver(GraphDriver):
         self._next_episode_edge_ops = RelateNextEpisodeEdgeOperations()
         self._search_ops = RelateSearchOperations()
         self._graph_ops = RelateGraphMaintenanceOperations()
+
+        # The legacy interfaces delegate to the operations above.
+        self.search_interface = RelateSearchInterface()
+        self.graph_operations_interface = RelateGraphOperationsInterface()
 
     @classmethod
     async def open(
