@@ -27,6 +27,7 @@ from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_return_query,
     get_entity_edge_save_bulk_query,
     get_entity_edge_save_query,
+    get_entity_edge_update_bulk_query,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,11 +99,37 @@ class RelateEntityEdgeOperations(EntityEdgeOperations):
                     edge_data[key] = value
             prepared.append(edge_data)
 
+        await self.save_bulk_records(executor, prepared, tx)
+
+    async def save_bulk_records(
+        self,
+        executor: QueryExecutor,
+        records: list[dict[str, Any]],
+        tx: Transaction | None = None,
+    ) -> None:
+        """Write entity edge records in a single query."""
+        if not records:
+            return
         query = get_entity_edge_save_bulk_query(GraphProvider.RELATE)
         if tx is not None:
-            await tx.run(query, entity_edges=prepared)
+            await tx.run(query, entity_edges=records)
         else:
-            await executor.execute_query(query, entity_edges=prepared)
+            await executor.execute_query(query, entity_edges=records)
+
+    async def update_bulk_records(
+        self,
+        executor: QueryExecutor,
+        records: list[dict[str, Any]],
+        tx: Transaction | None = None,
+    ) -> None:
+        """Update entity edge records that exist. An edge that does not exist is not created."""
+        if not records:
+            return
+        query = get_entity_edge_update_bulk_query(GraphProvider.RELATE)
+        if tx is not None:
+            await tx.run(query, entity_edges=records)
+        else:
+            await executor.execute_query(query, entity_edges=records)
 
     async def delete(
         self,

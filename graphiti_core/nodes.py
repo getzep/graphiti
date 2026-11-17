@@ -121,7 +121,7 @@ class Node(BaseModel, ABC):
                 pass
 
         match driver.provider:
-            case GraphProvider.NEO4J | GraphProvider.RELATE:
+            case GraphProvider.NEO4J:
                 records, _, _ = await driver.execute_query(
                     """
                     MATCH (n {uuid: $uuid})
@@ -199,7 +199,7 @@ class Node(BaseModel, ABC):
                 pass
 
         match driver.provider:
-            case GraphProvider.FALKORDB | GraphProvider.RELATE:
+            case GraphProvider.FALKORDB:
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
                         f"""
@@ -626,11 +626,7 @@ class EntityNode(Node):
             except NotImplementedError:
                 pass
 
-        if driver.provider not in (
-            GraphProvider.NEO4J,
-            GraphProvider.FALKORDB,
-            GraphProvider.RELATE,
-        ):
+        if driver.provider not in (GraphProvider.NEO4J, GraphProvider.FALKORDB):
             raise NotImplementedError(
                 f'Attribute lookup is not supported for {driver.provider.value}'
             )

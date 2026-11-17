@@ -26,6 +26,7 @@ from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_return_query,
     get_entity_node_save_bulk_query,
     get_entity_node_save_query,
+    get_entity_node_update_bulk_query,
 )
 from graphiti_core.nodes import EntityNode
 
@@ -86,11 +87,77 @@ class RelateEntityNodeOperations(EntityNodeOperations):
                     entity_data[key] = value
             prepared.append(entity_data)
 
-        query = get_entity_node_save_bulk_query(GraphProvider.RELATE, prepared)
+        await self.save_bulk_records(executor, prepared, tx)
+
+    async def save_bulk_records(
+        self,
+        executor: QueryExecutor,
+        records: list[dict[str, Any]],
+        tx: Transaction | None = None,
+    ) -> None:
+        """Write entity node records, each with its `labels`, in a single query."""
+        if not records:
+            return
+        query = get_entity_node_save_bulk_query(GraphProvider.RELATE, records)
+        await self._run(executor, tx, query, nodes=records)
+
+    async def update_bulk_records(
+        self,
+        executor: QueryExecutor,
+        records: list[dict[str, Any]],
+        tx: Transaction | None = None,
+    ) -> None:
+        """Update entity node records that exist. A node that does not exist is not created."""
+        if not records:
+            return
+        query = get_entity_node_update_bulk_query(GraphProvider.RELATE, records)
+        await self._run(executor, tx, query, nodes=records)
+
+    @staticmethod
+    async def _run(
+        executor: QueryExecutor, tx: Transaction | None, query: Any, **params: Any
+    ) -> None:
         if tx is not None:
-            await tx.run(query, nodes=prepared)
+            await tx.run(query, **params)
         else:
-            await executor.execute_query(query, nodes=prepared)
+            await executor.execute_query(query, **params)
+
+    async def get_by_attribute_values(
+        self,
+        executor: QueryExecutor,
+        group_id: str,
+        attributes: dict[str, Any],
+        node_labels: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[EntityNode]:
+        """Retrieve entity nodes of a group whose properties equal all of `attributes`.
+
+        The attribute names and the labels are validated by the caller, `EntityNode`.
+        """
+        if not attributes:
+            return []
+        names = list(attributes)
+        label_query = ''.join(f':{label}' for label in (node_labels or []) if label != 'Entity')
+        conditions = ' '.join(f'AND n.`{name}` = $attribute_{i}' for i, name in enumerate(names))
+        query = (
+            f"""
+            MATCH (n:Entity{label_query})
+            WHERE n.group_id = $group_id
+            {conditions}
+            RETURN
+            """
+            + get_entity_node_return_query(GraphProvider.RELATE)
+            + """
+            LIMIT $limit
+            """
+        )
+        params: dict[str, Any] = {
+            f'attribute_{i}': attributes[name] for i, name in enumerate(names)
+        }
+        records, _, _ = await executor.execute_query(
+            query, group_id=group_id, limit=limit, **params
+        )
+        return [entity_node_from_record(r) for r in records]
 
     async def delete(
         self,

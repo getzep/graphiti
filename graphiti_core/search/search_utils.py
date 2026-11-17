@@ -447,9 +447,6 @@ async def edge_bfs_search(
     if bfs_origin_node_uuids is None or len(bfs_origin_node_uuids) == 0:
         return []
 
-    if driver.provider == GraphProvider.RELATE:
-        bfs_max_depth = min(bfs_max_depth, 500)
-
     filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
@@ -741,9 +738,6 @@ async def node_bfs_search(
 
     if bfs_origin_node_uuids is None or len(bfs_origin_node_uuids) == 0 or bfs_max_depth < 1:
         return []
-
-    if driver.provider == GraphProvider.RELATE:
-        bfs_max_depth = min(bfs_max_depth, 500)
 
     filter_queries, filter_params = node_search_filter_query_constructor(
         search_filter, driver.provider

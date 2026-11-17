@@ -77,6 +77,23 @@ class RelateEpisodeNodeOperations(EpisodeNodeOperations):
             ep.pop('episode_metadata', None)
             episodes.append(ep)
 
+        await self.save_bulk_records(executor, episodes, tx)
+
+    async def save_bulk_records(
+        self,
+        executor: QueryExecutor,
+        records: list[dict[str, Any]],
+        tx: Transaction | None = None,
+    ) -> None:
+        """Write episode records, with `source` as a string, in a single query."""
+        if not records:
+            return
+        episodes = []
+        for record in records:
+            episode = dict(record)
+            episode.pop('labels', None)
+            episode.pop('episode_metadata', None)
+            episodes.append(episode)
         query = get_episode_node_save_bulk_query(GraphProvider.RELATE)
         if tx is not None:
             await tx.run(query, episodes=episodes)
@@ -232,7 +249,7 @@ class RelateEpisodeNodeOperations(EpisodeNodeOperations):
         saga: str | None = None,
     ) -> list[EpisodicNode]:
         if saga is not None and group_ids is not None and len(group_ids) > 0:
-            source_clause = 'AND e.source = $source' if source else ''
+            source_clause = ' AND e.source = $source' if source else ''
             query = (
                 """
                 MATCH (s:Saga {name: $saga_name, group_id: $group_id})-[:HAS_EPISODE]->(e:Episodic)
@@ -257,8 +274,8 @@ class RelateEpisodeNodeOperations(EpisodeNodeOperations):
                 num_episodes=last_n,
             )
         else:
-            source_clause = 'AND e.source = $source' if source else ''
-            group_clause = 'AND e.group_id IN $group_ids' if group_ids else ''
+            source_clause = ' AND e.source = $source' if source else ''
+            group_clause = ' AND e.group_id IN $group_ids' if group_ids else ''
             query = (
                 """
                 MATCH (e:Episodic)
