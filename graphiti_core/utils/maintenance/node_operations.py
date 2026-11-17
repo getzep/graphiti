@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 from collections.abc import Awaitable, Callable
 from time import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -27,6 +27,7 @@ from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import (
+    NODE_DEDUP_CANDIDATE_LIMIT,
     EntityNode,
     EpisodeType,
     EpisodicNode,
@@ -60,11 +61,13 @@ from graphiti_core.utils.text_utils import (
     truncate_at_sentence,
 )
 
+if TYPE_CHECKING:
+    from graphiti_core.ingestion.change_set import ResolutionTrace
+
 logger = logging.getLogger(__name__)
 
 # Maximum number of nodes to summarize in a single LLM call
 MAX_NODES = 30
-NODE_DEDUP_CANDIDATE_LIMIT = 15
 NODE_DEDUP_COSINE_MIN_SCORE = 0.6
 
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
@@ -458,15 +461,22 @@ async def _collect_candidate_nodes(
     extracted_nodes: list[EntityNode],
     existing_nodes_override: list[EntityNode] | None = None,
     identity_properties: dict[str, list[str]] | None = None,
+    reuse_name_embeddings: bool = False,
 ) -> list[list[EntityNode]]:
-    """Search per extracted name and return ordered candidates for each extracted node."""
+    """Search per extracted name and return ordered candidates for each extracted node.
+
+    With `reuse_name_embeddings`, a node that has a `name_embedding` uses it for the
+    semantic search, and the embedder is called only for the other nodes.
+    """
     identity_results = await _collect_identity_property_candidate_nodes(
         clients,
         extracted_nodes,
         identity_properties,
     )
     exact_name_results = await _collect_exact_name_candidate_nodes(clients, extracted_nodes)
-    search_results = await _semantic_candidate_search(clients, extracted_nodes)
+    search_results = await _semantic_candidate_search(
+        clients, extracted_nodes, reuse_name_embeddings=reuse_name_embeddings
+    )
 
     candidates_by_node: list[list[EntityNode]] = []
     for identity_result, exact_results, search_result in zip(
@@ -494,11 +504,6 @@ async def _collect_identity_property_candidate_nodes(
     if not identity_properties:
         return [[] for _ in extracted_nodes]
 
-    graph_operations = getattr(clients.driver, 'graph_operations_interface', None)
-    lookup = getattr(graph_operations, 'node_get_by_attribute_values', None)
-    if lookup is None:
-        return [[] for _ in extracted_nodes]
-
     async def _lookup_node(node: EntityNode) -> list[EntityNode]:
         identity_type = _identity_type_for_node(node, identity_properties)
         identity_key = _identity_key_for_node(node, identity_properties)
@@ -507,8 +512,7 @@ async def _collect_identity_property_candidate_nodes(
 
         _, identity_values = identity_key
         try:
-            return await lookup(
-                EntityNode,
+            return await EntityNode.get_by_attribute_values(
                 clients.driver,
                 node.group_id,
                 dict(identity_values),
@@ -585,6 +589,7 @@ async def _collect_exact_name_candidate_nodes(
 async def _semantic_candidate_search(
     clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
+    reuse_name_embeddings: bool = False,
 ) -> list[list[EntityNode]]:
     """Run direct cosine similarity search per extracted node without reranking."""
     if not extracted_nodes:
@@ -597,20 +602,12 @@ async def _semantic_candidate_search(
     if not queries:
         return [[] for _ in extracted_nodes]
 
-    try:
-        query_vectors = await clients.embedder.create_batch(queries)
-    except NotImplementedError:
-        query_vectors = list(
-            await semaphore_gather(
-                *[clients.embedder.create(input_data=[query]) for query in queries],
-                max_coroutines=getattr(clients, 'max_coroutines', None),
-            )
+    if reuse_name_embeddings:
+        query_vectors = await _name_vectors_with_reuse(
+            clients, [extracted_nodes[index] for index in query_indices], queries
         )
-
-    if len(query_vectors) != len(queries):
-        raise ValueError(
-            f'embedder returned {len(query_vectors)} vectors for {len(queries)} queries'
-        )
+    else:
+        query_vectors = await _embed_queries(clients, queries)
 
     search_results = await semaphore_gather(
         *[
@@ -630,6 +627,37 @@ async def _semantic_candidate_search(
     for index, search_result in zip(query_indices, search_results, strict=True):
         results[index] = search_result
     return results
+
+
+async def _embed_queries(clients: GraphitiClients, queries: list[str]) -> list[list[float]]:
+    try:
+        query_vectors = await clients.embedder.create_batch(queries)
+    except NotImplementedError:
+        query_vectors = list(
+            await semaphore_gather(
+                *[clients.embedder.create(input_data=[query]) for query in queries],
+                max_coroutines=getattr(clients, 'max_coroutines', None),
+            )
+        )
+
+    if len(query_vectors) != len(queries):
+        raise ValueError(
+            f'embedder returned {len(query_vectors)} vectors for {len(queries)} queries'
+        )
+    return query_vectors
+
+
+async def _name_vectors_with_reuse(
+    clients: GraphitiClients, nodes: list[EntityNode], queries: list[str]
+) -> list[list[float]]:
+    """Return the stored name embedding of each node, and embed only the other names."""
+    vectors: list[list[float] | None] = [node.name_embedding for node in nodes]
+    missing = [index for index, vector in enumerate(vectors) if vector is None]
+    if missing:
+        embedded = await _embed_queries(clients, [queries[index] for index in missing])
+        for index, vector in zip(missing, embedded, strict=True):
+            vectors[index] = vector
+    return [vector for vector in vectors if vector is not None]
 
 
 def _commit_resolution(
@@ -821,15 +849,52 @@ async def resolve_extracted_nodes(
     entity_types: dict[str, type[BaseModel]] | None = None,
     existing_nodes_override: list[EntityNode] | None = None,
     identity_properties: dict[str, list[str]] | None = None,
+    trace: 'ResolutionTrace | None' = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
-    """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup."""
-    llm_client = clients.llm_client
+    """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup.
+
+    When `trace` is given, it records the candidates that each extracted node saw and
+    one `PatchNode` operation for each extracted node that resolved to a candidate.
+    """
     candidate_nodes_by_extracted = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
         existing_nodes_override=existing_nodes_override,
         identity_properties=identity_properties,
     )
+
+    # The record is before the resolution, which promotes labels of candidates in memory.
+    if trace is not None:
+        for node, candidates in zip(extracted_nodes, candidate_nodes_by_extracted, strict=True):
+            trace.record_node_candidates(node.uuid, candidates)
+    return await resolve_nodes_with_candidates(
+        clients,
+        extracted_nodes,
+        candidate_nodes_by_extracted,
+        episode,
+        previous_episodes,
+        entity_types,
+        identity_properties,
+        trace=trace,
+    )
+
+
+async def resolve_nodes_with_candidates(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    candidate_nodes_by_extracted: list[list[EntityNode]],
+    episode: EpisodicNode | None = None,
+    previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
+    *,
+    trace: 'ResolutionTrace | None' = None,
+) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
+    """Resolve nodes against given candidates: identity rule, similarity rule, then LLM.
+
+    `candidate_nodes_by_extracted` has one candidate list for each extracted node.
+    """
+    llm_client = clients.llm_client
 
     state = DedupResolutionState(
         resolved_nodes=[None] * len(extracted_nodes),
@@ -879,6 +944,11 @@ async def resolve_extracted_nodes(
                 for candidate in candidate_nodes_by_extracted[idx]
             ]
         )
+        if trace is not None:
+            # The dedupe prompt shows the merged candidates to each unresolved node.
+            for idx in state.unresolved_indices:
+                trace.record_node_candidates(extracted_nodes[idx].uuid, llm_candidate_nodes)
+            trace.node_llm_calls += 1
         await _resolve_with_llm(
             llm_client,
             extracted_nodes,
@@ -902,6 +972,10 @@ async def resolve_extracted_nodes(
         'Resolved nodes: %s',
         [node.uuid for node in state.resolved_nodes if node is not None],
     )
+
+    if trace is not None:
+        for node in extracted_nodes:
+            trace.record_node_resolution(node, state.uuid_map.get(node.uuid, node.uuid))
 
     return (
         [node for node in state.resolved_nodes if node is not None],
@@ -941,6 +1015,7 @@ async def extract_attributes_only_from_nodes(
     episode: EpisodicNode | list[EpisodicNode] | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
+    validate_shape: bool = True,
 ) -> list[EntityNode]:
     if not nodes or not entity_types:
         return nodes
@@ -964,6 +1039,7 @@ async def extract_attributes_only_from_nodes(
                 previous_episodes,
                 entity_type,
                 clients=clients,
+                validate_shape=validate_shape,
             )
             for node, entity_type in extraction_inputs
         ],
@@ -1036,6 +1112,7 @@ async def _extract_entity_attributes(
     entity_type: type[BaseModel] | None,
     *,
     clients: GraphitiClients | None = None,
+    validate_shape: bool = True,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
         # No applicable type means nothing to extract, not "extracted nothing": return the
@@ -1080,7 +1157,8 @@ async def _extract_entity_attributes(
     # Shape validation only — we discard the validated instance because returning
     # `model_dump()` would expand defaults across all fields and clobber prior
     # values that the merge above just preserved.
-    entity_type(**merged)
+    if validate_shape:
+        entity_type(**merged)
 
     return merged
 
