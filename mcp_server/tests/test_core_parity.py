@@ -10,6 +10,7 @@ import inspect
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -221,6 +222,86 @@ class TestQueueServiceThreading:
 
         kwargs = client.add_episode.await_args.kwargs
         assert before <= kwargs['reference_time'] <= after
+
+    @pytest.mark.asyncio
+    async def test_tracks_terminal_failures_and_resets_after_success(self):
+        service = QueueService()
+
+        async def fail():
+            raise RuntimeError('provider response failed')
+
+        async def succeed():
+            return None
+
+        await service.add_episode_task('group-a', fail)
+        await service._episode_queues['group-a'].join()
+
+        failed_status = service.get_ingestion_status()
+        assert failed_status['status'] == 'degraded'
+        assert failed_status['recent_failure_count'] == 1
+        assert failed_status['consecutive_failure_count'] == 1
+        assert failed_status['last_failure_group_id'] == 'group-a'
+        assert failed_status['last_failure_at'] is not None
+
+        await service.add_episode_task('group-b', succeed)
+        await service._episode_queues['group-b'].join()
+
+        unaffected_status = service.get_ingestion_status()
+        assert unaffected_status['status'] == 'degraded'
+        assert unaffected_status['consecutive_failure_count'] == 1
+        assert unaffected_status['failing_group_count'] == 1
+
+        await service.add_episode_task('group-a', succeed)
+        await service._episode_queues['group-a'].join()
+
+        recovered_status = service.get_ingestion_status()
+        assert recovered_status['status'] == 'ok'
+        assert recovered_status['recent_failure_count'] == 1
+        assert recovered_status['consecutive_failure_count'] == 0
+        assert recovered_status['last_failure_group_id'] == 'group-a'
+
+
+class TestMcpStatus:
+    @pytest.mark.asyncio
+    async def test_status_is_degraded_when_ingestion_has_terminal_failures(self, monkeypatch):
+        import graphiti_mcp_server as mcp_server
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback):
+                return False
+
+            async def run(self, query):
+                return []
+
+        class FakeDriver:
+            def session(self):
+                return FakeSession()
+
+        class FakeService:
+            config = SimpleNamespace(database=SimpleNamespace(provider='test'))
+
+            async def get_client(self):
+                return SimpleNamespace(driver=FakeDriver())
+
+        queue = QueueService()
+
+        async def fail():
+            raise RuntimeError('provider response failed')
+
+        await queue.add_episode_task('group-a', fail)
+        await queue._episode_queues['group-a'].join()
+
+        monkeypatch.setattr(mcp_server, 'graphiti_service', FakeService())
+        monkeypatch.setattr(mcp_server, 'queue_service', queue)
+
+        status = await mcp_server.get_status()
+
+        assert status['status'] == 'degraded'
+        assert status['ingestion']['status'] == 'degraded'
+        assert status['ingestion']['last_failure_group_id'] == 'group-a'
 
 
 class TestCoreSignatureCompatibility:
