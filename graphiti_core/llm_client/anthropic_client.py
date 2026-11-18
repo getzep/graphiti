@@ -106,7 +106,9 @@ class AnthropicClient(LLMClient):
         super().__init__(config, cache)
         if self.temperature not in (None, DEFAULT_TEMPERATURE):
             logger.warning(
-                'AnthropicClient ignores temperature=%s and does not send it to the Anthropic API.',
+                'AnthropicClient ignores temperature=%s and does not send it. anthropic SDK 1.0 '
+                'and later removed the temperature parameter, and Claude 5, Opus 4.7, and Opus 4.8 '
+                'models reject it.',
                 self.temperature,
             )
         # Explicitly set the instance model to the config model to prevent type checking errors
