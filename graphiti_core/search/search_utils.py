@@ -118,7 +118,12 @@ async def get_episodes_by_mentions(
     for edge in edges:
         episode_uuids.extend(edge.episodes)
 
-    episodes = await EpisodicNode.get_by_uuids(driver, episode_uuids[:limit])
+    # One episode appears in the `episodes` list of every fact that mentions it, so the
+    # same UUID repeats across edges. Collapse the repeats before the limit, so the limit
+    # counts distinct episodes instead of references to them.
+    unique_episode_uuids = list(dict.fromkeys(episode_uuids))
+
+    episodes = await EpisodicNode.get_by_uuids(driver, unique_episode_uuids[:limit])
 
     return episodes
 
