@@ -143,6 +143,7 @@ class TestAnthropicClientGenerateResponse:
         assert isinstance(result, dict)
         assert result['test_field'] == 'test_value'
         mock_async_anthropic.messages.create.assert_called_once()
+        assert 'temperature' not in mock_async_anthropic.messages.create.call_args.kwargs
 
     @pytest.mark.asyncio
     async def test_generate_response_with_text_response(
