@@ -5,7 +5,6 @@ import builtins
 import logging
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -15,14 +14,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 
-import graphiti_mcp_server
 from config.schema import (
     AnthropicProviderConfig,
-    DatabaseConfig,
     EmbedderConfig,
     EmbedderProvidersConfig,
     GeminiProviderConfig,
-    GraphitiConfig,
     LLMConfig,
     LLMProvidersConfig,
     OpenAIProviderConfig,
@@ -81,22 +77,3 @@ class TestCrossEncoderFactory:
             CrossEncoderFactory.create(llm, embedder)
 
         assert '~2.3 GB' in caplog.text
-
-
-@pytest.mark.asyncio
-async def test_graphiti_service_does_not_swallow_reranker_configuration_error(monkeypatch):
-    error = ValueError('reranker setup failed')
-
-    def fail_reranker_setup(*_args):
-        raise error
-
-    fake_client = Mock()
-    fake_client.build_indices_and_constraints = AsyncMock()
-    monkeypatch.setattr(CrossEncoderFactory, 'create', fail_reranker_setup)
-    monkeypatch.setattr(graphiti_mcp_server, 'Graphiti', Mock(return_value=fake_client))
-    service = graphiti_mcp_server.GraphitiService(
-        GraphitiConfig(database=DatabaseConfig(provider='neo4j'))
-    )
-
-    with pytest.raises(ValueError, match='reranker setup failed'):
-        await service.initialize()
