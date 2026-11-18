@@ -1236,7 +1236,7 @@ async def initialize_server() -> ServerConfig:
     parser.add_argument('--model', help='Model name to use with the LLM client')
     parser.add_argument('--small-model', help='Small model name to use with the LLM client')
     parser.add_argument(
-        '--temperature', type=float, help='Temperature setting for the LLM (0.0-2.0)'
+        '--temperature', type=float, help='Temperature setting for the LLM (0.0-2.0). The Anthropic provider ignores this setting.'
     )
 
     # Embedder configuration arguments
