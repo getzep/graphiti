@@ -259,7 +259,6 @@ class AnthropicClient(LLMClient):
             result = await self.client.messages.create(
                 system=system_message.content,
                 max_tokens=max_creation_tokens,
-                temperature=self.temperature,
                 messages=user_messages_cast,
                 model=effective_model,
                 tools=tools,
