@@ -25,7 +25,7 @@ from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
+from .config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
 if TYPE_CHECKING:
@@ -104,6 +104,11 @@ class AnthropicClient(LLMClient):
             config.model = DEFAULT_MODEL
 
         super().__init__(config, cache)
+        if self.temperature not in (None, DEFAULT_TEMPERATURE):
+            logger.warning(
+                'AnthropicClient ignores temperature=%s: the Anthropic API no longer accepts it.',
+                self.temperature,
+            )
         # Explicitly set the instance model to the config model to prevent type checking errors
         self.model = typing.cast(AnthropicModel, config.model)
 
