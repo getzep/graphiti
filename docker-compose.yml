@@ -56,6 +56,8 @@ services:
       - falkordb_data:/data
     environment:
       - FALKORDB_ARGS=--port 6379 --cluster-enabled no
+      # Append-only file: writes survive a hard stop instead of waiting for an RDB snapshot.
+      - REDIS_ARGS=${REDIS_ARGS:---appendonly yes}
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 1s
