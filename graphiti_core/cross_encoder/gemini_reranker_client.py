@@ -110,6 +110,9 @@ Provide only a number between 0 and 100 (no explanation, just the number):"""
                             system_instruction='You are an expert at rating passage relevance. Respond with only a number from 0-100.',
                             temperature=0.0,
                             max_output_tokens=3,
+                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                                disable=True
+                            ),
                         ),
                     )
                     for prompt_messages in scoring_prompts
