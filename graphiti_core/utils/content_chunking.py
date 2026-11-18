@@ -231,7 +231,8 @@ def chunk_json_content(
         List of JSON string chunks
     """
     chunk_size_tokens = chunk_size_tokens or CHUNK_TOKEN_SIZE
-    overlap_tokens = overlap_tokens or CHUNK_OVERLAP_TOKENS
+    if overlap_tokens is None:
+        overlap_tokens = CHUNK_OVERLAP_TOKENS
 
     chunk_size_chars = _tokens_to_chars(chunk_size_tokens)
     overlap_chars = _tokens_to_chars(overlap_tokens)
@@ -391,7 +392,8 @@ def chunk_text_content(
         List of text chunks
     """
     chunk_size_tokens = chunk_size_tokens or CHUNK_TOKEN_SIZE
-    overlap_tokens = overlap_tokens or CHUNK_OVERLAP_TOKENS
+    if overlap_tokens is None:
+        overlap_tokens = CHUNK_OVERLAP_TOKENS
 
     chunk_size_chars = _tokens_to_chars(chunk_size_tokens)
     overlap_chars = _tokens_to_chars(overlap_tokens)
@@ -567,7 +569,8 @@ def chunk_message_content(
         List of conversation chunks
     """
     chunk_size_tokens = chunk_size_tokens or CHUNK_TOKEN_SIZE
-    overlap_tokens = overlap_tokens or CHUNK_OVERLAP_TOKENS
+    if overlap_tokens is None:
+        overlap_tokens = CHUNK_OVERLAP_TOKENS
 
     chunk_size_chars = _tokens_to_chars(chunk_size_tokens)
     overlap_chars = _tokens_to_chars(overlap_tokens)
