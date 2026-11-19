@@ -67,6 +67,16 @@ ANTHROPIC_MODEL_MAX_TOKENS = {
 DEFAULT_ANTHROPIC_MAX_TOKENS = 8192
 
 
+# Requests the API rejected as malformed or unauthorized. Resending them cannot succeed.
+_CLIENT_ERRORS: tuple[type[Exception], ...] = (
+    anthropic.BadRequestError,
+    anthropic.AuthenticationError,
+    anthropic.PermissionDeniedError,
+    anthropic.NotFoundError,
+    anthropic.UnprocessableEntityError,
+)
+
+
 class AnthropicClient(LLMClient):
     """
     A client for the Anthropic LLM.
@@ -393,9 +403,12 @@ class AnthropicClient(LLMClient):
                     # If no validation needed, return the response
                     return response
 
-                except (RateLimitError, RefusalError):
-                    # These errors should not trigger retries
-                    span.set_status('error', str(last_error))
+                except (RateLimitError, RefusalError, *_CLIENT_ERRORS) as e:
+                    # These errors should not trigger retries. A 400 (prompt too long,
+                    # bad parameter), 401, 403, 404 or 422 is rejected the same way on
+                    # every attempt, and the retry below would resend it with a longer
+                    # prompt each time.
+                    span.set_status('error', str(e))
                     raise
                 except Exception as e:
                     last_error = e

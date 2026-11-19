@@ -29,10 +29,12 @@ from .errors import RateLimitError
 
 if TYPE_CHECKING:
     from google import genai
+    from google.genai import errors as genai_errors
     from google.genai import types
 else:
     try:
         from google import genai
+        from google.genai import errors as genai_errors
         from google.genai import types
     except ImportError:
         # If gemini client is not installed, raise an ImportError
@@ -437,6 +439,14 @@ class GeminiClient(LLMClient):
                     raise e
                 except Exception as e:
                     last_error = e
+
+                    # A 4xx other than 429 (prompt too long, bad parameter, bad key, unknown
+                    # model) is rejected the same way on every attempt; resending it with a
+                    # longer prompt only pays for the input again.
+                    cause = e.__cause__ if e.__cause__ is not None else e
+                    if isinstance(cause, genai_errors.ClientError):
+                        span.set_status('error', str(e))
+                        raise
 
                     # Check if this is a safety block - these typically shouldn't be retried
                     error_text = str(e) or (str(e.__cause__) if e.__cause__ else '')
