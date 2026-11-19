@@ -62,6 +62,58 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
             await session.execute_write(delete_group_ids)
 
 
+async def delete_entities_mentioned_only_by(
+    driver: GraphDriver, episode_uuid: str, entity_uuids: list[str]
+) -> set[str]:
+    """
+    Delete the entities in entity_uuids that no episode other than episode_uuid mentions.
+
+    The mention check and the delete run in one statement, so an entity that a concurrent
+    add_episode has mentioned since the caller last counted its mentions is kept. FalkorDB
+    runs each query on its own. On Neo4j a check alone only narrows the window under read
+    committed, so the statement first takes a write lock on each entity (SET, then REMOVE, a
+    property), which makes it wait for a transaction that is writing a mention of that entity
+    and then see the mention.
+
+    Returns the uuids of the deleted entities.
+    """
+    if not entity_uuids:
+        return set()
+
+    check_and_delete: LiteralString = """
+        OPTIONAL MATCH (other:Episodic)-[:MENTIONS]->(n)
+        WHERE other.uuid <> $episode_uuid
+        WITH n, count(other) AS other_mentions
+        WHERE other_mentions = 0
+        WITH n, n.uuid AS uuid
+        DETACH DELETE n
+        RETURN uuid
+    """
+    match driver.provider:
+        case GraphProvider.FALKORDB:
+            query: LiteralString = (
+                """
+                MATCH (n:Entity)
+                WHERE n.uuid IN $uuids
+                """
+                + check_and_delete
+            )
+        case _:  # Neo4j, Neptune
+            query = (
+                """
+                MATCH (n:Entity)
+                WHERE n.uuid IN $uuids
+                SET n._remove_episode_lock = true
+                REMOVE n._remove_episode_lock
+                WITH n
+                """
+                + check_and_delete
+            )
+
+    records, _, _ = await driver.execute_query(query, uuids=entity_uuids, episode_uuid=episode_uuid)
+    return {record['uuid'] for record in records}
+
+
 async def retrieve_episodes(
     driver: GraphDriver,
     reference_time: datetime,
