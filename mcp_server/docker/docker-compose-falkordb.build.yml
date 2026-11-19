@@ -1,0 +1,12 @@
+# Local build override for docker-compose-falkordb.yml: builds the MCP image
+# from source and mounts the repo config so edits apply without a rebuild.
+#   docker compose -f docker-compose-falkordb.yml -f docker-compose-falkordb.build.yml up --build
+services:
+  graphiti-mcp:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.standalone
+    environment:
+      - CONFIG_PATH=/app/mcp/config/config.yaml
+    volumes:
+      - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro

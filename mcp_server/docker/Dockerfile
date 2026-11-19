@@ -136,6 +136,7 @@ redis-server \
   --bind 0.0.0.0 \
   --port 6379 \
   --dir /var/lib/falkordb/data \
+  --appendonly yes \
   --daemonize yes
 
 # Wait for FalkorDB to be ready
