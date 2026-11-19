@@ -40,6 +40,16 @@ DEFAULT_REASONING = 'auto'
 DEFAULT_VERBOSITY = 'low'
 
 
+# Requests the API rejected as malformed or unauthorized. Resending them cannot succeed.
+_CLIENT_ERRORS: tuple[type[Exception], ...] = (
+    openai.BadRequestError,
+    openai.AuthenticationError,
+    openai.PermissionDeniedError,
+    openai.NotFoundError,
+    openai.UnprocessableEntityError,
+)
+
+
 class BaseOpenAIClient(LLMClient):
     """
     Base client class for OpenAI-compatible APIs (OpenAI and Azure OpenAI).
@@ -312,9 +322,12 @@ class BaseOpenAIClient(LLMClient):
                     self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
 
                     return response
-                except (RateLimitError, RefusalError):
-                    # These errors should not trigger retries
-                    span.set_status('error', str(last_error))
+                except (RateLimitError, RefusalError, *_CLIENT_ERRORS) as e:
+                    # These errors should not trigger retries. A 400 (context too long,
+                    # bad parameter), 401, 403, 404 or 422 is rejected the same way on
+                    # every attempt, and the retry below would resend it with a longer
+                    # prompt each time.
+                    span.set_status('error', str(e))
                     raise
                 except (
                     openai.APITimeoutError,
