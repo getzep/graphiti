@@ -51,7 +51,6 @@ dev = [
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
     "langgraph>=1.0.10",
-    "langchain-anthropic>=0.2.4",
     "langsmith>=0.1.108",
     "langchain-openai>=0.2.6",
     "voyageai>=0.2.3",
