@@ -230,8 +230,8 @@ COMMUNITY_EDGE_RETURN = """
 
 
 HAS_EPISODE_EDGE_SAVE = """
-    MATCH (saga:Saga {uuid: $saga_uuid})
-    MATCH (episode:Episodic {uuid: $episode_uuid})
+    MATCH (saga:Saga {uuid: $saga_uuid, group_id: $group_id})
+    MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
     MERGE (saga)-[e:HAS_EPISODE {uuid: $uuid}]->(episode)
     SET
         e.group_id = $group_id,
@@ -249,8 +249,8 @@ HAS_EPISODE_EDGE_RETURN = """
 
 
 NEXT_EPISODE_EDGE_SAVE = """
-    MATCH (source_episode:Episodic {uuid: $source_episode_uuid})
-    MATCH (target_episode:Episodic {uuid: $target_episode_uuid})
+    MATCH (source_episode:Episodic {uuid: $source_episode_uuid, group_id: $group_id})
+    MATCH (target_episode:Episodic {uuid: $target_episode_uuid, group_id: $group_id})
     MERGE (source_episode)-[e:NEXT_EPISODE {uuid: $uuid}]->(target_episode)
     SET
         e.group_id = $group_id,

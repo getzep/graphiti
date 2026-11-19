@@ -27,6 +27,7 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
+from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.ingestion import phases
 from graphiti_core.ingestion.change_set import ChangeSet
 from graphiti_core.ingestion.config import ConcurrentIngestionConfig
@@ -352,10 +353,17 @@ class Harness:
                 node.summary = f'{node.summary}+{episode.uuid}'
             return nodes
 
-        async def episodes_by_uuids(driver, uuids):
-            return [
+        async def episodes_by_uuids(driver, uuids, group_id=None, *, require_all=False):
+            episodes = [
                 deepcopy(self.graph.episodes[uuid]) for uuid in uuids if uuid in self.graph.episodes
             ]
+            if group_id is not None:
+                episodes = [episode for episode in episodes if episode.group_id == group_id]
+            found_uuids = {episode.uuid for episode in episodes}
+            if require_all and any(uuid not in found_uuids for uuid in uuids):
+                missing_uuid = next(uuid for uuid in uuids if uuid not in found_uuids)
+                raise NodeNotFoundError(missing_uuid)
+            return episodes
 
         self.graphiti.retrieve_episodes = AsyncMock(return_value=[])
         monkeypatch.setattr(EpisodicNode, 'get_by_uuids', episodes_by_uuids)
