@@ -606,7 +606,11 @@ async def resolve_extracted_edges(
                     related_edges,
                     existing_edges,
                     episode,
-                    extracted_edge_types,
+                    # An empty map is how the resolver learns that a configured schema
+                    # omits this relation, and it clears attributes. When the caller
+                    # configured no schema at all, nothing is omitted, so pass None and
+                    # keep the attributes of a stored edge that the new edge merges into.
+                    extracted_edge_types if edge_types else None,
                     **resolver_kwargs,
                 )
                 for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
