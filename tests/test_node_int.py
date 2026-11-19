@@ -19,6 +19,8 @@ from uuid import uuid4
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.namespaces.nodes import NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -31,6 +33,7 @@ from tests.helpers_test import (
     assert_episodic_node_equals,
     get_node_count,
     group_id,
+    group_id_2,
 )
 
 created_at = datetime.now()
@@ -227,3 +230,86 @@ async def test_episodic_node(sample_episodic_node, graph_driver):
     assert node_count == 0
 
     await graph_driver.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('namespace_name', 'node_label'),
+    [
+        ('entity', 'Entity'),
+        ('episode', 'Episodic'),
+        ('community', 'Community'),
+        ('saga', 'Saga'),
+    ],
+)
+@pytest.mark.parametrize('delete_by', ['group_id', 'uuids'])
+async def test_namespace_batch_delete(
+    graph_driver, mock_embedder, namespace_name, node_label, delete_by
+):
+    if graph_driver.provider != GraphProvider.NEO4J:
+        pytest.skip('Neo4j namespace batch deletion regression')
+
+    target_uuids = [str(uuid4()), str(uuid4())]
+    same_group_uuid, other_group_uuid, other_label_uuid = (str(uuid4()) for _ in range(3))
+    all_uuids = [*target_uuids, same_group_uuid, other_group_uuid, other_label_uuid]
+    other_label = 'Episodic' if node_label == 'Entity' else 'Entity'
+    nodes = [
+        {'uuid': uuid, 'group_id': group_id, 'name': 'Batch delete target'}
+        for uuid in [*target_uuids, same_group_uuid]
+    ]
+    nodes.append({'uuid': other_group_uuid, 'group_id': group_id_2, 'name': 'Other group control'})
+
+    try:
+        await graph_driver.execute_query(
+            f'UNWIND $nodes AS node CREATE (n:{node_label}) SET n = node', nodes=nodes
+        )
+        await graph_driver.execute_query(
+            f'CREATE (n:{other_label} {{uuid: $uuid, group_id: $group_id}})',
+            uuid=other_label_uuid,
+            group_id=group_id,
+        )
+
+        namespace = getattr(NodeNamespace(graph_driver, mock_embedder), namespace_name)
+        if delete_by == 'group_id':
+            await namespace.delete_by_group_id(group_id, batch_size=1)
+            expected_uuids = {other_group_uuid, other_label_uuid}
+        else:
+            await namespace.delete_by_uuids(target_uuids, batch_size=1)
+            expected_uuids = {same_group_uuid, other_group_uuid, other_label_uuid}
+
+        records, _, _ = await graph_driver.execute_query(
+            'MATCH (n) WHERE n.uuid IN $uuids RETURN n.uuid AS uuid', uuids=all_uuids
+        )
+        assert {record['uuid'] for record in records} == expected_uuids
+    finally:
+        await graph_driver.execute_query(
+            'MATCH (n) WHERE n.uuid IN $uuids DETACH DELETE n', uuids=all_uuids
+        )
+
+
+@pytest.mark.asyncio
+async def test_namespace_batch_delete_rollback(graph_driver, mock_embedder):
+    if graph_driver.provider != GraphProvider.NEO4J:
+        pytest.skip('Neo4j namespace batch deletion regression')
+
+    uuid = str(uuid4())
+    try:
+        await graph_driver.execute_query(
+            'CREATE (:Entity {uuid: $uuid, group_id: $group_id})', uuid=uuid, group_id=group_id
+        )
+        nodes = NodeNamespace(graph_driver, mock_embedder)
+        with pytest.raises(RuntimeError, match='rollback namespace deletion'):
+            async with graph_driver.transaction() as tx:
+                await nodes.entity.delete_by_uuids([uuid], tx=tx, batch_size=1)
+                result = await tx.run(
+                    'MATCH (n:Entity {uuid: $uuid}) RETURN count(n) AS count', uuid=uuid
+                )
+                record = await result.single()
+                assert record['count'] == 0
+                raise RuntimeError('rollback namespace deletion')
+
+        assert await get_node_count(graph_driver, [uuid]) == 1
+    finally:
+        await graph_driver.execute_query(
+            'MATCH (n) WHERE n.uuid = $uuid DETACH DELETE n', uuid=uuid
+        )
