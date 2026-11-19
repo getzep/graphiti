@@ -1149,6 +1149,7 @@ version = "0.31.2"
 source = { editable = "." }
 dependencies = [
     { name = "certifi" },
+    { name = "httpx" },
     { name = "neo4j" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1239,6 +1240,7 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.62.0" },
     { name = "groq", marker = "extra == 'dev'", specifier = ">=0.2.0" },
     { name = "groq", marker = "extra == 'groq'", specifier = ">=0.2.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5" },
     { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.2.4" },
     { name = "langchain-anthropic", marker = "extra == 'dev'", specifier = ">=0.2.4" },
