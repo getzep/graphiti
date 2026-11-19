@@ -93,6 +93,9 @@ EPISODIC_NODE_RETURN = """
     e.entity_edges AS entity_edges
 """
 
+# The save queries of this provider store `entity_edges` as one string joined with '|'
+# (see `get_episode_node_save_query` / `get_episode_node_save_bulk_query`), so the return
+# query must split on that same separator.
 EPISODIC_NODE_RETURN_NEPTUNE = """
     e.content AS content,
     e.created_at AS created_at,
@@ -102,7 +105,7 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
     e.group_id AS group_id,
     e.source_description AS source_description,
     e.source AS source,
-    split(e.entity_edges, ",") AS entity_edges
+    split(e.entity_edges, "|") AS entity_edges
 """
 
 
