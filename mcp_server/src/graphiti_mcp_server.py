@@ -751,7 +751,7 @@ async def delete_episode(uuid: str, group_id: str | None = None) -> SuccessRespo
         )
         # remove_episode cascades cleanup of episode-created entities/edges,
         # unlike EpisodicNode.delete which would orphan them.
-        await scoped_client.remove_episode(uuid)
+        await scoped_client.remove_episode(uuid, group_id=effective_group_id or None)
         return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
@@ -1085,7 +1085,9 @@ async def get_episode_entities(
         scoped_client = (
             _client_for_group(client, effective_group_id) if effective_group_id else client
         )
-        results = await scoped_client.get_nodes_and_edges_by_episode(episode_uuids)
+        results = await scoped_client.get_nodes_and_edges_by_episode(
+            episode_uuids, group_id=effective_group_id or None
+        )
 
         return EpisodeEntitiesResponse(
             message=f'Retrieved provenance for {len(episode_uuids)} episode(s)',
