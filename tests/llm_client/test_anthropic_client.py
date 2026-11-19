@@ -29,6 +29,7 @@ from graphiti_core.llm_client.anthropic_client import (
     AnthropicClient,
     AnthropicModel,
 )
+from graphiti_core.llm_client.client import get_extraction_language_instruction
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.errors import RateLimitError, RefusalError
 from graphiti_core.prompts.models import Message
@@ -236,6 +237,35 @@ class TestAnthropicClientGenerateResponse:
         tools, tool_choice = anthropic_client._create_tool()
         assert len(tools) == 1
         assert tools[0]['name'] == 'generic_json_output'
+
+    @pytest.mark.asyncio
+    async def test_system_message_carries_extraction_language_instruction(
+        self, anthropic_client, mock_async_anthropic
+    ):
+        """The Anthropic system message must carry the shared extraction-language instruction.
+
+        OpenAI, OpenAI-compatible and Gemini clients all append
+        ``get_extraction_language_instruction(group_id)``; Anthropic accepted ``group_id``
+        but silently dropped the instruction.
+        """
+        content_item = MagicMock()
+        content_item.type = 'tool_use'
+        content_item.input = {'test_field': 'test_value'}
+
+        mock_response = MagicMock()
+        mock_response.content = [content_item]
+        mock_async_anthropic.messages.create.return_value = mock_response
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        await anthropic_client.generate_response(
+            messages=messages, response_model=ResponseModel, group_id='group_a'
+        )
+
+        system_prompt = mock_async_anthropic.messages.create.call_args.kwargs['system']
+        assert get_extraction_language_instruction('group_a') in system_prompt
 
     @pytest.mark.asyncio
     async def test_validation_error_retry(self, anthropic_client, mock_async_anthropic):
