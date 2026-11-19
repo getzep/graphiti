@@ -286,18 +286,29 @@ class EpisodicNode(Node):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str, group_id: str | None = None):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.episodic_node_get_by_uuid(
+                episode = await driver.graph_operations_interface.episodic_node_get_by_uuid(
                     cls, driver, uuid
                 )
             except NotImplementedError:
                 pass
+            else:
+                if group_id is not None and episode.group_id != group_id:
+                    raise NodeNotFoundError(uuid)
+                return episode
+
+        group_filter: LiteralString = (
+            'WHERE e.group_id = $group_id' if group_id is not None else ''
+        )
 
         records, _, _ = await driver.execute_query(
             """
             MATCH (e:Episodic {uuid: $uuid})
+            """
+            + group_filter
+            + """
             RETURN
             """
             + (
@@ -306,10 +317,13 @@ class EpisodicNode(Node):
                 else EPISODIC_NODE_RETURN
             ),
             uuid=uuid,
+            group_id=group_id,
             routing_='r',
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
+        if group_id is not None:
+            episodes = [episode for episode in episodes if episode.group_id == group_id]
 
         if len(episodes) == 0:
             raise NodeNotFoundError(uuid)
@@ -317,19 +331,42 @@ class EpisodicNode(Node):
         return episodes[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+    async def get_by_uuids(
+        cls,
+        driver: GraphDriver,
+        uuids: list[str],
+        group_id: str | None = None,
+        *,
+        require_all: bool = False,
+    ):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.episodic_node_get_by_uuids(
+                episodes = await driver.graph_operations_interface.episodic_node_get_by_uuids(
                     cls, driver, uuids
                 )
             except NotImplementedError:
                 pass
+            else:
+                if group_id is not None:
+                    episodes = [episode for episode in episodes if episode.group_id == group_id]
+                if require_all:
+                    found_uuids = {episode.uuid for episode in episodes}
+                    for uuid in uuids:
+                        if uuid not in found_uuids:
+                            raise NodeNotFoundError(uuid)
+                return episodes
+
+        group_filter: LiteralString = (
+            'AND e.group_id = $group_id' if group_id is not None else ''
+        )
 
         records, _, _ = await driver.execute_query(
             """
             MATCH (e:Episodic)
             WHERE e.uuid IN $uuids
+            """
+            + group_filter
+            + """
             RETURN DISTINCT
             """
             + (
@@ -338,10 +375,19 @@ class EpisodicNode(Node):
                 else EPISODIC_NODE_RETURN
             ),
             uuids=uuids,
+            group_id=group_id,
             routing_='r',
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
+        if group_id is not None:
+            episodes = [episode for episode in episodes if episode.group_id == group_id]
+
+        if require_all:
+            found_uuids = {episode.uuid for episode in episodes}
+            for uuid in uuids:
+                if uuid not in found_uuids:
+                    raise NodeNotFoundError(uuid)
 
         return episodes
 
