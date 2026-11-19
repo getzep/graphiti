@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock
 
@@ -21,7 +22,7 @@ import numpy as np
 import pytest
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
-from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
+from graphiti_core.edges import CommunityEdge, Edge, EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
@@ -958,6 +959,178 @@ async def test_remove_episode_keeps_old_summary_when_rebuild_fails(
         record.levelname == 'ERROR' and alice.uuid in record.getMessage()
         for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_remove_episode_keeps_entities_mentioned_by_concurrent_add(
+    graph_driver,
+    mock_llm_client,
+    mock_embedder,
+    mock_cross_encoder_client,
+    monkeypatch,
+):
+    # Regression test for #2159. remove_episode counts the MENTIONS of each entity the
+    # episode mentions, then deletes the entities only that episode mentions. An
+    # add_episode that writes in between must not lose its mentions and facts.
+    mock_llm_client.generate_response = AsyncMock(
+        return_value={
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice reviewed the report of Bob.'},
+                {'name': 'Bob', 'summary': 'Bob wrote a report.'},
+            ]
+        }
+    )
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now()
+    episode_to_remove = EpisodicNode(
+        name='episode_to_remove',
+        group_id=group_id,
+        labels=[],
+        created_at=now - timedelta(days=1),
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice mentioned OLD_MARKER to Bob and Carol.',
+        valid_at=now - timedelta(days=1),
+    )
+    added_episode = EpisodicNode(
+        name='added_episode',
+        group_id=group_id,
+        labels=[],
+        created_at=now,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice reviewed the report of Bob.',
+        valid_at=now,
+    )
+    alice = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Alice has marker OLD_MARKER',
+    )
+    bob = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Bob summary',
+    )
+    carol = EntityNode(
+        name='Carol',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Carol summary',
+    )
+    await alice.generate_name_embedding(mock_embedder)
+    await bob.generate_name_embedding(mock_embedder)
+    carol.name_embedding = [0.3] * 384
+
+    removed_edge = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='has_marker',
+        fact='Alice has marker OLD_MARKER',
+        episodes=[episode_to_remove.uuid],
+        valid_at=now - timedelta(days=1),
+        group_id=group_id,
+    )
+    added_edge = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='reviewed',
+        fact='Alice reviewed the report of Bob',
+        episodes=[added_episode.uuid],
+        valid_at=now,
+        group_id=group_id,
+    )
+    removed_edge.fact_embedding = [0.1] * 384
+    added_edge.fact_embedding = [0.2] * 384
+    episode_to_remove.entity_edges = [removed_edge.uuid]
+    added_episode.entity_edges = [added_edge.uuid]
+
+    def mentions(episode: EpisodicNode, nodes: list[EntityNode]) -> list[EpisodicEdge]:
+        return [
+            EpisodicEdge(
+                source_node_uuid=episode.uuid,
+                target_node_uuid=node.uuid,
+                created_at=now,
+                group_id=group_id,
+            )
+            for node in nodes
+        ]
+
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [episode_to_remove],
+        mentions(episode_to_remove, [alice, bob, carol]),
+        [alice, bob, carol],
+        [removed_edge],
+        mock_embedder,
+    )
+    added_mentions = mentions(added_episode, [alice, bob])
+
+    # Force the order count -> add_episode's bulk write -> delete. remove_episode deletes
+    # the episode's facts after it has counted mentions and before it deletes entities,
+    # so it is held there until the concurrent bulk write has returned.
+    counted = asyncio.Event()
+    written = asyncio.Event()
+    delete_edges = Edge.delete_by_uuids
+
+    async def delete_edges_then_wait_for_write(driver, uuids):
+        await delete_edges(driver, uuids)
+        counted.set()
+        await asyncio.wait_for(written.wait(), timeout=30)
+
+    monkeypatch.setattr(Edge, 'delete_by_uuids', staticmethod(delete_edges_then_wait_for_write))
+
+    async def add_after_count():
+        await asyncio.wait_for(counted.wait(), timeout=30)
+        try:
+            await add_nodes_and_edges_bulk(
+                graph_driver,
+                [added_episode],
+                added_mentions,
+                [alice, bob],
+                [added_edge],
+                mock_embedder,
+            )
+        finally:
+            written.set()
+
+    await asyncio.gather(graphiti.remove_episode(episode_to_remove.uuid), add_after_count())
+
+    # The added episode, its fact, its mentions and the entities it mentions survive.
+    assert await get_node_count(graph_driver, [added_episode.uuid, alice.uuid, bob.uuid]) == 3
+    assert (
+        await get_edge_count(
+            graph_driver, [added_edge.uuid, *[mention.uuid for mention in added_mentions]]
+        )
+        == 3
+    )
+    # The removed episode, its fact and the entity only it mentioned are still deleted.
+    assert await get_node_count(graph_driver, [episode_to_remove.uuid, carol.uuid]) == 0
+    assert await get_edge_count(graph_driver, [removed_edge.uuid]) == 0
+    # The surviving entities are rebuilt from the added episode only.
+    prompt_texts = [
+        '\n'.join(message.content for message in call.args[0])
+        for call in mock_llm_client.generate_response.await_args_list
+    ]
+    assert len(prompt_texts) == 2
+    assert all(added_episode.content in prompt_text for prompt_text in prompt_texts)
+    assert all('OLD_MARKER' not in prompt_text for prompt_text in prompt_texts)
+    retrieved_alice = await EntityNode.get_by_uuid(graph_driver, alice.uuid)
+    assert retrieved_alice.summary == 'Alice reviewed the report of Bob.'
 
 
 @pytest.mark.asyncio
