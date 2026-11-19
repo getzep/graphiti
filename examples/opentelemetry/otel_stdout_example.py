@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from logging import INFO
 
@@ -26,7 +27,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 
 from graphiti_core import Graphiti
-from graphiti_core.driver.kuzu_driver import KuzuDriver
 from graphiti_core.nodes import EpisodeType
 
 logging.basicConfig(
@@ -51,9 +51,15 @@ async def main():
 
     print('OpenTelemetry stdout tracing enabled\n')
 
-    kuzu_driver = KuzuDriver()
+    neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
+    neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
+    neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
     graphiti = Graphiti(
-        graph_driver=kuzu_driver, tracer=otel_tracer, trace_span_prefix='graphiti.example'
+        neo4j_uri,
+        neo4j_user,
+        neo4j_password,
+        tracer=otel_tracer,
+        trace_span_prefix='graphiti.example',
     )
 
     try:

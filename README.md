@@ -163,7 +163,7 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
-  Serverless collection (serves as the full text search backend) / Kuzu 0.11.2 (**deprecated**, see below)
+  Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -207,22 +207,6 @@ uv add graphiti-core[falkordb]
 pip install graphiti-core[falkordblite]
 # or with uv
 uv add graphiti-core[falkordblite]
-```
-
-### Installing with Kuzu Support
-
-> [!WARNING]
-> **Kuzu is deprecated** and will be removed in a future release — the upstream Kuzu project is no longer
-> maintained. New projects should use Neo4j or FalkorDB. The driver still ships for now but emits a
-> `DeprecationWarning`.
-
-If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
-
-```bash
-pip install graphiti-core[kuzu]
-
-# or with uv
-uv add graphiti-core[kuzu]
 ```
 
 ### Installing with Amazon Neptune Support
@@ -283,7 +267,7 @@ performance.
 For a complete working example, see the [Quickstart Example](examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
 
-1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
+1. Connecting to a Neo4j, Amazon Neptune, or FalkorDB database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -417,23 +401,6 @@ driver = FalkorDriver(
 # from redislite.async_falkordb_client import AsyncFalkorDB
 # falkordb_client = AsyncFalkorDB(dbfilename='/path/to/database.db')
 # driver = FalkorDriver(falkor_db=falkordb_client)
-
-# Pass the driver to Graphiti
-graphiti = Graphiti(graph_driver=driver)
-```
-
-#### Kuzu
-
-> [!WARNING]
-> Kuzu is **deprecated** (upstream project unmaintained) and will be removed in a future release. Prefer Neo4j or
-> FalkorDB.
-
-```python
-from graphiti_core import Graphiti
-from graphiti_core.driver.kuzu_driver import KuzuDriver
-
-# Create a Kuzu driver
-driver = KuzuDriver(db="/tmp/graphiti.kuzu")
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
@@ -642,6 +609,37 @@ When using smaller or local models:
 - Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
   servers and some providers have limited concurrency.
 
+## Identity properties
+
+Use `identity_properties` to match entities by one or more attributes. Each entity type must exist in
+`entity_types`, and each identity property must be a field on that type. Graphiti extracts these fields
+before it resolves nodes. This lookup is supported by Neo4j and FalkorDB.
+
+After you create a `Graphiti` instance, pass the entity model and its identity fields to `add_episode`:
+
+```python
+from datetime import datetime, timezone
+
+from pydantic import BaseModel
+
+from graphiti_core.nodes import EpisodeType
+
+
+class Person(BaseModel):
+    email: str
+
+
+await graphiti.add_episode(
+    name='Conversation',
+    episode_body='Alex uses alex@example.com.',
+    source_description='chat',
+    reference_time=datetime.now(timezone.utc),
+    source=EpisodeType.message,
+    entity_types={'Person': Person},
+    identity_properties={'Person': ['email']},
+)
+```
+
 ## Configurable Prompts
 
 Graphiti lets you override LLM prompt builders per client instance. Override callables must return
@@ -779,6 +777,50 @@ use it for extraction, summaries, or other generation tasks.
 See the [OpenAI Decisions FalkorDB example](examples/openai_decisions/) for a
 runnable example.
 
+## Concurrent Ingestion for One Graph
+
+By default, Graphiti ingests the episodes of one graph (`group_id`) one at a time, because each episode must see
+the entities and the facts of the episodes before it. Concurrent ingestion is an opt-in mode that runs the
+extraction and the resolution of up to `window` episodes of one graph at the same time. Each episode then commits
+in the order of its `add_episode` call. At the commit, Graphiti compares the result of the episode with the commits
+that the analysis did not see, and repairs only the items that collide.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.ingestion import ConcurrentIngestionConfig
+
+graphiti = Graphiti(
+    graph_driver=driver,
+    concurrent_ingestion=ConcurrentIngestionConfig(window=4),
+)
+
+# Start the calls in the order of the episodes. Each call returns after its commit and its enrichment.
+results = await asyncio.gather(*[graphiti.add_episode(**episode) for episode in episodes])
+```
+
+Notes:
+
+- The mode is off when `concurrent_ingestion` is `None`. Serial ingestion is then the same as before.
+- `enabled_for_group` selects the graphs that use the mode. The other graphs use serial ingestion.
+- `window` is the number of episodes of one graph that are in progress at one time. Each episode also uses up to
+  `SEMAPHORE_LIMIT` concurrent LLM calls, so the mode can send `window x SEMAPHORE_LIMIT` calls at one time.
+  Decrease one of the two values if your LLM provider returns `429` rate limit errors.
+- The default state store is in memory and is for one process. `SQLiteIngestionStateStore` keeps the state in a
+  file, so that more than one process on one machine can ingest into the same graph. A host application can supply
+  its own store with the `IngestionStateStore` interface.
+- `update_communities=True` is not available in this mode. Call `build_communities` after the ingestion.
+- `identity_properties` works in this mode. Give the same value in each call for one graph, because the commit of a
+  recovered unit uses the value of the call that recovers it.
+- The graph of a window larger than 1 can be different from the graph of serial ingestion, because the LLM sees the
+  episodes in a different context. The mode does not guarantee an equal graph.
+- The tests of this mode run on an in-memory graph and on embedded FalkorDB. The mode is not tested on Neo4j or
+  Amazon Neptune.
+
+See the [specification](spec/concurrent-group-ingestion.md) for the design, the phase functions for a host
+application with its own orchestration, the telemetry, and the limits. See the
+[example](examples/concurrent_ingestion/) for a script that ingests a JSONL file with serial or concurrent
+ingestion.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
@@ -799,7 +841,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
+  - Database backend (Neo4j, FalkorDB, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
