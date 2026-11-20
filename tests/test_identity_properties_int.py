@@ -128,7 +128,7 @@ async def test_resolve_nodes_matches_identity_property_without_llm(
         attributes={'email': 'alex@example.com'},
     )
 
-    async def no_semantic_candidates(_clients, nodes):
+    async def no_semantic_candidates(_clients, nodes, reuse_name_embeddings=False):
         return [[] for _ in nodes]
 
     monkeypatch.setattr(

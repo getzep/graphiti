@@ -173,6 +173,9 @@ def mock_embedder():
             raise ValueError(f'Unsupported input type: {type(input_data)}')
 
     mock_model.create.side_effect = mock_embed
+    mock_model.create_batch.side_effect = lambda input_data_list: [
+        mock_embed(query) for query in input_data_list
+    ]
     return mock_model
 
 
