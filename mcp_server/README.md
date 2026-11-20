@@ -343,7 +343,7 @@ uv run main.py --config config/config-docker-falkordb.yaml
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
 - `--database-provider`: Database provider to use (falkordb, neo4j) - default: falkordb
 - `--model`: Model name to use with the LLM client
-- `--temperature`: Temperature setting for the LLM (0.0-2.0)
+- `--temperature`: Temperature setting for the LLM (0.0-2.0). The Anthropic provider ignores this setting.
 - `--transport`: Choose the transport method (http or stdio, default: http)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "main"
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup
