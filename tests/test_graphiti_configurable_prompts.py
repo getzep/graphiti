@@ -88,6 +88,48 @@ async def test_concurrent_ingestion_receives_resolved_knowledge():
     assert ingestor.single_episode_kwargs['custom_extraction_instructions'] == 'single knowledge'
     assert ingestor.bulk_episode_kwargs['custom_extraction_instructions'] == 'bulk knowledge'
 
+    with pytest.warns(DeprecationWarning, match='custom_extraction_instructions is deprecated'):
+        await graphiti.add_episode(
+            name='single alias',
+            episode_body='single alias body',
+            source_description='test',
+            reference_time=datetime.now(UTC),
+            custom_extraction_instructions='single alias knowledge',
+        )
+    with pytest.warns(DeprecationWarning, match='custom_extraction_instructions is deprecated'):
+        await graphiti.add_episode_bulk(
+            bulk_episodes=[],
+            custom_extraction_instructions='bulk alias knowledge',
+        )
+
+    assert (
+        ingestor.single_episode_kwargs['custom_extraction_instructions'] == 'single alias knowledge'
+    )
+    assert ingestor.bulk_episode_kwargs['custom_extraction_instructions'] == 'bulk alias knowledge'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('method', ['single', 'bulk'])
+async def test_graphiti_rejects_knowledge_and_deprecated_alias_together(method):
+    graphiti = _make_graphiti()
+
+    with pytest.raises(ValueError, match='Pass either knowledge or custom_extraction_instructions'):
+        if method == 'single':
+            await graphiti.add_episode(
+                name='episode',
+                episode_body='body',
+                source_description='test',
+                reference_time=datetime.now(UTC),
+                knowledge='new argument',
+                custom_extraction_instructions='deprecated alias',
+            )
+        else:
+            await graphiti.add_episode_bulk(
+                bulk_episodes=[],
+                knowledge='new argument',
+                custom_extraction_instructions='deprecated alias',
+            )
+
 
 def test_graphiti_stores_custom_prompt_library():
     custom = create_prompt_library({'extract_nodes': {'extract_message': _custom_extract_message}})

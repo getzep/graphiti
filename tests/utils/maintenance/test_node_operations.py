@@ -186,6 +186,29 @@ async def test_resolve_nodes_exact_match_skips_llm(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_resolve_extracted_nodes_can_disable_shared_neighbor_name_gate(monkeypatch):
+    clients, llm_generate = _make_clients()
+    candidate = EntityNode(name='Joe Michaels', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='Joe Michaels', group_id='group', labels=['Entity'])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidate]]),
+    )
+
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+        require_shared_neighbor_for_name_match=False,
+    )
+
+    assert resolved[0].uuid == candidate.uuid
+    assert uuid_map[extracted.uuid] == candidate.uuid
+    llm_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_resolve_nodes_exact_match_promotes_generic_candidate_type(monkeypatch):
     clients, llm_generate = _make_clients()
 
@@ -213,21 +236,17 @@ async def test_resolve_nodes_exact_match_promotes_generic_candidate_type(monkeyp
     llm_generate.assert_not_awaited()
 
 
-def test_identity_type_for_node_uses_deepest_type_with_identity_properties():
+def test_identity_type_for_node_uses_label_with_identity_properties():
     node = EntityNode(name='Acme', group_id='group', labels=['Entity', 'Party', 'Company'])
     identity_properties = {'Party': ['party_id'], 'Company': ['company_id']}
 
     assert _identity_type_for_node(node, identity_properties) == 'Company'
 
 
-def test_identity_type_for_node_scans_configured_labels():
-    node = EntityNode(name='Acme', group_id='group', labels=['Entity', 'Person'])
-    entity_types = {'Person': _entity_type('Person')}
+def test_identity_type_for_node_uses_matching_label_when_other_labels_do_not_match():
+    node = EntityNode(name='Acme', group_id='group', labels=['Entity', 'Party', 'Company'])
 
-    assert (
-        _identity_type_for_node(node, {'Person': ['email']}, entity_types=entity_types) == 'Person'
-    )
-    assert _identity_type_for_node(node, {'Company': ['domain']}, entity_types=entity_types) is None
+    assert _identity_type_for_node(node, {'Party': ['party_id']}) == 'Party'
 
 
 @pytest.mark.asyncio

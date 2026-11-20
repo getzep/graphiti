@@ -7,7 +7,10 @@ from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.llm_client import LLMRuntime, LLMTransport
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.nodes import EpisodeType, EpisodicNode
-from graphiti_core.prompts.extract_nodes_and_edges import _build_extract_user_prompt
+from graphiti_core.prompts.extract_nodes_and_edges import (
+    _build_extract_user_prompt,
+    extract_message,
+)
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.combined_extraction import (
     TIMESTAMP_BATCH_SIZE,
@@ -823,3 +826,19 @@ async def test_combined_extraction_omits_knowledge_block_when_empty():
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
     assert '<KNOWLEDGE>' not in prompt_text
+
+
+def test_combined_extraction_uses_default_prompt():
+    system, user = extract_message(
+        {
+            'entity_types': '[]',
+            'previous_episodes': [],
+            'episode_content': 'Alice works at Acme.',
+        }
+    )
+
+    assert system.content.startswith(
+        'You are an expert knowledge graph extraction specialist for an AI agent memory system.'
+    )
+    assert 'The original conversation will NOT be available at retrieval time' in system.content
+    assert 'Entity names must be NOUN PHRASES' in user.content

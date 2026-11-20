@@ -751,3 +751,78 @@ async def test_extract_nodes_and_edges_bulk_knowledge_multiple_episodes(monkeypa
 
     for call in extract_combined_calls:
         assert call['knowledge'] == knowledge
+
+
+@pytest.mark.asyncio
+async def test_extract_nodes_and_edges_bulk_passes_knowledge_to_extract_nodes(monkeypatch):
+    clients = _make_clients()
+    episode = _make_episode('1')
+    knowledge = 'Extract person entities.'
+    extracted_knowledge = []
+
+    async def mock_extract_nodes(*args, knowledge=None, **kwargs):
+        extracted_knowledge.append(knowledge)
+        return [], {}
+
+    monkeypatch.setattr(bulk_utils, 'extract_nodes', mock_extract_nodes)
+    monkeypatch.setattr(bulk_utils, 'extract_edges', AsyncMock(return_value=([], [])))
+
+    await extract_nodes_and_edges_bulk(
+        clients,
+        [(episode, [])],
+        edge_type_map={},
+        knowledge=knowledge,
+        use_combined_extraction=False,
+    )
+
+    assert extracted_knowledge == [knowledge]
+
+
+@pytest.mark.asyncio
+async def test_extract_nodes_and_edges_bulk_passes_knowledge_to_extract_edges(monkeypatch):
+    clients = _make_clients()
+    episode = _make_episode('1')
+    knowledge = 'Extract only professional relationships.'
+    extracted_node = EntityNode(name='Alice', group_id='group', labels=['Entity'])
+    extracted_knowledge = []
+
+    async def mock_extract_nodes(*args, **kwargs):
+        return [extracted_node], {}
+
+    async def mock_extract_edges(*args, knowledge=None, **kwargs):
+        extracted_knowledge.append(knowledge)
+        return [], []
+
+    monkeypatch.setattr(bulk_utils, 'extract_nodes', mock_extract_nodes)
+    monkeypatch.setattr(bulk_utils, 'extract_edges', mock_extract_edges)
+
+    await extract_nodes_and_edges_bulk(
+        clients,
+        [(episode, [])],
+        edge_type_map={},
+        knowledge=knowledge,
+        use_combined_extraction=False,
+    )
+
+    assert extracted_knowledge == [knowledge]
+
+
+@pytest.mark.asyncio
+async def test_extract_nodes_and_edges_bulk_defaults_to_combined_extraction(monkeypatch):
+    clients = _make_clients()
+    combined_extractor = AsyncMock(return_value=([], [], {}))
+    extract_nodes = AsyncMock(return_value=([], {}))
+    extract_edges = AsyncMock(return_value=([], []))
+    monkeypatch.setattr(combined_extraction, 'extract_nodes_and_edges', combined_extractor)
+    monkeypatch.setattr(bulk_utils, 'extract_nodes', extract_nodes)
+    monkeypatch.setattr(bulk_utils, 'extract_edges', extract_edges)
+
+    await extract_nodes_and_edges_bulk(
+        clients,
+        [(_make_episode('1'), [])],
+        edge_type_map={},
+    )
+
+    combined_extractor.assert_awaited_once()
+    extract_nodes.assert_not_awaited()
+    extract_edges.assert_not_awaited()
