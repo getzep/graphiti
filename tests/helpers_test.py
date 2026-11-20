@@ -157,12 +157,24 @@ def mock_embedder():
             return embeddings[input_data]
         elif isinstance(input_data, list):
             combined_input = ' '.join(input_data)
+            if combined_input in embeddings:
+                return embeddings[combined_input]
+
+            node_name, separator, _ = combined_input.partition('\n\n')
+            if separator and node_name in embeddings:
+                return embeddings[node_name]
+
             return embeddings[combined_input]
         else:
             raise ValueError(f'Unsupported input type: {type(input_data)}')
 
     mock_model.create.side_effect = mock_embed
     return mock_model
+
+
+@pytest.mark.asyncio
+async def test_mock_embedder_uses_name_embedding_for_canonical_node_content(mock_embedder):
+    assert await mock_embedder.create(input_data=['Alice\n\nAlice summary']) == embeddings['Alice']
 
 
 def test_lucene_sanitize():
