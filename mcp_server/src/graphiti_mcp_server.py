@@ -18,9 +18,11 @@ from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge
+from graphiti_core.errors import EntityTypeValidationError
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, SagaNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
+from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
@@ -267,6 +269,14 @@ class GraphitiService:
             # registered in models.entity_types / models.edge_types are preferred;
             # otherwise documentation-only models are built from the description.
             self.entity_types = build_entity_types(self.config.graphiti.entity_types)
+            try:
+                validate_entity_types(self.entity_types)
+            except EntityTypeValidationError as e:
+                logger.error(
+                    'Invalid entity type configuration: %s '
+                    'add_memory requests will be rejected until the configuration is fixed.',
+                    e,
+                )
             self.edge_types = build_edge_types(self.config.graphiti.edge_types)
             self.edge_type_map = build_edge_type_map(self.config.graphiti.edge_type_map)
 
