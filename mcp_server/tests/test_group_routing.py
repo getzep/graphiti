@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+from graphiti_core.driver.driver import GraphProvider
 
 import graphiti_mcp_server as server
 
@@ -22,6 +23,8 @@ def fresh_group_drivers(monkeypatch):
 
 class FakeDriver:
     """Records clone() calls and returns a distinct driver per database."""
+
+    provider = GraphProvider.NEO4J
 
     def __init__(self, database: str = 'default_db', share: list | None = None):
         self.database = database
