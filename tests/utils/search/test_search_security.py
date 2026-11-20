@@ -158,3 +158,12 @@ def test_falkordb_fulltext_query_escapes_default_group_id():
     built = _build_falkor_fulltext_query('hello', [default])
     assert '@group_id:"\\_"' in built
     assert '@group_id:"_"' not in built
+
+
+def test_group_id_error_shows_the_rejected_value_and_examples():
+    with pytest.raises(GroupIdValidationError) as exc_info:
+        validate_group_id('group@org')
+
+    message = str(exc_info.value)
+    assert 'group@org' in message
+    assert '"my_group"' in message
