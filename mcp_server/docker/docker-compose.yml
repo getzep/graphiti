@@ -1,14 +1,10 @@
+# Runs the published image. To build it locally instead:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+# (Kept out of this file so Git-based deploys such as Portainer stacks, which
+# run a build step whenever a service has build:, only pull the image.)
 services:
   graphiti-falkordb:
     image: zepai/knowledge-graph-mcp:latest
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        GRAPHITI_CORE_VERSION: ${GRAPHITI_CORE_VERSION:-0.29.1}
-        MCP_SERVER_VERSION: ${MCP_SERVER_VERSION:-1.1.3}
-        BUILD_DATE: ${BUILD_DATE:-}
-        VCS_REF: ${VCS_REF:-}
     env_file:
       - path: ../.env
         required: false
