@@ -106,6 +106,19 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
 """
 
 
+# Entity reads omit the vector by default. Preserve it when saving a node
+# without a loaded embedding, and only call Neo4j's setter for a supplied vector.
+_NEO4J_ENTITY_NODE_SAVE_PROPERTIES = """
+    SET n = node{.*, name_embedding: n.name_embedding}
+    WITH n, node.name_embedding AS embedding
+    CALL (n, embedding) {
+        WITH n, embedding
+        WHERE embedding IS NOT NULL
+        CALL db.create.setNodeVectorProperty(n, "name_embedding", embedding)
+    }
+"""
+
+
 def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: bool = False) -> str:
     validated_labels = _validate_entity_labels(labels)
     labels = ':'.join(validated_labels)
@@ -131,18 +144,14 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 RETURN n.uuid AS uuid
             """
         case _:
-            save_embedding_query = (
-                'WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)'
-                if not has_aoss
-                else ''
-            )
+            save_properties = 'SET n = node' if has_aoss else _NEO4J_ENTITY_NODE_SAVE_PROPERTIES
             return (
                 f"""
-                MERGE (n:Entity {{uuid: $entity_data.uuid}})
+                WITH $entity_data AS node
+                MERGE (n:Entity {{uuid: node.uuid}})
                 SET n:{labels}
-                SET n = $entity_data
                 """
-                + save_embedding_query
+                + save_properties
                 + """
                 RETURN n.uuid AS uuid
             """
@@ -197,19 +206,14 @@ def get_entity_node_save_bulk_query(
                 )
             return queries
         case _:  # Neo4j
-            save_embedding_query = (
-                'WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)'
-                if not has_aoss
-                else ''
-            )
+            save_properties = 'SET n = node' if has_aoss else _NEO4J_ENTITY_NODE_SAVE_PROPERTIES
             return (
                 """
                     UNWIND $nodes AS node
                     MERGE (n:Entity {uuid: node.uuid})
                     SET n:$(node.labels)
-                    SET n = node
                     """
-                + save_embedding_query
+                + save_properties
                 + """
                 RETURN n.uuid AS uuid
             """
