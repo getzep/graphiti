@@ -579,7 +579,9 @@ async def search_nodes(
 
         # center_node_uuid is only honored by the node_distance reranker, so select
         # that recipe when a center node is given (mirroring core's Graphiti.search);
-        # otherwise use RRF.
+        # otherwise use RRF. The recipe caps its own results at `config.limit`, so
+        # the limit must carry `max_nodes` on a copy - otherwise every request is
+        # truncated to the recipe default (10) and `max_nodes` can only shrink it.
         from graphiti_core.search.search_config_recipes import (
             NODE_HYBRID_SEARCH_NODE_DISTANCE,
             NODE_HYBRID_SEARCH_RRF,
@@ -587,7 +589,7 @@ async def search_nodes(
 
         node_config = (
             NODE_HYBRID_SEARCH_NODE_DISTANCE if center_node_uuid else NODE_HYBRID_SEARCH_RRF
-        )
+        ).model_copy(update={'limit': max_nodes})
         results = await client.search_(
             query=query,
             config=node_config,
