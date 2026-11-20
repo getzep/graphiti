@@ -142,6 +142,10 @@ class Neo4jSearchOperations(SearchOperations):
             filter_queries.append('n.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
+        filter_queries.append(
+            'n.name_embedding IS NOT NULL AND size(n.name_embedding) = size($search_vector)'
+        )
+
         filter_query = ''
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
@@ -307,6 +311,10 @@ class Neo4jSearchOperations(SearchOperations):
             if target_node_uuid is not None:
                 filter_params['target_uuid'] = target_node_uuid
                 filter_queries.append('m.uuid = $target_uuid')
+
+        filter_queries.append(
+            'e.fact_embedding IS NOT NULL AND size(e.fact_embedding) = size($search_vector)'
+        )
 
         filter_query = ''
         if filter_queries:
@@ -489,11 +497,15 @@ class Neo4jSearchOperations(SearchOperations):
         min_score: float = 0.6,
     ) -> list[CommunityNode]:
         query_params: dict[str, Any] = {}
+        filter_queries = [
+            'c.name_embedding IS NOT NULL AND size(c.name_embedding) = size($search_vector)'
+        ]
 
-        group_filter_query = ''
         if group_ids is not None:
-            group_filter_query += ' WHERE c.group_id IN $group_ids'
+            filter_queries.insert(0, 'c.group_id IN $group_ids')
             query_params['group_ids'] = group_ids
+
+        group_filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
         cypher = (
             'MATCH (c:Community)'
