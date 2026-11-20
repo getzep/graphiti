@@ -331,10 +331,18 @@ class EpisodicNode(Node):
             except NotImplementedError:
                 pass
 
+        group_id_filter = 'AND e.group_id = $group_id' if group_id is not None else ''
+        parameters: dict[str, Any] = {'uuids': uuids, 'routing_': 'r'}
+        if group_id is not None:
+            parameters['group_id'] = group_id
+
         records, _, _ = await driver.execute_query(
             """
             MATCH (e:Episodic)
             WHERE e.uuid IN $uuids
+            """
+            + group_id_filter
+            + """
             RETURN DISTINCT
             """
             + (
@@ -342,8 +350,7 @@ class EpisodicNode(Node):
                 if driver.provider == GraphProvider.NEPTUNE
                 else EPISODIC_NODE_RETURN
             ),
-            uuids=uuids,
-            routing_='r',
+            **parameters,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -649,7 +656,9 @@ class EntityNode(Node):
             if normalize_strings and isinstance(value, str):
                 tokens = re.split(r'\s+', value.strip())
                 if tokens and tokens[0]:
-                    pattern = r'(?i)^' + r'\s+'.join(re.escape(token) for token in tokens) + r'$'
+                    pattern = (
+                        r'(?i)^\s*' + r'\s+'.join(re.escape(token) for token in tokens) + r'\s*$'
+                    )
                 else:
                     pattern = r'^\s*$'
                 attribute_conditions.append(f'AND n.`{property_name}` =~ $attribute_{index}')

@@ -69,8 +69,9 @@ async def extract_nodes_and_edges(
     edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
     strict_edge_types: bool = False,
-    knowledge: str | None = None,
+    custom_extraction_instructions: str | None = None,
     timeline: list[EpisodicNode] | None = None,
+    knowledge: str | None = None,
     untyped_entities: bool = False,
 ) -> tuple[list[EntityNode], list[EntityEdge], dict[str, list[int]]]:
     """Extract entity nodes and relationship facts in a single LLM call.
@@ -108,6 +109,8 @@ async def extract_nodes_and_edges(
         A tuple of (nodes, edges, node_episode_index_map) where
         node_episode_index_map maps node UUID to 0-indexed episode positions.
     """
+    if knowledge is None:
+        knowledge = custom_extraction_instructions
     episodes = episode if isinstance(episode, list) else [episode]
     primary_episode = episodes[0]
 

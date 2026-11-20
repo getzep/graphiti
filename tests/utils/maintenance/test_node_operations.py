@@ -35,6 +35,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     _collect_candidate_nodes,
     _collect_exact_name_candidate_nodes,
     _collect_identity_property_candidate_nodes,
+    _entity_type_for_labels,
     _extract_entity_summaries_batch,
     _resolve_with_llm,
     _semantic_candidate_search,
@@ -206,6 +207,46 @@ async def test_resolve_extracted_nodes_can_disable_shared_neighbor_name_gate(mon
     assert resolved[0].uuid == candidate.uuid
     assert uuid_map[extracted.uuid] == candidate.uuid
     llm_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_nodes_excludes_self_candidates(monkeypatch):
+    clients, _ = _make_clients()
+    extracted = EntityNode(
+        uuid='same-node',
+        name='Alice',
+        group_id='group',
+        labels=['Entity'],
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._collect_exact_name_candidate_nodes',
+        AsyncMock(return_value=[[]]),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        AsyncMock(return_value=[[]]),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.resolve_nodes_with_candidates',
+        AsyncMock(return_value=([extracted], {extracted.uuid: extracted.uuid}, [])),
+    )
+    candidates_by_node = {}
+
+    await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        existing_nodes_override=[extracted],
+        candidates_by_node=candidates_by_node,
+        exclude_self_candidates=True,
+    )
+
+    assert candidates_by_node == {extracted.uuid: []}
+
+
+def test_entity_label_uses_a_supplied_entity_schema():
+    custom_entity = create_model('CustomEntity', summary_attribute=(str, ...))
+
+    assert _entity_type_for_labels(['Entity'], {'Entity': custom_entity}) is custom_entity
 
 
 @pytest.mark.asyncio

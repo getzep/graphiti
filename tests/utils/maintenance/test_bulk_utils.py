@@ -89,7 +89,11 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
     assert compressed_map.get(extracted_two.uuid) == canonical.uuid
 
 
-async def _dedupe_new_nodes_bulk(monkeypatch, episodes_nodes: list[list[EntityNode]]):
+async def _dedupe_new_nodes_bulk(
+    monkeypatch,
+    episodes_nodes: list[list[EntityNode]],
+    require_shared_neighbor_for_name_match: bool = True,
+):
     """Run dedupe_nodes_bulk where the graph pass keeps every node as it is."""
 
     async def fake_resolve(clients_arg, nodes_arg, *args, **kwargs):
@@ -98,7 +102,10 @@ async def _dedupe_new_nodes_bulk(monkeypatch, episodes_nodes: list[list[EntityNo
     monkeypatch.setattr(bulk_utils, 'resolve_extracted_nodes', fake_resolve)
     episodes = [_make_episode(str(i)) for i in range(len(episodes_nodes))]
     return await bulk_utils.dedupe_nodes_bulk(
-        _make_clients(), episodes_nodes, [(episode, []) for episode in episodes]
+        _make_clients(),
+        episodes_nodes,
+        [(episode, []) for episode in episodes],
+        require_shared_neighbor_for_name_match=require_shared_neighbor_for_name_match,
     )
 
 
@@ -116,6 +123,24 @@ async def test_dedupe_nodes_bulk_generic_exact_name_without_shared_neighbor_stay
     )
 
     assert compressed_map.get(loan_two.uuid, loan_two.uuid) == loan_two.uuid
+
+
+@pytest.mark.asyncio
+async def test_dedupe_nodes_bulk_exact_name_merges_when_shared_neighbor_is_not_required(
+    monkeypatch,
+):
+    westlake = EntityNode(name='Westlake Services', group_id='group', labels=['Company'])
+    capital_one = EntityNode(name='Capital One', group_id='group', labels=['Company'])
+    loan_one = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+    loan_two = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+
+    _, compressed_map = await _dedupe_new_nodes_bulk(
+        monkeypatch,
+        [[westlake, loan_one], [capital_one, loan_two]],
+        require_shared_neighbor_for_name_match=False,
+    )
+
+    assert compressed_map.get(loan_two.uuid) == loan_one.uuid
 
 
 @pytest.mark.asyncio

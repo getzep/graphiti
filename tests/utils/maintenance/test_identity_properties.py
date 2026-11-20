@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import re
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -117,7 +118,8 @@ async def test_get_by_attribute_values_normalizes_string_attributes(provider):
     query = driver.execute_query.await_args.args[0]
     parameters = driver.execute_query.await_args.kwargs
     assert 'n.`company_name` =~ $attribute_0' in query
-    assert parameters['attribute_0'] == r'(?i)^Acme\s+Corp$'
+    assert parameters['attribute_0'] == r'(?i)^\s*Acme\s+Corp\s*$'
+    assert re.fullmatch(parameters['attribute_0'], '  Acme    Corp  ') is not None
 
 
 @pytest.mark.asyncio

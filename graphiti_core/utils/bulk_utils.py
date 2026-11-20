@@ -367,11 +367,14 @@ async def extract_nodes_and_edges_bulk(
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
+    use_combined_extraction: bool = True,
     strict_edge_types: bool = False,
     knowledge: str | None = None,
-    use_combined_extraction: bool = True,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     """Extract nodes and edges for each episode."""
+    if knowledge is None:
+        knowledge = custom_extraction_instructions
     extractor = (
         _extract_nodes_and_edges_bulk_combined
         if use_combined_extraction
@@ -570,6 +573,9 @@ async def dedupe_nodes_bulk(
             batch_neighbor_uuids.get(candidate.uuid, set()) - {node.uuid},
         )
 
+    def _allow_name_match(_node: EntityNode, _candidate: EntityNode) -> bool:
+        return True
+
     canonical_nodes: dict[str, EntityNode] = {}
     for _, resolved_nodes in episode_resolutions:
         for node in resolved_nodes:
@@ -613,7 +619,11 @@ async def dedupe_nodes_bulk(
                     candidate
                     for candidate in existing_candidates
                     if _normalize_string_exact(candidate.name) == normalized
-                    and (candidate.uuid == node.uuid or _shares_batch_neighbor(node, candidate))
+                    and (
+                        candidate.uuid == node.uuid
+                        or not require_shared_neighbor_for_name_match
+                        or _shares_batch_neighbor(node, candidate)
+                    )
                 ),
                 None,
             )
@@ -628,7 +638,14 @@ async def dedupe_nodes_bulk(
                 uuid_map={},
                 unresolved_indices=[],
             )
-            _resolve_with_similarity([node], indexes, state, name_match_gate=_shares_batch_neighbor)
+            _resolve_with_similarity(
+                [node],
+                indexes,
+                state,
+                name_match_gate=_shares_batch_neighbor
+                if require_shared_neighbor_for_name_match
+                else _allow_name_match,
+            )
 
             resolved = state.resolved_nodes[0]
             if resolved is None:

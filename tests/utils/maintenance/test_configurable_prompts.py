@@ -1,6 +1,7 @@
 """Runtime coverage tests for instance-scoped configurable prompts."""
 
 from datetime import datetime, timezone
+from inspect import signature
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,6 +28,68 @@ from graphiti_core.utils.maintenance.community_operations import (
 )
 from graphiti_core.utils.maintenance.edge_operations import extract_edges, resolve_extracted_edge
 from graphiti_core.utils.maintenance.node_operations import extract_nodes, resolve_extracted_nodes
+
+
+def test_public_signatures_preserve_upstream_parameter_positions():
+    add_episode_parameters = list(signature(Graphiti.add_episode).parameters)
+    assert add_episode_parameters[14:19] == [
+        'custom_extraction_instructions',
+        'saga',
+        'saga_previous_episode_uuid',
+        'identity_properties',
+        'knowledge',
+    ]
+
+    add_episode_bulk_parameters = list(signature(Graphiti.add_episode_bulk).parameters)
+    assert add_episode_bulk_parameters[8:13] == [
+        'custom_extraction_instructions',
+        'saga',
+        'use_combined_extraction',
+        'identity_properties',
+        'knowledge',
+    ]
+
+    bulk_extraction_parameters = list(signature(extract_nodes_and_edges_bulk).parameters)
+    assert bulk_extraction_parameters[6:10] == [
+        'custom_extraction_instructions',
+        'use_combined_extraction',
+        'strict_edge_types',
+        'knowledge',
+    ]
+
+    combined_extraction_parameters = list(signature(extract_nodes_and_edges).parameters)
+    assert combined_extraction_parameters[8:12] == [
+        'custom_extraction_instructions',
+        'timeline',
+        'knowledge',
+        'untyped_entities',
+    ]
+
+    assert list(signature(extract_nodes).parameters)[5:7] == [
+        'custom_extraction_instructions',
+        'knowledge',
+    ]
+    assert list(signature(extract_edges).parameters)[8:10] == [
+        'custom_extraction_instructions',
+        'knowledge',
+    ]
+
+    resolve_edges_parameters = list(signature(edge_ops.resolve_extracted_edges).parameters)
+    assert resolve_edges_parameters[7:13] == [
+        'strict_edge_types',
+        'invalidated_by',
+        'trace',
+        'exclude_self_candidates',
+        'candidates_by_edge',
+        'knowledge',
+    ]
+
+    resolve_nodes_parameters = list(signature(node_ops.resolve_nodes_with_candidates).parameters)
+    assert resolve_nodes_parameters[7:] == [
+        'trace',
+        'episode_neighbor_uuids',
+        'require_shared_neighbor_for_name_match',
+    ]
 
 
 class _EmploymentEdge(BaseModel):
@@ -585,8 +648,15 @@ async def test_add_episode_bulk_can_select_separate_extraction(monkeypatch):
                 reference_time=utc_now(),
             )
         ],
-        group_id='group',
-        use_combined_extraction=False,
+        None,
+        None,
+        None,
+        None,
+        None,
+        False,
+        None,
+        None,
+        False,
     )
 
     extract_mock.assert_awaited_once()

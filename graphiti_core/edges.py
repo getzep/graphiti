@@ -412,15 +412,22 @@ class EntityEdge(Edge):
         match_query = """
             MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
         """
+        group_id_filter = 'AND e.group_id = $group_id' if group_id is not None else ''
+        parameters: dict[str, Any] = {'uuids': uuids, 'routing_': 'r'}
+        if group_id is not None:
+            parameters['group_id'] = group_id
+
         records, _, _ = await driver.execute_query(
             match_query
             + """
             WHERE e.uuid IN $uuids
+            """
+            + group_id_filter
+            + """
             RETURN
             """
             + get_entity_edge_return_query(driver.provider),
-            uuids=uuids,
-            routing_='r',
+            **parameters,
         )
 
         edges = [get_entity_edge_from_record(record, driver.provider) for record in records]

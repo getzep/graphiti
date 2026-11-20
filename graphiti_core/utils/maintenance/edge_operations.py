@@ -145,6 +145,7 @@ async def extract_edges(
     group_id: str = '',
     edge_types: dict[str, type[BaseModel]] | None = None,
     strict_edge_types: bool = False,
+    custom_extraction_instructions: str | None = None,
     knowledge: str | None = None,
 ) -> tuple[list[EntityEdge], list[EntityNode]]:
     """Extract edges from one or more episodes.
@@ -162,6 +163,8 @@ async def extract_edges(
         Extracted edges and any endpoint nodes materialized onto ``nodes`` for
         dangling source/target names that survived edge filters.
     """
+    if knowledge is None:
+        knowledge = custom_extraction_instructions
     episodes = episode if isinstance(episode, list) else [episode]
     primary_episode = episodes[0]
 
@@ -438,10 +441,10 @@ async def resolve_extracted_edges(
     edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
     existing_edges_override: list[EntityEdge] | None = None,
-    exclude_self_candidates: bool = False,
     strict_edge_types: bool = False,
     invalidated_by: dict[str, list[str]] | None = None,
     trace: 'ResolutionTrace | None' = None,
+    exclude_self_candidates: bool = False,
     candidates_by_edge: dict[str, list[EntityEdge]] | None = None,
     knowledge: str | None = None,
 ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:

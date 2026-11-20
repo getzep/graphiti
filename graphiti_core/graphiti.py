@@ -774,6 +774,8 @@ class Graphiti:
                 saga.summary = ''
                 saga.last_summarized_at = None
                 saga.last_summarized_episode_valid_at = None
+                if before_publish is not None:
+                    saga.summary = await before_publish(saga.summary)
                 await saga.save(self.driver)
                 logger.info(f'Rebuilt saga {saga_id} summary to empty: no surviving episodes')
                 return saga
@@ -1657,11 +1659,11 @@ class Graphiti:
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
-        knowledge: str | None = None,
+        custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
         identity_properties: dict[str, list[str]] | None = None,
-        custom_extraction_instructions: str | None = None,
+        knowledge: str | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1970,11 +1972,11 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
         strict_edge_types: bool = False,
-        knowledge: str | None = None,
-        saga: str | SagaNode | None = None,
-        identity_properties: dict[str, list[str]] | None = None,
         custom_extraction_instructions: str | None = None,
+        saga: str | SagaNode | None = None,
         use_combined_extraction: bool = True,
+        identity_properties: dict[str, list[str]] | None = None,
+        knowledge: str | None = None,
     ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.

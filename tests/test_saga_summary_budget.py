@@ -292,7 +292,7 @@ async def test_saga_summary_rebuild_ignores_watermark_and_discards_old_text():
     assert operations.saved_saga is saga
 
 
-async def test_saga_summary_rebuild_with_no_survivors_clears_summary():
+async def test_saga_summary_rebuild_with_no_survivors_runs_before_publish():
     """A rebuild over zero surviving episodes must not invent content: the
     summary is cleared without an LLM call."""
     operations = _RebuildFakeGraphOperations(episodes=[])
@@ -300,10 +300,21 @@ async def test_saga_summary_rebuild_with_no_survivors_clears_summary():
     graphiti = Graphiti.__new__(Graphiti)
     graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
     graphiti.llm_client = _FailingLLMClient()
+    seen = []
 
-    saga = await graphiti.summarize_saga('saga-1', rebuild=True)
+    async def before_publish(summary: str) -> str:
+        assert operations.saved_saga is None
+        seen.append(summary)
+        return 'checked empty summary'
 
-    assert saga.summary == ''
+    saga = await graphiti.summarize_saga(
+        'saga-1',
+        rebuild=True,
+        before_publish=before_publish,
+    )
+
+    assert seen == ['']
+    assert saga.summary == 'checked empty summary'
     assert saga.last_summarized_episode_valid_at is None
     # content policies spec-1 §7.2: an episode that is not eligible yet (a
     # pending policy state) is behind no watermark, so the next incremental

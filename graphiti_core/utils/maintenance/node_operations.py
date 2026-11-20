@@ -81,6 +81,7 @@ async def extract_nodes(
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
+    custom_extraction_instructions: str | None = None,
     knowledge: str | None = None,
 ) -> tuple[list[EntityNode], dict[str, list[int]]]:
     """Extract entity nodes from one or more episodes.
@@ -99,6 +100,8 @@ async def extract_nodes(
         node_episode_index_map maps node UUID to a list of 0-indexed episode
         positions that the node was extracted from.
     """
+    if knowledge is None:
+        knowledge = custom_extraction_instructions
     episodes = episode if isinstance(episode, list) else [episode]
     primary_episode = episodes[0]
 
@@ -1149,9 +1152,9 @@ async def resolve_extracted_nodes(
     candidate_nodes_by_extracted = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
-        existing_nodes_override,
-        identity_properties,
-        exclude_self_candidates,
+        existing_nodes_override=existing_nodes_override,
+        identity_properties=identity_properties,
+        exclude_self_candidates=exclude_self_candidates,
         entity_types=entity_types,
     )
     if candidates_by_node is not None:
@@ -1184,10 +1187,10 @@ async def resolve_nodes_with_candidates(
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
     identity_properties: dict[str, list[str]] | None = None,
-    episode_neighbor_uuids: set[str] | None = None,
-    require_shared_neighbor_for_name_match: bool = True,
     *,
     trace: 'ResolutionTrace | None' = None,
+    episode_neighbor_uuids: set[str] | None = None,
+    require_shared_neighbor_for_name_match: bool = True,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     """Resolve nodes against given candidates: identity rule, similarity rule, then LLM.
 
@@ -1362,11 +1365,7 @@ def _entity_type_for_labels(
     if entity_types is None:
         return None
     return next(
-        (
-            entity_types[label]
-            for label in reversed(labels)
-            if label != 'Entity' and label in entity_types
-        ),
+        (entity_types[label] for label in labels if label in entity_types),
         None,
     )
 
