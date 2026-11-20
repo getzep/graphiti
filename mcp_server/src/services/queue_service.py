@@ -1,25 +1,87 @@
 """Queue service for managing episode processing."""
 
 import asyncio
+import json
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+from services.rate_limit_retry import is_rate_limit_error
+
 logger = logging.getLogger(__name__)
+
+DEFAULT_DEAD_LETTER_PATH = 'episode_dead_letter.jsonl'
+
+
+def _edge_type_map_names(edge_type_map: Any) -> list[dict[str, Any]] | None:
+    """Return an edge type map as JSON-friendly ``{source, target, edge_types}`` rows."""
+    if not edge_type_map:
+        return None
+    return [
+        {'source': str(pair[0]), 'target': str(pair[1]), 'edge_types': sorted(map(str, names))}
+        for pair, names in sorted(edge_type_map.items(), key=lambda item: tuple(map(str, item[0])))
+    ]
+
+
+def _type_names(types: Any) -> list[str] | None:
+    """Return the names of a mapping/list of entity or edge types, for logging."""
+    if not types:
+        return None
+    return sorted(str(name) for name in types)
 
 
 class QueueService:
     """Service for managing sequential episode processing queues by group_id."""
 
-    def __init__(self):
-        """Initialize the queue service."""
+    def __init__(self, dead_letter_path: str | os.PathLike[str] | None = None):
+        """Initialize the queue service.
+
+        Args:
+            dead_letter_path: JSONL file that receives the payload of every episode that
+                fails to process, so it can be replayed. Defaults to the
+                ``EPISODE_DEAD_LETTER_PATH`` environment variable, then
+                ``episode_dead_letter.jsonl`` in the working directory.
+        """
         # Dictionary to store queues for each group_id
         self._episode_queues: dict[str, asyncio.Queue] = {}
         # Dictionary to track if a worker is running for each group_id
         self._queue_workers: dict[str, bool] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
+        self._dead_letter_path = Path(
+            dead_letter_path or os.getenv('EPISODE_DEAD_LETTER_PATH') or DEFAULT_DEAD_LETTER_PATH
+        )
+        self._dead_letter_lock = asyncio.Lock()
+
+    @property
+    def dead_letter_path(self) -> Path:
+        """Path of the JSONL file that records episodes that failed to process."""
+        return self._dead_letter_path
+
+    async def _write_dead_letter(self, record: dict[str, Any]) -> bool:
+        """Append one record to the dead-letter file. Returns True on success."""
+        line = json.dumps(record, default=str, ensure_ascii=False) + '\n'
+
+        def _append() -> None:
+            self._dead_letter_path.parent.mkdir(parents=True, exist_ok=True)
+            # Records hold full episode bodies, so create the file owner-only (0o600).
+            fd = os.open(self._dead_letter_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            with os.fdopen(fd, 'a', encoding='utf-8') as f:
+                f.write(line)
+
+        try:
+            async with self._dead_letter_lock:
+                await asyncio.to_thread(_append)
+            return True
+        except Exception as e:
+            logger.error(
+                f'Could not write dead-letter record to {self._dead_letter_path}: {e}. '
+                f'Episode payload follows so it is not lost: {line.strip()}'
+            )
+            return False
 
     async def add_episode_task(
         self, group_id: str, process_func: Callable[[], Awaitable[None]]
@@ -177,7 +239,38 @@ class QueueService:
                 logger.info(f'Successfully processed episode {uuid} for group {group_id}')
 
             except Exception as e:
-                logger.error(f'Failed to process episode {uuid} for group {group_id}: {str(e)}')
+                # The provider clients already retried rate-limit errors with backoff (see
+                # services.rate_limit_retry), so this failure is final. Nothing re-queues
+                # the episode: record its payload so it can be replayed instead of lost.
+                logger.error(
+                    f'EPISODE DROPPED: failed to process episode {uuid or name!r} for group '
+                    f'{group_id}: {type(e).__name__}: {e}. Payload written to dead-letter '
+                    f'file {self._dead_letter_path}'
+                )
+                await self._write_dead_letter(
+                    {
+                        'failed_at': datetime.now(timezone.utc).isoformat(),
+                        'error_type': type(e).__name__,
+                        'error': str(e),
+                        'rate_limited': is_rate_limit_error(e),
+                        'group_id': group_id,
+                        'uuid': uuid,
+                        'name': name,
+                        'episode_body': content,
+                        'source': getattr(episode_type, 'value', str(episode_type)),
+                        'source_description': source_description,
+                        'reference_time': reference_time.isoformat() if reference_time else None,
+                        'excluded_entity_types': excluded_entity_types,
+                        'previous_episode_uuids': previous_episode_uuids,
+                        'custom_extraction_instructions': custom_extraction_instructions,
+                        'update_communities': update_communities,
+                        'saga': saga,
+                        'saga_previous_episode_uuid': saga_previous_episode_uuid,
+                        'entity_types': _type_names(entity_types),
+                        'edge_types': _type_names(edge_types),
+                        'edge_type_map': _edge_type_map_names(edge_type_map),
+                    }
+                )
                 raise
 
         # Use the existing add_episode_task method to queue the processing
