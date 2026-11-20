@@ -1,6 +1,6 @@
 """Tests for Graphiti constructor prompt_library / llm_runtime wiring."""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -80,7 +80,7 @@ async def test_concurrent_ingestion_receives_resolved_knowledge():
         name='single',
         episode_body='single body',
         source_description='test',
-        reference_time=datetime.now(UTC),
+        reference_time=datetime.now(timezone.utc),
         knowledge='single knowledge',
     )
     await graphiti.add_episode_bulk(bulk_episodes=[], knowledge='bulk knowledge')
@@ -93,7 +93,7 @@ async def test_concurrent_ingestion_receives_resolved_knowledge():
             name='single alias',
             episode_body='single alias body',
             source_description='test',
-            reference_time=datetime.now(UTC),
+            reference_time=datetime.now(timezone.utc),
             custom_extraction_instructions='single alias knowledge',
         )
     with pytest.warns(DeprecationWarning, match='custom_extraction_instructions is deprecated'):
@@ -119,7 +119,7 @@ async def test_graphiti_rejects_knowledge_and_deprecated_alias_together(method):
                 name='episode',
                 episode_body='body',
                 source_description='test',
-                reference_time=datetime.now(UTC),
+                reference_time=datetime.now(timezone.utc),
                 knowledge='new argument',
                 custom_extraction_instructions='deprecated alias',
             )
