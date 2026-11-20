@@ -1,5 +1,6 @@
 """Tests for Graphiti constructor prompt_library / llm_runtime wiring."""
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -49,6 +50,43 @@ def test_graphiti_keeps_prompt_library_unset_when_unconfigured():
     graphiti = _make_graphiti()
     assert graphiti.prompt_library is None
     assert graphiti.clients.prompt_library is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_ingestion_receives_resolved_knowledge():
+    class RecordingIngestor:
+        def __init__(self):
+            self.single_episode_kwargs = None
+            self.bulk_episode_kwargs = None
+
+        async def add_episode(self, **kwargs):
+            self.single_episode_kwargs = kwargs
+
+        async def add_episode_bulk(self, **kwargs):
+            self.bulk_episode_kwargs = kwargs
+
+    graphiti = _make_graphiti()
+    ingestor = RecordingIngestor()
+    graphiti.concurrent_ingestion = SimpleNamespace(enabled_for_group=None)
+    graphiti._resolve_request_scope = lambda group_id: (
+        group_id or 'test-group',
+        graphiti.driver,
+        graphiti.clients,
+    )
+    graphiti._concurrent_ingestion_enabled = lambda group_id: True
+    graphiti._get_concurrent_ingestor = lambda: ingestor
+
+    await graphiti.add_episode(
+        name='single',
+        episode_body='single body',
+        source_description='test',
+        reference_time=datetime.now(UTC),
+        knowledge='single knowledge',
+    )
+    await graphiti.add_episode_bulk(bulk_episodes=[], knowledge='bulk knowledge')
+
+    assert ingestor.single_episode_kwargs['custom_extraction_instructions'] == 'single knowledge'
+    assert ingestor.bulk_episode_kwargs['custom_extraction_instructions'] == 'bulk knowledge'
 
 
 def test_graphiti_stores_custom_prompt_library():

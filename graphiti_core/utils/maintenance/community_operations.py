@@ -198,8 +198,8 @@ async def build_community(
     llm_client: LLMClient,
     community_cluster: list[EntityNode],
     *,
-    max_coroutines: int | None = None,
     clients: GraphitiClients | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     """Build one community from its nodes.
 
@@ -254,8 +254,8 @@ async def build_communities(
     llm_client: LLMClient,
     group_ids: list[str] | None,
     *,
-    max_coroutines: int | None = None,
     clients: GraphitiClients | None = None,
+    max_coroutines: int | None = None,
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     """Build communities for the requested groups.
 
@@ -265,6 +265,11 @@ async def build_communities(
         driver, group_ids, max_coroutines=max_coroutines
     )
 
+    # Honour the per-instance `max_coroutines` cap when set; otherwise fall back to the
+    # historical built-in cap of `MAX_COMMUNITY_BUILD_CONCURRENCY` to preserve behavior.
+    # We let `semaphore_gather` enforce the cap directly rather than wrapping each
+    # coroutine in a redundant `asyncio.Semaphore` — both mechanisms would bound the
+    # same fan-out at the same value, and the inner cap obscures the precedence.
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
         await semaphore_gather(
             *[

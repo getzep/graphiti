@@ -32,6 +32,7 @@ from graphiti_core.prompts.lib import (
 from graphiti_core.prompts.models import Message, PromptFunction
 from graphiti_core.prompts.names import PromptName
 from graphiti_core.prompts.versions import PromptTemplate, template_of
+from graphiti_core.tracer import Tracer
 
 
 class GraphitiClients(BaseModel):
@@ -39,9 +40,10 @@ class GraphitiClients(BaseModel):
     llm_client: LLMClient
     embedder: EmbedderClient
     cross_encoder: CrossEncoderClient
-    max_coroutines: int | None = None
+    tracer: Tracer
     prompt_library: Any = None
     llm_runtime: LLMRuntime | None = None
+    max_coroutines: int | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
