@@ -7,8 +7,11 @@ import pytest
 
 from graphiti_core.llm_client import (
     JevClient,
+    LLMRuntime,
+    LLMTransport,
     OpenAIDecisionsClient,
     OpenAIDecisionsInputTooLongError,
+    PromptRoutes,
     jev_prompt_overrides,
     openai_decisions_prompt_overrides,
 )
@@ -81,6 +84,54 @@ async def _call(client: OpenAIDecisionsClient, payload=None) -> dict[str, Any]:
         [Message(role='user', content=json.dumps(payload or _payload()))],
         prompt_name='dedupe_edges.resolve_edge',
     )
+
+
+@pytest.mark.asyncio
+async def test_runtime_routes_dedupe_prompts_to_openai_decisions() -> None:
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        answers = []
+        for question in body['questions']:
+            if question['type'] == 'choice':
+                answers.append(
+                    {
+                        'type': 'choice',
+                        'name': question['name'],
+                        'choice': question['choices'][0]['value'],
+                        'confidence': 1.0,
+                    }
+                )
+            else:
+                answers.append({'type': 'predicate', 'name': question['name'], 'probability': 0.0})
+        return httpx.Response(200, json={'answers': answers})
+
+    client = _client(handler)
+    transport = LLMTransport(client, models=['gpt-4.1-mini'])
+    decisions_model = transport.model(
+        'gpt-4.1-mini',
+        prompt_overrides=openai_decisions_prompt_overrides(),
+    )
+    runtime = LLMRuntime(
+        model=transport.model('gpt-4.1-mini'),
+        routes=PromptRoutes(dedupe_edges=PromptRoutes.DedupeEdges(resolve_edge=decisions_model)),
+    )
+    result = await runtime.complete(
+        'dedupe_edges.resolve_edge',
+        {
+            'existing_edges': '[{"idx": 0, "fact": "Alice works at Acme"}]',
+            'edge_invalidation_candidates': '[{"idx": 1, "fact": "Alice was a manager at Acme"}]',
+            'new_edge': 'Alice works at Acme as an engineer',
+        },
+    )
+
+    assert result == {'duplicate_facts': [], 'contradicted_facts': []}
+    assert len(requests) == 1
+    assert requests[0]['model'] == 'gpt-4.1-mini'
+    assert requests[0]['questions']
+    await client.http_client.aclose()
 
 
 @pytest.mark.asyncio

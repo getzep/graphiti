@@ -26,6 +26,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.embedder.canonical_text import canonical_edge_fact_text
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
@@ -254,6 +255,9 @@ class EntityEdge(Edge):
     reference_time: datetime | None = Field(
         default=None, description='reference timestamp from the episode that produced this edge'
     )
+    reference_time: datetime | None = Field(
+        default=None, description='reference timestamp from the episode that produced this edge'
+    )
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the edge. Dependent on edge name'
     )
@@ -261,7 +265,7 @@ class EntityEdge(Edge):
     async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
 
-        text = self.fact.replace('\n', ' ')
+        text = canonical_edge_fact_text(self.fact)
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
@@ -393,10 +397,12 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str], group_id: str | None = None):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.edge_get_by_uuids(cls, driver, uuids)
+                return await driver.graph_operations_interface.edge_get_by_uuids(
+                    cls, driver, uuids, group_id
+                )
             except NotImplementedError:
                 pass
 
@@ -406,15 +412,22 @@ class EntityEdge(Edge):
         match_query = """
             MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
         """
+        group_id_filter = 'AND e.group_id = $group_id' if group_id is not None else ''
+        parameters: dict[str, Any] = {'uuids': uuids, 'routing_': 'r'}
+        if group_id is not None:
+            parameters['group_id'] = group_id
+
         records, _, _ = await driver.execute_query(
             match_query
             + """
             WHERE e.uuid IN $uuids
+            """
+            + group_id_filter
+            + """
             RETURN
             """
             + get_entity_edge_return_query(driver.provider),
-            uuids=uuids,
-            routing_='r',
+            **parameters,
         )
 
         edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
@@ -967,11 +980,16 @@ def get_next_episode_edge_from_record(record: Any) -> NextEpisodeEdge:
 
 
 async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[EntityEdge]):
-    # filter out falsey values from edges
-    filtered_edges = [edge for edge in edges if edge.fact]
+    filtered_edges = []
+    fact_texts = []
+    for edge in edges:
+        fact_text = canonical_edge_fact_text(edge.fact)
+        if fact_text.strip():
+            filtered_edges.append(edge)
+            fact_texts.append(fact_text)
 
     if len(filtered_edges) == 0:
         return
-    fact_embeddings = await embedder.create_batch([edge.fact for edge in filtered_edges])
+    fact_embeddings = await embedder.create_batch(fact_texts)
     for edge, fact_embedding in zip(filtered_edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding

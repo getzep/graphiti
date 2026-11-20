@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
+from .versions import PromptTemplate, render_template
 
 
 class NodeDuplicate(BaseModel):
@@ -51,34 +52,26 @@ class Versions(TypedDict):
     nodes: PromptFunction
 
 
-def node(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are an entity deduplication assistant. '
-            'NEVER fabricate entity names or mark distinct entities as duplicates.',
-        ),
-        Message(
-            role='user',
-            content=f"""
+NODE_SYSTEM_PROMPT = """You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates."""
+NODE_USER_TEMPLATE = """
 <PREVIOUS MESSAGES>
-{to_prompt_json(context['previous_episodes'])}
+{previous_episodes}
 </PREVIOUS MESSAGES>
 
 <CURRENT MESSAGE>
-{context['episode_content']}
+{episode_content}
 </CURRENT MESSAGE>
 
 <NEW ENTITY>
-{to_prompt_json(context['extracted_node'])}
+{extracted_node}
 </NEW ENTITY>
 
 <ENTITY TYPE DESCRIPTION>
-{to_prompt_json(context['entity_type_description'])}
+{entity_type_description}
 </ENTITY TYPE DESCRIPTION>
 
 <EXISTING ENTITIES>
-{to_prompt_json(context['existing_nodes'])}
+{existing_nodes}
 </EXISTING ENTITIES>
 
 Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
@@ -95,50 +88,57 @@ Task:
 
 <EXAMPLE>
 NEW ENTITY: "Sam" (Person)
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Sam", "entity_types": ["Person"], "summary": "Sam enjoys hiking and photography"}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "Sam", "entity_types": ["Person"], "summary": "Sam enjoys hiking and photography"}]
 Result: duplicate_candidate_id = 0 (same person referenced in conversation)
 
 NEW ENTITY: "NYC"
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "New York City", "entity_types": ["Location"]}}, {{"candidate_id": 1, "name": "New York Knicks", "entity_types": ["Organization"]}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "New York City", "entity_types": ["Location"]}, {"candidate_id": 1, "name": "New York Knicks", "entity_types": ["Organization"]}]
 Result: duplicate_candidate_id = 0 (same location, abbreviated name)
 
 NEW ENTITY: "Java" (programming language)
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Java", "entity_types": ["Location"], "summary": "An island in Indonesia"}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "Java", "entity_types": ["Location"], "summary": "An island in Indonesia"}]
 Result: duplicate_candidate_id = -1 (same name but distinct real-world things)
 
 NEW ENTITY: "Marco's car"
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Marco's vehicle", "entity_types": ["Entity"], "summary": "Marco drives a red sedan."}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "Marco's vehicle", "entity_types": ["Entity"], "summary": "Marco drives a red sedan."}]
 Result: duplicate_candidate_id = 0 (synonym — "car" and "vehicle" refer to the same thing, same possessor)
 </EXAMPLE>
-""",
+"""
+
+
+def node(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(role='system', content=NODE_SYSTEM_PROMPT),
+        Message(
+            role='user',
+            content=render_template(
+                NODE_USER_TEMPLATE,
+                previous_episodes=to_prompt_json(context['previous_episodes']),
+                episode_content=context['episode_content'],
+                extracted_node=to_prompt_json(context['extracted_node']),
+                entity_type_description=to_prompt_json(context['entity_type_description']),
+                existing_nodes=to_prompt_json(context['existing_nodes']),
+            ),
         ),
     ]
 
 
-def nodes(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are an entity deduplication assistant. '
-            'NEVER fabricate entity names or mark distinct entities as duplicates.',
-        ),
-        Message(
-            role='user',
-            content=f"""
+NODES_SYSTEM_PROMPT = NODE_SYSTEM_PROMPT
+NODES_USER_TEMPLATE = """
 <PREVIOUS MESSAGES>
-{to_prompt_json(context['previous_episodes'])}
+{previous_episodes}
 </PREVIOUS MESSAGES>
 
 <CURRENT MESSAGE>
-{context['episode_content']}
+{episode_content}
 </CURRENT MESSAGE>
 
 <ENTITIES>
-{to_prompt_json(context['extracted_nodes'])}
+{extracted_nodes}
 </ENTITIES>
 
 <EXISTING ENTITIES>
-{to_prompt_json(context['existing_nodes'])}
+{existing_nodes}
 </EXISTING ENTITIES>
 
 Each of the above ENTITIES was extracted from the CURRENT MESSAGE.
@@ -150,8 +150,8 @@ NEVER mark entities as duplicates if:
 - They have similar names or purposes but refer to separate instances or concepts.
 
 Task:
-ENTITIES contains {len(context['extracted_nodes'])} entities with IDs 0 through {len(context['extracted_nodes']) - 1}.
-Your response MUST include EXACTLY {len(context['extracted_nodes'])} resolutions with IDs 0 through {len(context['extracted_nodes']) - 1}. Do not skip or add IDs.
+ENTITIES contains {entity_count} entities with IDs 0 through {last_entity_id}.
+Your response MUST include EXACTLY {entity_count} resolutions with IDs 0 through {last_entity_id}. Do not skip or add IDs.
 
 For every entity, provide:
 - `id`: integer id from ENTITIES
@@ -160,39 +160,51 @@ For every entity, provide:
 
 <EXAMPLE>
 ENTITY: "Sam" (Person)
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Sam", "entity_types": ["Person"], "summary": "Sam enjoys hiking and photography"}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "Sam", "entity_types": ["Person"], "summary": "Sam enjoys hiking and photography"}]
 Result: duplicate_candidate_id = 0 (same person referenced in conversation)
 
 ENTITY: "NYC"
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "New York City", "entity_types": ["Location"]}}, {{"candidate_id": 1, "name": "New York Knicks", "entity_types": ["Organization"]}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "New York City", "entity_types": ["Location"]}, {"candidate_id": 1, "name": "New York Knicks", "entity_types": ["Organization"]}]
 Result: duplicate_candidate_id = 0 (same location, abbreviated name)
 
 ENTITY: "Java" (programming language)
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Java", "entity_types": ["Location"], "summary": "An island in Indonesia"}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "Java", "entity_types": ["Location"], "summary": "An island in Indonesia"}]
 Result: duplicate_candidate_id = -1 (same name but distinct real-world things)
 
 ENTITY: "Marco's car"
-EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Marco's vehicle", "entity_types": ["Entity"], "summary": "Marco drives a red sedan."}}]
+EXISTING ENTITIES: [{"candidate_id": 0, "name": "Marco's vehicle", "entity_types": ["Entity"], "summary": "Marco drives a red sedan."}]
 Result: duplicate_candidate_id = 0 (synonym — "car" and "vehicle" refer to the same thing, same possessor)
 </EXAMPLE>
-""",
+"""
+
+
+def nodes(context: dict[str, Any]) -> list[Message]:
+    entity_count = len(context['extracted_nodes'])
+    return [
+        Message(role='system', content=NODES_SYSTEM_PROMPT),
+        Message(
+            role='user',
+            content=render_template(
+                NODES_USER_TEMPLATE,
+                previous_episodes=to_prompt_json(context['previous_episodes']),
+                episode_content=context['episode_content'],
+                extracted_nodes=to_prompt_json(context['extracted_nodes']),
+                existing_nodes=to_prompt_json(context['existing_nodes']),
+                entity_count=str(entity_count),
+                last_entity_id=str(entity_count - 1),
+            ),
         ),
     ]
 
 
-def node_list(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are an entity deduplication assistant that groups duplicate nodes by UUID.',
-        ),
-        Message(
-            role='user',
-            content=f"""
+NODE_LIST_SYSTEM_PROMPT = (
+    'You are an entity deduplication assistant that groups duplicate nodes by UUID.'
+)
+NODE_LIST_USER_TEMPLATE = """
 Given the following context, deduplicate a list of nodes:
 
 <NODES>
-{to_prompt_json(context['nodes'])}
+{nodes}
 </NODES>
 
 Task:
@@ -207,21 +219,38 @@ Guidelines:
 <EXAMPLE>
 Input nodes:
 [
-  {{"uuid": "a1", "name": "NYC", "summary": "New York City"}},
-  {{"uuid": "b2", "name": "New York City", "summary": "The city of New York"}},
-  {{"uuid": "c3", "name": "Los Angeles", "summary": "City in California"}}
+  {"uuid": "a1", "name": "NYC", "summary": "New York City"},
+  {"uuid": "b2", "name": "New York City", "summary": "The city of New York"},
+  {"uuid": "c3", "name": "Los Angeles", "summary": "City in California"}
 ]
 
 Result:
 [
-  {{"uuids": ["a1", "b2"], "summary": "New York City, also known as NYC"}},
-  {{"uuids": ["c3"], "summary": "City in California"}}
+  {"uuids": ["a1", "b2"], "summary": "New York City, also known as NYC"},
+  {"uuids": ["c3"], "summary": "City in California"}
 ]
 </EXAMPLE>
-""",
+"""
+
+
+def node_list(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(role='system', content=NODE_LIST_SYSTEM_PROMPT),
+        Message(
+            role='user',
+            content=render_template(
+                NODE_LIST_USER_TEMPLATE, nodes=to_prompt_json(context['nodes'])
+            ),
         ),
     ]
 
+
+NODE_TEMPLATE = PromptTemplate((NODE_SYSTEM_PROMPT, NODE_USER_TEMPLATE))
+NODES_TEMPLATE = PromptTemplate((NODES_SYSTEM_PROMPT, NODES_USER_TEMPLATE))
+NODE_LIST_TEMPLATE = PromptTemplate((NODE_LIST_SYSTEM_PROMPT, NODE_LIST_USER_TEMPLATE))
+node.__prompt_template__ = NODE_TEMPLATE
+nodes.__prompt_template__ = NODES_TEMPLATE
+node_list.__prompt_template__ = NODE_LIST_TEMPLATE
 
 versions: Versions = {'node': node, 'node_list': node_list, 'nodes': nodes}
 

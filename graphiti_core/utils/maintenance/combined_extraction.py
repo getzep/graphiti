@@ -27,11 +27,16 @@ from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.extract_edges import BatchEdgeTimestamps
-from graphiti_core.prompts.extract_nodes_and_edges import CombinedExtraction, CombinedFact
+from graphiti_core.prompts.extract_nodes_and_edges import (
+    CombinedExtraction,
+    CombinedFact,
+    untyped_extraction_model,
+)
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.dangling_endpoints import materialize_dangling_endpoint_node
 from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
 from graphiti_core.utils.maintenance.node_operations import (
+    _attributes_context,
     _build_entity_types_context,
     _collapse_exact_duplicate_extracted_nodes,
     _filter_entity_types_context,
@@ -66,12 +71,13 @@ async def extract_nodes_and_edges(
     strict_edge_types: bool = False,
     custom_extraction_instructions: str | None = None,
     timeline: list[EpisodicNode] | None = None,
+    knowledge: str | None = None,
+    untyped_entities: bool = False,
 ) -> tuple[list[EntityNode], list[EntityEdge], dict[str, list[int]]]:
     """Extract entity nodes and relationship facts in a single LLM call.
 
-    This combined extraction produces better results than separate node+edge
-    extraction because the model can see both tasks simultaneously, ensuring
-    every entity has at least one connecting fact and reducing orphaned nodes.
+    Nodes of entity types with attributes stay without edges because attribute
+    extraction stores their values. Other nodes with no edges are dropped.
 
     Parameters
     ----------
@@ -91,7 +97,7 @@ async def extract_nodes_and_edges(
         Custom edge type definitions (Pydantic models keyed by type name).
     strict_edge_types : bool
         Whether to discard edges that do not use one of the provided edge_types.
-    custom_extraction_instructions : str | None
+    knowledge : str | None
         Additional extraction instructions.
     timeline : list[EpisodicNode] | None
         Ordered span containing the episodes plus interleaved context-only turns.
@@ -103,6 +109,8 @@ async def extract_nodes_and_edges(
         A tuple of (nodes, edges, node_episode_index_map) where
         node_episode_index_map maps node UUID to 0-indexed episode positions.
     """
+    if knowledge is None:
+        knowledge = custom_extraction_instructions
     episodes = episode if isinstance(episode, list) else [episode]
     primary_episode = episodes[0]
 
@@ -113,16 +121,31 @@ async def extract_nodes_and_edges(
     entity_types_context = _filter_entity_types_context(
         _build_entity_types_context(entity_types), excluded_entity_types
     )
-    if not entity_types_context:
+    speaker_types = {}
+    if untyped_entities:
+        speaker_types = {
+            name.lower(): name for name in (entity_types or {}) if name in {'User', 'Assistant'}
+        }
+        entity_types_context = []
+    attribute_type_names: set[str] = {
+        type_context['entity_type_name']
+        for type_context in entity_types_context
+        if type_context.get('entity_type_attributes')
+    }
+    if not entity_types_context and not untyped_entities:
         logger.debug('No entity types available for combined extraction after exclusions')
         return [], [], {}
 
     # Build edge types context (same format as separate extraction path)
     edge_types_context: list[dict] = []
-    if edge_types and edge_type_map:
+    prompt_edge_types = edge_types
+    prompt_edge_type_names = set(prompt_edge_types or {})
+    if prompt_edge_types and edge_type_map:
         edge_type_signatures_map: dict[str, list] = {}
         for signature, type_names in edge_type_map.items():
             for type_name in type_names:
+                if type_name not in prompt_edge_type_names:
+                    continue
                 if type_name not in edge_type_signatures_map:
                     edge_type_signatures_map[type_name] = []
                 edge_type_signatures_map[type_name].append(signature)
@@ -134,15 +157,16 @@ async def extract_nodes_and_edges(
                     type_name, [('Entity', 'Entity')]
                 ),
                 'fact_type_description': type_model.__doc__,
+                **_attributes_context('fact_type_attributes', type_model),
             }
-            for type_name, type_model in edge_types.items()
+            for type_name, type_model in prompt_edge_types.items()
         ]
 
     if strict_edge_types and not edge_types_context:
         logger.debug('No edge types available for strict combined extraction')
         return [], [], {}
 
-    allowed_edge_type_names = set(edge_types or {}) if strict_edge_types else None
+    allowed_edge_type_names = set(prompt_edge_types or {}) if strict_edge_types else None
 
     # Build context for the combined prompt
     context = {
@@ -156,23 +180,43 @@ async def extract_nodes_and_edges(
             }
             for ep in previous_episodes
         ],
-        'custom_extraction_instructions': custom_extraction_instructions or '',
+        'knowledge': knowledge or '',
         'entity_types': entity_types_context,
         'edge_types': edge_types_context,
         'strict_edge_types': strict_edge_types,
     }
+    if untyped_entities:
+        context['untyped_entities'] = True
+        context['speaker_types'] = list(speaker_types.values())
+
+    prompt_name = 'extract_nodes_and_edges.extract_message'
+    prompt_builder = prompt_library.extract_nodes_and_edges.extract_message
+    response_model = CombinedExtraction
+
+    if untyped_entities:
+        response_model = untyped_extraction_model(list(speaker_types.values()))
 
     # Single LLM call for combined extraction
     llm_response = await generate_prompt_response(
         llm_client,
-        'extract_nodes_and_edges.extract_message',
-        prompt_library.extract_nodes_and_edges.extract_message,
+        prompt_name,
+        prompt_builder,
         context,
         clients=clients,
-        response_model=CombinedExtraction,
+        response_model=response_model,
         group_id=primary_episode.group_id,
     )
-    response_object = CombinedExtraction(**llm_response)
+    if untyped_entities and 'extracted_entities' in llm_response:
+        llm_response = {
+            **llm_response,
+            'extracted_entities': [
+                {**entity, 'speaker': None}
+                if isinstance(entity, dict) and entity.get('speaker') not in speaker_types
+                else entity
+                for entity in llm_response.get('extracted_entities', [])
+            ],
+        }
+    response_object = response_model(**llm_response)
 
     end = time()
     logger.debug(
@@ -190,13 +234,19 @@ async def extract_nodes_and_edges(
     extracted_nodes: list[EntityNode] = []
     excluded_entity_names: set[str] = set()
     for entity in filtered_entities:
-        type_id = entity.entity_type_id
+        type_id = getattr(entity, 'entity_type_id', -1)
         if 0 <= type_id < len(entity_types_context):
             entity_type_name = entity_types_context[type_id].get('entity_type_name')
         else:
             entity_type_name = 'Entity'
+        if untyped_entities:
+            entity_type_name = speaker_types.get(getattr(entity, 'speaker', None) or '', 'Entity')
 
-        if excluded_entity_types and entity_type_name in excluded_entity_types:
+        if (
+            not untyped_entities
+            and excluded_entity_types
+            and entity_type_name in excluded_entity_types
+        ):
             excluded_entity_names.add(_normalize_string_exact(entity.name))
             logger.debug(f'Excluding entity of type "{entity_type_name}"')
             continue
@@ -244,7 +294,7 @@ async def extract_nodes_and_edges(
         source_name = edge_data.source_entity_name.strip()
         target_name = edge_data.target_entity_name.strip()
         if not source_name or not target_name:
-            logger.debug('Skipping edge with empty source or target entity name')
+            logger.debug('Skipping edge endpoint with empty source or target name')
             continue
 
         if (
@@ -263,6 +313,7 @@ async def extract_nodes_and_edges(
             logger.debug('Skipping edge with excluded entity endpoint')
             continue
 
+        # Resolve endpoints; materialize any dangling name instead of dropping the edge
         source_node = name_to_node.get(source_key)
         if source_node is None:
             before = len(extracted_nodes)
@@ -300,6 +351,7 @@ async def extract_nodes_and_edges(
             )
         )
 
+    # --- Extract timestamps in batches ---
     if extracted_edges:
 
         async def extract_group_timestamps(group: list[EntityEdge]) -> BatchEdgeTimestamps | None:
@@ -314,7 +366,7 @@ async def extract_nodes_and_edges(
             ]
             for attempt in range(1, TIMESTAMP_BATCH_ATTEMPTS + 1):
                 try:
-                    # Build the prompt again for each attempt because the LLM client edits messages.
+                    # Build the prompt again for each attempt: the LLM client edits the messages.
                     ts_response = await generate_prompt_response(
                         llm_client,
                         'extract_edges.extract_timestamps_batch',
@@ -335,6 +387,7 @@ async def extract_nodes_and_edges(
                     )
             return None
 
+        # Smaller groups limit the facts that one failed call leaves undated.
         fact_groups = [
             extracted_edges[i : i + TIMESTAMP_BATCH_SIZE]
             for i in range(0, len(extracted_edges), TIMESTAMP_BATCH_SIZE)
@@ -343,15 +396,19 @@ async def extract_nodes_and_edges(
             *(extract_group_timestamps(group) for group in fact_groups),
             max_coroutines=clients.max_coroutines,
         )
+        dated_edge_uuids: set[str] = set()
         for group, batch_result in zip(fact_groups, group_results, strict=True):
             if batch_result is None:
                 continue
+            dated_edge_uuids.update(edge.uuid for edge in group)
             if len(batch_result.timestamps) != len(group):
                 logger.warning(
                     'Batch timestamp count mismatch: got %d timestamps for %d facts',
                     len(batch_result.timestamps),
                     len(group),
                 )
+            # Truncating extra rows keeps every zip_longest pair on a real fact;
+            # a short batch pads with None so those facts are still stamped.
             batch_rows = batch_result.timestamps[: len(group)]
             for edge, timestamps in zip_longest(group, batch_rows):
                 if timestamps is not None:
@@ -361,23 +418,31 @@ async def extract_nodes_and_edges(
                         timestamps.invalid_at,
                         edge.reference_time,
                     )
-
-    # --- Derive node episode attribution from edges and drop orphans ---
+    # --- Derive node episode attribution from edges and drop other orphans ---
     # Each node inherits the episode indices of every edge it participates in.
-    # Nodes with no connecting edges are dropped — they have no retrievable facts.
+    # Nodes of entity types with attributes stay without edges because attribute extraction
+    # stores their values. All other nodes with no edges are dropped.
     episode_uuid_to_idx = {ep.uuid: i for i, ep in enumerate(episodes)}
     connected_node_uuids: set[str] = set()
     for edge in extracted_edges:
         connected_node_uuids.add(edge.source_node_uuid)
         connected_node_uuids.add(edge.target_node_uuid)
 
-    orphan_count = sum(1 for n in extracted_nodes if n.uuid not in connected_node_uuids)
+    retained_nodes: list[EntityNode] = []
+    orphan_count = 0
+    for node in extracted_nodes:
+        if node.uuid in connected_node_uuids or any(
+            label in attribute_type_names for label in node.labels
+        ):
+            retained_nodes.append(node)
+        else:
+            orphan_count += 1
     if orphan_count:
         logger.debug(
             'Dropping %d orphan node(s) with no connecting edges',
             orphan_count,
         )
-    extracted_nodes = [n for n in extracted_nodes if n.uuid in connected_node_uuids]
+    extracted_nodes = retained_nodes
     surviving_materialized = len(materialized_endpoint_uuids & connected_node_uuids)
     if surviving_materialized:
         logger.warning(

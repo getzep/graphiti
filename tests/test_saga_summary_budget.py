@@ -100,25 +100,18 @@ class _FakeLLMClient:
         return {'summary': 'updated summary'}
 
 
-def _make_graphiti(operations, llm):
-    graphiti = Graphiti.__new__(Graphiti)
-    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
-    graphiti.llm_client = llm
-    graphiti.clients = GraphitiClients.model_construct(
-        driver=graphiti.driver,
-        llm_client=llm,
-        embedder=SimpleNamespace(),
-        cross_encoder=SimpleNamespace(),
-        tracer=SimpleNamespace(),
-    )
-    return graphiti
+class _FailingLLMClient:
+    async def generate_response(self, _messages, response_model=None, prompt_name=None, **_kwargs):
+        raise AssertionError('LLM should not be called for this case')
 
 
 async def test_saga_summary_cursor_advances_only_to_latest_selected_episode(monkeypatch):
     monkeypatch.setattr('graphiti_core.graphiti.SAGA_SUMMARY_MAX_EPISODE_CHARS', 90)
     operations = _FakeGraphOperations()
     llm = _FakeLLMClient()
-    graphiti = _make_graphiti(operations, llm)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = llm
 
     saga = await graphiti.summarize_saga('saga-1')
 
@@ -141,7 +134,9 @@ async def test_saga_summary_watermark_advances_for_partial_fetch_window(monkeypa
     episodes = [('e' * 1_000, _dt(i), _dt(10 + i)) for i in range(1, 21)]
     operations = _FakeGraphOperations(episodes=episodes)
     llm = _FakeLLMClient()
-    graphiti = _make_graphiti(operations, llm)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = llm
 
     saga = await graphiti.summarize_saga('saga-1')
 
@@ -167,7 +162,9 @@ class _LongSummaryLLMClient(_FakeLLMClient):
 async def test_saga_summary_truncates_stored_text_to_8k_chars():
     operations = _FakeGraphOperations()
     llm = _LongSummaryLLMClient()
-    graphiti = _make_graphiti(operations, llm)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = llm
 
     saga = await graphiti.summarize_saga('saga-1')
 
@@ -185,7 +182,9 @@ async def test_saga_summary_cursor_follows_created_at_not_valid_at(monkeypatch):
             ('backfill newer ingestion but older valid_at', _dt(1), _dt(10)),
         ]
     )
-    graphiti = _make_graphiti(operations, _FakeLLMClient())
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = _FakeLLMClient()
 
     saga = await graphiti.summarize_saga('saga-1')
 
@@ -203,7 +202,9 @@ async def test_saga_summary_prompt_orders_selected_episodes_by_valid_at(monkeypa
             ('backfill newer ingestion but older valid_at', _dt(1), _dt(10)),
         ]
     )
-    graphiti = _make_graphiti(operations, _FakeLLMClient())
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = _FakeLLMClient()
 
     await graphiti.summarize_saga('saga-1')
 
@@ -219,7 +220,9 @@ async def test_saga_summary_truncates_oversized_first_episode_and_advances_curso
     monkeypatch.setattr('graphiti_core.graphiti.SAGA_SUMMARY_MAX_EPISODE_CHARS', 10)
     operations = _FakeGraphOperations()
     llm = _FakeLLMClient()
-    graphiti = _make_graphiti(operations, llm)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = llm
 
     saga = await graphiti.summarize_saga('saga-1')
 
@@ -233,12 +236,101 @@ async def test_saga_summary_truncates_oversized_first_episode_and_advances_curso
     assert operations.saved_saga is saga
 
 
+class _RebuildFakeGraphOperations(_FakeGraphOperations):
+    """A saga that HAS been summarized before: carries a prior summary and
+    watermarks, and records the `since` filter the fetch was given."""
+
+    def __init__(self, episodes=None):
+        super().__init__(episodes)
+        self.requested_since = 'unset'
+
+    async def saga_node_get_by_uuid(self, _cls, _driver, uuid: str):
+        saga = SagaNode(uuid=uuid, name='test saga', group_id='graph-1', created_at=_dt(0))
+        saga.summary = 'OLD SUMMARY CONTAINING DELETED EPISODE CONTENT'
+        saga.last_summarized_at = _dt(20)
+        saga.last_summarized_episode_valid_at = _dt(9)
+        return saga
+
+    async def saga_get_episode_contents(self, _driver, _saga_uuid, since=None, limit=200):
+        self.requested_since = since
+        return self.episodes
+
+
+class _CapturingLLMClient:
+    def __init__(self):
+        self.messages = None
+
+    async def generate_response(
+        self, messages, response_model=None, prompt_name=None, max_tokens=None, **_kwargs
+    ):
+        self.messages = messages
+        self.max_tokens = max_tokens
+        return {'summary': 'rebuilt summary'}
+
+
+async def test_saga_summary_rebuild_ignores_watermark_and_discards_old_text():
+    """A rebuild regenerates from scratch -- the watermark
+    filter is bypassed (all surviving episodes fetched) and the prior summary
+    text (which carries deleted-episode content) is not fed to the prompt."""
+    operations = _RebuildFakeGraphOperations()
+    llm = _CapturingLLMClient()
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = llm
+
+    saga = await graphiti.summarize_saga('saga-1', rebuild=True)
+
+    assert operations.requested_since is None, 'rebuild must fetch ALL surviving episodes'
+    prompt_text = ' '.join(str(m) for m in llm.messages)
+    assert 'OLD SUMMARY CONTAINING DELETED EPISODE CONTENT' not in prompt_text, (
+        'rebuild must not feed the prior summary back into the prompt'
+    )
+    assert saga.summary == 'rebuilt summary'
+    # The temporal watermark reflects the surviving episodes even though it
+    # regresses from the pre-rebuild value.
+    assert saga.last_summarized_episode_valid_at == _dt(3)
+    assert operations.saved_saga is saga
+
+
+async def test_saga_summary_rebuild_with_no_survivors_runs_before_publish():
+    """A rebuild over zero surviving episodes must not invent content: the
+    summary is cleared without an LLM call."""
+    operations = _RebuildFakeGraphOperations(episodes=[])
+    operations.episodes = []
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = _FailingLLMClient()
+    seen = []
+
+    async def before_publish(summary: str) -> str:
+        assert operations.saved_saga is None
+        seen.append(summary)
+        return 'checked empty summary'
+
+    saga = await graphiti.summarize_saga(
+        'saga-1',
+        rebuild=True,
+        before_publish=before_publish,
+    )
+
+    assert seen == ['']
+    assert saga.summary == 'checked empty summary'
+    assert saga.last_summarized_episode_valid_at is None
+    # content policies spec-1 §7.2: an episode that is not eligible yet (a
+    # pending policy state) is behind no watermark, so the next incremental
+    # run reads it.
+    assert saga.last_summarized_at is None
+    assert operations.saved_saga is saga
+
+
 async def test_saga_summary_prompt_stays_under_context_cap(monkeypatch):
     monkeypatch.setattr('graphiti_core.graphiti.SAGA_SUMMARY_MAX_PROMPT_BYTES', 12_000)
     monkeypatch.setattr('graphiti_core.graphiti.SAGA_SUMMARY_MAX_EPISODE_CHARS', 12_000)
     operations = _FakeGraphOperations(episodes=[('x' * 4_000, _dt(i), _dt(i)) for i in range(1, 8)])
     llm = _FakeLLMClient()
-    graphiti = _make_graphiti(operations, llm)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = llm
 
     saga = await graphiti.summarize_saga('saga-1')
 
@@ -286,3 +378,40 @@ async def test_saga_summary_budget_uses_routed_prompt(monkeypatch):
         prompt_bytes = sum(len(message.content.encode('utf-8')) for message in llm.messages)
         assert prompt_bytes <= 25_000
     assert routed_llm.messages[0].content.startswith('P' * 100)
+
+
+async def test_saga_summary_before_publish_runs_before_save_and_can_stop_it():
+    """The publication callback runs after generation and before the save. An
+    exception from the callback leaves the saga unsaved."""
+    operations = _FakeGraphOperations()
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    graphiti.llm_client = _FakeLLMClient()
+    seen: list[str] = []
+
+    async def before_publish(summary: str) -> str:
+        assert operations.saved_saga is None
+        seen.append(summary)
+        return summary + ' (checked)'
+
+    saga = await graphiti.summarize_saga('saga-1', before_publish=before_publish)
+
+    assert seen == ['updated summary']
+    assert saga.summary == 'updated summary (checked)'
+    assert operations.saved_saga is saga
+
+    class _Stop(Exception):
+        pass
+
+    async def stop(_summary: str) -> str:
+        raise _Stop()
+
+    operations = _FakeGraphOperations()
+    graphiti.driver = SimpleNamespace(graph_operations_interface=operations)
+    try:
+        await graphiti.summarize_saga('saga-1', before_publish=stop)
+    except _Stop:
+        pass
+    else:
+        raise AssertionError('the callback must stop the publication')
+    assert operations.saved_saga is None

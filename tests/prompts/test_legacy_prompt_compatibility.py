@@ -15,6 +15,7 @@ from graphiti_core.prompts import create_prompt_library, default_chat_prompt_lib
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
 from graphiti_core.prompts.lib import PROMPT_GROUPS
 from graphiti_core.prompts.models import ChatPrompt, Message, SystemMessage, UserMessage
+from graphiti_core.prompts.versions import PromptTemplate
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import node_operations
 
@@ -22,8 +23,9 @@ PROMPT_CONTEXT: dict[str, Any] = {
     'answer': 'Alice knows Bob.',
     'attributes': {'role': 'project lead'},
     'baseline': 'Bob is known by Alice.',
+    'chain': [{'name': 'Person', 'description': 'A person mentioned in an episode.'}],
     'candidate': 'Alice knows Bob.',
-    'custom_extraction_instructions': 'Use only facts stated in the episode.',
+    'knowledge': 'Use only facts stated in the episode.',
     'edge_invalidation_candidates': '[]',
     'edge_types': [{'name': 'KNOWS', 'description': 'One person knows another.'}],
     'entities': [{'name': 'Alice', 'type': 'Person'}],
@@ -74,9 +76,38 @@ PROMPT_CONTEXT: dict[str, Any] = {
 def test_chat_prompt_defaults_match_legacy_prompt_text(group_name: str, function_name: str) -> None:
     legacy_builder = getattr(getattr(prompt_library, group_name), function_name)
     chat_builder = getattr(getattr(default_chat_prompt_library, group_name), function_name)
+    context = PROMPT_CONTEXT
+    if group_name == 'classify_entity_subtype':
+        context = {
+            **PROMPT_CONTEXT,
+            'episode_content': [PROMPT_CONTEXT['episode_content']],
+            'entity_name': 'Alice',
+            'candidates': [
+                {
+                    'index': 0,
+                    'name': 'Person',
+                    'description': 'A person mentioned in an episode.',
+                }
+            ],
+        }
+    elif group_name == 'classify_edge_subtype':
+        context = {
+            **PROMPT_CONTEXT,
+            'episode_content': [PROMPT_CONTEXT['episode_content']],
+            'chain': [{'name': 'KNOWS', 'description': 'One person knows another.'}],
+            'candidates': [
+                {
+                    'index': 1,
+                    'name': 'KNOWS_COLLEAGUE',
+                    'description': 'A work colleague knows another person.',
+                }
+            ],
+            'source_entity_name': 'Alice',
+            'target_entity_name': 'Bob',
+        }
 
-    expected = legacy_builder(PROMPT_CONTEXT)
-    actual = chat_builder(PROMPT_CONTEXT).as_messages()
+    expected = legacy_builder(context)
+    actual = chat_builder(context).as_messages()
 
     assert [(message.role, message.content.encode('utf-8')) for message in actual] == [
         (message.role, message.content.encode('utf-8')) for message in expected
@@ -146,6 +177,7 @@ async def test_legacy_prompt_response_uses_main_default_kwargs(clients: Any) -> 
     assert llm_client.generate_response.await_args.kwargs == {
         'response_model': ExtractedEntities,
         'prompt_name': 'extract_nodes.extract_message',
+        'prompt_template': None,
     }
 
 
@@ -170,6 +202,7 @@ async def test_legacy_prompt_response_forwards_only_non_default_kwargs() -> None
     assert llm_client.generate_response.await_args.kwargs == {
         'response_model': ExtractedEntities,
         'prompt_name': 'extract_nodes.extract_message',
+        'prompt_template': None,
         'max_tokens': 128,
         'model_size': ModelSize.small,
         'group_id': 'group-a',
@@ -204,6 +237,7 @@ class LegacySignatureLLMClient(LLMClient):
         prompt_name: str | None = None,
         *,
         attribute_extraction: bool = False,
+        prompt_template: PromptTemplate | None = None,
     ) -> dict[str, Any]:
         self.messages = messages
         self.kwargs = {
@@ -213,6 +247,7 @@ class LegacySignatureLLMClient(LLMClient):
             'group_id': group_id,
             'prompt_name': prompt_name,
             'attribute_extraction': attribute_extraction,
+            'prompt_template': prompt_template,
         }
         return {'ok': True}
 
@@ -237,6 +272,7 @@ async def test_legacy_prompt_response_supports_main_llmclient_override_signature
     assert llm_client.kwargs['model_size'] is ModelSize.medium
     assert llm_client.kwargs['group_id'] is None
     assert llm_client.kwargs['attribute_extraction'] is False
+    assert llm_client.kwargs['prompt_template'] is None
 
 
 @pytest.mark.asyncio

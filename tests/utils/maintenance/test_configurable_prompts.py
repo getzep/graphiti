@@ -1,6 +1,7 @@
 """Runtime coverage tests for instance-scoped configurable prompts."""
 
 from datetime import datetime, timezone
+from inspect import signature
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,6 +30,68 @@ from graphiti_core.utils.maintenance.edge_operations import extract_edges, resol
 from graphiti_core.utils.maintenance.node_operations import extract_nodes, resolve_extracted_nodes
 
 
+def test_public_signatures_preserve_upstream_parameter_positions():
+    add_episode_parameters = list(signature(Graphiti.add_episode).parameters)
+    assert add_episode_parameters[14:19] == [
+        'custom_extraction_instructions',
+        'saga',
+        'saga_previous_episode_uuid',
+        'identity_properties',
+        'knowledge',
+    ]
+
+    add_episode_bulk_parameters = list(signature(Graphiti.add_episode_bulk).parameters)
+    assert add_episode_bulk_parameters[8:13] == [
+        'custom_extraction_instructions',
+        'saga',
+        'use_combined_extraction',
+        'identity_properties',
+        'knowledge',
+    ]
+
+    bulk_extraction_parameters = list(signature(extract_nodes_and_edges_bulk).parameters)
+    assert bulk_extraction_parameters[6:10] == [
+        'custom_extraction_instructions',
+        'use_combined_extraction',
+        'strict_edge_types',
+        'knowledge',
+    ]
+
+    combined_extraction_parameters = list(signature(extract_nodes_and_edges).parameters)
+    assert combined_extraction_parameters[8:12] == [
+        'custom_extraction_instructions',
+        'timeline',
+        'knowledge',
+        'untyped_entities',
+    ]
+
+    assert list(signature(extract_nodes).parameters)[5:7] == [
+        'custom_extraction_instructions',
+        'knowledge',
+    ]
+    assert list(signature(extract_edges).parameters)[8:10] == [
+        'custom_extraction_instructions',
+        'knowledge',
+    ]
+
+    resolve_edges_parameters = list(signature(edge_ops.resolve_extracted_edges).parameters)
+    assert resolve_edges_parameters[7:13] == [
+        'strict_edge_types',
+        'invalidated_by',
+        'trace',
+        'exclude_self_candidates',
+        'candidates_by_edge',
+        'knowledge',
+    ]
+
+    resolve_nodes_parameters = list(signature(node_ops.resolve_nodes_with_candidates).parameters)
+    assert resolve_nodes_parameters[7:] == [
+        'trace',
+        'episode_neighbor_uuids',
+        'require_shared_neighbor_for_name_match',
+    ]
+
+
 class _EmploymentEdge(BaseModel):
     """Employment edge attributes."""
 
@@ -47,7 +110,7 @@ def _marker_prompt(marker: str):
 
 def _make_clients(custom_library=None) -> GraphitiClients:
     llm_client = MagicMock()
-    llm_client.max_tokens = 16384
+    llm_client.max_tokens = 32768
     llm_client.generate_response = AsyncMock(
         return_value={'extracted_entities': [], 'edges': [], 'entity_resolutions': []}
     )
@@ -56,7 +119,6 @@ def _make_clients(custom_library=None) -> GraphitiClients:
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
         llm_client=llm_client,
-        tracer=MagicMock(),
         prompt_library=custom_library,
     )
 
@@ -508,6 +570,26 @@ async def test_community_operations_use_configured_prompt_library():
 
 
 @pytest.mark.asyncio
+async def test_bulk_node_flow_inherits_clients_prompt_library(monkeypatch):
+    marker = 'CUSTOM_BULK_NODES'
+    lib = create_prompt_library({'extract_nodes': {'extract_message': _marker_prompt(marker)}})
+    clients = _make_clients(lib)
+    captured = {}
+
+    async def fake_extract_nodes_and_edges(clients_arg, *args, **kwargs):
+        captured['library'] = clients_arg.prompt_library
+        return [], [], {}
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.combined_extraction.extract_nodes_and_edges',
+        fake_extract_nodes_and_edges,
+    )
+
+    await extract_nodes_and_edges_bulk(clients, [(_make_episode(), [])], edge_type_map={})
+    assert captured['library'] is lib
+
+
+@pytest.mark.asyncio
 async def test_bulk_combined_flow_inherits_clients_prompt_library():
     marker = 'CUSTOM_BULK_COMBINED'
     lib = create_prompt_library(
@@ -517,54 +599,16 @@ async def test_bulk_combined_flow_inherits_clients_prompt_library():
     clients.llm_client.generate_response = AsyncMock(
         return_value={'extracted_entities': [], 'edges': []}
     )
-    episode = _make_episode()
 
     await extract_nodes_and_edges_bulk(
         clients,
-        [(episode, [])],
-        {('Entity', 'Entity'): []},
-        use_combined_extraction=True,
+        [(_make_episode(), [])],
+        edge_type_map={('Entity', 'Entity'): []},
     )
 
     args, kwargs = clients.llm_client.generate_response.await_args
     assert args[0][0].content.startswith(marker)
     assert kwargs['prompt_name'] == 'extract_nodes_and_edges.extract_message'
-
-
-@pytest.mark.asyncio
-async def test_bulk_node_flow_inherits_clients_prompt_library(monkeypatch):
-    marker = 'CUSTOM_BULK_NODES'
-    lib = create_prompt_library({'extract_nodes': {'extract_message': _marker_prompt(marker)}})
-    clients = _make_clients(lib)
-    clients.llm_client.generate_response = AsyncMock(
-        return_value={'extracted_entities': [], 'edges': []}
-    )
-
-    captured = {}
-
-    async def fake_extract_nodes(clients_arg, *args, **kwargs):
-        captured['library'] = clients_arg.prompt_library
-        return [], {}
-
-    monkeypatch.setattr(
-        'graphiti_core.utils.bulk_utils.extract_nodes',
-        fake_extract_nodes,
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.bulk_utils.extract_edges',
-        AsyncMock(return_value=([], [])),
-    )
-
-    episode = _make_episode()
-    await extract_nodes_and_edges_bulk(
-        clients,
-        [(episode, [])],
-        edge_type_map={},
-        use_combined_extraction=False,
-    )
-
-    assert clients.prompt_library is lib
-    assert captured['library'] is lib
 
 
 @pytest.mark.asyncio
@@ -582,10 +626,7 @@ async def test_add_episode_bulk_can_select_separate_extraction(monkeypatch):
 
     extract_mock = AsyncMock(return_value=([], []))
     monkeypatch.setattr('graphiti_core.graphiti.extract_nodes_and_edges_bulk', extract_mock)
-    monkeypatch.setattr(
-        'graphiti_core.graphiti.add_nodes_and_edges_bulk',
-        AsyncMock(),
-    )
+    monkeypatch.setattr('graphiti_core.graphiti.add_nodes_and_edges_bulk', AsyncMock())
     monkeypatch.setattr(
         'graphiti_core.graphiti.retrieve_previous_episodes_bulk',
         retrieve_episodes,
@@ -594,10 +635,7 @@ async def test_add_episode_bulk_can_select_separate_extraction(monkeypatch):
         'graphiti_core.graphiti.dedupe_nodes_bulk',
         AsyncMock(return_value=({}, {})),
     )
-    monkeypatch.setattr(
-        'graphiti_core.graphiti.dedupe_edges_bulk',
-        AsyncMock(return_value={}),
-    )
+    monkeypatch.setattr('graphiti_core.graphiti.dedupe_edges_bulk', AsyncMock(return_value={}))
     graphiti._resolve_nodes_and_edges_bulk = AsyncMock(return_value=([], [], [], {}))
 
     await graphiti.add_episode_bulk(
@@ -610,8 +648,15 @@ async def test_add_episode_bulk_can_select_separate_extraction(monkeypatch):
                 reference_time=utc_now(),
             )
         ],
-        group_id='group',
-        use_combined_extraction=False,
+        None,
+        None,
+        None,
+        None,
+        None,
+        False,
+        None,
+        None,
+        False,
     )
 
     extract_mock.assert_awaited_once()

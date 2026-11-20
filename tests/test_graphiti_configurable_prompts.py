@@ -1,5 +1,6 @@
 """Tests for Graphiti constructor prompt_library / llm_runtime wiring."""
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -49,6 +50,85 @@ def test_graphiti_keeps_prompt_library_unset_when_unconfigured():
     graphiti = _make_graphiti()
     assert graphiti.prompt_library is None
     assert graphiti.clients.prompt_library is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_ingestion_receives_resolved_knowledge():
+    class RecordingIngestor:
+        def __init__(self):
+            self.single_episode_kwargs = None
+            self.bulk_episode_kwargs = None
+
+        async def add_episode(self, **kwargs):
+            self.single_episode_kwargs = kwargs
+
+        async def add_episode_bulk(self, **kwargs):
+            self.bulk_episode_kwargs = kwargs
+
+    graphiti = _make_graphiti()
+    ingestor = RecordingIngestor()
+    graphiti.concurrent_ingestion = SimpleNamespace(enabled_for_group=None)
+    graphiti._resolve_request_scope = lambda group_id: (
+        group_id or 'test-group',
+        graphiti.driver,
+        graphiti.clients,
+    )
+    graphiti._concurrent_ingestion_enabled = lambda group_id: True
+    graphiti._get_concurrent_ingestor = lambda: ingestor
+
+    await graphiti.add_episode(
+        name='single',
+        episode_body='single body',
+        source_description='test',
+        reference_time=datetime.now(timezone.utc),
+        knowledge='single knowledge',
+    )
+    await graphiti.add_episode_bulk(bulk_episodes=[], knowledge='bulk knowledge')
+
+    assert ingestor.single_episode_kwargs['custom_extraction_instructions'] == 'single knowledge'
+    assert ingestor.bulk_episode_kwargs['custom_extraction_instructions'] == 'bulk knowledge'
+
+    with pytest.warns(DeprecationWarning, match='custom_extraction_instructions is deprecated'):
+        await graphiti.add_episode(
+            name='single alias',
+            episode_body='single alias body',
+            source_description='test',
+            reference_time=datetime.now(timezone.utc),
+            custom_extraction_instructions='single alias knowledge',
+        )
+    with pytest.warns(DeprecationWarning, match='custom_extraction_instructions is deprecated'):
+        await graphiti.add_episode_bulk(
+            bulk_episodes=[],
+            custom_extraction_instructions='bulk alias knowledge',
+        )
+
+    assert (
+        ingestor.single_episode_kwargs['custom_extraction_instructions'] == 'single alias knowledge'
+    )
+    assert ingestor.bulk_episode_kwargs['custom_extraction_instructions'] == 'bulk alias knowledge'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('method', ['single', 'bulk'])
+async def test_graphiti_rejects_knowledge_and_deprecated_alias_together(method):
+    graphiti = _make_graphiti()
+
+    with pytest.raises(ValueError, match='Pass either knowledge or custom_extraction_instructions'):
+        if method == 'single':
+            await graphiti.add_episode(
+                name='episode',
+                episode_body='body',
+                source_description='test',
+                reference_time=datetime.now(timezone.utc),
+                knowledge='new argument',
+                custom_extraction_instructions='deprecated alias',
+            )
+        else:
+            await graphiti.add_episode_bulk(
+                bulk_episodes=[],
+                knowledge='new argument',
+                custom_extraction_instructions='deprecated alias',
+            )
 
 
 def test_graphiti_stores_custom_prompt_library():
@@ -159,7 +239,7 @@ def test_create_prompt_library_does_not_mutate_default_prompt_library():
     context = {
         'episode_content': 'hi',
         'previous_episodes': [],
-        'custom_extraction_instructions': '',
+        'knowledge': '',
         'entity_types': [],
         'source_description': 'test',
     }

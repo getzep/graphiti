@@ -270,9 +270,7 @@ class TestFalkorDriver:
             # hasattr(self.client, 'aclose') returns False
             # hasattr(self.client.connection, 'aclose') returns False
             # hasattr(self.client.connection, 'close') returns True
-            mock_hasattr.side_effect = lambda obj, attr: (
-                attr == 'close' and obj is mock_connection
-            )
+            mock_hasattr.side_effect = lambda obj, attr: attr == 'close' and obj is mock_connection
 
             await self.driver.close()
 

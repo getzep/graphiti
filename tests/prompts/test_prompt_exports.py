@@ -26,7 +26,7 @@ def test_prompt_library_import_from_prompts_package():
         {
             'episode_content': 'hi',
             'previous_episodes': [],
-            'custom_extraction_instructions': '',
+            'knowledge': '',
             'entity_types': [],
             'source_description': 'test',
         }

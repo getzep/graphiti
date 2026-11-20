@@ -1,9 +1,11 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.llm_client import LLMRuntime, LLMTransport
+from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.prompts.extract_nodes_and_edges import (
     _build_extract_user_prompt,
@@ -43,6 +45,160 @@ def _make_episode() -> EpisodicNode:
         content='Acme Robotics announced the Atlas launch.',
         valid_at=utc_now(),
     )
+
+
+@pytest.mark.asyncio
+async def test_combined_extraction_keeps_orphan_of_entity_type_with_attributes():
+    class Vendor(BaseModel):
+        domain: str | None = Field(None, description='The vendor internet domain.')
+
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'extracted_entities': [{'name': 'Crimson Harbor Labs', 'entity_type_id': 1}],
+        'edges': [],
+    }
+
+    nodes, edges, node_episode_index_map = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+        entity_types={'Vendor': Vendor},
+    )
+
+    assert len(nodes) == 1
+    assert nodes[0].name == 'Crimson Harbor Labs'
+    assert 'Vendor' in nodes[0].labels
+    assert edges == []
+    assert nodes[0].uuid not in node_episode_index_map
+
+
+@pytest.mark.asyncio
+async def test_combined_extraction_drops_orphan_of_entity_type_without_attributes():
+    class Vendor(BaseModel):
+        pass
+
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'extracted_entities': [{'name': 'Crimson Harbor Labs', 'entity_type_id': 1}],
+        'edges': [],
+    }
+
+    nodes, edges, _ = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+        entity_types={'Vendor': Vendor},
+    )
+
+    assert nodes == []
+    assert edges == []
+
+
+@pytest.mark.asyncio
+async def test_combined_extraction_drops_default_entity_orphan_and_keeps_connected_pair():
+    clients, llm_generate = _make_clients()
+    llm_generate.side_effect = [
+        {
+            'extracted_entities': [
+                {'name': 'Acme Robotics', 'entity_type_id': 0},
+                {'name': 'Atlas launch', 'entity_type_id': 0},
+                {'name': 'Unrelated concept', 'entity_type_id': 0},
+            ],
+            'edges': [
+                {
+                    'source_entity_name': 'Acme Robotics',
+                    'target_entity_name': 'Atlas launch',
+                    'relation_type': 'ANNOUNCED',
+                    'fact': 'Acme Robotics announced the Atlas launch.',
+                    'episode_indices': [0],
+                }
+            ],
+        },
+        {'timestamps': [{'valid_at': None, 'invalid_at': None}]},
+    ]
+
+    nodes, edges, node_episode_index_map = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+    )
+
+    assert {node.name for node in nodes} == {'Acme Robotics', 'Atlas launch'}
+    assert len(edges) == 1
+    assert set(node_episode_index_map) == {node.uuid for node in nodes}
+
+
+@pytest.mark.asyncio
+async def test_untyped_extraction_drops_orphan_with_available_attribute_entity_type():
+    class Vendor(BaseModel):
+        domain: str | None = Field(None, description='The vendor internet domain.')
+
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'extracted_entities': [{'name': 'Crimson Harbor Labs'}],
+        'edges': [],
+    }
+
+    nodes, edges, _ = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+        entity_types={'Vendor': Vendor},
+        untyped_entities=True,
+    )
+
+    assert nodes == []
+    assert edges == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime_routing', [False, True])
+async def test_untyped_extraction_ignores_type_output_and_exclusions(runtime_routing):
+    clients, generate = _make_clients()
+    if runtime_routing:
+        routed_client = MagicMock(spec=LLMClient)
+        routed_client.generate_response = generate
+        clients.llm_runtime = LLMRuntime(model=LLMTransport(routed_client).model('test'))
+    endpoints = {
+        'source_entity_name': 'Acme',
+        'target_entity_name': 'Atlas',
+        'relation_type': 'MAKES',
+    }
+    generate.side_effect = [
+        {
+            'extracted_entities': [
+                {'name': 'Acme', 'entity_type_id': 1},
+                {'name': 'Atlas'},
+            ],
+            'edges': [
+                {
+                    **endpoints,
+                    'fact': 'Acme makes Atlas.',
+                    'episode_indices': [0],
+                }
+            ],
+        },
+        {'timestamps': [{'valid_at': None, 'invalid_at': None}]},
+    ]
+    nodes, edges, _ = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        [],
+        entity_types={'Company': BaseModel},
+        excluded_entity_types=['Entity', 'Company'],
+        untyped_entities=True,
+    )
+    assert len(nodes) == 2
+    assert all(node.labels == ['Entity'] for node in nodes)
+    assert len(edges) == 1
+    assert edges[0].name == 'MAKES'
+    prompt = '\n'.join(message.content for message in generate.await_args_list[0].args[0])
+    assert '<ENTITY TYPES>' not in prompt
+    assert 'entity_type_id' not in prompt
+    schema = generate.await_args_list[0].kwargs['response_model'].model_json_schema()
+    assert schema['$defs']['UntypedEntity']['properties'] == {
+        'name': {'title': 'Name', 'type': 'string'}
+    }
 
 
 @pytest.mark.asyncio
@@ -87,9 +243,9 @@ async def test_combined_extraction_excluding_default_entity_remaps_custom_type_t
     assert all(episode_indices == [0] for episode_indices in node_episode_index_map.values())
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
-    assert "'entity_type_name': 'Entity'" not in prompt_text
-    assert "'entity_type_id': 0" in prompt_text
-    assert "'entity_type_name': 'Company'" in prompt_text
+    assert '"entity_type_name": "Entity"' not in prompt_text
+    assert '"entity_type_id": 0' in prompt_text
+    assert '"entity_type_name": "Company"' in prompt_text
 
 
 @pytest.mark.asyncio
@@ -147,6 +303,37 @@ async def test_combined_extraction_strict_edge_types_filters_derived_relations()
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
     assert 'If a relationship does not match any FACT TYPE, skip it' in prompt_text
     assert 'derive a new relation_type' in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_combined_extraction_prompt_keeps_all_edge_types():
+    class Root(BaseModel):
+        """A root edge type."""
+
+        pass
+
+    class Child(BaseModel):
+        """An edge type."""
+
+        pass
+
+    clients, llm_generate = _make_clients()
+    llm_generate.side_effect = [
+        {'extracted_entities': [], 'edges': []},
+        {'timestamps': []},
+    ]
+
+    await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+        edge_types={'Root': Root, 'Child': Child},
+        edge_type_map={('Entity', 'Entity'): ['Root', 'Child']},
+    )
+
+    prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
+    assert 'Root' in prompt_text
+    assert 'Child' in prompt_text
 
 
 @pytest.mark.asyncio
@@ -258,11 +445,8 @@ async def test_combined_extraction_keeps_edge_when_both_endpoints_present():
     assert all(set(node.labels) == {'Entity'} for node in nodes)
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
-    assert (
-        'source_entity_name and target_entity_name must be names from extracted_entities'
-        in prompt_text
-    )
-    assert 'If an endpoint is a value such as a version, add it as an entity.' in prompt_text
+    assert 'Every edge endpoint must also appear as an entity' in prompt_text
+    assert 'version strings like "3.4.0" / "version 6.8.6"' in prompt_text
 
 
 @pytest.mark.asyncio
@@ -343,6 +527,50 @@ async def test_combined_extraction_does_not_resurrect_excluded_entity_endpoint()
 
 
 @pytest.mark.asyncio
+async def test_combined_extraction_dates_facts_in_groups():
+    fact_count = TIMESTAMP_BATCH_SIZE + 5
+    extract_response = {
+        'extracted_entities': [
+            {'name': f'Entity {i}', 'entity_type_id': 0} for i in range(fact_count + 1)
+        ],
+        'edges': [
+            {
+                'source_entity_name': f'Entity {i}',
+                'target_entity_name': f'Entity {i + 1}',
+                'relation_type': 'LINKS_TO',
+                'fact': f'Entity {i} links to Entity {i + 1}.',
+                'episode_indices': [0],
+            }
+            for i in range(fact_count)
+        ],
+    }
+    group_sizes: list[int] = []
+
+    async def generate(messages, **kwargs):
+        if kwargs['prompt_name'] != 'extract_edges.extract_timestamps_batch':
+            return extract_response
+        prompt = '\n'.join(message.content for message in messages)
+        size = sum(f'Entity {i} links to Entity' in prompt for i in range(fact_count))
+        group_sizes.append(size)
+        if len(group_sizes) == 1:
+            raise RuntimeError('batch timestamps failed')
+        return {'timestamps': [{'valid_at': '2024-01-01T00:00:00Z', 'invalid_at': None}] * size}
+
+    clients, llm_generate = _make_clients()
+    llm_generate.side_effect = generate
+
+    _nodes, edges, _ = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+    )
+
+    assert len(edges) == fact_count
+    assert sorted(group_sizes) == sorted([TIMESTAMP_BATCH_SIZE, TIMESTAMP_BATCH_SIZE, 5])
+    assert all(edge.valid_at is not None for edge in edges)
+
+
+@pytest.mark.asyncio
 async def test_combined_extraction_pairwise_null_batch_does_not_retry():
     clients, llm_generate = _make_clients()
     llm_generate.side_effect = [
@@ -380,7 +608,6 @@ async def test_combined_extraction_pairwise_null_batch_does_not_retry():
 
 @pytest.mark.asyncio
 async def test_combined_extraction_pairwise_keeps_an_end_before_its_start():
-    """A pairwise edge keeps the extracted end time even when it precedes its start."""
     clients, llm_generate = _make_clients()
     start = '2024-02-01T00:00:00+00:00'
     end_before_start = '2024-01-01T00:00:00+00:00'
@@ -442,14 +669,15 @@ async def test_combined_extraction_renders_timeline_with_context_turns():
     )
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
+    normalized_prompt_text = ' '.join(prompt_text.split())
     episode_0 = prompt_text.index('[Episode 0]')
     context = prompt_text.index('[CONTEXT EPISODE] (timestamp:')
     episode_1 = prompt_text.index('[Episode 1]')
     assert episode_0 < context < episode_1
     assert 'ignored assistant turn' in prompt_text
-    assert '[CONTEXT EPISODE] are not numbered episodes' in prompt_text
-    assert 'PREVIOUS MESSAGES and [CONTEXT EPISODE] messages to resolve' in prompt_text
-    assert 'CONTEXT EPISODES:' not in prompt_text
+    assert '[CONTEXT EPISODE] are NOT numbered episodes' in normalized_prompt_text
+    assert 'PREVIOUS MESSAGES and [CONTEXT EPISODE] messages to resolve' in normalized_prompt_text
+    assert 'CONTEXT EPISODES:' not in normalized_prompt_text
 
 
 @pytest.mark.asyncio
@@ -497,7 +725,7 @@ async def test_combined_extraction_timeline_indices_attribute_to_targets_only():
 
 
 @pytest.mark.asyncio
-async def test_combined_extraction_renders_custom_instructions_after_fact_types():
+async def test_combined_extraction_renders_knowledge_after_fact_types():
     class Product(BaseModel):
         """A named product."""
 
@@ -521,15 +749,16 @@ async def test_combined_extraction_renders_custom_instructions_after_fact_types(
         entity_types={'Product': Product},
         edge_types={'SOLD': SOLD},
         edge_type_map={('Product', 'Product'): ['SOLD']},
-        custom_extraction_instructions='Only extract products launched after 2020.',
+        knowledge='Only extract products launched after 2020.',
     )
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
-    assert '<CUSTOM INSTRUCTIONS>' in prompt_text
+    assert '<KNOWLEDGE>' in prompt_text
     assert 'Only extract products launched after 2020.' in prompt_text
-    assert 'the CUSTOM INSTRUCTION wins' in prompt_text
-    assert prompt_text.index('</FACT TYPES>') < prompt_text.index('<CUSTOM INSTRUCTIONS>')
-    assert prompt_text.index('<CUSTOM INSTRUCTIONS>') < prompt_text.index('<PREVIOUS MESSAGES>')
+    assert 'It does not change the output rules of this task.' in prompt_text
+    assert 'the CUSTOM INSTRUCTION wins' not in prompt_text
+    assert prompt_text.index('</FACT TYPES>') < prompt_text.index('<KNOWLEDGE>')
+    assert prompt_text.index('<KNOWLEDGE>') < prompt_text.index('<PREVIOUS MESSAGES>')
 
 
 def test_combined_extraction_data_sections_match_previous_render() -> None:
@@ -544,7 +773,7 @@ def test_combined_extraction_data_sections_match_previous_render() -> None:
                 'fact_type_description': 'A person works for an organization.',
             }
         ],
-        'custom_extraction_instructions': 'Keep ownership facts.',
+        'knowledge': 'Keep ownership facts.',
         'previous_episodes': ['Alice joined Acme on Monday.'],
         'episode_content': '[Episode 0]\nAlice now leads the billing team.',
     }
@@ -561,11 +790,10 @@ RELATION TYPE RULES:
   (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).
 
 
-<CUSTOM INSTRUCTIONS>
+<KNOWLEDGE>
 Keep ownership facts.
-</CUSTOM INSTRUCTIONS>
-CUSTOM INSTRUCTION RULES:
-- CUSTOM INSTRUCTIONS come from the owner of this graph. Apply them. When a CUSTOM INSTRUCTION conflicts with a rule above, the CUSTOM INSTRUCTION wins.
+</KNOWLEDGE>
+KNOWLEDGE comes from the owner of this graph. It describes the domain: terms, aliases, and what words mean. Use it to interpret the content. It does not change the output rules of this task.
 
 <PREVIOUS MESSAGES>
 ["Alice joined Acme on Monday."]
@@ -577,37 +805,13 @@ Alice now leads the billing team.
 </CURRENT MESSAGES>
 """
 
-    prompt = _build_extract_user_prompt(context)
+    prompt = _build_extract_user_prompt(context, '')
 
     assert prompt[prompt.index('<ENTITY TYPES>') :] == previous_data_sections
 
 
-def test_combined_extraction_uses_c2_system_and_instruction_text() -> None:
-    context = {
-        'entity_types': '[]',
-        'previous_episodes': [],
-        'episode_content': 'Alice works for Acme.',
-    }
-
-    system, user = extract_message(context)
-
-    assert system.content == (
-        'You build the long-term memory of an AI agent. From each conversation you extract the '
-        'entities and the relationship facts that the agent will need later to answer questions, '
-        'personalize responses, and continue work. The original conversation will not be available '
-        'later: only your entities and facts will remain, so each fact must stand alone.'
-    )
-    assert user.content.startswith(
-        '# Goal\nTurn CURRENT MESSAGES into a knowledge graph: a list of entities and a list of '
-        'facts (edges) between them.'
-    )
-    assert '# What good output looks like' in user.content
-    assert 'ENTITY RULES:' not in user.content
-    assert 'FACT RULES:' not in user.content
-
-
 @pytest.mark.asyncio
-async def test_combined_extraction_omits_custom_instructions_block_when_empty():
+async def test_combined_extraction_omits_knowledge_block_when_empty():
     clients, llm_generate = _make_clients()
     llm_generate.side_effect = [
         {'extracted_entities': [], 'edges': []},
@@ -621,48 +825,20 @@ async def test_combined_extraction_omits_custom_instructions_block_when_empty():
     )
 
     prompt_text = '\n'.join(message.content for message in llm_generate.call_args_list[0].args[0])
-    assert '<CUSTOM INSTRUCTIONS>' not in prompt_text
+    assert '<KNOWLEDGE>' not in prompt_text
 
 
-@pytest.mark.asyncio
-async def test_combined_extraction_dates_facts_in_groups():
-    fact_count = TIMESTAMP_BATCH_SIZE + 5
-    extract_response = {
-        'extracted_entities': [
-            {'name': f'Entity {i}', 'entity_type_id': 0} for i in range(fact_count + 1)
-        ],
-        'edges': [
-            {
-                'source_entity_name': f'Entity {i}',
-                'target_entity_name': f'Entity {i + 1}',
-                'relation_type': 'LINKS_TO',
-                'fact': f'Entity {i} links to Entity {i + 1}.',
-                'episode_indices': [0],
-            }
-            for i in range(fact_count)
-        ],
-    }
-    group_sizes: list[int] = []
-
-    async def generate(messages, **kwargs):
-        if kwargs['prompt_name'] != 'extract_edges.extract_timestamps_batch':
-            return extract_response
-        prompt = '\n'.join(message.content for message in messages)
-        size = sum(f'Entity {i} links to Entity' in prompt for i in range(fact_count))
-        group_sizes.append(size)
-        if len(group_sizes) == 1:
-            raise RuntimeError('batch timestamps failed')
-        return {'timestamps': [{'valid_at': '2024-01-01T00:00:00Z', 'invalid_at': None}] * size}
-
-    clients, llm_generate = _make_clients()
-    llm_generate.side_effect = generate
-
-    _nodes, edges, _ = await extract_nodes_and_edges(
-        clients,
-        _make_episode(),
-        previous_episodes=[],
+def test_combined_extraction_uses_default_prompt():
+    system, user = extract_message(
+        {
+            'entity_types': '[]',
+            'previous_episodes': [],
+            'episode_content': 'Alice works at Acme.',
+        }
     )
 
-    assert len(edges) == fact_count
-    assert sorted(group_sizes) == sorted([TIMESTAMP_BATCH_SIZE, TIMESTAMP_BATCH_SIZE, 5])
-    assert all(edge.valid_at is not None for edge in edges)
+    assert system.content.startswith(
+        'You are an expert knowledge graph extraction specialist for an AI agent memory system.'
+    )
+    assert 'The original conversation will NOT be available at retrieval time' in system.content
+    assert 'Entity names must be NOUN PHRASES' in user.content

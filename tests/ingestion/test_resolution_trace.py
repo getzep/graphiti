@@ -200,7 +200,13 @@ async def run_node_resolution(monkeypatch, trace: ResolutionTrace | None):
     )
     kwargs = {'trace': trace} if trace is not None else {}
     nodes, uuid_map, pairs = await resolve_extracted_nodes(
-        clients, extracted, make_episode(), [], None, **kwargs
+        clients,
+        extracted,
+        make_episode(),
+        [],
+        None,
+        require_shared_neighbor_for_name_match=False,
+        **kwargs,
     )
     return nodes, uuid_map, pairs, llm_client
 

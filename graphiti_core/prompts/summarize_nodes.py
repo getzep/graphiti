@@ -24,6 +24,63 @@ from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
+from .versions import PromptTemplate, render_template
+
+SUMMARIZE_PAIR_SYSTEM_TEMPLATE = (
+    'You are a helpful assistant that combines summaries into a single dense factual summary.'
+)
+SUMMARIZE_PAIR_USER_TEMPLATE = """
+        Synthesize the information from the following two summaries into a single information-dense summary.
+
+        IMPORTANT:
+        - Preserve all materially relevant names, roles, places, dates, counts, and changes over time that are explicitly supported.
+        - Prefer compact factual sentences over vague thematic phrasing.
+        - When the durable fact is the content of what was said, state the content directly instead of narrating that it was said.
+        - Use communication verbs only when the act of speaking, asking, sharing, presenting, or announcing is itself the important fact.
+        - Avoid filler verbs like "mentioned", "described", "stated", "reported", "noted", "discussed", "referenced", and "indicated" unless the communication act itself matters.
+        - SUMMARIES MUST BE LESS THAN {max_summary_chars} CHARACTERS.
+
+        Summaries:
+        {node_summaries}
+        """
+SUMMARIZE_CONTEXT_SYSTEM_TEMPLATE = 'You are a helpful assistant that generates detailed, information-dense summaries and attributes from provided text.'
+SUMMARIZE_CONTEXT_USER_TEMPLATE = """
+        Given the MESSAGES and the ENTITY name, create a summary for the ENTITY. Your summary must only use
+        information from the provided MESSAGES. Your summary should also only contain information relevant to the
+        provided ENTITY.
+
+        In addition, extract any values for the provided entity properties based on their descriptions.
+        If the value of the entity property cannot be found in the current context, set the value of the property to the Python value None.
+
+        {summary_instructions}
+
+        <MESSAGES>
+        {previous_episodes}
+        {episode_content}
+        </MESSAGES>
+
+        <ENTITY>
+        {node_name}
+        </ENTITY>
+
+        <ENTITY CONTEXT>
+        {node_summary}
+        </ENTITY CONTEXT>
+
+        <ATTRIBUTES>
+        {attributes}
+        </ATTRIBUTES>
+        """
+SUMMARY_DESCRIPTION_SYSTEM_TEMPLATE = (
+    'You are a helpful assistant that describes provided contents in a single sentence.'
+)
+SUMMARY_DESCRIPTION_USER_TEMPLATE = """
+        Create a short one sentence description of the summary that explains what kind of information is summarized.
+        Summaries must be under {max_summary_chars} characters.
+
+        Summary:
+        {summary}
+        """
 
 
 class Summary(BaseModel):
@@ -56,24 +113,15 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that combines summaries into a single dense factual summary.',
+            content=SUMMARIZE_PAIR_SYSTEM_TEMPLATE,
         ),
         Message(
             role='user',
-            content=f"""
-        Synthesize the information from the following two summaries into a single information-dense summary.
-
-        IMPORTANT:
-        - Preserve all materially relevant names, roles, places, dates, counts, and changes over time that are explicitly supported.
-        - Prefer compact factual sentences over vague thematic phrasing.
-        - When the durable fact is the content of what was said, state the content directly instead of narrating that it was said.
-        - Use communication verbs only when the act of speaking, asking, sharing, presenting, or announcing is itself the important fact.
-        - Avoid filler verbs like "mentioned", "described", "stated", "reported", "noted", "discussed", "referenced", and "indicated" unless the communication act itself matters.
-        - SUMMARIES MUST BE LESS THAN {MAX_SUMMARY_CHARS} CHARACTERS.
-
-        Summaries:
-        {to_prompt_json(context['node_summaries'])}
-        """,
+            content=render_template(
+                SUMMARIZE_PAIR_USER_TEMPLATE,
+                max_summary_chars=str(MAX_SUMMARY_CHARS),
+                node_summaries=to_prompt_json(context['node_summaries']),
+            ),
         ),
     ]
 
@@ -82,37 +130,19 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that generates detailed, information-dense summaries and attributes from provided text.',
+            content=SUMMARIZE_CONTEXT_SYSTEM_TEMPLATE,
         ),
         Message(
             role='user',
-            content=f"""
-        Given the MESSAGES and the ENTITY name, create a summary for the ENTITY. Your summary must only use
-        information from the provided MESSAGES. Your summary should also only contain information relevant to the
-        provided ENTITY.
-
-        In addition, extract any values for the provided entity properties based on their descriptions.
-        If the value of the entity property cannot be found in the current context, set the value of the property to the Python value None.
-
-        {summary_instructions}
-
-        <MESSAGES>
-        {to_prompt_json(context['previous_episodes'])}
-        {to_prompt_json(context['episode_content'])}
-        </MESSAGES>
-
-        <ENTITY>
-        {context['node_name']}
-        </ENTITY>
-
-        <ENTITY CONTEXT>
-        {context['node_summary']}
-        </ENTITY CONTEXT>
-
-        <ATTRIBUTES>
-        {to_prompt_json(context['attributes'])}
-        </ATTRIBUTES>
-        """,
+            content=render_template(
+                SUMMARIZE_CONTEXT_USER_TEMPLATE,
+                summary_instructions=summary_instructions,
+                previous_episodes=to_prompt_json(context['previous_episodes']),
+                episode_content=to_prompt_json(context['episode_content']),
+                node_name=context['node_name'],
+                node_summary=context['node_summary'],
+                attributes=to_prompt_json(context['attributes']),
+            ),
         ),
     ]
 
@@ -121,17 +151,15 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that describes provided contents in a single sentence.',
+            content=SUMMARY_DESCRIPTION_SYSTEM_TEMPLATE,
         ),
         Message(
             role='user',
-            content=f"""
-        Create a short one sentence description of the summary that explains what kind of information is summarized.
-        Summaries must be under {MAX_SUMMARY_CHARS} characters.
-
-        Summary:
-        {to_prompt_json(context['summary'])}
-        """,
+            content=render_template(
+                SUMMARY_DESCRIPTION_USER_TEMPLATE,
+                max_summary_chars=str(MAX_SUMMARY_CHARS),
+                summary=to_prompt_json(context['summary']),
+            ),
         ),
     ]
 
@@ -141,6 +169,16 @@ versions: Versions = {
     'summarize_context': summarize_context,
     'summary_description': summary_description,
 }
+
+summarize_pair.__prompt_template__ = PromptTemplate(
+    (SUMMARIZE_PAIR_SYSTEM_TEMPLATE, SUMMARIZE_PAIR_USER_TEMPLATE)
+)
+summarize_context.__prompt_template__ = PromptTemplate(
+    (SUMMARIZE_CONTEXT_SYSTEM_TEMPLATE, SUMMARIZE_CONTEXT_USER_TEMPLATE, summary_instructions)
+)
+summary_description.__prompt_template__ = PromptTemplate(
+    (SUMMARY_DESCRIPTION_SYSTEM_TEMPLATE, SUMMARY_DESCRIPTION_USER_TEMPLATE)
+)
 
 
 class SummarizeNodesPrompts(ABC):

@@ -276,8 +276,8 @@ async def build_communities(
                 build_community(
                     llm_client,
                     cluster,
-                    clients=clients,
                     max_coroutines=max_coroutines,
+                    clients=clients,
                 )
                 for cluster in community_clusters
             ],

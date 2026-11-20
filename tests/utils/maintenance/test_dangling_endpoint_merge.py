@@ -69,7 +69,7 @@ async def test_extract_and_resolve_edges_preserves_dedup_uuid_map(monkeypatch):
         group_id='',
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
         nodes_arg.append(version)
         edge = EntityEdge(
@@ -171,7 +171,7 @@ async def test_materialized_endpoint_resolves_onto_existing_graph_node(monkeypat
         group_id='',
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
         edge = EntityEdge(
             source_node_uuid='ami-uuid',
@@ -257,7 +257,7 @@ async def test_materialized_endpoint_resolving_onto_source_drops_self_edge(monke
         group_id='',
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
         edge = EntityEdge(
             source_node_uuid='postgres-uuid',
@@ -344,7 +344,7 @@ async def test_materialized_endpoint_reuses_same_name_node_from_this_episode(mon
         group_id='',
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
         edge = EntityEdge(
             source_node_uuid='ami-uuid',
