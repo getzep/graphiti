@@ -69,11 +69,14 @@ async def delete_entities_mentioned_only_by(
     Delete the entities in entity_uuids that no episode other than episode_uuid mentions.
 
     The mention check and the delete run in one statement, so an entity that a concurrent
-    add_episode has mentioned since the caller last counted its mentions is kept. FalkorDB
-    runs each query on its own. On Neo4j a check alone only narrows the window under read
-    committed, so the statement first takes a write lock on each entity (SET, then REMOVE, a
-    property), which makes it wait for a transaction that is writing a mention of that entity
-    and then see the mention.
+    add_episode has mentioned since the caller last counted its mentions is kept. On Neo4j a
+    check alone only narrows the window under read committed, so the statement first takes a
+    write lock on each entity (SET, then REMOVE, a property), which makes it wait for a
+    transaction that is writing a mention of that entity and then see the mention.
+
+    On FalkorDB this narrows the window but does not close it. FalkorDB runs each query on its
+    own, and add_nodes_and_edges_bulk writes the entities and their MENTIONS edges as separate
+    queries, so a delete that runs between the two still removes the entity.
 
     Returns the uuids of the deleted entities.
     """
