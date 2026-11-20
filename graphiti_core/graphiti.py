@@ -59,7 +59,6 @@ from graphiti_core.nodes import (
     EntityNode,
     EpisodeType,
     EpisodicNode,
-    Node,
     SagaNode,
     create_entity_node_embeddings,
 )
@@ -110,6 +109,7 @@ from graphiti_core.utils.maintenance.edge_operations import (
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
+    delete_entities_mentioned_only_by,
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
@@ -2550,15 +2550,17 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
-        deleted_node_uuids = {node.uuid for node in nodes_to_delete}
-        surviving_nodes = [node for node in nodes if node.uuid not in deleted_node_uuids]
-
         for edge in edges_to_update:
             await edge.load_fact_embedding(self.driver)
             await edge.save(self.driver)
 
         await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
-        await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
+        # A concurrent add_episode may have mentioned an entity since it was counted above, so
+        # the delete checks the mentions again and keeps such an entity (#2159).
+        deleted_node_uuids = await delete_entities_mentioned_only_by(
+            self.driver, episode.uuid, [node.uuid for node in nodes_to_delete]
+        )
+        surviving_nodes = [node for node in nodes if node.uuid not in deleted_node_uuids]
         await episode.delete(self.driver)
 
         async def rebuild_node_summary(node: EntityNode) -> None:
