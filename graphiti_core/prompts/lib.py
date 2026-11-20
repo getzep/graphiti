@@ -19,14 +19,18 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, Protocol, TypedDict
+from typing import Any, Protocol
 
 from pydantic import BaseModel
+from typing_extensions import TypedDict
 
+from . import prompt_helpers
 from .dedupe_edges import (
     DedupeEdgesPrompts,
     DefaultDedupeEdgesPrompts,
+    EdgeContradictions,
     EdgeDuplicate,
+    EdgeDuplicates,
 )
 from .dedupe_edges import (
     Prompt as DedupeEdgesPrompt,
@@ -104,6 +108,7 @@ from .extract_nodes_and_edges import (
     CombinedExtraction,
     DefaultExtractNodesAndEdgesPrompts,
     ExtractNodesAndEdgesPrompts,
+    untyped_extraction_models,
 )
 from .extract_nodes_and_edges import (
     Prompt as ExtractNodesAndEdgesPrompt,
@@ -114,8 +119,11 @@ from .extract_nodes_and_edges import (
 from .extract_nodes_and_edges import (
     versions as extract_nodes_and_edges_versions,
 )
+from .ingestion_rules import Prompt as IngestionRulesPrompt
+from .ingestion_rules import RuleMatch
+from .ingestion_rules import Versions as IngestionRulesVersions
+from .ingestion_rules import versions as ingestion_rules_versions
 from .models import ChatPrompt, ChatPromptFunction, Message, PromptFunction, PromptSpec
-from .prompt_helpers import DO_NOT_ESCAPE_UNICODE
 from .summarize_nodes import (
     DefaultSummarizeNodesPrompts,
     SummarizeNodesPrompts,
@@ -145,6 +153,7 @@ from .summarize_sagas import (
 from .summarize_sagas import (
     versions as summarize_sagas_versions,
 )
+from .versions import PromptTemplate, template_of
 
 # Canonical group -> method names for structural validation and overrides.
 PROMPT_GROUPS: dict[str, tuple[str, ...]] = {
@@ -166,7 +175,8 @@ PROMPT_GROUPS: dict[str, tuple[str, ...]] = {
         'extract_timestamps_batch',
     ),
     'extract_nodes_and_edges': ('extract_message',),
-    'dedupe_edges': ('resolve_edge',),
+    'ingestion_rules': ('evaluate',),
+    'dedupe_edges': ('resolve_edge', 'resolve_duplicates', 'resolve_contradictions'),
     'summarize_nodes': ('summarize_pair', 'summarize_context', 'summary_description'),
     'summarize_sagas': ('summarize_saga',),
     'eval': (
@@ -179,6 +189,7 @@ PROMPT_GROUPS: dict[str, tuple[str, ...]] = {
 
 
 class PromptLibrary(Protocol):
+    ingestion_rules: IngestionRulesPrompt
     extract_nodes: ExtractNodesPrompt
     dedupe_nodes: DedupeNodesPrompt
     extract_edges: ExtractEdgesPrompt
@@ -190,6 +201,7 @@ class PromptLibrary(Protocol):
 
 
 class PromptLibraryImpl(TypedDict):
+    ingestion_rules: IngestionRulesVersions
     extract_nodes: ExtractNodesVersions
     dedupe_nodes: DedupeNodesVersions
     extract_edges: ExtractEdgesVersions
@@ -200,14 +212,30 @@ class PromptLibraryImpl(TypedDict):
     eval: EvalVersions
 
 
+class IngestionRulesPrompts(Protocol):
+    def evaluate(self, context: dict[str, Any]) -> ChatPrompt: ...
+
+
+class DefaultIngestionRulesPrompts:
+    def evaluate(self, context: dict[str, Any]) -> ChatPrompt:
+        return ChatPrompt.from_messages(ingestion_rules_versions['evaluate'](context))
+
+
 class VersionWrapper:
     def __init__(self, func: PromptFunction):
         self.func = func
+        self.__wrapped__ = func
+
+    @property
+    def __prompt_template__(self) -> PromptTemplate | None:
+        return template_of(self.func, append_parts=(prompt_helpers.DO_NOT_ESCAPE_UNICODE,))
 
     def __call__(self, context: dict[str, Any]) -> list[Message]:
         messages = self.func(context)
         for message in messages:
-            message.content += DO_NOT_ESCAPE_UNICODE if message.role == 'system' else ''
+            message.content += (
+                prompt_helpers.DO_NOT_ESCAPE_UNICODE if message.role == 'system' else ''
+            )
         return messages
 
 
@@ -225,6 +253,7 @@ class PromptLibraryWrapper:
 
 PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
     'extract_nodes': extract_nodes_versions,
+    'ingestion_rules': ingestion_rules_versions,
     'dedupe_nodes': dedupe_nodes_versions,
     'extract_edges': extract_edges_versions,
     'extract_nodes_and_edges': extract_nodes_and_edges_versions,
@@ -296,10 +325,22 @@ def _builtin_specs() -> dict[str, PromptSpec]:
         'extract_nodes_and_edges.extract_message': PromptSpec(
             name='extract_nodes_and_edges.extract_message',
             response_model=CombinedExtraction,
+            allowed_response_models=untyped_extraction_models(),
+        ),
+        'ingestion_rules.evaluate': PromptSpec(
+            name='ingestion_rules.evaluate', response_model=RuleMatch
         ),
         'dedupe_edges.resolve_edge': PromptSpec(
             name='dedupe_edges.resolve_edge',
             response_model=EdgeDuplicate,
+        ),
+        'dedupe_edges.resolve_duplicates': PromptSpec(
+            name='dedupe_edges.resolve_duplicates',
+            response_model=EdgeDuplicates,
+        ),
+        'dedupe_edges.resolve_contradictions': PromptSpec(
+            name='dedupe_edges.resolve_contradictions',
+            response_model=EdgeContradictions,
         ),
         'summarize_nodes.summarize_pair': PromptSpec(
             name='summarize_nodes.summarize_pair',
@@ -352,6 +393,8 @@ def resolve_response_model(
             )
         return response_model
 
+    if response_model in spec.allowed_response_models:
+        return response_model
     if response_model is not None and response_model is not spec.response_model:
         raise ValueError(
             f'Prompt schema overrides are not allowed for {prompt_name}: '
@@ -382,6 +425,10 @@ class ChatPromptLibrary(ABC):
 
     @property
     @abstractmethod
+    def ingestion_rules(self) -> IngestionRulesPrompts: ...
+
+    @property
+    @abstractmethod
     def dedupe_edges(self) -> DedupeEdgesPrompts: ...
 
     @property
@@ -409,11 +456,20 @@ class DefaultChatPromptLibrary(ChatPromptLibrary):
         self._dedupe_nodes = DefaultDedupeNodesPrompts()
         self._extract_edges = DefaultExtractEdgesPrompts()
         self._extract_nodes_and_edges = DefaultExtractNodesAndEdgesPrompts()
+        self._ingestion_rules = DefaultIngestionRulesPrompts()
         self._dedupe_edges = DefaultDedupeEdgesPrompts()
         self._summarize_nodes = DefaultSummarizeNodesPrompts()
         self._summarize_sagas = DefaultSummarizeSagasPrompts()
         self._eval = DefaultEvalPrompts()
         self._specs = BUILTIN_PROMPT_SPECS
+        for group_name, method_names in PROMPT_GROUPS.items():
+            group = getattr(self, f'_{group_name}')
+            for method_name in method_names:
+                source = PROMPT_LIBRARY_IMPL[group_name].get(method_name)
+                template = template_of(source)
+                method = getattr(group, method_name, None)
+                if template is not None and method is not None:
+                    method.__func__.__prompt_template__ = template
 
     @property
     def extract_nodes(self) -> ExtractNodesPrompts:
@@ -430,6 +486,10 @@ class DefaultChatPromptLibrary(ChatPromptLibrary):
     @property
     def extract_nodes_and_edges(self) -> ExtractNodesAndEdgesPrompts:
         return self._extract_nodes_and_edges
+
+    @property
+    def ingestion_rules(self) -> IngestionRulesPrompts:
+        return self._ingestion_rules
 
     @property
     def dedupe_edges(self) -> DedupeEdgesPrompts:
@@ -473,6 +533,9 @@ class _OverrideGroup:
                 result = override(context)
                 return _ensure_chat_prompt(result, f'override.{name}')
 
+            template = template_of(override)
+            if template is not None:
+                _bound.__prompt_template__ = template
             return _bound
         return getattr(self._base, name)
 
@@ -530,6 +593,10 @@ def get_prompt_builder(library: Any, prompt_name: str) -> ChatPromptFunction:
     def _call(context: dict[str, Any]) -> ChatPrompt:
         return ensure_chat_prompt(builder(context), prompt_name)
 
+    template = template_of(builder, append_parts=(prompt_helpers.DO_NOT_ESCAPE_UNICODE,))
+    if template is not None:
+        _call.__prompt_template__ = template
+    _call.__wrapped__ = builder
     return _call
 
 

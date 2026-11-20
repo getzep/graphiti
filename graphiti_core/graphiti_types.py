@@ -31,7 +31,7 @@ from graphiti_core.prompts.lib import (
 )
 from graphiti_core.prompts.models import Message, PromptFunction
 from graphiti_core.prompts.names import PromptName
-from graphiti_core.tracer import Tracer
+from graphiti_core.prompts.versions import PromptTemplate, template_of
 
 
 class GraphitiClients(BaseModel):
@@ -39,10 +39,9 @@ class GraphitiClients(BaseModel):
     llm_client: LLMClient
     embedder: EmbedderClient
     cross_encoder: CrossEncoderClient
-    tracer: Tracer
+    max_coroutines: int | None = None
     prompt_library: Any = None
     llm_runtime: LLMRuntime | None = None
-    max_coroutines: int | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -89,6 +88,7 @@ class GraphitiClients(BaseModel):
             group_id=group_id,
             prompt_name=prompt_name,
             attribute_extraction=attribute_extraction,
+            prompt_template=template_of(builder),
         )
 
 
@@ -115,11 +115,11 @@ def resolve_prompt_messages(
 
 class GeneratePromptResponseKwargs(TypedDict, total=False):
     response_model: type[BaseModel] | None
-    prompt_name: PromptName
     max_tokens: int | None
     model_size: ModelSize
     group_id: str | None
     attribute_extraction: bool
+    prompt_template: PromptTemplate | None
 
 
 async def generate_prompt_response(
@@ -148,7 +148,7 @@ async def generate_prompt_response(
 
     kwargs: GeneratePromptResponseKwargs = {
         'response_model': response_model,
-        'prompt_name': prompt_name,
+        'prompt_template': template_of(legacy_prompt),
     }
     if max_tokens is not None:
         kwargs['max_tokens'] = max_tokens
@@ -159,4 +159,6 @@ async def generate_prompt_response(
     if attribute_extraction:
         kwargs['attribute_extraction'] = True
 
-    return await llm_client.generate_response(legacy_prompt(context), **kwargs)
+    return await llm_client.generate_response(
+        legacy_prompt(context), prompt_name=prompt_name, **kwargs
+    )

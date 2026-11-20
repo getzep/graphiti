@@ -98,6 +98,55 @@ async def test_get_by_attribute_values_builds_safe_query(provider):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('provider', [GraphProvider.NEO4J, GraphProvider.FALKORDB])
+async def test_get_by_attribute_values_normalizes_string_attributes(provider):
+    driver = MagicMock()
+    driver.provider = provider
+    driver._database = 'group'
+    driver.graph_operations_interface = None
+    driver.execute_query = AsyncMock(return_value=([], [], None))
+
+    await EntityNode.get_by_attribute_values(
+        driver,
+        'group',
+        {'company_name': '  Acme    Corp '},
+        labels=['Company'],
+        normalize_strings=True,
+    )
+
+    query = driver.execute_query.await_args.args[0]
+    parameters = driver.execute_query.await_args.kwargs
+    assert 'n.`company_name` =~ $attribute_0' in query
+    assert parameters['attribute_0'] == r'(?i)^Acme\s+Corp$'
+
+
+@pytest.mark.asyncio
+async def test_get_by_attribute_values_forwards_normalize_strings():
+    lookup = AsyncMock(return_value=[])
+    driver = MagicMock()
+    driver.graph_operations_interface = SimpleNamespace(node_get_by_attribute_values=lookup)
+
+    await EntityNode.get_by_attribute_values(
+        driver,
+        'group',
+        {'company_name': 'Acme Corp'},
+        labels=['Company'],
+        limit=5,
+        normalize_strings=True,
+    )
+
+    lookup.assert_awaited_once_with(
+        EntityNode,
+        driver,
+        'group',
+        {'company_name': 'Acme Corp'},
+        ['Company'],
+        5,
+        normalize_strings=True,
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_by_attribute_values_returns_empty_for_empty_attributes():
     driver = MagicMock()
 
@@ -224,6 +273,7 @@ async def test_identity_candidate_collection_calls_entity_attribute_lookup(monke
         {'email': 'alex@example.com'},
         ['Person'],
         15,
+        normalize_strings=True,
     )
 
 

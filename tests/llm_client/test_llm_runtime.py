@@ -71,7 +71,7 @@ def _extract_ctx() -> dict:
     return {
         'episode_content': 'hi',
         'previous_episodes': [],
-        'custom_extraction_instructions': '',
+        'knowledge': '',
         'entity_types': [],
         'source_description': 't',
     }

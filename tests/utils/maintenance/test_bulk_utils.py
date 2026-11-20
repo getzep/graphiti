@@ -1,3 +1,4 @@
+from collections import deque
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -50,17 +51,24 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
 
     canonical = extracted_one
 
+    call_queue = deque()
+
     async def fake_resolve(
         clients_arg,
         nodes_arg,
         episode_arg,
         previous_episodes_arg,
         entity_types_arg,
+        existing_nodes_override=None,
+        require_shared_neighbor_for_name_match=True,
     ):
+        call_queue.append(existing_nodes_override)
+
         if nodes_arg == [extracted_one]:
             return [canonical], {canonical.uuid: canonical.uuid}, []
 
         assert nodes_arg == [extracted_two]
+        assert existing_nodes_override is None
 
         return [canonical], {extracted_two.uuid: canonical.uuid}, [(extracted_two, canonical)]
 
@@ -72,9 +80,81 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
         [(episode_one, []), (episode_two, [])],
     )
 
+    assert len(call_queue) == 2
+    assert call_queue[0] is None
+    assert call_queue[1] is None
+
     assert nodes_by_episode[episode_one.uuid] == [canonical]
     assert nodes_by_episode[episode_two.uuid] == [canonical]
     assert compressed_map.get(extracted_two.uuid) == canonical.uuid
+
+
+async def _dedupe_new_nodes_bulk(monkeypatch, episodes_nodes: list[list[EntityNode]]):
+    """Run dedupe_nodes_bulk where the graph pass keeps every node as it is."""
+
+    async def fake_resolve(clients_arg, nodes_arg, *args, **kwargs):
+        return list(nodes_arg), {node.uuid: node.uuid for node in nodes_arg}, []
+
+    monkeypatch.setattr(bulk_utils, 'resolve_extracted_nodes', fake_resolve)
+    episodes = [_make_episode(str(i)) for i in range(len(episodes_nodes))]
+    return await bulk_utils.dedupe_nodes_bulk(
+        _make_clients(), episodes_nodes, [(episode, []) for episode in episodes]
+    )
+
+
+@pytest.mark.asyncio
+async def test_dedupe_nodes_bulk_generic_exact_name_without_shared_neighbor_stays_separate(
+    monkeypatch,
+):
+    westlake = EntityNode(name='Westlake Services', group_id='group', labels=['Company'])
+    capital_one = EntityNode(name='Capital One', group_id='group', labels=['Company'])
+    loan_one = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+    loan_two = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+
+    _, compressed_map = await _dedupe_new_nodes_bulk(
+        monkeypatch, [[westlake, loan_one], [capital_one, loan_two]]
+    )
+
+    assert compressed_map.get(loan_two.uuid, loan_two.uuid) == loan_two.uuid
+
+
+@pytest.mark.asyncio
+async def test_dedupe_nodes_bulk_exact_name_with_shared_neighbor_merges(monkeypatch):
+    westlake = EntityNode(name='Westlake Services', group_id='group', labels=['Company'])
+    loan_one = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+    loan_two = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+
+    _, compressed_map = await _dedupe_new_nodes_bulk(
+        monkeypatch, [[westlake, loan_one], [westlake, loan_two]]
+    )
+
+    assert compressed_map.get(loan_two.uuid) == loan_one.uuid
+
+
+@pytest.mark.asyncio
+async def test_dedupe_nodes_bulk_exact_name_checks_every_same_name_node(monkeypatch):
+    capital_one = EntityNode(name='Capital One', group_id='group', labels=['Company'])
+    westlake = EntityNode(name='Westlake Services', group_id='group', labels=['Company'])
+    loan_a = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+    loan_b = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+    loan_c = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+
+    _, compressed_map = await _dedupe_new_nodes_bulk(
+        monkeypatch, [[capital_one, loan_a], [westlake, loan_b], [westlake, loan_c]]
+    )
+
+    assert compressed_map.get(loan_b.uuid, loan_b.uuid) == loan_b.uuid
+    assert compressed_map.get(loan_c.uuid) == loan_b.uuid
+
+
+@pytest.mark.asyncio
+async def test_dedupe_nodes_bulk_same_episode_exact_name_merges(monkeypatch):
+    loan_one = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+    loan_two = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+
+    _, compressed_map = await _dedupe_new_nodes_bulk(monkeypatch, [[loan_one, loan_two]])
+
+    assert compressed_map.get(loan_two.uuid) == loan_one.uuid
 
 
 @pytest.mark.asyncio
@@ -180,6 +260,8 @@ async def test_dedupe_nodes_bulk_uuid_map_respects_direction(monkeypatch):
         episode_arg,
         previous_episodes_arg,
         entity_types_arg,
+        existing_nodes_override=None,
+        require_shared_neighbor_for_name_match=True,
     ):
         if nodes_arg == [extracted_one]:
             return [canonical], {canonical.uuid: canonical.uuid}, []
@@ -487,10 +569,10 @@ async def test_dedupe_edges_bulk_merges_episode_provenance_for_duplicates(monkey
 
 
 @pytest.mark.asyncio
-async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_combined_extractor(
+async def test_extract_nodes_and_edges_bulk_passes_knowledge_to_combined_extractor(
     monkeypatch,
 ):
-    """Test that custom_extraction_instructions is passed to combined extraction."""
+    """Test that knowledge is passed to combined extraction."""
     clients = _make_clients()
     episode = _make_episode('1')
 
@@ -506,7 +588,7 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_combin
         edge_type_map=None,
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
         extract_combined_calls.append(
             {
@@ -515,25 +597,24 @@ async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_combin
                 'edge_type_map': edge_type_map,
                 'edge_types': edge_types,
                 'strict_edge_types': strict_edge_types,
-                'custom_extraction_instructions': custom_extraction_instructions,
+                'knowledge': knowledge,
             }
         )
         return [], [], {}
 
     monkeypatch.setattr(combined_extraction, 'extract_nodes_and_edges', mock_extract_combined)
 
-    custom_instructions = 'Focus on extracting person entities and their relationships.'
+    knowledge = 'Focus on extracting person entities and their relationships.'
 
     await extract_nodes_and_edges_bulk(
         clients,
         [(episode, [])],
         edge_type_map={},
-        custom_extraction_instructions=custom_instructions,
-        use_combined_extraction=True,
+        knowledge=knowledge,
     )
 
     assert len(extract_combined_calls) == 1
-    assert extract_combined_calls[0]['custom_extraction_instructions'] == custom_instructions
+    assert extract_combined_calls[0]['knowledge'] == knowledge
 
 
 @pytest.mark.asyncio
@@ -556,21 +637,21 @@ async def test_extract_nodes_and_edges_bulk_passes_edge_ontology_to_combined_ext
         edge_type_map=None,
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
         extract_combined_calls.append(
             {
                 'edge_type_map': edge_type_map,
                 'edge_types': edge_types,
                 'strict_edge_types': strict_edge_types,
-                'custom_extraction_instructions': custom_extraction_instructions,
+                'knowledge': knowledge,
             }
         )
         return [], [], {}
 
     monkeypatch.setattr(combined_extraction, 'extract_nodes_and_edges', mock_extract_combined)
 
-    custom_instructions = 'Extract only professional relationships between people.'
+    knowledge = 'Extract only professional relationships between people.'
     edge_type_map = {('Entity', 'Entity'): ['knows']}
     edge_types = {'knows': EntityNode}
 
@@ -580,121 +661,19 @@ async def test_extract_nodes_and_edges_bulk_passes_edge_ontology_to_combined_ext
         edge_type_map=edge_type_map,
         edge_types=edge_types,
         strict_edge_types=True,
-        custom_extraction_instructions=custom_instructions,
-        use_combined_extraction=True,
+        knowledge=knowledge,
     )
 
     assert len(extract_combined_calls) == 1
-    assert extract_combined_calls[0]['custom_extraction_instructions'] == custom_instructions
+    assert extract_combined_calls[0]['knowledge'] == knowledge
     assert extract_combined_calls[0]['edge_type_map'] == edge_type_map
     assert extract_combined_calls[0]['edge_types'] == edge_types
     assert extract_combined_calls[0]['strict_edge_types'] is True
 
 
 @pytest.mark.asyncio
-async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_extract_nodes(
-    monkeypatch,
-):
-    clients = _make_clients()
-    episode = _make_episode('1')
-    extract_nodes_calls = []
-
-    async def mock_extract_nodes(
-        clients,
-        episode,
-        previous_episodes,
-        entity_types=None,
-        excluded_entity_types=None,
-        custom_extraction_instructions=None,
-    ):
-        extract_nodes_calls.append(custom_extraction_instructions)
-        return [], {}
-
-    async def mock_extract_edges(
-        clients,
-        episode,
-        nodes,
-        previous_episodes,
-        edge_type_map,
-        group_id='',
-        edge_types=None,
-        strict_edge_types=False,
-        custom_extraction_instructions=None,
-    ):
-        return [], []
-
-    monkeypatch.setattr(bulk_utils, 'extract_nodes', mock_extract_nodes)
-    monkeypatch.setattr(bulk_utils, 'extract_edges', mock_extract_edges)
-
-    custom_instructions = 'Focus on extracting person entities and their relationships.'
-    await extract_nodes_and_edges_bulk(
-        clients,
-        [(episode, [])],
-        edge_type_map={},
-        custom_extraction_instructions=custom_instructions,
-        use_combined_extraction=False,
-    )
-
-    assert extract_nodes_calls == [custom_instructions]
-
-
-@pytest.mark.asyncio
-async def test_extract_nodes_and_edges_bulk_passes_custom_instructions_to_extract_edges(
-    monkeypatch,
-):
-    clients = _make_clients()
-    episode = _make_episode('1')
-    extracted_node = EntityNode(name='Test', group_id='group', labels=['Entity'])
-    extract_edges_calls = []
-
-    async def mock_extract_nodes(
-        clients,
-        episode,
-        previous_episodes,
-        entity_types=None,
-        excluded_entity_types=None,
-        custom_extraction_instructions=None,
-    ):
-        return [extracted_node], {}
-
-    async def mock_extract_edges(
-        clients,
-        episode,
-        nodes,
-        previous_episodes,
-        edge_type_map,
-        group_id='',
-        edge_types=None,
-        strict_edge_types=False,
-        custom_extraction_instructions=None,
-    ):
-        extract_edges_calls.append(
-            (nodes, edge_type_map, edge_types, custom_extraction_instructions)
-        )
-        return [], []
-
-    monkeypatch.setattr(bulk_utils, 'extract_nodes', mock_extract_nodes)
-    monkeypatch.setattr(bulk_utils, 'extract_edges', mock_extract_edges)
-
-    custom_instructions = 'Extract only professional relationships between people.'
-    edge_type_map = {('Entity', 'Entity'): ['knows']}
-    edge_types = {'knows': EntityNode}
-    await extract_nodes_and_edges_bulk(
-        clients,
-        [(episode, [])],
-        edge_type_map=edge_type_map,
-        edge_types=edge_types,
-        custom_extraction_instructions=custom_instructions,
-        use_combined_extraction=False,
-    )
-
-    assert extract_edges_calls == [
-        ([extracted_node], edge_type_map, edge_types, custom_instructions)
-    ]
-
-
-@pytest.mark.asyncio
-async def test_extract_nodes_and_edges_bulk_defaults_to_combined_extraction(monkeypatch):
+async def test_extract_nodes_and_edges_bulk_knowledge_none_by_default(monkeypatch):
+    """Test that knowledge defaults to None when not provided."""
     clients = _make_clients()
     episode = _make_episode('1')
 
@@ -710,11 +689,9 @@ async def test_extract_nodes_and_edges_bulk_defaults_to_combined_extraction(monk
         edge_type_map=None,
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
-        extract_combined_calls.append(
-            {'custom_extraction_instructions': custom_extraction_instructions}
-        )
+        extract_combined_calls.append({'knowledge': knowledge})
         return [], [], {}
 
     monkeypatch.setattr(combined_extraction, 'extract_nodes_and_edges', mock_extract_combined)
@@ -726,12 +703,12 @@ async def test_extract_nodes_and_edges_bulk_defaults_to_combined_extraction(monk
     )
 
     assert len(extract_combined_calls) == 1
-    assert extract_combined_calls[0]['custom_extraction_instructions'] is None
+    assert extract_combined_calls[0]['knowledge'] is None
 
 
 @pytest.mark.asyncio
-async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episodes(monkeypatch):
-    """Test that custom_extraction_instructions is passed for all episodes in bulk."""
+async def test_extract_nodes_and_edges_bulk_knowledge_multiple_episodes(monkeypatch):
+    """Test that knowledge is passed for all episodes in bulk."""
     clients = _make_clients()
     episode1 = _make_episode('1')
     episode2 = _make_episode('2')
@@ -749,29 +726,28 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
         edge_type_map=None,
         edge_types=None,
         strict_edge_types=False,
-        custom_extraction_instructions=None,
+        knowledge=None,
     ):
         extract_combined_calls.append(
             {
                 'episode_name': episode.name,
-                'custom_extraction_instructions': custom_extraction_instructions,
+                'knowledge': knowledge,
             }
         )
         return [], [], {}
 
     monkeypatch.setattr(combined_extraction, 'extract_nodes_and_edges', mock_extract_combined)
 
-    custom_instructions = 'Extract entities related to financial transactions.'
+    knowledge = 'Extract entities related to financial transactions.'
 
     await extract_nodes_and_edges_bulk(
         clients,
         [(episode1, []), (episode2, []), (episode3, [])],
         edge_type_map={},
-        custom_extraction_instructions=custom_instructions,
-        use_combined_extraction=True,
+        knowledge=knowledge,
     )
 
     assert len(extract_combined_calls) == 3
 
     for call in extract_combined_calls:
-        assert call['custom_extraction_instructions'] == custom_instructions
+        assert call['knowledge'] == knowledge

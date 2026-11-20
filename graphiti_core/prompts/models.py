@@ -19,7 +19,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from .prompt_helpers import DO_NOT_ESCAPE_UNICODE
+from . import prompt_helpers
 
 
 class Message(BaseModel):
@@ -71,7 +71,7 @@ class ChatPrompt(BaseModel):
         """
         system_content = self.system.content
         if append_unicode_note:
-            system_content = system_content + DO_NOT_ESCAPE_UNICODE
+            system_content = system_content + prompt_helpers.DO_NOT_ESCAPE_UNICODE
         return [
             Message(role='system', content=system_content),
             Message(role='user', content=self.user.content),
@@ -88,6 +88,7 @@ class PromptSpec(BaseModel):
 
     name: str
     response_model: type[BaseModel] | None = None
+    allowed_response_models: tuple[type[BaseModel], ...] = ()
     dynamic_schema: bool = False
 
 

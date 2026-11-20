@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import contextvars
 import hashlib
 import json
 import logging
@@ -25,6 +26,7 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
+from ..prompts.versions import UNKNOWN_PROMPT_VERSION, PromptTemplate
 from ..tracer import NoOpTracer, Tracer
 from .cache import LLMCache
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
@@ -32,6 +34,34 @@ from .errors import EmptyResponseError, RateLimitError
 from .token_tracker import TokenUsageTracker
 
 DEFAULT_CACHE_DIR = './llm_cache'
+
+# current_prompt_name carries the prompt_name of the in-flight generate_response
+# call to downstream _generate_response implementations (e.g. gateway
+# clients, which add it to the request for inference tracing) without
+# threading the argument through every provider signature. It is an asyncio
+# task-local, so concurrent extractions don't clobber each other.
+current_prompt_name: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    'graphiti_current_prompt_name', default=None
+)
+current_prompt_version: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    'graphiti_current_prompt_version', default=None
+)
+
+ATTRIBUTE_EXTRACTION_PREAMBLE = (
+    '\n\n<<graphiti.attr_extraction.preamble.v1>>\n'
+    'ATTRIBUTE EXTRACTION: Field descriptions in the response schema describe '
+    'what a real value LOOKS LIKE — they are NEVER themselves valid values and '
+    'must NEVER be copied into any field. If you have no value for a field, set '
+    'it to null; never explain the absence in the field itself.'
+)
+RESPONSE_FORMAT_TEMPLATE = (
+    '\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
+)
+LANGUAGE_INSTRUCTION_TEMPLATE = (
+    '\n\nAny extracted information should be returned in the same language as it was written in. '
+    'Only output non-English text when the user has written full sentences or phrases in that '
+    'non-English language. Otherwise, output English.'
+)
 
 
 def get_extraction_language_instruction(group_id: str | None = None) -> str:
@@ -48,11 +78,7 @@ def get_extraction_language_instruction(group_id: str | None = None) -> str:
     Returns:
         str: Language instruction to append to system messages
     """
-    return (
-        '\n\nAny extracted information should be returned in the same language as it was written in. '
-        'Only output non-English text when the user has written full sentences or phrases in that non-English language. '
-        'Otherwise, output English.'
-    )
+    return LANGUAGE_INSTRUCTION_TEMPLATE
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +98,10 @@ def is_server_or_retry_error(exception):
 
 
 class LLMClient(ABC):
+    # When True, node dedupe sends one request per unresolved node with only that
+    # node's candidates, in place of one request with the union of all candidates.
+    dedupe_nodes_per_entity: bool = False
+
     def __init__(self, config: LLMConfig | None, cache: bool = False):
         if config is None:
             config = LLMConfig()
@@ -120,11 +150,13 @@ class LLMClient(ABC):
         stop=stop_after_attempt(4),
         wait=wait_random_exponential(multiplier=10, min=5, max=120),
         retry=retry_if_exception(is_server_or_retry_error),
-        after=lambda retry_state: logger.warning(
-            f'Retrying {retry_state.fn.__name__ if retry_state.fn else "function"} after {retry_state.attempt_number} attempts...'
-        )
-        if retry_state.attempt_number > 1
-        else None,
+        after=lambda retry_state: (
+            logger.warning(
+                f'Retrying {retry_state.fn.__name__ if retry_state.fn else "function"} after {retry_state.attempt_number} attempts...'
+            )
+            if retry_state.attempt_number > 1
+            else None
+        ),
         reraise=True,
     )
     async def _generate_response_with_retry(
@@ -189,20 +221,49 @@ class LLMClient(ABC):
         # that happens to mention "attribute extraction". Bump the suffix if the note
         # text is meaningfully revised so older callers don't suppress the new copy.
         sentinel = '<<graphiti.attr_extraction.preamble.v1>>'
-        note = (
-            f'\n\n{sentinel}\n'
-            'ATTRIBUTE EXTRACTION: Field descriptions in the response schema describe '
-            'what a real value LOOKS LIKE — they are NEVER themselves valid values and '
-            'must NEVER be copied into any field. If you have no value for a field, set '
-            'it to null; never explain the absence in the field itself.'
-        )
         target = messages[0]
         if sentinel in target.content:
             return
         if target.role == 'system':
-            target.content += note
+            target.content += ATTRIBUTE_EXTRACTION_PREAMBLE
         else:
-            target.content = note.lstrip() + '\n\n' + target.content
+            target.content = ATTRIBUTE_EXTRACTION_PREAMBLE.lstrip() + '\n\n' + target.content
+
+    def _apply_shared_prompt_parts(
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None,
+        attribute_extraction: bool,
+        group_id: str | None,
+        *,
+        add_response_format: bool,
+    ) -> tuple[str, ...]:
+        shared_parts: list[str] = []
+        if attribute_extraction and messages:
+            self._apply_attribute_extraction_preamble(messages, True)
+            shared_parts.append(ATTRIBUTE_EXTRACTION_PREAMBLE)
+
+        if response_model is not None and add_response_format:
+            serialized_model = json.dumps(response_model.model_json_schema())
+            messages[-1].content += RESPONSE_FORMAT_TEMPLATE.replace(
+                '{serialized_model}', serialized_model
+            )
+            shared_parts.append(RESPONSE_FORMAT_TEMPLATE)
+
+        if messages:
+            messages[0].content += get_extraction_language_instruction(group_id)
+            shared_parts.append(LANGUAGE_INSTRUCTION_TEMPLATE)
+        return tuple(shared_parts)
+
+    @staticmethod
+    def _prompt_version(
+        prompt_template: PromptTemplate | None, shared_parts: tuple[str, ...]
+    ) -> str:
+        return (
+            prompt_template.version(shared_parts)
+            if prompt_template is not None
+            else UNKNOWN_PROMPT_VERSION
+        )
 
     async def generate_response(
         self,
@@ -215,24 +276,19 @@ class LLMClient(ABC):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
+        prompt_template: PromptTemplate | None = None,
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
 
-        # The strict attribute-extraction framing belongs on the system message so it
-        # reaches every provider regardless of structured-output mechanism.
-        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
-
-        if response_model is not None:
-            serialized_model = json.dumps(response_model.model_json_schema())
-            messages[
-                -1
-            ].content += (
-                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
-            )
-
-        # Add multilingual extraction instructions
-        messages[0].content += get_extraction_language_instruction(group_id)
+        shared_parts = self._apply_shared_prompt_parts(
+            messages,
+            response_model,
+            attribute_extraction,
+            group_id,
+            add_response_format=True,
+        )
+        prompt_version = self._prompt_version(prompt_template, shared_parts)
 
         for message in messages:
             message.content = self._clean_input(message.content)
@@ -247,6 +303,7 @@ class LLMClient(ABC):
             }
             if prompt_name:
                 attributes['prompt.name'] = prompt_name
+            attributes['prompt.version'] = prompt_version
             span.add_attributes(attributes)
 
             # Check cache first
@@ -260,19 +317,27 @@ class LLMClient(ABC):
 
             span.add_attributes({'cache.hit': False})
 
-            # Execute LLM call
+            # Execute LLM call. Expose prompt_name to downstream
+            # _generate_response implementations via a task-local so they can
+            # tag it on the request (e.g. for the inference tap).
+            token = current_prompt_name.set(prompt_name)
+            version_token = current_prompt_version.set(prompt_version)
             try:
+                model_kwargs = {} if model is None else {'model': model}
                 response = await self._generate_response_with_retry(
                     messages,
                     response_model,
                     max_tokens,
                     model_size,
-                    model=model,
+                    **model_kwargs,
                 )
             except Exception as e:
                 span.set_status('error', str(e))
                 span.record_exception(e)
                 raise
+            finally:
+                current_prompt_name.reset(token)
+                current_prompt_version.reset(version_token)
 
             # Cache response if enabled
             if self.cache_enabled and self.cache_dir is not None:

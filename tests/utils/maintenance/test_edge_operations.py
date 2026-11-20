@@ -1592,6 +1592,91 @@ async def test_resolve_extracted_edges_dedupes_against_reverse_direction(monkeyp
     assert new_edges == []
 
 
+@pytest.mark.asyncio
+async def test_reverse_orientation_override_is_offered_as_duplicate_candidate(monkeypatch):
+    """A recently-resolved reverse-orientation edge from the dedup-cache
+    override must reach the duplicate-candidate list even though the
+    directed pair key differs (candidates are undirected)."""
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+    monkeypatch.setattr(EntityEdge, 'get_between_nodes', AsyncMock(return_value=[]))
+
+    async def immediate_gather(*aws, max_coroutines=None):
+        return [await aw for aw in aws]
+
+    monkeypatch.setattr(edge_ops, 'semaphore_gather', immediate_gather)
+    monkeypatch.setattr(edge_ops, 'search', AsyncMock(return_value=SearchResults()))
+
+    seen_related: list[list[EntityEdge]] = []
+
+    async def capture_resolve(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+    ):
+        seen_related.append(related_edges)
+        return extracted_edge, [], None
+
+    monkeypatch.setattr(edge_ops, '_dedupe_extracted_edge', capture_resolve)
+
+    reverse_override = EntityEdge(
+        uuid='override_reverse',
+        source_node_uuid='target_uuid',  # opposite orientation
+        target_node_uuid='source_uuid',
+        name='likes',
+        group_id='group_1',
+        fact='Yoga is liked by user',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    extracted = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='likes',
+        group_id='group_1',
+        fact='User likes yoga',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+    )
+    nodes = [
+        EntityNode(uuid='source_uuid', name='User', group_id='group_1', labels=['Entity']),
+        EntityNode(uuid='target_uuid', name='Yoga', group_id='group_1', labels=['Entity']),
+    ]
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Episode content',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    await resolve_extracted_edges(
+        clients=SimpleNamespace(
+            driver=MagicMock(),
+            llm_client=MagicMock(),
+            embedder=MagicMock(),
+            cross_encoder=MagicMock(),
+        ),
+        extracted_edges=[extracted],
+        episode=episode,
+        entities=nodes,
+        edge_types={},
+        edge_type_map={},
+        existing_edges_override=[reverse_override],
+    )
+
+    assert len(seen_related) == 1
+    assert [e.uuid for e in seen_related[0]] == ['override_reverse']
+
+
 def test_same_pair_edges_keeps_both_orientations_drops_strays():
     extracted = _candidate_edge(0, 'fact', None)
     extracted.source_node_uuid = 'a'
@@ -1682,6 +1767,7 @@ async def test_resolve_extracted_edges_pair_scopes_duplicate_search(monkeypatch)
         EntityNode(uuid='source_uuid', name='User', group_id='group_1', labels=['Entity']),
         EntityNode(uuid='target_uuid', name='Yoga', group_id='group_1', labels=['Entity']),
     ]
+    candidates_by_edge = {}
 
     resolved_edges, invalidated_edges, _ = await resolve_extracted_edges(
         clients=SimpleNamespace(
@@ -1695,6 +1781,7 @@ async def test_resolve_extracted_edges_pair_scopes_duplicate_search(monkeypatch)
         entities=nodes,
         edge_types={},
         edge_type_map={},
+        candidates_by_edge=candidates_by_edge,
     )
 
     # Exactly two searches: the pair-scoped duplicate search, then the
@@ -1708,88 +1795,8 @@ async def test_resolve_extracted_edges_pair_scopes_duplicate_search(monkeypatch)
     # The pair edge resolved via the exact-fact fast path.
     assert resolved_edges[0].uuid == existing.uuid
     assert invalidated_edges == []
-
-
-@pytest.mark.asyncio
-async def test_resolve_extracted_edges_merges_override_candidates(monkeypatch):
-    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
-
-    async def immediate_gather(*aws, max_coroutines=None):
-        return [await aw for aw in aws]
-
-    monkeypatch.setattr(edge_ops, 'semaphore_gather', immediate_gather)
-    monkeypatch.setattr(edge_ops, 'search', AsyncMock(return_value=SearchResults()))
-
-    seen_related: list[list[EntityEdge]] = []
-
-    async def capture_resolve(
-        llm_client,
-        extracted_edge,
-        related_edges,
-        existing_edges,
-        episode,
-        edge_type_candidates=None,
-        **kwargs,
-    ):
-        seen_related.append(related_edges)
-        return extracted_edge, [], None
-
-    monkeypatch.setattr(edge_ops, '_dedupe_extracted_edge', capture_resolve)
-
-    override = EntityEdge(
-        uuid='override_edge',
-        source_node_uuid='source_uuid',
-        target_node_uuid='target_uuid',
-        name='likes',
-        group_id='group_1',
-        fact='User likes yoga',
-        episodes=[],
-        created_at=datetime.now(timezone.utc),
-        valid_at=None,
-        invalid_at=None,
-    )
-    extracted = EntityEdge(
-        source_node_uuid='source_uuid',
-        target_node_uuid='target_uuid',
-        name='likes',
-        group_id='group_1',
-        fact='User likes yoga',
-        episodes=[],
-        created_at=datetime.now(timezone.utc),
-        valid_at=None,
-        invalid_at=None,
-    )
-    nodes = [
-        EntityNode(uuid='source_uuid', name='User', group_id='group_1', labels=['Entity']),
-        EntityNode(uuid='target_uuid', name='Yoga', group_id='group_1', labels=['Entity']),
-    ]
-    episode = EpisodicNode(
-        uuid='episode_uuid',
-        name='Episode',
-        group_id='group_1',
-        source='message',
-        source_description='desc',
-        content='Episode content',
-        valid_at=datetime.now(timezone.utc),
-    )
-
-    await resolve_extracted_edges(
-        clients=SimpleNamespace(
-            driver=MagicMock(),
-            llm_client=MagicMock(),
-            embedder=MagicMock(),
-            cross_encoder=MagicMock(),
-        ),
-        extracted_edges=[extracted],
-        episode=episode,
-        entities=nodes,
-        edge_types={},
-        edge_type_map={},
-        existing_edges_override=[override],
-    )
-
-    assert len(seen_related) == 1
-    assert [edge.uuid for edge in seen_related[0]] == ['override_edge']
+    assert candidates_by_edge[extracted.uuid][0].uuid == existing.uuid
+    assert candidates_by_edge[extracted.uuid][0].episodes == []
 
 
 @pytest.mark.asyncio
@@ -1860,6 +1867,107 @@ async def test_resolve_extracted_edges_reuses_fact_embedding_for_searches(monkey
 
     # Duplicate search + invalidation search, both with the precomputed vector.
     assert captured_vectors == [sentinel_embedding, sentinel_embedding]
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_keeps_richer_fact_on_duplicate(
+    mock_llm_client,
+    mock_existing_edges,
+    mock_current_episode,
+):
+    """A duplicate decision does not remove details from a stored fact."""
+    extracted_fact = 'Portfolio record SBP-005-01 is an opportunity for Alder Works.'
+    stored_fact = (
+        'Portfolio record SBP-005-01 is the Atlas Robotics opportunity 006SB005000000 '
+        '(HubSpot deal 8000520000) for account Alder Works.'
+    )
+    extracted_edge = EntityEdge(
+        source_node_uuid='portfolio_uuid',
+        target_node_uuid='account_uuid',
+        name='OPPORTUNITY',
+        group_id='group_1',
+        fact=extracted_fact,
+        episodes=['episode_1'],
+        created_at=datetime.now(timezone.utc),
+    )
+    stored_embedding = [0.1, 0.2, 0.3]
+    stored = EntityEdge(
+        source_node_uuid='portfolio_uuid',
+        target_node_uuid='account_uuid',
+        name='OPPORTUNITY',
+        group_id='group_1',
+        fact=stored_fact,
+        fact_embedding=stored_embedding,
+        episodes=['episode_prior'],
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    mock_llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [0], 'contradicted_facts': []}
+    )
+
+    resolved_edge, invalidated_edges, duplicate_edges = await resolve_extracted_edge(
+        mock_llm_client,
+        extracted_edge,
+        [stored],
+        mock_existing_edges,
+        mock_current_episode,
+        edge_type_candidates=None,
+    )
+
+    assert resolved_edge is stored
+    assert stored.fact == stored_fact
+    assert stored.fact_embedding == stored_embedding
+    assert stored.episodes == ['episode_prior', mock_current_episode.uuid]
+    assert invalidated_edges == []
+    assert duplicate_edges == [stored]
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_keeps_different_fact_on_duplicate(
+    mock_llm_client,
+    mock_existing_edges,
+    mock_current_episode,
+):
+    """A stored fact stays unchanged when it differs from the group fact."""
+    extracted_edge = EntityEdge(
+        source_node_uuid='alice_uuid',
+        target_node_uuid='bob_uuid',
+        name='INTRODUCED',
+        group_id='group_1',
+        fact='Alice introduced Bob to Carol.',
+        episodes=['episode_1'],
+        created_at=datetime.now(timezone.utc),
+    )
+    stored = EntityEdge(
+        source_node_uuid='alice_uuid',
+        target_node_uuid='bob_uuid',
+        name='KNOWS',
+        group_id='group_1',
+        fact='Alice knows Bob.',
+        fact_embedding=[0.1, 0.2, 0.3],
+        episodes=['episode_prior'],
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+        valid_at=datetime(2019, 1, 1, tzinfo=timezone.utc),
+    )
+    mock_llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [0], 'contradicted_facts': []}
+    )
+
+    resolved_edge, invalidated_edges, duplicate_edges = await resolve_extracted_edge(
+        mock_llm_client,
+        extracted_edge,
+        [stored],
+        mock_existing_edges,
+        mock_current_episode,
+        edge_type_candidates=None,
+    )
+
+    assert resolved_edge is stored
+    assert stored.fact == 'Alice knows Bob.'
+    assert stored.fact_embedding == [0.1, 0.2, 0.3]
+    assert stored.episodes == ['episode_prior', 'episode_1']
+    assert invalidated_edges == []
+    assert duplicate_edges == [stored]
 
 
 @pytest.mark.asyncio
@@ -1946,3 +2054,281 @@ async def test_extract_edge_timestamps_prefers_edge_reference_time(monkeypatch):
         None,
         edge_reference_time,
     )
+
+
+def _patch_resolve_search(
+    monkeypatch,
+    related_by_source: dict[str, list[EntityEdge]] | None = None,
+    invalidation_candidates: list[EntityEdge] | None = None,
+):
+    related_by_source = related_by_source or {}
+    invalidation_candidates = invalidation_candidates or []
+
+    async def fake_search(clients, query, group_ids=None, config=None, search_filter=None, **kw):
+        sources = getattr(search_filter, 'edge_source_node_uuids', None) or []
+        if sources:
+            return SearchResults(edges=list(related_by_source.get(sources[0], [])))
+        return SearchResults(edges=list(invalidation_candidates))
+
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+
+    async def immediate_gather(*aws, max_coroutines=None):
+        return [await aw for aw in aws]
+
+    monkeypatch.setattr(edge_ops, 'semaphore_gather', immediate_gather)
+    monkeypatch.setattr(edge_ops, 'search', AsyncMock(side_effect=fake_search))
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edges_snapshots_candidates_before_mutation(monkeypatch):
+    episode_time = datetime(2024, 6, 1, tzinfo=timezone.utc)
+    extracted_edge = EntityEdge(
+        source_node_uuid='alice',
+        target_node_uuid='bob',
+        name='INTRODUCED',
+        group_id='group_1',
+        fact='Alice introduced Bob.',
+        episodes=['episode_uuid'],
+        created_at=episode_time,
+    )
+    duplicate_edge = EntityEdge(
+        source_node_uuid='alice',
+        target_node_uuid='bob',
+        name='INTRODUCED',
+        group_id='group_1',
+        fact='Alice introduced Bob at a meeting.',
+        episodes=['episode_prior'],
+        created_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        valid_at=episode_time,
+    )
+    older_edge = EntityEdge(
+        source_node_uuid='dave',
+        target_node_uuid='erin',
+        name='INTRODUCED',
+        group_id='group_1',
+        fact='Dave introduced Erin.',
+        episodes=['episode_old'],
+        created_at=datetime(2022, 1, 1, tzinfo=timezone.utc),
+        valid_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+    )
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice introduced Bob.',
+        valid_at=episode_time,
+    )
+    _patch_resolve_search(
+        monkeypatch,
+        related_by_source={'alice': [duplicate_edge]},
+        invalidation_candidates=[older_edge],
+    )
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [0], 'contradicted_facts': [1]}
+    )
+    candidates_by_edge = {}
+
+    resolved, invalidated, _new = await resolve_extracted_edges(
+        clients=SimpleNamespace(
+            driver=MagicMock(),
+            llm_client=llm_client,
+            embedder=MagicMock(),
+            cross_encoder=MagicMock(),
+        ),
+        extracted_edges=[extracted_edge],
+        episode=episode,
+        entities=[
+            EntityNode(uuid='alice', name='Alice', group_id='group_1', labels=['Entity']),
+            EntityNode(uuid='bob', name='Bob', group_id='group_1', labels=['Entity']),
+        ],
+        edge_types={},
+        edge_type_map={},
+        candidates_by_edge=candidates_by_edge,
+    )
+
+    snapshots = {edge.uuid: edge for edge in candidates_by_edge[extracted_edge.uuid]}
+    assert resolved == [duplicate_edge]
+    assert duplicate_edge.episodes == ['episode_prior', episode.uuid]
+    assert episode.uuid not in snapshots[duplicate_edge.uuid].episodes
+    assert invalidated == [older_edge]
+    assert older_edge.invalid_at == episode_time
+    assert older_edge.expired_at is not None
+    assert snapshots[older_edge.uuid].invalid_at is None
+    assert snapshots[older_edge.uuid].expired_at is None
+
+
+def _make_temporal_edge(
+    uuid: str,
+    *,
+    valid_at: datetime | None = None,
+    invalid_at: datetime | None = None,
+    reference_time: datetime | None = None,
+    expired_at: datetime | None = None,
+) -> EntityEdge:
+    created_at = (
+        valid_at or reference_time or invalid_at or datetime(2025, 1, 1, tzinfo=timezone.utc)
+    )
+    return EntityEdge(
+        uuid=uuid,
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='WORKS_AT',
+        group_id='group_1',
+        fact=uuid,
+        episodes=[],
+        created_at=created_at,
+        valid_at=valid_at,
+        invalid_at=invalid_at,
+        reference_time=reference_time,
+        expired_at=expired_at,
+    )
+
+
+def test_apply_temporal_invalidation_handles_termination_fact_with_same_start():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=start)
+    new_edge = _make_temporal_edge('new', valid_at=start, invalid_at=end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == end
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_handles_dated_termination_without_valid_at():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=start)
+    new_edge = _make_temporal_edge('new', invalid_at=end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == end
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_uses_episode_time_for_undated_termination():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    reference_time = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=start)
+    new_edge = _make_temporal_edge('new', reference_time=reference_time)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == reference_time
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_uses_old_episode_time_when_valid_at_is_missing():
+    old_reference_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    new_reference_time = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', reference_time=old_reference_time)
+    new_edge = _make_temporal_edge('new', reference_time=new_reference_time)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == new_reference_time
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_skips_old_edge_that_starts_after_termination():
+    old_start = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge('old', valid_at=old_start)
+    new_edge = _make_temporal_edge('new', invalid_at=end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at is None
+    assert old_edge.expired_at is None
+    assert invalidated == []
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_does_not_extend_an_existing_end():
+    old_end = datetime(2025, 1, 5, tzinfo=timezone.utc)
+    original_expired_at = datetime(2025, 1, 6, tzinfo=timezone.utc)
+    new_end = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    old_edge = _make_temporal_edge(
+        'old',
+        valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        invalid_at=old_end,
+        expired_at=original_expired_at,
+    )
+    new_edge = _make_temporal_edge('new', invalid_at=new_end)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == old_end
+    assert old_edge.expired_at == original_expired_at
+    assert invalidated == []
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_skips_undated_edges_without_later_episode_time():
+    same_reference_time = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    same_old = _make_temporal_edge('same-old', reference_time=same_reference_time)
+    same_new = _make_temporal_edge('same-new', reference_time=same_reference_time)
+
+    assert edge_ops._apply_temporal_invalidation(same_new, [same_old]) == []
+    assert edge_ops._apply_temporal_invalidation(same_old, [same_new]) == []
+    assert same_old.invalid_at is None
+    assert same_old.expired_at is None
+    assert same_new.invalid_at is None
+    assert same_new.expired_at is None
+
+    old_edge = _make_temporal_edge(
+        'later-old', reference_time=datetime(2025, 2, 2, tzinfo=timezone.utc)
+    )
+    new_edge = _make_temporal_edge(
+        'earlier-new', reference_time=datetime(2025, 2, 1, tzinfo=timezone.utc)
+    )
+
+    assert edge_ops._apply_temporal_invalidation(new_edge, [old_edge]) == []
+    assert old_edge.invalid_at is None
+    assert old_edge.expired_at is None
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_keeps_later_state_change_behavior():
+    old_edge = _make_temporal_edge('old', valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+    new_start = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    new_edge = _make_temporal_edge('new', valid_at=new_start)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at == new_start
+    assert old_edge.expired_at is not None
+    assert invalidated == [old_edge]
+    assert new_edge.expired_at is None
+
+
+def test_apply_temporal_invalidation_keeps_earlier_state_change_behavior():
+    old_start = datetime(2025, 3, 1, tzinfo=timezone.utc)
+    new_edge = _make_temporal_edge('new', valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+    old_edge = _make_temporal_edge('old', valid_at=old_start)
+
+    invalidated = edge_ops._apply_temporal_invalidation(new_edge, [old_edge])
+
+    assert old_edge.invalid_at is None
+    assert old_edge.expired_at is None
+    assert invalidated == []
+    assert new_edge.expired_at is not None
+
+
+def test_apply_temporal_invalidation_returns_empty_for_no_candidates():
+    new_edge = _make_temporal_edge('new', valid_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+
+    assert edge_ops._apply_temporal_invalidation(new_edge, []) == []

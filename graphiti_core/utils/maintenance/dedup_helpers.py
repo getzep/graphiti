@@ -19,14 +19,17 @@ from __future__ import annotations
 import math
 import re
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from hashlib import blake2b
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pydantic import BaseModel
+
     from graphiti_core.nodes import EntityNode
+
 
 _NAME_ENTROPY_THRESHOLD = 1.5
 _MIN_NAME_LENGTH = 6
@@ -35,6 +38,14 @@ _FUZZY_JACCARD_THRESHOLD = 0.9
 _MINHASH_PERMUTATIONS = 32
 _MINHASH_BAND_SIZE = 4
 ENTITY_BASE_LABEL = 'Entity'
+
+NameMatchGate = Callable[['EntityNode', 'EntityNode'], bool]
+"""Return True when a name match of (extracted node, candidate) can merge with no LLM call."""
+
+
+def shares_neighbor(node_neighbors: Iterable[str], candidate_neighbors: Iterable[str]) -> bool:
+    """Return True when the two neighbor UUID sets have a common UUID."""
+    return not set(node_neighbors).isdisjoint(candidate_neighbors)
 
 
 def _normalize_string_exact(name: str) -> str:
@@ -207,12 +218,17 @@ def _merge_non_empty_attributes(resolved_node: EntityNode, extracted_node: Entit
 def _identity_type_for_node(
     node: EntityNode,
     identity_properties: dict[str, list[str]] | None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> str | None:
     if not identity_properties:
         return None
 
-    for label in reversed(node.labels):
-        if label != ENTITY_BASE_LABEL and label in identity_properties:
+    specific_labels = [label for label in node.labels if label != ENTITY_BASE_LABEL]
+    if not specific_labels:
+        return None
+
+    for label in reversed(specific_labels):
+        if label in identity_properties:
             return label
 
     return None
@@ -222,7 +238,7 @@ def _normalize_identity_value(value: object) -> object | None:
     if value is None:
         return None
     if isinstance(value, str):
-        normalized = value.strip()
+        normalized = _normalize_string_exact(value)
         return normalized if normalized else None
     if isinstance(value, bool):
         return value
@@ -236,8 +252,13 @@ def _normalize_identity_value(value: object) -> object | None:
 def _identity_key_for_node(
     node: EntityNode,
     identity_properties: dict[str, list[str]] | None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[str, tuple[tuple[str, object], ...]] | None:
-    identity_type = _identity_type_for_node(node, identity_properties)
+    identity_type = _identity_type_for_node(
+        node,
+        identity_properties,
+        entity_types=entity_types,
+    )
     if identity_type is None or identity_properties is None:
         return None
 
@@ -261,6 +282,7 @@ def _resolve_with_identity_properties(
     indexes: DedupCandidateIndexes,
     state: DedupResolutionState,
     identity_properties: dict[str, list[str]] | None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> None:
     """Resolve nodes whose configured identity properties exactly match a candidate."""
     if not identity_properties:
@@ -270,7 +292,11 @@ def _resolve_with_identity_properties(
         if state.resolved_nodes[idx] is not None:
             continue
 
-        identity_key = _identity_key_for_node(node, identity_properties)
+        identity_key = _identity_key_for_node(
+            node,
+            identity_properties,
+            entity_types=entity_types,
+        )
         if identity_key is None:
             continue
 
@@ -278,13 +304,22 @@ def _resolve_with_identity_properties(
             candidate
             for candidate in indexes.existing_nodes
             if candidate.uuid != node.uuid
-            and _identity_key_for_node(candidate, identity_properties) == identity_key
+            and _identity_key_for_node(
+                candidate,
+                identity_properties,
+                entity_types=entity_types,
+            )
+            == identity_key
         ]
         if not matches:
             continue
 
         matches.sort(key=lambda candidate: (candidate.created_at, candidate.uuid))
+        # The key matches normalized values, so keep the stored identity values.
+        stored_attributes = matches[0].attributes or {}
+        stored_identity = {name: stored_attributes[name] for name, _ in identity_key[1]}
         match = _promote_resolved_node(node, matches[0])
+        match.attributes = {**(match.attributes or {}), **stored_identity}
         state.resolved_nodes[idx] = match
         state.uuid_map[node.uuid] = match.uuid
         state.duplicate_pairs.append((node, match))
@@ -318,24 +353,62 @@ def _build_candidate_indexes(existing_nodes: list[EntityNode]) -> DedupCandidate
     )
 
 
+def _best_fuzzy_candidate(name: str, indexes: DedupCandidateIndexes) -> EntityNode | None:
+    """Return the candidate with the highest Jaccard score, if the score is at the threshold or more.
+
+    Short or low-entropy names give unreliable shingle sets, so they get no fuzzy candidate.
+    """
+    normalized_fuzzy = _normalize_name_for_fuzzy(name)
+    if not _has_high_entropy(normalized_fuzzy):
+        return None
+    shingles = _cached_shingles(normalized_fuzzy)
+    signature = _minhash_signature(shingles)
+    candidate_ids: set[str] = set()
+    for band_index, band in enumerate(_lsh_bands(signature)):
+        candidate_ids.update(indexes.lsh_buckets.get((band_index, band), []))
+
+    best_candidate: EntityNode | None = None
+    best_score = 0.0
+    for candidate_id in candidate_ids:
+        candidate_shingles = indexes.shingles_by_candidate.get(candidate_id, set())
+        score = _jaccard_similarity(shingles, candidate_shingles)
+        if score > best_score:
+            best_score = score
+            best_candidate = indexes.nodes_by_uuid.get(candidate_id)
+    if best_score >= _FUZZY_JACCARD_THRESHOLD:
+        return best_candidate
+    return None
+
+
 def _resolve_with_similarity(
     extracted_nodes: list[EntityNode],
     indexes: DedupCandidateIndexes,
     state: DedupResolutionState,
+    *,
+    name_match_gate: NameMatchGate,
 ) -> None:
     """Attempt deterministic resolution using exact name hits and fuzzy MinHash comparisons.
 
     Exact normalized-name matching runs first for *all* names regardless of
-    length or entropy.  The entropy gate only guards the fuzzy (MinHash/LSH)
-    path where short or low-entropy names produce unreliable shingle sets.
+    length or entropy. A unique exact match merges with no LLM call only when
+    `name_match_gate` accepts it (the two nodes share a neighbor), because a
+    generic name such as "consumer's auto loan" can name different entities.
+    The same gate applies to a fuzzy (MinHash/LSH) match, for example
+    "consumer's auto loans". A refused match goes to the LLM. The entropy gate
+    only guards the fuzzy path where short or low-entropy names produce
+    unreliable shingle sets.
     """
     for idx, node in enumerate(extracted_nodes):
         normalized_exact = _normalize_string_exact(node.name)
-        normalized_fuzzy = _normalize_name_for_fuzzy(node.name)
 
         # --- exact-name matching (always attempted) ---
         existing_matches = indexes.normalized_existing.get(normalized_exact, [])
         if len(existing_matches) == 1:
+            if existing_matches[0].uuid != node.uuid and not name_match_gate(
+                node, existing_matches[0]
+            ):
+                state.unresolved_indices.append(idx)
+                continue
             match = _promote_resolved_node(node, existing_matches[0])
             state.resolved_nodes[idx] = match
             state.uuid_map[node.uuid] = match.uuid
@@ -348,28 +421,12 @@ def _resolve_with_similarity(
             state.unresolved_indices.append(idx)
             continue
 
-        # --- entropy gate (protects fuzzy matching only) ---
-        if not _has_high_entropy(normalized_fuzzy):
-            state.unresolved_indices.append(idx)
-            continue
-
-        # --- fuzzy matching via MinHash/LSH ---
-        shingles = _cached_shingles(normalized_fuzzy)
-        signature = _minhash_signature(shingles)
-        candidate_ids: set[str] = set()
-        for band_index, band in enumerate(_lsh_bands(signature)):
-            candidate_ids.update(indexes.lsh_buckets.get((band_index, band), []))
-
-        best_candidate: EntityNode | None = None
-        best_score = 0.0
-        for candidate_id in candidate_ids:
-            candidate_shingles = indexes.shingles_by_candidate.get(candidate_id, set())
-            score = _jaccard_similarity(shingles, candidate_shingles)
-            if score > best_score:
-                best_score = score
-                best_candidate = indexes.nodes_by_uuid.get(candidate_id)
-
-        if best_candidate is not None and best_score >= _FUZZY_JACCARD_THRESHOLD:
+        # --- fuzzy matching via MinHash/LSH (high-entropy names only) ---
+        best_candidate = _best_fuzzy_candidate(node.name, indexes)
+        if best_candidate is not None:
+            if best_candidate.uuid != node.uuid and not name_match_gate(node, best_candidate):
+                state.unresolved_indices.append(idx)
+                continue
             best_candidate = _promote_resolved_node(node, best_candidate)
             state.resolved_nodes[idx] = best_candidate
             state.uuid_map[node.uuid] = best_candidate.uuid
@@ -382,6 +439,9 @@ def _resolve_with_similarity(
 
 __all__ = [
     'DedupCandidateIndexes',
+    'NameMatchGate',
+    '_best_fuzzy_candidate',
+    'shares_neighbor',
     'DedupResolutionState',
     '_normalize_string_exact',
     '_normalize_name_for_fuzzy',

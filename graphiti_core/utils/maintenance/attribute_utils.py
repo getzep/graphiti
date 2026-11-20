@@ -112,7 +112,9 @@ def _check_value_against_cap(value: Any, max_len: int) -> tuple[bool, str, int, 
         per-item triggers, the aggregate string length for aggregate triggers.
       * ``breached_cap``    — the cap that was actually breached; ``max_len`` for
         per-item, ``max_len * LIST_TOTAL_LENGTH_MULTIPLIER`` for aggregate. Logging
-        this alongside ``observed_length`` makes the breached cap clear.
+        this alongside ``observed_length`` keeps the two directly comparable in
+        DataDog instead of confusingly showing ``length=240 cap=250`` when 50
+        just-under-cap items collectively breached the aggregate guard.
 
     Catching both axes prevents a single bleed slipping through inside one element
     AND prevents many "just-under-cap" items adding up to KB-scale list bleed.
@@ -172,7 +174,7 @@ def cap_string_attributes(
     should set an explicit ``max_length`` on the Pydantic Field; Pydantic will
     enforce it at validation time.
 
-    Logging uses ``entity_uuid`` instead of the entity name to avoid exposing text values.
+    Logging deliberately uses ``entity_uuid`` (not name) per AGENTS.md "no PII in logs".
     """
     effective_default = _resolve_default_max_length(default_max_length)
     kept: dict[str, Any] = {}

@@ -9,6 +9,11 @@ from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.prompt_config import LLMTransport
 from graphiti_core.prompts import create_prompt_library
 from graphiti_core.prompts.extract_nodes import ExtractedEntities
+from graphiti_core.prompts.extract_nodes_and_edges import (
+    CombinedExtraction,
+    UntypedCombinedExtraction,
+)
+from graphiti_core.prompts.lib import resolve_response_model
 from graphiti_core.prompts.models import ChatPrompt, Message, SystemMessage, UserMessage
 
 
@@ -23,9 +28,26 @@ def _clients(library=None, llm=None) -> GraphitiClients:
         llm_client=llm_client,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
-        tracer=MagicMock(),
         prompt_library=library,
     )
+
+
+@pytest.mark.parametrize(
+    'name,typed,untyped',
+    [
+        (
+            'extract_nodes_and_edges.extract_message',
+            CombinedExtraction,
+            UntypedCombinedExtraction,
+        ),
+    ],
+)
+def test_extraction_schemas_allow_only_registered_typed_and_untyped_variants(name, typed, untyped):
+    assert resolve_response_model(name) is typed
+    assert resolve_response_model(name, typed) is typed
+    assert resolve_response_model(name, untyped) is untyped
+    with pytest.raises(ValueError, match='schema overrides are not allowed'):
+        resolve_response_model(name, ExtractedEntities)
 
 
 @pytest.mark.asyncio
@@ -36,7 +58,7 @@ async def test_complete_prompt_legacy_uses_fixed_schema():
         {
             'episode_content': 'hi',
             'previous_episodes': [],
-            'custom_extraction_instructions': '',
+            'knowledge': '',
             'entity_types': [],
             'source_description': 't',
         },
@@ -64,7 +86,7 @@ async def test_complete_prompt_honors_chat_prompt_override():
         {
             'episode_content': 'hi',
             'previous_episodes': [],
-            'custom_extraction_instructions': '',
+            'knowledge': '',
             'entity_types': [],
             'source_description': 't',
         },
@@ -87,7 +109,7 @@ async def test_complete_prompt_rejects_wrong_schema():
             {
                 'episode_content': 'hi',
                 'previous_episodes': [],
-                'custom_extraction_instructions': '',
+                'knowledge': '',
                 'entity_types': [],
                 'source_description': 't',
             },
@@ -105,7 +127,7 @@ async def test_complete_prompt_legacy_passes_model_size_and_attribute_flag():
         {
             'episode_content': 'hi',
             'previous_episodes': [],
-            'custom_extraction_instructions': '',
+            'knowledge': '',
             'entity_types': [],
             'source_description': 't',
         },
@@ -131,7 +153,6 @@ async def test_complete_prompt_routes_to_runtime_when_set():
         llm_client=MagicMock(),
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
-        tracer=MagicMock(),
         prompt_library=None,
         llm_runtime=runtime,
     )
@@ -141,11 +162,12 @@ async def test_complete_prompt_routes_to_runtime_when_set():
         {
             'episode_content': 'hi',
             'previous_episodes': [],
-            'custom_extraction_instructions': '',
+            'knowledge': '',
             'entity_types': [],
             'source_description': 't',
         },
     )
+
     transport_client.generate_response.assert_awaited_once()
     kwargs = transport_client.generate_response.await_args.kwargs
     assert kwargs['model'] == 'gpt-4.1'

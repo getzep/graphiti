@@ -88,8 +88,10 @@ async def run_concurrent_episode(monkeypatch, identity_properties):
             node.attributes = {'email': IDENTITY_VALUE}
         return nodes
 
-    async def get_by_attribute_values(cls, driver, group_id, attributes, labels=None, limit=None):
-        lookup_calls.append((group_id, attributes, labels, limit))
+    async def get_by_attribute_values(
+        cls, driver, group_id, attributes, labels=None, limit=None, normalize_strings=False
+    ):
+        lookup_calls.append((group_id, attributes, labels, limit, normalize_strings))
         return [stored]
 
     async def commit(graphiti, store, config, unit, change_set, **kwargs):
@@ -137,7 +139,7 @@ async def test_concurrent_add_episode_uses_identity_properties_for_lookup(monkey
     assert attribute_calls[0][0][0].uuid == 'extracted'
     assert attribute_calls[0][1] == {'validate_shape': False}
     assert lookup_calls == [
-        (GROUP, {'email': IDENTITY_VALUE}, ['Person'], NODE_DEDUP_CANDIDATE_LIMIT)
+        (GROUP, {'email': IDENTITY_VALUE}, ['Person'], NODE_DEDUP_CANDIDATE_LIMIT, True)
     ]
     assert commit_calls[0][1]['identity_properties'] == IDENTITY_PROPERTIES
 

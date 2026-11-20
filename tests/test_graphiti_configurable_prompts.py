@@ -159,7 +159,7 @@ def test_create_prompt_library_does_not_mutate_default_prompt_library():
     context = {
         'episode_content': 'hi',
         'previous_episodes': [],
-        'custom_extraction_instructions': '',
+        'knowledge': '',
         'entity_types': [],
         'source_description': 'test',
     }

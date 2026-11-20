@@ -61,8 +61,14 @@ class LLMPromptOverrides:
         extract_message: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
+    class IngestionRules:
+        evaluate: ChatPromptFunction | None = None
+
+    @dataclass(frozen=True)
     class DedupeEdges:
         resolve_edge: ChatPromptFunction | None = None
+        resolve_duplicates: ChatPromptFunction | None = None
+        resolve_contradictions: ChatPromptFunction | None = None
 
     @dataclass(frozen=True)
     class SummarizeNodes:
@@ -85,6 +91,7 @@ class LLMPromptOverrides:
     dedupe_nodes: DedupeNodes | None = None
     extract_edges: ExtractEdges | None = None
     extract_nodes_and_edges: ExtractNodesAndEdges | None = None
+    ingestion_rules: IngestionRules | None = None
     dedupe_edges: DedupeEdges | None = None
     summarize_nodes: SummarizeNodes | None = None
     summarize_sagas: SummarizeSagas | None = None
@@ -155,12 +162,14 @@ class LLMTransport(Generic[M]):
         *,
         prompt_overrides: LLMPromptOverrides | None = None,
         max_tokens: int | None = None,
+        prompt_variant: str | None = None,
     ) -> LLMModel:
         return LLMModel(
             id=id,
             transport=self,
             prompt_overrides=prompt_overrides,
             max_tokens=max_tokens,
+            prompt_variant=prompt_variant,
         )
 
     def __repr__(self) -> str:
@@ -174,17 +183,25 @@ class LLMModel:
 
     Graphiti does not assign nicknames. Bind this object to a local Python
     variable and pass that variable into ``PromptRoutes``.
+
+    ``prompt_variant=None`` selects Haiku prompts for Claude Haiku 5.5 ids.
+    Set ``prompt_variant='haiku'`` to select them on another model, or
+    ``prompt_variant='default'`` to force the library prompts. Explicit model
+    and runtime overrides take precedence over variant prompts.
     """
 
     id: str
     transport: LLMTransport[Any]
     prompt_overrides: LLMPromptOverrides | None = field(default=None, compare=False, hash=False)
     max_tokens: int | None = None
+    prompt_variant: str | None = None
     _flat_overrides: Mapping[str, ChatPromptFunction] = field(
         init=False, repr=False, compare=False, hash=False
     )
 
     def __post_init__(self) -> None:
+        if self.prompt_variant not in (None, 'default', 'haiku'):
+            raise ValueError(f'Unknown prompt variant: {self.prompt_variant!r}')
         if not self.id.strip():
             raise ValueError('LLMModel.id must be a non-empty string')
         if not isinstance(self.transport, LLMTransport):
@@ -246,9 +263,16 @@ class PromptRoutes:
         extract_message: LLMModel | None = None
 
     @dataclass(frozen=True)
+    class IngestionRules:
+        default: LLMModel | None = None
+        evaluate: LLMModel | None = None
+
+    @dataclass(frozen=True)
     class DedupeEdges:
         default: LLMModel | None = None
         resolve_edge: LLMModel | None = None
+        resolve_duplicates: LLMModel | None = None
+        resolve_contradictions: LLMModel | None = None
 
     @dataclass(frozen=True)
     class SummarizeNodes:
@@ -274,6 +298,7 @@ class PromptRoutes:
     dedupe_nodes: LLMModel | DedupeNodes | None = None
     extract_edges: LLMModel | ExtractEdges | None = None
     extract_nodes_and_edges: LLMModel | ExtractNodesAndEdges | None = None
+    ingestion_rules: LLMModel | IngestionRules | None = None
     dedupe_edges: LLMModel | DedupeEdges | None = None
     summarize_nodes: LLMModel | SummarizeNodes | None = None
     summarize_sagas: LLMModel | SummarizeSagas | None = None
