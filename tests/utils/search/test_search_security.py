@@ -102,6 +102,34 @@ def test_falkordb_fulltext_query_returns_empty_on_punctuation_only():
     assert result == ''
 
 
+def test_falkordb_fulltext_query_drops_symbol_only_tokens():
+    """Tokens without alphanumeric characters (e.g. a lone '_') are dropped.
+
+    RediSearch rejects a term that contains no letter or digit, which makes the
+    whole fulltext query fail with a syntax error.
+    """
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    result = _build_falkor_fulltext_query('name (_) date', ['group1'])
+    assert result == '(@group_id:"group1") (name | date)'
+
+
+def test_falkordb_fulltext_query_returns_empty_on_symbol_only_tokens():
+    """When every token lacks alphanumerics, return an empty query."""
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    result = _build_falkor_fulltext_query('_ – __', ['group1'])
+    assert result == ''
+
+
+def test_falkordb_fulltext_query_keeps_tokens_containing_alphanumerics():
+    """Tokens like '_2025' contain digits and stay valid RediSearch terms."""
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    result = _build_falkor_fulltext_query('Report – _2025', ['group1'])
+    assert result == '(@group_id:"group1") (Report | _2025)'
+
+
 def test_falkordb_driver_build_fulltext_query_strips_backticks():
     """FalkorDriver.build_fulltext_query should also strip backticks."""
     from graphiti_core.driver.falkordb_driver import FalkorDriver
