@@ -137,3 +137,22 @@ async def test_falkor_multi_group_ids_with_positional_group_ids_and_kwarg_driver
     assert host.clients.driver is driver
     assert set(host.seen_drivers) == {'a', 'b'}
     assert sorted(result) == ["q:a:['a']", "q:b:['b']"]
+
+
+@pytest.mark.asyncio
+async def test_falkor_single_group_id_with_positional_driver():
+    """A positional `driver` must not collide with the injected keyword (#1659).
+
+    The single-group branch added `driver` to the call as a keyword without
+    rebinding the positional arguments, so a caller that passed `driver`
+    positionally got `TypeError: got multiple values for argument 'driver'` —
+    the collision the multi-group branch already avoids."""
+    driver = _FakeDriver('reggraph')
+    host = _Host(driver)
+
+    result = await host.search('q', ['acptprobe'], driver)
+
+    assert driver.clone_calls == ['acptprobe']
+    assert host.clients.driver is driver
+    assert host.seen_drivers == ['acptprobe']
+    assert result == ["q:acptprobe:['acptprobe']"]
