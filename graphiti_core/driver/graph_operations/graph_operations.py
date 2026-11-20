@@ -132,8 +132,13 @@ class GraphOperationsInterface(BaseModel):
         attributes: dict[str, Any],
         node_labels: list[str] | None = None,
         limit: int = 100,
+        normalize_strings: bool = False,
     ) -> list[Any]:
-        """Retrieve nodes matching all provided attributes within a group."""
+        """Retrieve nodes matching all provided attributes within a group.
+
+        With ``normalize_strings``, a string value matches without regard to case,
+        and with whitespace collapsed to one space and stripped.
+        """
         raise NotImplementedError
 
     # --------------------------
@@ -218,7 +223,7 @@ class GraphOperationsInterface(BaseModel):
         raise NotImplementedError
 
     async def episodic_node_get_by_uuids(
-        self, _cls: Any, driver: Any, uuids: list[str]
+        self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None
     ) -> list[Any]:
         """Retrieve multiple episodic nodes by UUIDs."""
         raise NotImplementedError
@@ -496,7 +501,9 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve a single edge by UUID."""
         raise NotImplementedError
 
-    async def edge_get_by_uuids(self, _cls: Any, driver: Any, uuids: list[str]) -> list[Any]:
+    async def edge_get_by_uuids(
+        self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None
+    ) -> list[Any]:
         """Retrieve multiple edges by UUIDs."""
         raise NotImplementedError
 

@@ -14,16 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
 
+from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
     EpisodeType,
     EpisodicNode,
+    create_entity_node_embeddings,
 )
 from tests.helpers_test import (
     assert_community_node_equals,
@@ -227,3 +230,29 @@ async def test_episodic_node(sample_episodic_node, graph_driver):
     assert node_count == 0
 
     await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_create_entity_node_embeddings_skips_whitespace_only_names():
+    class WhitespaceDroppingEmbedder(EmbedderClient):
+        def __init__(self):
+            self.received_texts: list[str] = []
+
+        async def create(
+            self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
+        ) -> list[float]:
+            raise NotImplementedError
+
+        async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+            self.received_texts.extend(input_data_list)
+            return [[0.1, 0.2] for text in input_data_list if text and text.strip()]
+
+    embedder = WhitespaceDroppingEmbedder()
+    whitespace_node = EntityNode(name=' ', group_id=group_id, name_embedding=[0.9])
+    bob_node = EntityNode(name='Bob', group_id=group_id)
+
+    await create_entity_node_embeddings(embedder, [whitespace_node, bob_node])
+
+    assert embedder.received_texts == ['Bob']
+    assert bob_node.name_embedding == [0.1, 0.2]
+    assert whitespace_node.name_embedding == [0.9]

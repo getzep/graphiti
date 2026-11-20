@@ -23,7 +23,8 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import LLMClient, get_extraction_language_instruction
+from ..prompts.versions import PromptTemplate
+from .client import LLMClient, current_prompt_name, current_prompt_version
 from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
 
@@ -370,6 +371,7 @@ class GeminiClient(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
+        prompt_template: PromptTemplate | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model with retry logic and error handling.
@@ -389,9 +391,14 @@ class GeminiClient(LLMClient):
         Returns:
             dict[str, typing.Any]: The response from the language model.
         """
-        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
-        # Add multilingual extraction instructions
-        messages[0].content += get_extraction_language_instruction(group_id)
+        shared_parts = self._apply_shared_prompt_parts(
+            messages,
+            response_model,
+            attribute_extraction,
+            group_id,
+            add_response_format=False,
+        )
+        prompt_version = self._prompt_version(prompt_template, shared_parts)
 
         # Wrap entire operation in tracing span
         with self.tracer.start_span('llm.generate') as span:
@@ -402,6 +409,7 @@ class GeminiClient(LLMClient):
             }
             if prompt_name:
                 attributes['prompt.name'] = prompt_name
+            attributes['prompt.version'] = prompt_version
             span.add_attributes(attributes)
 
             retry_count = 0
@@ -412,13 +420,19 @@ class GeminiClient(LLMClient):
 
             while retry_count < self.MAX_RETRIES:
                 try:
-                    response, input_tokens, output_tokens = await self._generate_response(
-                        messages=messages,
-                        response_model=response_model,
-                        max_tokens=max_tokens,
-                        model_size=model_size,
-                        model=model,
-                    )
+                    name_token = current_prompt_name.set(prompt_name)
+                    version_token = current_prompt_version.set(prompt_version)
+                    try:
+                        response, input_tokens, output_tokens = await self._generate_response(
+                            messages=messages,
+                            response_model=response_model,
+                            max_tokens=max_tokens,
+                            model_size=model_size,
+                            model=model,
+                        )
+                    finally:
+                        current_prompt_name.reset(name_token)
+                        current_prompt_version.reset(version_token)
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens
 

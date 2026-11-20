@@ -21,73 +21,13 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
 
+from .knowledge import KNOWLEDGE_SECTION_TEMPLATE, knowledge_section
 from .models import ChatPrompt, Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
+from .versions import PromptTemplate, render_template
 
-
-class ExtractedEntity(BaseModel):
-    name: str = Field(..., description='Name of the extracted entity')
-    entity_type_id: int = Field(
-        description='ID of the classified entity type. '
-        'Must be one of the provided entity_type_id integers.',
-    )
-    episode_indices: list[int] = Field(
-        default_factory=lambda: [0],
-        description='List of episode numbers (0-indexed) this entity was extracted from. '
-        'When processing a single episode, this should be [0].',
-    )
-
-
-class ExtractedEntities(BaseModel):
-    extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
-
-
-class EntitySummary(BaseModel):
-    summary: str = Field(..., description='Summary of the entity')
-
-
-class SummarizedEntity(BaseModel):
-    name: str = Field(..., description='Name of the entity being summarized')
-    summary: str = Field(..., description='Updated summary for the entity')
-
-
-class SummarizedEntities(BaseModel):
-    summaries: list[SummarizedEntity] = Field(
-        ...,
-        description='List of entity summaries. Only include entities that need summary updates.',
-    )
-
-
-class Prompt(Protocol):
-    extract_message: PromptVersion
-    extract_json: PromptVersion
-    extract_text: PromptVersion
-    classify_nodes: PromptVersion
-    extract_attributes: PromptVersion
-    extract_summary: PromptVersion
-    extract_summaries_batch: PromptVersion
-    extract_entity_summaries_from_episodes: PromptVersion
-
-
-class Versions(TypedDict):
-    extract_message: PromptFunction
-    extract_json: PromptFunction
-    extract_text: PromptFunction
-    classify_nodes: PromptFunction
-    extract_attributes: PromptFunction
-    extract_summary: PromptFunction
-    extract_summaries_batch: PromptFunction
-    extract_entity_summaries_from_episodes: PromptFunction
-
-
-def extract_message(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity extraction specialist for conversational messages. '
-        'NEVER extract abstract concepts, feelings, or generic words.'
-    )
-
-    user_prompt = f"""
+EXTRACT_MESSAGE_USER_PROMPT_TEMPLATE = """
 NEVER extract any of the following:
 - Pronouns (you, me, I, he, she, they, we, us, it, them, him, her, this, that, those)
 - Abstract concepts or feelings (joy, balance, growth, resilience, happiness, passion, motivation)
@@ -117,15 +57,15 @@ Pronoun references such as he/she/they or this/that/those should be disambiguate
 reference entities. Only extract distinct entities from the CURRENT MESSAGE.
 
 <ENTITY TYPES>
-{context['entity_types']}
+{entity_types}
 </ENTITY TYPES>
 
 <PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
+{value_1}
 </PREVIOUS MESSAGES>
 
 <CURRENT MESSAGE>
-{context['episode_content']}
+{episode_content}
 </CURRENT MESSAGE>
 
 1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.
@@ -203,21 +143,9 @@ Good extractions: "Jordan" (speaker)
 Do NOT extract: "basket" (ambiguous bare noun that depends on sentence context)
 </EXAMPLE>
 
-{context['custom_extraction_instructions']}
+{knowledge}
 """
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def extract_json(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity extraction specialist for JSON data. '
-        'NEVER extract abstract concepts, dates, or generic field values.'
-    )
-
-    user_prompt = f"""
+EXTRACT_JSON_USER_PROMPT_TEMPLATE = """
 NEVER extract:
 - Date, time, or timestamp values
 - Abstract concepts or generic field values (e.g., "true", "active", "pending")
@@ -237,15 +165,15 @@ NEVER extract:
 Extract entities from the JSON and classify each using the ENTITY TYPES above.
 
 <ENTITY TYPES>
-{context['entity_types']}
+{entity_types}
 </ENTITY TYPES>
 
 <SOURCE DESCRIPTION>
-{context['source_description']}
+{source_description}
 </SOURCE DESCRIPTION>
 
 <JSON>
-{context['episode_content']}
+{episode_content}
 </JSON>
 
 Guidelines:
@@ -256,33 +184,21 @@ Guidelines:
 5. Use the most specific form present in the data (e.g., "road cycling" not "cycling").
 6. If a value would not be meaningful and distinguishable when read alone later, do NOT extract it.
 
-{context['custom_extraction_instructions']}
+{knowledge}
 
 <EXAMPLE>
-JSON: {{"user": "Jordan Lee", "company": "Acme Corp", "role": "engineer", "start_date": "2024-01-15", "location": "Denver", "active": true}}
+JSON: {"user": "Jordan Lee", "company": "Acme Corp", "role": "engineer", "start_date": "2024-01-15", "location": "Denver", "active": true}
 Good extractions: "Jordan Lee" (Person), "Acme Corp" (Organization), "Denver" (Location)
 Do NOT extract: "engineer" (role, not an entity), "2024-01-15" (date), "true" (field value)
 </EXAMPLE>
 
 <EXAMPLE>
-JSON: {{"author": "Alex", "attachment_type": "photo", "event_name": "event", "agency": "government"}}
+JSON: {"author": "Alex", "attachment_type": "photo", "event_name": "event", "agency": "government"}
 Good extractions: "Alex" (Person)
 Do NOT extract: "photo" (generic media noun), "event" (generic event noun), "government" (broad institutional noun)
 </EXAMPLE>
 """
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def extract_text(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity extraction specialist for unstructured text. '
-        'NEVER extract abstract concepts, feelings, or generic words.'
-    )
-
-    user_prompt = f"""
+EXTRACT_TEXT_USER_PROMPT_TEMPLATE = """
 NEVER extract:
 - Pronouns (you, me, he, she, they, it, them, him, her, we, us, this, that, those)
 - Abstract concepts (joy, balance, growth, resilience, passion, motivation)
@@ -306,11 +222,11 @@ For each entity, classify it using the ENTITY TYPES above.
 Only extract entities specific enough to be uniquely identifiable — ask: "Could this have its own Wikipedia article or database entry?"
 
 <ENTITY TYPES>
-{context['entity_types']}
+{entity_types}
 </ENTITY TYPES>
 
 <TEXT>
-{context['episode_content']}
+{episode_content}
 </TEXT>
 
 Guidelines:
@@ -325,7 +241,7 @@ Guidelines:
 7. If a phrase would not be meaningful and distinguishable when read alone later, do NOT extract it.
 8. When in doubt, do NOT extract.
 
-{context['custom_extraction_instructions']}
+{knowledge}
 
 <EXAMPLE>
 Text: "Dr. Amara Osei presented her migraine study results at the AAN conference. The study tracked 340 patients using a new CGRP combination protocol."
@@ -339,33 +255,21 @@ Good extractions: "Alex" (Person)
 Do NOT extract: "pic" (generic media noun), "event" (generic event noun), "basket" (ambiguous bare noun)
 </EXAMPLE>
 """
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def classify_nodes(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = (
-        'You are an entity classification specialist. '
-        'NEVER assign types not listed in ENTITY TYPES.'
-    )
-
-    user_prompt = f"""
+CLASSIFY_NODES_USER_PROMPT_TEMPLATE = """
 <PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
+{value_0}
 </PREVIOUS MESSAGES>
 
 <CURRENT MESSAGE>
-{context['episode_content']}
+{episode_content}
 </CURRENT MESSAGE>
 
 <EXTRACTED ENTITIES>
-{context['extracted_entities']}
+{extracted_entities}
 </EXTRACTED ENTITIES>
 
 <ENTITY TYPES>
-{context['entity_types']}
+{entity_types}
 </ENTITY TYPES>
 
 Given the above conversation, extracted entities, and provided entity types and their descriptions, classify the extracted entities.
@@ -375,27 +279,13 @@ Guidelines:
 2. NEVER use types not listed in ENTITY TYPES.
 3. If none of the provided entity types accurately classify an extracted entity, the type should be set to None.
 """
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
-def extract_attributes(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content=(
-                'You are an entity attribute extraction specialist. '
-                'You ONLY emit attribute values that are explicitly stated in MESSAGES or '
-                'already present on the ENTITY. You output strictly the JSON specified by the '
-                'response schema — no reasoning, no explanation, no commentary in any field.'
-            ),
-        ),
-        Message(
-            role='user',
-            content=f"""\
-Given the MESSAGES and the following ENTITY, update its attributes.
+_ENTITY_TYPE_DESCRIPTIONS_SECTION_TEMPLATE_TEMPLATE = """
+<ENTITY_TYPE_DESCRIPTIONS>
+{descriptions}
+</ENTITY_TYPE_DESCRIPTIONS>
+When an entity's type appears in ENTITY_TYPE_DESCRIPTIONS, use the description to decide which facts are most relevant to that entity type. NEVER mention the entity type, type description, or classification in the summary text itself.
+"""
+EXTRACT_ATTRIBUTES_USER_PROMPT_TEMPLATE = """Given the MESSAGES and the following ENTITY, update its attributes.
 
 HARD RULES — violating any of these is a failure:
 
@@ -438,32 +328,230 @@ HARD RULES — violating any of these is a failure:
 
 EXAMPLES
 
-ENTITY: {{"name": "Sam Rivera", "phones": "415-555-0142"}}
+ENTITY: {"name": "Sam Rivera", "phones": "415-555-0142"}
 MESSAGES contain no phone information for Sam.
 GOOD → "phones": "415-555-0142"   (preserved existing value)
 BAD  → "phones": "415-555-0142 (implied by original entity, but no new information in
         messages, retaining original value as per instruction...)"
 
-ENTITY: {{"name": "Northwind", "industry": null}}
+ENTITY: {"name": "Northwind", "industry": null}
 MESSAGES mention Northwind only as the platform some content was posted to.
 GOOD → "industry": null   (no explicit industry classification was stated)
 BAD  → "industry": "Content platform, SaaS (implied by usage context, though not stated
         explicitly as industry classification...)"
 
-ENTITY: {{"name": "Priya"}}
+ENTITY: {"name": "Priya"}
 MESSAGES contain no phone for Priya, but discuss a project she contributed to.
 GOOD → "phones": null
 BAD  → "phones": "Worked with Lin and Marco on the Q3 launch..."   (off-topic content dump)
 
 <MESSAGES>
-{to_prompt_json(context['previous_episodes'])}
-{to_prompt_json(context['episode_content'])}
+{previous_episodes}
+{episode_content}
 </MESSAGES>
 
 <ENTITY>
-{context['node']}
+{node}
 </ENTITY>
-""",
+"""
+EXTRACT_SUMMARY_USER_PROMPT_TEMPLATE = """
+        Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
+        from the messages and relevant information from the existing summary. Summary must be under {max_summary_chars} characters.
+
+        {summary_instructions}
+
+        <MESSAGES>
+        {previous_episodes}
+        {episode_content}
+        </MESSAGES>
+
+        <ENTITY>
+        {node}
+        </ENTITY>
+        """
+EXTRACT_SUMMARIES_BATCH_USER_PROMPT_TEMPLATE = """
+Given the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.
+Each summary must be under {max_summary_chars} characters.
+
+{summary_instructions}
+
+<MESSAGES>
+{previous_episodes}
+{episode_content}
+</MESSAGES>
+{context}
+<ENTITIES>
+{entities}
+</ENTITIES>
+
+For each entity, combine relevant information from the MESSAGES with any existing summary content.
+Only return summaries for entities that have meaningful information to summarize.
+If an entity has no relevant information in the messages and no existing summary, you may skip it.
+"""
+EXTRACT_ENTITY_SUMMARIES_FROM_EPISODES_USER_PROMPT_TEMPLATE = """NEVER include meta-language about the summarization process. Use ONLY facts from the provided EPISODES.
+Each summary must be under {max_summary_chars} characters. Write 2-6 dense sentences in third person. Preserve all material names, roles, dates, counts, and changes over time that are explicitly supported.
+
+For each entity below, generate an updated summary using ONLY the provided EPISODES and any existing summary already on the entity.
+
+<EPISODES>
+{previous_episodes}
+{episode_content}
+</EPISODES>
+{context}
+<ENTITIES>
+{entities}
+</ENTITIES>
+
+Only return summaries for entities that have meaningful information to summarize.
+If an entity has no relevant information in the episodes and no existing summary, you may skip it.
+"""
+EXTRACT_MESSAGE_SYSTEM_PROMPT_TEMPLATE = """You are an entity extraction specialist for conversational messages. NEVER extract abstract concepts, feelings, or generic words."""
+EXTRACT_JSON_SYSTEM_PROMPT_TEMPLATE = """You are an entity extraction specialist for JSON data. NEVER extract abstract concepts, dates, or generic field values."""
+EXTRACT_TEXT_SYSTEM_PROMPT_TEMPLATE = """You are an entity extraction specialist for unstructured text. NEVER extract abstract concepts, feelings, or generic words."""
+CLASSIFY_NODES_SYSTEM_PROMPT_TEMPLATE = (
+    'You are an entity classification specialist. NEVER assign types not listed in ENTITY TYPES.'
+)
+EXTRACT_ATTRIBUTES_SYSTEM_PROMPT_TEMPLATE = """You are an entity attribute extraction specialist. You ONLY emit attribute values that are explicitly stated in MESSAGES or already present on the ENTITY. You output strictly the JSON specified by the response schema — no reasoning, no explanation, no commentary in any field."""
+EXTRACT_SUMMARY_SYSTEM_PROMPT_TEMPLATE = (
+    'You are a helpful assistant that extracts entity summaries from the provided text.'
+)
+EXTRACT_SUMMARIES_BATCH_SYSTEM_PROMPT_TEMPLATE = (
+    'You are a helpful assistant that generates concise entity summaries from provided context.'
+)
+
+
+class ExtractedEntity(BaseModel):
+    name: str = Field(..., description='Name of the extracted entity')
+    entity_type_id: int = Field(
+        description='ID of the classified entity type. '
+        'Must be one of the provided entity_type_id integers.',
+    )
+    episode_indices: list[int] = Field(
+        default_factory=lambda: [0],
+        description='List of episode numbers (0-indexed) this entity was extracted from. '
+        'When processing a single episode, this should be [0].',
+    )
+
+
+class ExtractedEntities(BaseModel):
+    extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
+
+
+class EntitySummary(BaseModel):
+    summary: str = Field(..., description='Summary of the entity')
+
+
+class SummarizedEntity(BaseModel):
+    name: str = Field(..., description='Name of the entity being summarized')
+    summary: str = Field(..., description='Updated summary for the entity')
+
+
+class SummarizedEntities(BaseModel):
+    summaries: list[SummarizedEntity] = Field(
+        ...,
+        description='List of entity summaries. Only include entities that need summary updates.',
+    )
+
+
+class Prompt(Protocol):
+    extract_message: PromptVersion
+    extract_json: PromptVersion
+    extract_text: PromptVersion
+    classify_nodes: PromptVersion
+    extract_attributes: PromptVersion
+    extract_summary: PromptVersion
+    extract_summaries_batch: PromptVersion
+    extract_entity_summaries_from_episodes: PromptVersion
+
+
+class Versions(TypedDict):
+    extract_message: PromptFunction
+    extract_json: PromptFunction
+    extract_text: PromptFunction
+    classify_nodes: PromptFunction
+    extract_attributes: PromptFunction
+    extract_summary: PromptFunction
+    extract_summaries_batch: PromptFunction
+    extract_entity_summaries_from_episodes: PromptFunction
+
+
+def extract_message(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = EXTRACT_MESSAGE_SYSTEM_PROMPT_TEMPLATE
+
+    user_prompt = render_template(
+        EXTRACT_MESSAGE_USER_PROMPT_TEMPLATE,
+        entity_types=context['entity_types'],
+        value_1=to_prompt_json([ep for ep in context['previous_episodes']]),
+        episode_content=context['episode_content'],
+        knowledge=knowledge_section(context['knowledge']),
+    )
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+def extract_json(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = EXTRACT_JSON_SYSTEM_PROMPT_TEMPLATE
+
+    user_prompt = render_template(
+        EXTRACT_JSON_USER_PROMPT_TEMPLATE,
+        entity_types=context['entity_types'],
+        source_description=context['source_description'],
+        episode_content=context['episode_content'],
+        knowledge=knowledge_section(context['knowledge']),
+    )
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+def extract_text(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = EXTRACT_TEXT_SYSTEM_PROMPT_TEMPLATE
+
+    user_prompt = render_template(
+        EXTRACT_TEXT_USER_PROMPT_TEMPLATE,
+        entity_types=context['entity_types'],
+        episode_content=context['episode_content'],
+        knowledge=knowledge_section(context['knowledge']),
+    )
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+def classify_nodes(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = CLASSIFY_NODES_SYSTEM_PROMPT_TEMPLATE
+
+    user_prompt = render_template(
+        CLASSIFY_NODES_USER_PROMPT_TEMPLATE,
+        value_0=to_prompt_json([ep for ep in context['previous_episodes']]),
+        episode_content=context['episode_content'],
+        extracted_entities=context['extracted_entities'],
+        entity_types=context['entity_types'],
+    )
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+def extract_attributes(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content=(EXTRACT_ATTRIBUTES_SYSTEM_PROMPT_TEMPLATE),
+        ),
+        Message(
+            role='user',
+            content=render_template(
+                EXTRACT_ATTRIBUTES_USER_PROMPT_TEMPLATE,
+                previous_episodes=to_prompt_json(context['previous_episodes']),
+                episode_content=to_prompt_json(context['episode_content']),
+                node=context['node'],
+            ),
         ),
     ]
 
@@ -472,25 +560,18 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts entity summaries from the provided text.',
+            content=EXTRACT_SUMMARY_SYSTEM_PROMPT_TEMPLATE,
         ),
         Message(
             role='user',
-            content=f"""
-        Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
-        from the messages and relevant information from the existing summary. Summary must be under {MAX_SUMMARY_CHARS} characters.
-
-        {summary_instructions}
-
-        <MESSAGES>
-        {to_prompt_json(context['previous_episodes'])}
-        {to_prompt_json(context['episode_content'])}
-        </MESSAGES>
-
-        <ENTITY>
-        {context['node']}
-        </ENTITY>
-        """,
+            content=render_template(
+                EXTRACT_SUMMARY_USER_PROMPT_TEMPLATE,
+                max_summary_chars=str(MAX_SUMMARY_CHARS),
+                summary_instructions=summary_instructions,
+                previous_episodes=to_prompt_json(context['previous_episodes']),
+                episode_content=to_prompt_json(context['episode_content']),
+                node=context['node'],
+            ),
         ),
     ]
 
@@ -500,43 +581,29 @@ def _entity_type_descriptions_section(context: dict[str, Any]) -> str:
     descriptions = context.get('entity_type_descriptions')
     if not descriptions:
         return ''
-    return f"""
-<ENTITY_TYPE_DESCRIPTIONS>
-{to_prompt_json(descriptions)}
-</ENTITY_TYPE_DESCRIPTIONS>
-When an entity's type appears in ENTITY_TYPE_DESCRIPTIONS, use the description to decide which facts are \
-most relevant to that entity type. NEVER mention the entity type, type description, or classification \
-in the summary text itself.
-"""
+    return render_template(
+        _ENTITY_TYPE_DESCRIPTIONS_SECTION_TEMPLATE_TEMPLATE,
+        descriptions=to_prompt_json(descriptions),
+    )
 
 
 def extract_summaries_batch(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that generates concise entity summaries from provided context.',
+            content=EXTRACT_SUMMARIES_BATCH_SYSTEM_PROMPT_TEMPLATE,
         ),
         Message(
             role='user',
-            content=f"""
-Given the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.
-Each summary must be under {MAX_SUMMARY_CHARS} characters.
-
-{summary_instructions}
-
-<MESSAGES>
-{to_prompt_json(context['previous_episodes'])}
-{to_prompt_json(context['episode_content'])}
-</MESSAGES>
-{_entity_type_descriptions_section(context)}
-<ENTITIES>
-{to_prompt_json(context['entities'])}
-</ENTITIES>
-
-For each entity, combine relevant information from the MESSAGES with any existing summary content.
-Only return summaries for entities that have meaningful information to summarize.
-If an entity has no relevant information in the messages and no existing summary, you may skip it.
-""",
+            content=render_template(
+                EXTRACT_SUMMARIES_BATCH_USER_PROMPT_TEMPLATE,
+                max_summary_chars=str(MAX_SUMMARY_CHARS),
+                summary_instructions=summary_instructions,
+                previous_episodes=to_prompt_json(context['previous_episodes']),
+                episode_content=to_prompt_json(context['episode_content']),
+                context=_entity_type_descriptions_section(context),
+                entities=to_prompt_json(context['entities']),
+            ),
         ),
     ]
 
@@ -622,26 +689,14 @@ def extract_entity_summaries_from_episodes(context: dict[str, Any]) -> list[Mess
         ),
         Message(
             role='user',
-            content=f"""NEVER include meta-language about the summarization process. \
-Use ONLY facts from the provided EPISODES.
-Each summary must be under {MAX_SUMMARY_CHARS} characters. Write 2-6 dense sentences in third person. \
-Preserve all material names, roles, dates, counts, and changes over time that are explicitly supported.
-
-For each entity below, generate an updated summary using ONLY the provided EPISODES and any \
-existing summary already on the entity.
-
-<EPISODES>
-{to_prompt_json(context['previous_episodes'])}
-{to_prompt_json(context['episode_content'])}
-</EPISODES>
-{_entity_type_descriptions_section(context)}
-<ENTITIES>
-{to_prompt_json(context['entities'])}
-</ENTITIES>
-
-Only return summaries for entities that have meaningful information to summarize.
-If an entity has no relevant information in the episodes and no existing summary, you may skip it.
-""",
+            content=render_template(
+                EXTRACT_ENTITY_SUMMARIES_FROM_EPISODES_USER_PROMPT_TEMPLATE,
+                max_summary_chars=str(MAX_SUMMARY_CHARS),
+                previous_episodes=to_prompt_json(context['previous_episodes']),
+                episode_content=to_prompt_json(context['episode_content']),
+                context=_entity_type_descriptions_section(context),
+                entities=to_prompt_json(context['entities']),
+            ),
         ),
     ]
 
@@ -656,6 +711,56 @@ versions: Versions = {
     'classify_nodes': classify_nodes,
     'extract_attributes': extract_attributes,
 }
+
+extract_message.__prompt_template__ = PromptTemplate(
+    (
+        EXTRACT_MESSAGE_SYSTEM_PROMPT_TEMPLATE,
+        EXTRACT_MESSAGE_USER_PROMPT_TEMPLATE,
+        KNOWLEDGE_SECTION_TEMPLATE,
+    )
+)
+extract_json.__prompt_template__ = PromptTemplate(
+    (
+        EXTRACT_JSON_SYSTEM_PROMPT_TEMPLATE,
+        EXTRACT_JSON_USER_PROMPT_TEMPLATE,
+        KNOWLEDGE_SECTION_TEMPLATE,
+    )
+)
+extract_text.__prompt_template__ = PromptTemplate(
+    (
+        EXTRACT_TEXT_SYSTEM_PROMPT_TEMPLATE,
+        EXTRACT_TEXT_USER_PROMPT_TEMPLATE,
+        KNOWLEDGE_SECTION_TEMPLATE,
+    )
+)
+classify_nodes.__prompt_template__ = PromptTemplate(
+    (CLASSIFY_NODES_SYSTEM_PROMPT_TEMPLATE, CLASSIFY_NODES_USER_PROMPT_TEMPLATE)
+)
+extract_attributes.__prompt_template__ = PromptTemplate(
+    (EXTRACT_ATTRIBUTES_SYSTEM_PROMPT_TEMPLATE, EXTRACT_ATTRIBUTES_USER_PROMPT_TEMPLATE)
+)
+extract_summary.__prompt_template__ = PromptTemplate(
+    (
+        EXTRACT_SUMMARY_SYSTEM_PROMPT_TEMPLATE,
+        EXTRACT_SUMMARY_USER_PROMPT_TEMPLATE,
+        summary_instructions,
+    )
+)
+extract_summaries_batch.__prompt_template__ = PromptTemplate(
+    (
+        EXTRACT_SUMMARIES_BATCH_SYSTEM_PROMPT_TEMPLATE,
+        EXTRACT_SUMMARIES_BATCH_USER_PROMPT_TEMPLATE,
+        summary_instructions,
+        _ENTITY_TYPE_DESCRIPTIONS_SECTION_TEMPLATE_TEMPLATE,
+    )
+)
+extract_entity_summaries_from_episodes.__prompt_template__ = PromptTemplate(
+    (
+        _entity_episode_summary_system_prompt,
+        EXTRACT_ENTITY_SUMMARIES_FROM_EPISODES_USER_PROMPT_TEMPLATE,
+        _ENTITY_TYPE_DESCRIPTIONS_SECTION_TEMPLATE_TEMPLATE,
+    )
+)
 
 
 class ExtractNodesPrompts(ABC):

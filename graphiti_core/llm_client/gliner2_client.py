@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from ..prompts.models import Message
+from ..prompts.versions import PromptTemplate
 from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
@@ -264,6 +265,7 @@ class GLiNER2Client(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
+        prompt_template: PromptTemplate | None = None,
     ) -> dict[str, typing.Any]:
         # Delegate non-extraction operations to the wrapped LLM client.
         if not self._is_gliner2_operation(response_model):
@@ -278,6 +280,7 @@ class GLiNER2Client(LLMClient):
                 group_id=group_id,
                 prompt_name=prompt_name,
                 attribute_extraction=attribute_extraction,
+                prompt_template=prompt_template,
                 **overrides,
             )
 
@@ -314,10 +317,15 @@ class GLiNER2Client(LLMClient):
                     messages, response_model, max_tokens, model_size
                 )
 
+                # Approximate token usage (GLiNER2 doesn't report actual tokens)
                 text = self._extract_text_from_messages(messages)
                 input_tokens = len(text) // 4
                 output_tokens = len(json.dumps(response)) // 4
-                self.token_tracker.record(prompt_name or 'unknown', input_tokens, output_tokens)
+                self.token_tracker.record(
+                    prompt_name or 'unknown',
+                    input_tokens,
+                    output_tokens,
+                )
             except Exception as e:
                 span.set_status('error', str(e))
                 span.record_exception(e)
