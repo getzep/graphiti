@@ -40,7 +40,9 @@ class ExtractedEntity(BaseModel):
 
 
 class ExtractedEntities(BaseModel):
-    extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
+    extracted_entities: list[ExtractedEntity] = Field(
+        default_factory=list, description='List of extracted entities'
+    )
 
 
 class EntitySummary(BaseModel):
@@ -54,7 +56,7 @@ class SummarizedEntity(BaseModel):
 
 class SummarizedEntities(BaseModel):
     summaries: list[SummarizedEntity] = Field(
-        ...,
+        default_factory=list,
         description='List of entity summaries. Only include entities that need summary updates.',
     )
 
