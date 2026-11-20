@@ -39,6 +39,7 @@ from graphiti_core.driver.falkordb.fulltext import (
     build_falkor_fulltext_query,
     sanitize_falkor_fulltext_query,
 )
+from graphiti_core.driver.falkordb.graph_operations_interface import FalkorGraphOperationsInterface
 from graphiti_core.driver.falkordb.operations.community_edge_ops import (
     FalkorCommunityEdgeOperations,
 )
@@ -182,6 +183,22 @@ class FalkorDriver(GraphDriver):
         self._next_episode_edge_ops = FalkorNextEpisodeEdgeOperations()
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
+
+        # Wire up the graph operations interface to enable per-group routing
+        # through the classmethod dispatch path (fixes #2033)
+        self.graph_operations_interface = FalkorGraphOperationsInterface(
+            entity_node_ops=self._entity_node_ops,
+            episode_node_ops=self._episode_node_ops,
+            community_node_ops=self._community_node_ops,
+            saga_node_ops=self._saga_node_ops,
+            entity_edge_ops=self._entity_edge_ops,
+            episodic_edge_ops=self._episodic_edge_ops,
+            community_edge_ops=self._community_edge_ops,
+            has_episode_edge_ops=self._has_episode_edge_ops,
+            next_episode_edge_ops=self._next_episode_edge_ops,
+            search_ops=self._search_ops,
+            graph_ops=self._graph_ops,
+        )
 
         self._init_task: asyncio.Task | None = None
         # Schedule the indices and constraints to be built
