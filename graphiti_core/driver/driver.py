@@ -60,6 +60,7 @@ class GraphProvider(Enum):
     NEO4J = 'neo4j'
     FALKORDB = 'falkordb'
     NEPTUNE = 'neptune'
+    RELATE = 'relate'
 
 
 class GraphDriverSession(ABC):
@@ -87,6 +88,7 @@ class GraphDriverSession(ABC):
 
 
 class GraphDriver(QueryExecutor, ABC):
+    RELATE = GraphProvider.RELATE
     provider: GraphProvider
     fulltext_syntax: str = (
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries

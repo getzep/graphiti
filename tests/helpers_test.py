@@ -48,6 +48,15 @@ if os.getenv('DISABLE_FALKORDB') is None:
     except ImportError:
         raise
 
+if os.getenv('DISABLE_RELATE') is None:
+    try:
+        from graphiti_core.driver.relate_driver import RelateDriver
+
+        drivers.append(GraphProvider.RELATE)
+    except ImportError:
+        # relate-db is an optional extra; skip the Relate provider when it is absent.
+        pass
+
 # Disable Neptune for now
 os.environ['DISABLE_NEPTUNE'] = 'True'
 if os.getenv('DISABLE_NEPTUNE') is None:
@@ -95,6 +104,8 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             port=int(NEPTUNE_PORT),
             aoss_host=AOSS_HOST,
         )
+    elif provider == GraphProvider.RELATE:
+        return RelateDriver()
     else:
         raise ValueError(f'Driver {provider} not available')
 
