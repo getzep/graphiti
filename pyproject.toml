@@ -14,6 +14,7 @@ dependencies = [
     "pydantic>=2.11.5",
     "neo4j>=5.26.0",
     "openai>=1.91.0",
+    "httpx>=0.28.1",
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
@@ -29,8 +30,6 @@ Repository = "https://github.com/getzep/graphiti"
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.62.0"]
-# Deprecated: the upstream Kuzu project is unmaintained; this extra will be removed in a future release.
-kuzu = ["kuzu>=0.11.3"]
 falkordb = ["falkordb>=1.1.2,<2.0.0"]
 # redis<9 pin: redis-py 8.x breaks falkordblite's embedded server startup
 falkordblite = ["falkordblite>=0.5.0; python_version>='3.12'", "redis<9; python_version>='3.12'"]
@@ -46,14 +45,12 @@ dev = [
     "anthropic>=0.49.0",
     "google-genai>=1.8.0",
     "falkordb>=1.1.2,<2.0.0",
-    "kuzu>=0.11.3",
     "boto3>=1.39.16",
     "opensearch-py>=3.0.0",
     "langchain-aws>=0.2.29",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
     "langgraph>=1.0.10",
-    "langchain-anthropic>=0.2.4",
     "langsmith>=0.1.108",
     "langchain-openai>=0.2.6",
     "voyageai>=0.2.3",

@@ -16,6 +16,7 @@ limitations under the License.
 
 # Running tests: pytest -xvs tests/llm_client/test_anthropic_client.py
 
+import logging
 import os
 from typing import get_args
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -82,6 +83,13 @@ class TestAnthropicClientInitialization:
         assert client.temperature == 0.5
         assert client.max_tokens == 1000
 
+    @pytest.mark.parametrize(('temperature', 'warns'), [(0.5, True), (1, False), (None, False)])
+    def test_init_warns_when_temperature_is_ignored(self, caplog, temperature, warns):
+        config = LLMConfig(api_key='test_api_key', temperature=temperature)
+        with caplog.at_level(logging.WARNING, logger='graphiti_core.llm_client.anthropic_client'):
+            AnthropicClient(config=config, cache=False)
+        assert ('ignores temperature' in caplog.text) == warns
+
     def test_init_with_default_model(self):
         """Test initialization with default model when none is provided."""
         config = LLMConfig(api_key='test_api_key')
@@ -143,6 +151,7 @@ class TestAnthropicClientGenerateResponse:
         assert isinstance(result, dict)
         assert result['test_field'] == 'test_value'
         mock_async_anthropic.messages.create.assert_called_once()
+        assert 'temperature' not in mock_async_anthropic.messages.create.call_args.kwargs
 
     @pytest.mark.asyncio
     async def test_generate_response_with_text_response(

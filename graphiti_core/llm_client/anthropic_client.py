@@ -25,7 +25,7 @@ from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
+from .config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
 if TYPE_CHECKING:
@@ -104,6 +104,12 @@ class AnthropicClient(LLMClient):
             config.model = DEFAULT_MODEL
 
         super().__init__(config, cache)
+        if self.temperature not in (None, DEFAULT_TEMPERATURE):
+            logger.warning(
+                'AnthropicClient ignores temperature=%s because anthropic SDK 1.0 and later do not '
+                'accept the parameter, and Claude 5, Opus 4.7, and Opus 4.8 models reject it.',
+                self.temperature,
+            )
         # Explicitly set the instance model to the config model to prevent type checking errors
         self.model = typing.cast(AnthropicModel, config.model)
 
@@ -259,7 +265,6 @@ class AnthropicClient(LLMClient):
             result = await self.client.messages.create(
                 system=system_message.content,
                 max_tokens=max_creation_tokens,
-                temperature=self.temperature,
                 messages=user_messages_cast,
                 model=effective_model,
                 tools=tools,

@@ -55,6 +55,21 @@ class GraphOperationsInterface(BaseModel):
         """Persist (create or update) many nodes in batches."""
         raise NotImplementedError
 
+    async def node_update_bulk(
+        self,
+        _cls: Any,
+        driver: Any,
+        transaction: Any,
+        nodes: list[Any],
+        batch_size: int = 100,
+    ) -> None:
+        """Update many nodes that exist. A node that does not exist is not created.
+
+        `nodes` has the same records as `node_save_bulk`. Concurrent ingestion uses this
+        operation.
+        """
+        raise NotImplementedError
+
     async def node_delete_by_group_id(
         self,
         _cls: Any,
@@ -447,6 +462,21 @@ class GraphOperationsInterface(BaseModel):
         batch_size: int = 100,
     ) -> None:
         """Persist (create or update) many edges in batches."""
+        raise NotImplementedError
+
+    async def edge_update_bulk(
+        self,
+        _cls: Any,
+        driver: Any,
+        transaction: Any,
+        edges: list[Any],
+        batch_size: int = 100,
+    ) -> None:
+        """Update many edges that exist. An edge that does not exist is not created.
+
+        `edges` has the same records as `edge_save_bulk`. Concurrent ingestion uses this
+        operation.
+        """
         raise NotImplementedError
 
     async def edge_delete_by_uuids(
