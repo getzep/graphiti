@@ -32,7 +32,6 @@ from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
     CommunityEdge,
-    Edge,
     EntityEdge,
     EpisodicEdge,
     HasEpisodeEdge,
@@ -110,6 +109,7 @@ from graphiti_core.utils.maintenance.edge_operations import (
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     delete_entities_mentioned_only_by,
+    remove_episode_from_entity_edges,
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
@@ -2524,20 +2524,6 @@ class Graphiti:
         # Find the episode to be deleted
         episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
 
-        # Find edges mentioned by the episode
-        edges = await EntityEdge.get_by_uuids(self.driver, episode.entity_edges)
-
-        # Keep edges that other episodes also support.
-        edges_to_delete: list[EntityEdge] = []
-        edges_to_update: list[EntityEdge] = []
-        for edge in edges:
-            if episode.uuid in edge.episodes:
-                edge.episodes = [uuid for uuid in edge.episodes if uuid != episode.uuid]
-                if edge.episodes:
-                    edges_to_update.append(edge)
-                else:
-                    edges_to_delete.append(edge)
-
         # Find nodes mentioned by the episode
         nodes = await get_mentioned_nodes(self.driver, [episode])
         # We should delete all nodes that are only mentioned in the deleted episode
@@ -2550,11 +2536,10 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
-        for edge in edges_to_update:
-            await edge.load_fact_embedding(self.driver)
-            await edge.save(self.driver)
-
-        await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
+        # Remove the episode from the facts it supports, and delete the facts no other episode
+        # supports. The episodes of each fact are read again in the same statement, so an
+        # episode that a concurrent add_episode has added to a fact is kept (#2159).
+        await remove_episode_from_entity_edges(self.driver, episode.uuid, episode.entity_edges)
         # A concurrent add_episode may have mentioned an entity since it was counted above, so
         # the delete checks the mentions again and keeps such an entity (#2159).
         deleted_node_uuids = await delete_entities_mentioned_only_by(

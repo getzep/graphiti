@@ -21,8 +21,9 @@ from unittest.mock import AsyncMock, Mock
 import numpy as np
 import pytest
 
+import graphiti_core.graphiti as graphiti_module
 from graphiti_core.cross_encoder.client import CrossEncoderClient
-from graphiti_core.edges import CommunityEdge, Edge, EntityEdge, EpisodicEdge
+from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
@@ -55,6 +56,9 @@ from graphiti_core.utils.maintenance.community_operations import (
     remove_communities,
 )
 from graphiti_core.utils.maintenance.edge_operations import filter_existing_duplicate_of_edges
+from graphiti_core.utils.maintenance.graph_data_operations import (
+    remove_episode_from_entity_edges,
+)
 from tests.helpers_test import (
     GraphProvider,
     assert_entity_edge_equals,
@@ -1080,19 +1084,23 @@ async def test_remove_episode_keeps_entities_mentioned_by_concurrent_add(
     )
     added_mentions = mentions(added_episode, [alice, bob])
 
-    # Force the order count -> add_episode's bulk write -> delete. remove_episode deletes
-    # the episode's facts after it has counted mentions and before it deletes entities,
-    # so it is held there until the concurrent bulk write has returned.
+    # Force the order count -> add_episode's bulk write -> delete. remove_episode removes
+    # the episode from its facts after it has counted mentions and before it deletes
+    # entities, so it is held there until the concurrent bulk write has returned.
     counted = asyncio.Event()
     written = asyncio.Event()
-    delete_edges = Edge.delete_by_uuids
 
-    async def delete_edges_then_wait_for_write(driver, uuids):
-        await delete_edges(driver, uuids)
+    async def remove_from_edges_then_wait_for_write(driver, episode_uuid, edge_uuids):
+        deleted = await remove_episode_from_entity_edges(driver, episode_uuid, edge_uuids)
         counted.set()
         await asyncio.wait_for(written.wait(), timeout=30)
+        return deleted
 
-    monkeypatch.setattr(Edge, 'delete_by_uuids', staticmethod(delete_edges_then_wait_for_write))
+    monkeypatch.setattr(
+        graphiti_module,
+        'remove_episode_from_entity_edges',
+        remove_from_edges_then_wait_for_write,
+    )
 
     async def add_after_count():
         await asyncio.wait_for(counted.wait(), timeout=30)
@@ -1131,6 +1139,171 @@ async def test_remove_episode_keeps_entities_mentioned_by_concurrent_add(
     assert all('OLD_MARKER' not in prompt_text for prompt_text in prompt_texts)
     retrieved_alice = await EntityNode.get_by_uuid(graph_driver, alice.uuid)
     assert retrieved_alice.summary == 'Alice reviewed the report of Bob.'
+
+
+@pytest.mark.asyncio
+async def test_remove_episode_keeps_facts_restated_by_concurrent_add(
+    graph_driver,
+    mock_llm_client,
+    mock_embedder,
+    mock_cross_encoder_client,
+    monkeypatch,
+):
+    # An add_episode that restates facts of the episode being removed appends its own episode
+    # to them. remove_episode must keep those facts and that episode, even when the add writes
+    # after remove_episode has started.
+    mock_llm_client.generate_response = AsyncMock(
+        return_value={
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice summary'},
+                {'name': 'Bob', 'summary': 'Bob summary'},
+            ]
+        }
+    )
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now()
+
+    def make_episode(name: str, content: str) -> EpisodicNode:
+        return EpisodicNode(
+            name=name,
+            group_id=group_id,
+            labels=[],
+            created_at=now,
+            source=EpisodeType.message,
+            source_description='conversation message',
+            content=content,
+            valid_at=now,
+        )
+
+    shared_episode = make_episode('shared_episode', 'Alice works with Bob.')
+    episode_to_remove = make_episode(
+        'episode_to_remove', 'Alice works with Bob. Alice manages Bob.'
+    )
+    added_episode = make_episode('added_episode', 'Alice works with Bob. Alice manages Bob.')
+    alice = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Alice summary',
+    )
+    bob = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Bob summary',
+    )
+    await alice.generate_name_embedding(mock_embedder)
+    await bob.generate_name_embedding(mock_embedder)
+
+    # A fact only the removed episode supports, and one it shares with another episode.
+    manages = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='manages',
+        fact='Alice manages Bob',
+        episodes=[episode_to_remove.uuid],
+        valid_at=now,
+        group_id=group_id,
+    )
+    works_with = EntityEdge(
+        source_node_uuid=alice.uuid,
+        target_node_uuid=bob.uuid,
+        created_at=now,
+        name='works_with',
+        fact='Alice works with Bob',
+        episodes=[shared_episode.uuid, episode_to_remove.uuid],
+        valid_at=now,
+        group_id=group_id,
+    )
+    await manages.generate_embedding(mock_embedder)
+    await works_with.generate_embedding(mock_embedder)
+    works_with_embedding = works_with.fact_embedding
+    shared_episode.entity_edges = [works_with.uuid]
+    episode_to_remove.entity_edges = [manages.uuid, works_with.uuid]
+    added_episode.entity_edges = [manages.uuid, works_with.uuid]
+
+    def mentions(episode: EpisodicNode) -> list[EpisodicEdge]:
+        return [
+            EpisodicEdge(
+                source_node_uuid=episode.uuid,
+                target_node_uuid=node.uuid,
+                created_at=now,
+                group_id=group_id,
+            )
+            for node in [alice, bob]
+        ]
+
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [shared_episode, episode_to_remove],
+        mentions(shared_episode) + mentions(episode_to_remove),
+        [alice, bob],
+        [manages, works_with],
+        mock_embedder,
+    )
+
+    # The add restates both facts: it appends its episode to each and saves them, as
+    # add_episode does for a fact it resolves to an existing one.
+    restated = [
+        manages.model_copy(update={'episodes': [*manages.episodes, added_episode.uuid]}),
+        works_with.model_copy(update={'episodes': [*works_with.episodes, added_episode.uuid]}),
+    ]
+
+    # Force the order: remove_episode starts and finds what the episode mentions, then the
+    # add's bulk write runs, then remove_episode changes the facts.
+    started = asyncio.Event()
+    written = asyncio.Event()
+    get_mentioned = graphiti_module.get_mentioned_nodes
+
+    async def get_mentioned_then_wait_for_write(driver, episodes):
+        nodes = await get_mentioned(driver, episodes)
+        started.set()
+        await asyncio.wait_for(written.wait(), timeout=30)
+        return nodes
+
+    monkeypatch.setattr(graphiti_module, 'get_mentioned_nodes', get_mentioned_then_wait_for_write)
+
+    async def add_after_start():
+        await asyncio.wait_for(started.wait(), timeout=30)
+        try:
+            await add_nodes_and_edges_bulk(
+                graph_driver,
+                [added_episode],
+                mentions(added_episode),
+                [alice, bob],
+                restated,
+                mock_embedder,
+            )
+        finally:
+            written.set()
+
+    await asyncio.gather(graphiti.remove_episode(episode_to_remove.uuid), add_after_start())
+
+    # Both facts survive, supported by the remaining episodes only.
+    retrieved_manages = await EntityEdge.get_by_uuid(graph_driver, manages.uuid)
+    assert retrieved_manages.episodes == [added_episode.uuid]
+    retrieved_works_with = await EntityEdge.get_by_uuid(graph_driver, works_with.uuid)
+    assert retrieved_works_with.episodes == [shared_episode.uuid, added_episode.uuid]
+    await retrieved_works_with.load_fact_embedding(graph_driver)
+    assert np.allclose(retrieved_works_with.fact_embedding, works_with_embedding)
+    # The removed episode is deleted, and the other episodes and the entities are kept.
+    assert await get_node_count(graph_driver, [episode_to_remove.uuid]) == 0
+    assert (
+        await get_node_count(
+            graph_driver, [shared_episode.uuid, added_episode.uuid, alice.uuid, bob.uuid]
+        )
+        == 4
+    )
 
 
 @pytest.mark.asyncio

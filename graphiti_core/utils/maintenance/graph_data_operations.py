@@ -118,6 +118,72 @@ async def delete_entities_mentioned_only_by(
     return {record['uuid'] for record in records}
 
 
+async def remove_episode_from_entity_edges(
+    driver: GraphDriver, episode_uuid: str, edge_uuids: list[str]
+) -> set[str]:
+    """
+    Remove episode_uuid from the episodes of the entity edges in edge_uuids, and delete the
+    edges that no episode supports after that.
+
+    Each edge's episodes are read, changed and written in one statement, so an episode that a
+    concurrent add_episode has added to an edge since the caller loaded it is kept, and the
+    edge with it. On Neo4j and Neptune the statement first takes a write lock on each edge (SET,
+    then REMOVE, a property), so it waits for a transaction that is writing the edge and then
+    reads the episodes that transaction wrote.
+
+    Edges whose episodes do not include episode_uuid are left unchanged.
+
+    Returns the uuids of the deleted edges.
+    """
+    if not edge_uuids:
+        return set()
+
+    match driver.provider:
+        case GraphProvider.FALKORDB:
+            query: LiteralString = """
+                MATCH (:Entity)-[e:RELATES_TO]->(:Entity)
+                WHERE e.uuid IN $uuids AND $episode_uuid IN e.episodes
+                SET e.episodes = [uuid IN e.episodes WHERE uuid <> $episode_uuid]
+                WITH e, e.uuid AS uuid
+                WHERE size(e.episodes) = 0
+                DELETE e
+                RETURN uuid
+            """
+        case GraphProvider.NEPTUNE:
+            # Neptune stores episodes as a comma-separated string.
+            query = """
+                MATCH (:Entity)-[e:RELATES_TO]->(:Entity)
+                WHERE e.uuid IN $uuids
+                SET e._remove_episode_lock = true
+                REMOVE e._remove_episode_lock
+                WITH e, split(e.episodes, ',') AS episodes
+                WHERE $episode_uuid IN episodes
+                WITH e, [uuid IN episodes WHERE uuid <> $episode_uuid] AS episodes
+                SET e.episodes = join(episodes, ',')
+                WITH e, e.uuid AS uuid, episodes
+                WHERE size(episodes) = 0
+                DELETE e
+                RETURN uuid
+            """
+        case _:  # Neo4j
+            query = """
+                MATCH (:Entity)-[e:RELATES_TO]->(:Entity)
+                WHERE e.uuid IN $uuids
+                SET e._remove_episode_lock = true
+                REMOVE e._remove_episode_lock
+                WITH e
+                WHERE $episode_uuid IN e.episodes
+                SET e.episodes = [uuid IN e.episodes WHERE uuid <> $episode_uuid]
+                WITH e, e.uuid AS uuid
+                WHERE size(e.episodes) = 0
+                DELETE e
+                RETURN uuid
+            """
+
+    records, _, _ = await driver.execute_query(query, uuids=edge_uuids, episode_uuid=episode_uuid)
+    return {record['uuid'] for record in records}
+
+
 async def retrieve_episodes(
     driver: GraphDriver,
     reference_time: datetime,
