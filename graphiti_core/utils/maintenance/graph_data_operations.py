@@ -74,9 +74,10 @@ async def delete_entities_mentioned_only_by(
     write lock on each entity (SET, then REMOVE, a property), which makes it wait for a
     transaction that is writing a mention of that entity and then see the mention.
 
-    On FalkorDB this narrows the window but does not close it. FalkorDB runs each query on its
-    own, and add_nodes_and_edges_bulk writes the entities and their MENTIONS edges as separate
-    queries, so a delete that runs between the two still removes the entity.
+    On FalkorDB and Neptune this narrows the window but does not close it. Their drivers run each
+    query of add_nodes_and_edges_bulk on its own rather than in one transaction, and it writes
+    the entities and their MENTIONS edges as separate queries, so a delete that runs between the
+    two still removes the entity.
 
     Returns the uuids of the deleted entities.
     """
