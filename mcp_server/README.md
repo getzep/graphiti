@@ -573,12 +573,14 @@ The Graphiti MCP server exposes the following tools:
 - `build_communities`: Detect entity communities and produce higher-level community summaries.
 - `get_episode_entities`: Trace provenance — the entities and facts created by specific episode UUIDs.
   Accepts an optional `group_id`; defaults to the configured group. If one of the episode UUIDs is
-  not in that group, the tool returns an error for the whole request.
+  not in that group, the tool returns an error for the whole request. If no group is configured and
+  the caller does not give `group_id`, the tool does not check the group of the episode UUIDs.
 - `delete_entity_edge`: Delete an entity edge from the knowledge graph.
   Accepts an optional `group_id`; defaults to the configured group.
 - `delete_episode`: Delete an episode and cascade-delete the entities/facts it solely created.
   Accepts an optional `group_id`; defaults to the configured group. If an episode UUID is not in
-  that group, the tool returns an error and does not read or delete data.
+  that group, the tool returns an error and does not read or delete data. If no group is configured
+  and the caller does not give `group_id`, the tool does not check the group of the episode UUID.
 - `get_entity_edge`: Get an entity edge by its UUID. Accepts an optional `group_id`; defaults to
   the configured group.
 - `get_episodes`: Get the most recent episodes for one or more groups (`group_ids`).
