@@ -43,7 +43,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.29.1
+ARG GRAPHITI_CORE_VERSION=0.31.3
 ARG SOCKET_FIREWALL_ENABLED=false
 # Unique per release run so enforced builds re-resolve and re-download instead
 # of reusing cached layers, which sfw would never see.
