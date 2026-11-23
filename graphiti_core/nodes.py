@@ -535,14 +535,22 @@ class EntityNode(Node):
             except NotImplementedError:
                 pass
 
+        # `group_id` must also scope the fallback query: the interface above applies it, and
+        # readers such as `GraphReader.nodes_by_uuids` pass it to keep a commit inside its
+        # graph. An empty group id is the default group, so only `None` means "no scope".
+        group_clause = 'AND n.group_id = $group_id' if group_id is not None else ''
         records, _, _ = await driver.execute_query(
             """
             MATCH (n:Entity)
             WHERE n.uuid IN $uuids
+            """
+            + group_clause
+            + """
             RETURN
             """
             + get_entity_node_return_query(driver.provider),
             uuids=uuids,
+            group_id=group_id,
             routing_='r',
         )
 
