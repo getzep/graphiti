@@ -1,22 +1,21 @@
 # syntax=docker/dockerfile:1
-# Combined FalkorDB + Graphiti MCP Server Image
-# The builder stage prepares a self-contained Python runtime and MCP environment.
-# The final stage copies them into the FalkorDB image without running apt there.
-# FalkorDB removes perl, which apt package scripts need.
+# The image adds a uv-managed Python and the MCP environment to the FalkorDB image.
+# It does not run apt, because FalkorDB removes perl, which apt package scripts need.
 
-FROM debian:bookworm-slim AS mcp-builder
+FROM falkordb/falkordb:latest
 
-# Install builder dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Copy uv into the image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Install uv for Python package management
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
+# Configure uv for optimal Docker usage
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_PYTHON_PREFERENCE=only-managed \
+    UV_PYTHON=3.13
 
-# Add uv to PATH
-ENV PATH="/root/.local/bin:${PATH}"
+# Download the uv-managed CPython build, not a registry package.
+RUN uv python install 3.13
 
 # Install Socket Firewall (sfw) for dependency fetches when SOCKET_API_KEY is
 # provided as a BuildKit secret. Community builds without the secret fall back
@@ -28,20 +27,9 @@ RUN set -eux; \
       arm64) SFW_ARCH=arm64 ;; \
       *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
-      "https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-${SFW_ARCH}" \
-      -o /usr/local/bin/sfw; \
+    "$(uv python find 3.13)" -c \
+      "import urllib.request; urllib.request.urlretrieve('https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-${SFW_ARCH}', '/usr/local/bin/sfw')"; \
     chmod +x /usr/local/bin/sfw
-
-# Configure uv for optimal Docker usage
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_PYTHON_INSTALL_DIR=/opt/python \
-    UV_PYTHON_PREFERENCE=only-managed \
-    UV_PYTHON=3.13
-
-# Download the uv-managed CPython build, not a registry package.
-RUN uv python install 3.13
 
 # Set up MCP server directory
 WORKDIR /app/mcp
@@ -117,12 +105,6 @@ COPY config/ ./config/
 
 # Copy FalkorDB combined config (uses localhost since both services in same container)
 COPY config/config-docker-falkordb-combined.yaml /app/mcp/config/config.yaml
-
-# Copy the self-contained Python runtime and MCP environment into FalkorDB.
-FROM falkordb/falkordb:latest
-
-COPY --from=mcp-builder /opt/python /opt/python
-COPY --from=mcp-builder /app/mcp /app/mcp
 
 ENV PATH="/app/mcp/.venv/bin:${PATH}" \
     SERVER__HOST="0.0.0.0" \
