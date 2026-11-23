@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# ruff: noqa: E402
-
-"""Regression coverage for group-scoped episode UUID resolution."""
+# Regression coverage for group-scoped episode UUID resolution.
 
 from datetime import datetime, timezone
 from typing import Any
