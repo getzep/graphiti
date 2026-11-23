@@ -58,8 +58,8 @@ class FakeClient:
         self.clients = FakeClients(driver=driver)
         self.seen: list = []
 
-    async def remove_episode(self, uuid, group_id=None):
-        self.seen.append((self, uuid, group_id))
+    async def remove_episode(self, uuid):
+        self.seen.append((self, uuid))
 
 
 def make_client(driver) -> FakeClient:
@@ -259,7 +259,6 @@ async def test_delete_episode_calls_remove_episode_on_scoped_client(monkeypatch)
     response = await server.delete_episode('uuid-9', group_id='group-z')
 
     assert client.seen[0][1] == 'uuid-9'
-    assert client.seen[0][2] == 'group-z'
     # The call ran on a scoped copy whose driver is the group clone.
     assert client.seen[0][0] is not client
     assert client.seen[0][0].driver.database == 'group-z'
@@ -274,4 +273,3 @@ async def test_delete_episode_uses_base_client_without_any_group(monkeypatch):
     await server.delete_episode('uuid-9')
 
     assert client.seen[0][0] is client
-    assert client.seen[0][2] is None

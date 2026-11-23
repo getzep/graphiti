@@ -287,6 +287,23 @@ class EpisodicNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str, group_id: str | None = None):
+        """Get an episode by UUID.
+
+        Parameters
+        ----------
+        driver : GraphDriver
+            The graph driver.
+        uuid : str
+            The episode UUID.
+        group_id : str | None
+            If set, the episode must belong to this group or NodeNotFoundError is raised.
+            If None, the lookup does not check the group.
+
+        Raises
+        ------
+        NodeNotFoundError
+            If the episode is not found in the selected group.
+        """
         if driver.graph_operations_interface:
             try:
                 episode = await driver.graph_operations_interface.episodic_node_get_by_uuid(
@@ -299,9 +316,7 @@ class EpisodicNode(Node):
                     raise NodeNotFoundError(uuid)
                 return episode
 
-        group_filter: LiteralString = (
-            'WHERE e.group_id = $group_id' if group_id is not None else ''
-        )
+        group_filter: LiteralString = 'WHERE e.group_id = $group_id' if group_id is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -339,6 +354,20 @@ class EpisodicNode(Node):
         *,
         require_all: bool = False,
     ):
+        """Get episodes by UUID.
+
+        Parameters
+        ----------
+        driver : GraphDriver
+            The graph driver.
+        uuids : list[str]
+            The episode UUIDs.
+        group_id : str | None
+            If set, episodes in other groups are excluded. If None, no group check is performed.
+        require_all : bool
+            If True, raise NodeNotFoundError for the first UUID not found in the selected group.
+            If False, skip missing UUIDs.
+        """
         if driver.graph_operations_interface:
             try:
                 episodes = await driver.graph_operations_interface.episodic_node_get_by_uuids(
@@ -356,9 +385,7 @@ class EpisodicNode(Node):
                             raise NodeNotFoundError(uuid)
                 return episodes
 
-        group_filter: LiteralString = (
-            'AND e.group_id = $group_id' if group_id is not None else ''
-        )
+        group_filter: LiteralString = 'AND e.group_id = $group_id' if group_id is not None else ''
 
         records, _, _ = await driver.execute_query(
             """

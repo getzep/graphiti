@@ -637,9 +637,7 @@ class Graphiti:
                     )
                 )
                 if previous_episode_uuid is not None:
-                    await EpisodicNode.get_by_uuid(
-                        driver, previous_episode_uuid, group_id=group_id
-                    )
+                    await EpisodicNode.get_by_uuid(driver, previous_episode_uuid, group_id=group_id)
                 return previous_episode_uuid
             except NotImplementedError:
                 pass
@@ -1722,9 +1720,7 @@ class Graphiti:
 
         await _validate_saga_scope(saga, group_id, driver)
         if saga is not None and saga_previous_episode_uuid is not None:
-            await EpisodicNode.get_by_uuid(
-                driver, saga_previous_episode_uuid, group_id=group_id
-            )
+            await EpisodicNode.get_by_uuid(driver, saga_previous_episode_uuid, group_id=group_id)
 
         if self._concurrent_ingestion_enabled(group_id):
             if update_communities:
@@ -2414,6 +2410,22 @@ class Graphiti:
     async def get_nodes_and_edges_by_episode(
         self, episode_uuids: list[str], group_id: str | None = None
     ) -> SearchResults:
+        """Get nodes and edges that episodes reference.
+
+        Parameters
+        ----------
+        episode_uuids : list[str]
+            The episode UUIDs.
+        group_id : str | None
+            If set, episodes must belong to this group or NodeNotFoundError is raised. Only nodes
+            and edges in this group are read. If None, the method does not check the group of the
+            episode UUIDs. Multi-tenant callers must pass group_id.
+
+        Raises
+        ------
+        NodeNotFoundError
+            If an episode is not found in the selected group.
+        """
         driver = self.driver
         if group_id is not None:
             group_id, driver, _ = self._resolve_request_scope(group_id)
@@ -2590,9 +2602,7 @@ class Graphiti:
             query_vector=edge.fact_embedding,
         )
         existing_edges = [
-            candidate
-            for candidate in existing_search.edges
-            if candidate.group_id == edge.group_id
+            candidate for candidate in existing_search.edges if candidate.group_id == edge.group_id
         ]
         # Keep edges that are already duplicate candidates out of the
         # invalidation list so the LLM is not shown the same fact under two
@@ -2634,6 +2644,22 @@ class Graphiti:
         return AddTripletResults(edges=edges, nodes=nodes)
 
     async def remove_episode(self, episode_uuid: str, group_id: str | None = None):
+        """Remove an episode and its related nodes and edges.
+
+        Parameters
+        ----------
+        episode_uuid : str
+            The episode UUID.
+        group_id : str | None
+            If set, the episode must belong to this group or NodeNotFoundError is raised. Only nodes
+            and edges in this group are read or changed. If None, the method does not check the
+            group of the episode UUID. Multi-tenant callers must pass group_id.
+
+        Raises
+        ------
+        NodeNotFoundError
+            If the episode is not found in the selected group.
+        """
         driver = self.driver
         clients = self.clients
         if group_id is not None:

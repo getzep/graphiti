@@ -1,3 +1,21 @@
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+# ruff: noqa: E402
+
 """Regression coverage for group-scoped episode UUID resolution."""
 
 from datetime import datetime, timezone
@@ -74,9 +92,7 @@ async def test_episode_uuid_query_binds_requested_group():
 
 @pytest.mark.asyncio
 async def test_predecessor_list_rejects_missing_scoped_uuid():
-    driver = StubDriver(
-        [episode_record(), episode_record(uuid='episode-b', group_id='group-b')]
-    )
+    driver = StubDriver([episode_record(), episode_record(uuid='episode-b', group_id='group-b')])
 
     with pytest.raises(NodeNotFoundError, match='episode-b'):
         await EpisodicNode.get_by_uuids(  # type: ignore[arg-type]
@@ -121,7 +137,10 @@ async def test_saga_predecessor_query_binds_saga_and_episode_group():
     graphiti = Graphiti.__new__(Graphiti)
 
     result = await graphiti._saga_get_previous_episode_uuid(
-        'saga-a', 'episode-a', 'group-a', driver=driver  # type: ignore[arg-type]
+        'saga-a',
+        'episode-a',
+        'group-a',
+        driver=driver,  # type: ignore[arg-type]
     )
 
     query, params = driver.calls[0]
@@ -160,14 +179,8 @@ async def test_concurrent_ingestion_rejects_foreign_uuid_before_scheduler():
 def test_saga_edge_queries_bind_both_endpoints():
     assert 'Saga {uuid: $saga_uuid, group_id: $group_id}' in HAS_EPISODE_EDGE_SAVE
     assert 'Episodic {uuid: $episode_uuid, group_id: $group_id}' in HAS_EPISODE_EDGE_SAVE
-    assert (
-        'Episodic {uuid: $source_episode_uuid, group_id: $group_id}'
-        in NEXT_EPISODE_EDGE_SAVE
-    )
-    assert (
-        'Episodic {uuid: $target_episode_uuid, group_id: $group_id}'
-        in NEXT_EPISODE_EDGE_SAVE
-    )
+    assert 'Episodic {uuid: $source_episode_uuid, group_id: $group_id}' in NEXT_EPISODE_EDGE_SAVE
+    assert 'Episodic {uuid: $target_episode_uuid, group_id: $group_id}' in NEXT_EPISODE_EDGE_SAVE
 
 
 @pytest.mark.asyncio
