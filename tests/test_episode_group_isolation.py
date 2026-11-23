@@ -17,20 +17,22 @@ limitations under the License.
 # Regression coverage for group-scoped episode UUID resolution.
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import graphiti_core.graphiti as graphiti_module
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.edges import EntityEdge
-from graphiti_core.errors import NodeNotFoundError
+from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.models.edges.edge_db_queries import (
     HAS_EPISODE_EDGE_SAVE,
     NEXT_EPISODE_EDGE_SAVE,
 )
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, Node, SagaNode
 
 
 def episode_record(uuid: str = 'episode-a', group_id: str = 'group-a') -> dict[str, Any]:
@@ -45,6 +47,26 @@ def episode_record(uuid: str = 'episode-a', group_id: str = 'group-a') -> dict[s
         'content': 'safe content',
         'valid_at': now,
         'entity_edges': [],
+    }
+
+
+def entity_edge_record(uuid: str = 'edge-a', group_id: str = 'group-a') -> dict[str, Any]:
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    return {
+        'uuid': uuid,
+        'source_node_uuid': 'source-a',
+        'target_node_uuid': 'target-a',
+        'fact': 'source relates to target',
+        'fact_embedding': None,
+        'name': 'RELATED_TO',
+        'group_id': group_id,
+        'episodes': [],
+        'created_at': now,
+        'expired_at': None,
+        'valid_at': None,
+        'invalid_at': None,
+        'reference_time': None,
+        'attributes': {},
     }
 
 
@@ -72,6 +94,18 @@ class ForeignEpisodeOperations:
             content='foreign content',
             valid_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
+
+
+class EntityEdgeOperations:
+    def __init__(self, edge, edges=None):
+        self.edge = edge
+        self.edges = edges or [edge]
+
+    async def edge_get_by_uuid(self, cls, driver, uuid):
+        return self.edge
+
+    async def edge_get_by_uuids(self, cls, driver, uuids):
+        return self.edges
 
 
 @pytest.mark.asyncio
@@ -197,3 +231,282 @@ async def test_triplet_rejects_mismatched_group_before_processing():
 
     with pytest.raises(ValueError, match='does not belong to group group-a'):
         await Graphiti.__new__(Graphiti).add_triplet(source, edge, target)
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_uuid_lookup_filters_requested_group():
+    driver = StubDriver([entity_edge_record()])
+
+    edge = await EntityEdge.get_by_uuid(  # type: ignore[arg-type]
+        driver, 'edge-a', group_id='group-a'
+    )
+
+    query, params = driver.calls[0]
+    assert 'WHERE e.group_id = $group_id' in query
+    assert params['group_id'] == 'group-a'
+    assert edge.group_id == 'group-a'
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_uuid_lookup_rejects_foreign_query_result():
+    driver = StubDriver([entity_edge_record(group_id='group-b')])
+
+    with pytest.raises(EdgeNotFoundError, match='edge-a'):
+        await EntityEdge.get_by_uuid(  # type: ignore[arg-type]
+            driver, 'edge-a', group_id='group-a'
+        )
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_uuid_lookup_keeps_unscoped_behavior():
+    driver = StubDriver([entity_edge_record(group_id='group-b')])
+
+    edge = await EntityEdge.get_by_uuid(driver, 'edge-a')  # type: ignore[arg-type]
+
+    query, params = driver.calls[0]
+    assert 'WHERE e.group_id = $group_id' not in query
+    assert params['group_id'] is None
+    assert edge.group_id == 'group-b'
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_bulk_lookup_filters_foreign_edges():
+    driver = StubDriver(
+        [entity_edge_record(), entity_edge_record(uuid='edge-b', group_id='group-b')]
+    )
+
+    edges = await EntityEdge.get_by_uuids(  # type: ignore[arg-type]
+        driver, ['edge-a', 'edge-b'], group_id='group-a'
+    )
+
+    query, params = driver.calls[0]
+    assert 'AND e.group_id = $group_id' in query
+    assert params['group_id'] == 'group-a'
+    assert [edge.uuid for edge in edges] == ['edge-a']
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_uuid_lookup_filters_graph_operations_result():
+    edge = EntityEdge(
+        uuid='edge-b',
+        group_id='group-b',
+        source_node_uuid='source-b',
+        target_node_uuid='target-b',
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        name='RELATED_TO',
+        fact='source relates to target',
+    )
+    driver = StubDriver()
+    driver.graph_operations_interface = EntityEdgeOperations(edge)
+
+    with pytest.raises(EdgeNotFoundError, match='edge-b'):
+        await EntityEdge.get_by_uuid(  # type: ignore[arg-type]
+            driver, 'edge-b', group_id='group-a'
+        )
+
+    assert driver.calls == []
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_bulk_lookup_filters_graph_operations_result():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    edges = [
+        EntityEdge(
+            uuid='edge-a',
+            group_id='group-a',
+            source_node_uuid='source-a',
+            target_node_uuid='target-a',
+            created_at=now,
+            name='RELATED_TO',
+            fact='source relates to target',
+        ),
+        EntityEdge(
+            uuid='edge-b',
+            group_id='group-b',
+            source_node_uuid='source-b',
+            target_node_uuid='target-b',
+            created_at=now,
+            name='RELATED_TO',
+            fact='source relates to target',
+        ),
+    ]
+    driver = StubDriver()
+    driver.graph_operations_interface = EntityEdgeOperations(edges[0], edges)
+
+    result = await EntityEdge.get_by_uuids(  # type: ignore[arg-type]
+        driver, ['edge-a', 'edge-b'], group_id='group-a'
+    )
+
+    assert [edge.uuid for edge in result] == ['edge-a']
+    assert driver.calls == []
+
+
+@pytest.mark.asyncio
+async def test_episode_provenance_forwards_group_to_entity_edge_lookup(monkeypatch):
+    driver = StubDriver()
+    episode = EpisodicNode(
+        uuid='episode-a',
+        name='episode',
+        group_id='group-a',
+        source=EpisodeType.text,
+        source_description='test',
+        content='content',
+        valid_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        entity_edges=['edge-a'],
+    )
+    edge_group_ids = []
+
+    async def get_episodes(driver, uuids, group_id=None, require_all=False):
+        return [episode]
+
+    async def get_edges(driver, uuids, group_id=None):
+        edge_group_ids.append(group_id)
+        return []
+
+    async def get_nodes(driver, episodes):
+        return []
+
+    monkeypatch.setattr(EpisodicNode, 'get_by_uuids', staticmethod(get_episodes))
+    monkeypatch.setattr(EntityEdge, 'get_by_uuids', staticmethod(get_edges))
+    monkeypatch.setattr(graphiti_module, 'get_mentioned_nodes', get_nodes)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = driver
+    graphiti.max_coroutines = 1
+    graphiti._resolve_request_scope = lambda group_id: (  # type: ignore[method-assign]
+        group_id,
+        driver,
+        SimpleNamespace(driver=driver),
+    )
+
+    await graphiti.get_nodes_and_edges_by_episode(['episode-a'], group_id='group-a')
+
+    assert edge_group_ids == ['group-a']
+
+
+@pytest.mark.asyncio
+async def test_remove_episode_forwards_group_to_entity_edge_lookup(monkeypatch):
+    driver = StubDriver()
+    episode = EpisodicNode(
+        uuid='episode-a',
+        name='episode',
+        group_id='group-a',
+        source=EpisodeType.text,
+        source_description='test',
+        content='content',
+        valid_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        entity_edges=['edge-a'],
+    )
+    edge_group_ids = []
+
+    async def get_episode(driver, uuid, group_id=None):
+        return episode
+
+    async def get_edges(driver, uuids, group_id=None):
+        edge_group_ids.append(group_id)
+        return []
+
+    async def get_nodes(driver, episodes):
+        return []
+
+    monkeypatch.setattr(EpisodicNode, 'get_by_uuid', staticmethod(get_episode))
+    monkeypatch.setattr(EntityEdge, 'get_by_uuids', staticmethod(get_edges))
+    monkeypatch.setattr(EpisodicNode, 'delete', AsyncMock())
+    monkeypatch.setattr(Node, 'delete_by_uuids', AsyncMock())
+    monkeypatch.setattr(graphiti_module, 'get_mentioned_nodes', get_nodes)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = driver
+    graphiti.clients = SimpleNamespace(llm_client=object())
+    graphiti.max_coroutines = 1
+    graphiti._resolve_request_scope = lambda group_id: (  # type: ignore[method-assign]
+        group_id,
+        driver,
+        graphiti.clients,
+    )
+
+    await graphiti.remove_episode('episode-a', group_id='group-a')
+
+    assert edge_group_ids == ['group-a']
+
+
+@pytest.mark.asyncio
+async def test_summarize_saga_rejects_foreign_group_before_llm_or_write(monkeypatch):
+    driver = StubDriver()
+    saga = SagaNode(uuid='saga-b', name='saga', group_id='group-b')
+    saga_lookup_drivers = []
+
+    async def get_saga(driver, uuid):
+        saga_lookup_drivers.append(driver)
+        return saga
+
+    monkeypatch.setattr(SagaNode, 'get_by_uuid', staticmethod(get_saga))
+    summary_fetch = AsyncMock()
+    llm_call = AsyncMock()
+    save_call = AsyncMock()
+    monkeypatch.setattr(graphiti_module, 'generate_prompt_response', llm_call)
+    monkeypatch.setattr(SagaNode, 'save', save_call)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = StubDriver()
+    graphiti.clients = SimpleNamespace()
+    graphiti._resolve_request_scope = lambda group_id: (  # type: ignore[method-assign]
+        group_id,
+        driver,
+        graphiti.clients,
+    )
+    graphiti._saga_get_episode_contents = summary_fetch
+
+    with pytest.raises(NodeNotFoundError, match='saga-b'):
+        await graphiti.summarize_saga('saga-b', group_id='group-a')
+
+    assert saga_lookup_drivers == [driver]
+    summary_fetch.assert_not_awaited()
+    llm_call.assert_not_awaited()
+    save_call.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_add_triplet_rejects_foreign_edge_uuid_without_saving(monkeypatch):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    source = EntityNode(name='source', group_id='group-a', name_embedding=[0.1])
+    target = EntityNode(name='target', group_id='group-a', name_embedding=[0.1])
+    edge = EntityEdge(
+        uuid='edge-b',
+        source_node_uuid=source.uuid,
+        target_node_uuid=target.uuid,
+        name='RELATED_TO',
+        fact='source relates to target',
+        fact_embedding=[0.1],
+        group_id='group-a',
+        created_at=now,
+    )
+    foreign_edge = EntityEdge(
+        uuid='edge-b',
+        source_node_uuid='foreign-source',
+        target_node_uuid='foreign-target',
+        name='RELATED_TO',
+        fact='foreign fact',
+        group_id='group-b',
+        created_at=now,
+    )
+    edge_lookup_calls = []
+
+    async def get_node(driver, uuid):
+        return source if uuid == source.uuid else target
+
+    async def get_edge(driver, uuid, *args, **kwargs):
+        edge_lookup_calls.append((uuid, kwargs))
+        return foreign_edge
+
+    persist = AsyncMock()
+    monkeypatch.setattr(EntityNode, 'get_by_uuid', staticmethod(get_node))
+    monkeypatch.setattr(EntityEdge, 'get_by_uuid', staticmethod(get_edge))
+    monkeypatch.setattr(graphiti_module, 'add_nodes_and_edges_bulk', persist)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = StubDriver()
+    graphiti.clients = SimpleNamespace()
+    graphiti.embedder = object()
+
+    with pytest.raises(EdgeNotFoundError, match='edge-b'):
+        await graphiti.add_triplet(source, edge, target)
+
+    assert edge_lookup_calls == [('edge-b', {})]
+    persist.assert_not_awaited()

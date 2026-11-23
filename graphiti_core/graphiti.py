@@ -665,12 +665,14 @@ class Graphiti:
         saga_uuid: str,
         since: datetime | None = None,
         limit: int = 200,
+        driver: GraphDriver | None = None,
     ) -> list[tuple[str, datetime | None, datetime]] | None:
         """Retrieve (content, valid_at, created_at) episodes, using IoC if available."""
-        if self.driver.graph_operations_interface:
+        driver = driver or self.driver
+        if driver.graph_operations_interface:
             try:
-                return await self.driver.graph_operations_interface.saga_get_episode_contents(
-                    self.driver, saga_uuid, since=since, limit=limit
+                return await driver.graph_operations_interface.saga_get_episode_contents(
+                    driver, saga_uuid, since=since, limit=limit
                 )
             except NotImplementedError:
                 pass
@@ -679,6 +681,7 @@ class Graphiti:
     async def summarize_saga(
         self,
         saga_id: str,
+        group_id: str | None = None,
     ) -> SagaNode:
         """Incrementally summarize a saga using only new episodes since the last summary.
 
@@ -706,6 +709,9 @@ class Graphiti:
         ----------
         saga_id : str
             The UUID of the saga to summarize.
+        group_id : str | None
+            If set, the saga must belong to this group or NodeNotFoundError is raised.
+            If None, the lookup does not check the group.
 
         Returns
         -------
@@ -715,9 +721,16 @@ class Graphiti:
         Raises
         ------
         NodeNotFoundError
-            If the saga with the given UUID does not exist.
+            If the saga is not found in the selected group.
         """
-        saga = await SagaNode.get_by_uuid(self.driver, saga_id)
+        driver = self.driver
+        saga_clients = getattr(self, 'clients', None)
+        if group_id is not None:
+            group_id, driver, saga_clients = self._resolve_request_scope(group_id)
+
+        saga = await SagaNode.get_by_uuid(driver, saga_id)
+        if group_id is not None and saga.group_id != group_id:
+            raise NodeNotFoundError(saga_id)
 
         # Fetch only episodes added since the last summary. Cap the window to the same episode
         # count node summaries use so a long thread or document cannot fill
@@ -729,11 +742,11 @@ class Graphiti:
 
         # Try IoC interface first, fall back to raw Cypher
         episodes_data = await self._saga_get_episode_contents(
-            saga_id, since=since, limit=max_episodes
+            saga_id, since=since, limit=max_episodes, driver=driver
         )
         if episodes_data is None:
             if since is not None:
-                records, _, _ = await self.driver.execute_query(
+                records, _, _ = await driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
                     WHERE e.created_at IS NOT NULL AND e.created_at > $since
@@ -747,7 +760,7 @@ class Graphiti:
                     routing_='r',
                 )
             else:
-                records, _, _ = await self.driver.execute_query(
+                records, _, _ = await driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
                     WHERE e.created_at IS NOT NULL
@@ -816,7 +829,6 @@ class Graphiti:
         schema_reserve = len(_SAGA_SUMMARY_SCHEMA_WRAPPER.encode('utf-8')) + len(
             json.dumps(SagaSummary.model_json_schema()).encode('utf-8')
         )
-        saga_clients = getattr(self, 'clients', None)
         while episodes_data:
             context = _prompt_context(episodes_data)
             prompt_bytes = (
@@ -885,7 +897,7 @@ class Graphiti:
                 or new_episode_watermark > saga.last_summarized_episode_valid_at
             ):
                 saga.last_summarized_episode_valid_at = new_episode_watermark
-        await saga.save(self.driver)
+        await saga.save(driver)
 
         logger.info(f'Updated summary for saga {saga_id}')
 
@@ -2438,7 +2450,10 @@ class Graphiti:
         )
 
         edges_list = await semaphore_gather(
-            *[EntityEdge.get_by_uuids(driver, episode.entity_edges) for episode in episodes],
+            *[
+                EntityEdge.get_by_uuids(driver, episode.entity_edges, group_id=group_id)
+                for episode in episodes
+            ],
             max_coroutines=self.max_coroutines,
         )
 
@@ -2555,6 +2570,7 @@ class Graphiti:
         # Check if an edge with this UUID already exists with different source/target nodes.
         # If so, generate a new UUID to create a new edge instead of overwriting.
         try:
+            # Keep this lookup unscoped so the group check catches a foreign edge before MERGE overwrites it.
             existing_edge = await EntityEdge.get_by_uuid(self.driver, edge.uuid)
         except EdgeNotFoundError:
             # Edge doesn't exist yet, proceed normally
@@ -2672,7 +2688,9 @@ class Graphiti:
         # Find edges mentioned by the episode
         edges = [
             edge
-            for edge in await EntityEdge.get_by_uuids(driver, episode.entity_edges)
+            for edge in await EntityEdge.get_by_uuids(
+                driver, episode.entity_edges, group_id=group_id
+            )
             if edge.group_id == group_id
         ]
 

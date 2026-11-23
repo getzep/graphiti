@@ -336,27 +336,53 @@ class EntityEdge(Edge):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str, group_id: str | None = None):
+        """Get an entity edge by UUID.
+
+        Parameters
+        ----------
+        driver : GraphDriver
+            The graph driver.
+        uuid : str
+            The edge UUID.
+        group_id : str | None
+            If set, the edge must belong to this group or EdgeNotFoundError is raised.
+            If None, the lookup does not check the group.
+
+        Raises
+        ------
+        EdgeNotFoundError
+            If the edge is not found in the selected group.
+        """
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.edge_get_by_uuid(cls, driver, uuid)
+                edge = await driver.graph_operations_interface.edge_get_by_uuid(cls, driver, uuid)
             except NotImplementedError:
                 pass
+            else:
+                if group_id is not None and edge.group_id != group_id:
+                    raise EdgeNotFoundError(uuid)
+                return edge
 
         match_query = """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
         """
+        group_filter: LiteralString = 'WHERE e.group_id = $group_id' if group_id is not None else ''
         records, _, _ = await driver.execute_query(
             match_query
+            + group_filter
             + """
             RETURN
             """
             + get_entity_edge_return_query(driver.provider),
             uuid=uuid,
+            group_id=group_id,
             routing_='r',
         )
 
         edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
+        if group_id is not None:
+            edges = [edge for edge in edges if edge.group_id == group_id]
 
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
@@ -393,31 +419,54 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str], group_id: str | None = None):
+        """Get entity edges by UUID.
+
+        Parameters
+        ----------
+        driver : GraphDriver
+            The graph driver.
+        uuids : list[str]
+            The edge UUIDs.
+        group_id : str | None
+            If set, edges from other groups are excluded. If None, no group check is performed.
+        """
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.edge_get_by_uuids(cls, driver, uuids)
+                edges = await driver.graph_operations_interface.edge_get_by_uuids(
+                    cls, driver, uuids
+                )
             except NotImplementedError:
                 pass
+            else:
+                if group_id is not None:
+                    edges = [edge for edge in edges if edge.group_id == group_id]
+                return edges
 
         if len(uuids) == 0:
             return []
 
-        match_query = """
+        group_filter: LiteralString = 'AND e.group_id = $group_id' if group_id is not None else ''
+        match_query = (
+            """
             MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-        """
-        records, _, _ = await driver.execute_query(
-            match_query
-            + """
             WHERE e.uuid IN $uuids
+            """
+            + group_filter
+            + """
             RETURN
             """
-            + get_entity_edge_return_query(driver.provider),
+        )
+        records, _, _ = await driver.execute_query(
+            match_query + get_entity_edge_return_query(driver.provider),
             uuids=uuids,
+            group_id=group_id,
             routing_='r',
         )
 
         edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
+        if group_id is not None:
+            edges = [edge for edge in edges if edge.group_id == group_id]
 
         return edges
 
