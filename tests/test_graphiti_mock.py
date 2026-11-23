@@ -14,17 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 from datetime import datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import numpy as np
 import pytest
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
+from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.graphiti import Graphiti
+from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.search.search_config import SearchResults
+from graphiti_core.search.search_config_recipes import (
+    EDGE_HYBRID_SEARCH_NODE_DISTANCE,
+    EDGE_HYBRID_SEARCH_RRF,
+)
 from graphiti_core.search.search_filters import ComparisonOperator, DateFilter, SearchFilters
 from graphiti_core.search.search_utils import (
     community_fulltext_search,
@@ -47,6 +57,7 @@ from graphiti_core.search.search_utils import (
     node_fulltext_search,
     node_similarity_search,
 )
+from graphiti_core.tracer import Tracer
 from graphiti_core.utils.bulk_utils import add_nodes_and_edges_bulk
 from graphiti_core.utils.maintenance.community_operations import (
     determine_entity_community,
@@ -2540,6 +2551,98 @@ async def test_get_embeddings_for_nodes(graph_driver, mock_embedder):
     assert len(embeddings) == 1
     assert entity_node_1.uuid in embeddings
     assert np.allclose(embeddings[entity_node_1.uuid], entity_node_1.name_embedding)
+
+
+# --- Regression: Graphiti.search must not mutate the shared recipe singletons. ---
+# ``num_results`` is documented as "The maximum number of results to return" and is
+# applied to the selected recipe's ``limit``. The recipes in search_config_recipes.py
+# are module-level singletons also imported by ingestion/graph_reader.py and
+# utils/maintenance/edge_operations.py, so mutating one in place leaks the result
+# count into concurrent searches and into other callers.
+
+
+class _StubSearchDriver(GraphDriver):
+    """Minimal non-FalkorDB driver: these tests never touch a database."""
+
+    provider = GraphProvider.NEO4J
+
+    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Any:  # pragma: no cover
+        raise NotImplementedError
+
+    def session(self, database: str | None = None):  # pragma: no cover
+        raise NotImplementedError
+
+    def close(self):  # pragma: no cover
+        raise NotImplementedError
+
+    def delete_all_indexes(self):  # pragma: no cover
+        raise NotImplementedError
+
+    async def build_indices_and_constraints(
+        self, delete_existing: bool = False
+    ):  # pragma: no cover
+        raise NotImplementedError
+
+
+def _make_search_graphiti() -> Graphiti:
+    """Build a Graphiti instance with a fake non-FalkorDB driver, without a database."""
+    clients = GraphitiClients(
+        driver=_StubSearchDriver(),
+        llm_client=Mock(spec=LLMClient),
+        embedder=Mock(spec=EmbedderClient),
+        cross_encoder=Mock(spec=CrossEncoderClient),
+        tracer=Mock(spec=Tracer),
+    )
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.clients = clients
+    return graphiti
+
+
+def _record_search_configs(monkeypatch, recorded: list) -> None:
+    """Replace the DB-backed search coroutine with one that records its config."""
+
+    async def fake_search(clients, query, group_ids, config, search_filter, **kwargs):
+        recorded.append(config)
+        await asyncio.sleep(0)
+        return SearchResults(edges=[])
+
+    monkeypatch.setattr('graphiti_core.graphiti.search', fake_search)
+
+
+@pytest.mark.asyncio
+async def test_search_does_not_mutate_module_level_recipe(monkeypatch):
+    """A search's num_results must not overwrite the recipe singleton's limit."""
+    rrf_limit_before = EDGE_HYBRID_SEARCH_RRF.limit
+    distance_limit_before = EDGE_HYBRID_SEARCH_NODE_DISTANCE.limit
+    seen: list = []
+    _record_search_configs(monkeypatch, seen)
+
+    graphiti = _make_search_graphiti()
+    await graphiti.search('query', num_results=1)
+    await graphiti.search('query', center_node_uuid='center-uuid', num_results=7)
+
+    assert EDGE_HYBRID_SEARCH_RRF.limit == rrf_limit_before
+    assert EDGE_HYBRID_SEARCH_NODE_DISTANCE.limit == distance_limit_before
+    assert [config.limit for config in seen] == [1, 7]
+    assert seen[0] is not EDGE_HYBRID_SEARCH_RRF
+    assert seen[1] is not EDGE_HYBRID_SEARCH_NODE_DISTANCE
+
+
+@pytest.mark.asyncio
+async def test_concurrent_searches_keep_independent_limits(monkeypatch):
+    """Two interleaved searches with different num_results must not share a config."""
+    seen: list = []
+    _record_search_configs(monkeypatch, seen)
+
+    graphiti = _make_search_graphiti()
+    await asyncio.gather(
+        graphiti.search('query', num_results=1),
+        graphiti.search('query', num_results=9),
+    )
+
+    assert [config.limit for config in seen] == [1, 9]
+    assert seen[0] is not seen[1]
+    assert seen[0] is not EDGE_HYBRID_SEARCH_RRF
 
 
 @pytest.mark.asyncio

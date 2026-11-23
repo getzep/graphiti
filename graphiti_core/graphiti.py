@@ -2281,9 +2281,11 @@ class Graphiti:
         The search is performed using the current date and time as the reference
         point for temporal relevance.
         """
+        # Recipes are module-level singletons shared with other callers. Copy before
+        # setting the limit so one search's num_results cannot leak into another.
         search_config = (
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
-        )
+        ).model_copy(deep=True)
         search_config.limit = num_results
 
         edges = (
