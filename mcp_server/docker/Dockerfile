@@ -1,21 +1,14 @@
 # syntax=docker/dockerfile:1
 # Combined FalkorDB + Graphiti MCP Server Image
-# This extends the official FalkorDB image to include the MCP server
+# The builder stage prepares a self-contained Python runtime and MCP environment.
+# The final stage copies them into the FalkorDB image without running apt there.
+# FalkorDB removes perl, which apt package scripts need.
 
-# Pin this base so that a new FalkorDB release cannot change the OS (latest is Ubuntu 26.04).
-FROM falkordb/falkordb:6.0.4 AS falkordb-base
+FROM debian:bookworm-slim AS mcp-builder
 
-# Install Python and system dependencies
-# Note: Debian 13 "trixie" (FalkorDB base) ships with Python 3.13.
-# The FalkorDB image removes perl, but debconf needs perl to run the scripts of upgraded packages such as libc6.
+# Install builder dependencies
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends perl-base \
-    && apt-get install -y --no-install-recommends \
-        python3 \
-        python3-dev \
-        python3-pip \
-        curl \
-        ca-certificates \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for Python package management
@@ -43,9 +36,12 @@ RUN set -eux; \
 # Configure uv for optimal Docker usage
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=never \
-    SERVER__HOST="0.0.0.0" \
-    PYTHONUNBUFFERED=1
+    UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_PYTHON_PREFERENCE=only-managed \
+    UV_PYTHON=3.13
+
+# Download the uv-managed CPython build.
+RUN uv python install 3.13
 
 # Set up MCP server directory
 WORKDIR /app/mcp
@@ -122,6 +118,18 @@ COPY config/ ./config/
 # Copy FalkorDB combined config (uses localhost since both services in same container)
 COPY config/config-docker-falkordb-combined.yaml /app/mcp/config/config.yaml
 
+# Copy the self-contained Python runtime and MCP environment into FalkorDB.
+FROM falkordb/falkordb:latest
+
+COPY --from=mcp-builder /opt/python /opt/python
+COPY --from=mcp-builder /app/mcp /app/mcp
+
+ENV PATH="/app/mcp/.venv/bin:${PATH}" \
+    SERVER__HOST="0.0.0.0" \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app/mcp
+
 # Create log and data directories
 RUN mkdir -p /var/log/graphiti /var/lib/falkordb/data
 
@@ -165,12 +173,13 @@ fi
 # Start MCP server in foreground
 echo "Starting MCP server..."
 cd /app/mcp
-exec /root/.local/bin/uv run --no-sync main.py
+exec /app/mcp/.venv/bin/python main.py
 EOF
 
 RUN chmod +x /start-services.sh
 
 # Add Docker labels with version information
+ARG GRAPHITI_CORE_VERSION=0.32.0
 ARG MCP_SERVER_VERSION=1.1.3
 ARG BUILD_DATE
 ARG VCS_REF
