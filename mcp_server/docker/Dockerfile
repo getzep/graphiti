@@ -2,18 +2,20 @@
 # Combined FalkorDB + Graphiti MCP Server Image
 # This extends the official FalkorDB image to include the MCP server
 
-FROM falkordb/falkordb:latest AS falkordb-base
+# Pin this base so that a new FalkorDB release cannot change the OS (latest is Ubuntu 26.04).
+FROM falkordb/falkordb:6.0.4 AS falkordb-base
 
 # Install Python and system dependencies
 # Note: Debian 13 "trixie" (FalkorDB base) ships with Python 3.13.
-# procps is omitted: its postinst runs update-rc.d (a perl script), and the
-# FalkorDB base image no longer ships perl (purged upstream for CVE reduction).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-dev \
-    python3-pip \
-    curl \
-    ca-certificates \
+# The FalkorDB image removes perl, but debconf needs perl to run the scripts of upgraded packages such as libc6.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends perl-base \
+    && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-dev \
+        python3-pip \
+        curl \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for Python package management
