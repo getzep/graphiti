@@ -50,7 +50,7 @@ class FakeClient:
     """Minimal Graphiti stand-in: driver, a clients holder, and a call log.
 
     copy.copy() shares the seen list between the original and the scoped copy,
-    so remove_episode records which object the call actually ran on.
+    so both methods record which object the call actually ran on.
     """
 
     def __init__(self, driver):
@@ -58,8 +58,16 @@ class FakeClient:
         self.clients = FakeClients(driver=driver)
         self.seen: list = []
 
-    async def remove_episode(self, uuid):
-        self.seen.append((self, uuid))
+    async def remove_episode(self, uuid, group_id=None):
+        self.seen.append((self, uuid, group_id))
+
+    async def get_nodes_and_edges_by_episode(self, episode_uuids, group_id=None):
+        self.seen.append((self, list(episode_uuids), group_id))
+        return SimpleNamespace(nodes=[], edges=[])
+
+    async def summarize_saga(self, saga_uuid, group_id=None):
+        self.seen.append((self, saga_uuid, group_id))
+        return SimpleNamespace(uuid=saga_uuid, name='saga', summary='summary')
 
 
 def make_client(driver) -> FakeClient:
@@ -187,8 +195,8 @@ async def test_get_entity_edge_uses_cloned_driver_for_explicit_group(monkeypatch
     install_service(monkeypatch, client)
     calls = []
 
-    async def fake_get_by_uuid(driver, uuid):
-        calls.append(driver)
+    async def fake_get_by_uuid(driver, uuid, group_id=None):
+        calls.append((driver, uuid, group_id))
         return SimpleNamespace(
             uuid=uuid,
             fact='f',
@@ -209,8 +217,9 @@ async def test_get_entity_edge_uses_cloned_driver_for_explicit_group(monkeypatch
 
     await server.get_entity_edge('uuid-1', group_id='group-x')
 
-    assert calls[0].database == 'group-x'
-    assert calls[0] is not client.driver
+    assert calls[0][0].database == 'group-x'
+    assert calls[0][0] is not client.driver
+    assert calls[0][1:] == ('uuid-1', 'group-x')
 
 
 async def test_get_entity_edge_uses_base_driver_without_any_group(monkeypatch):
@@ -218,8 +227,8 @@ async def test_get_entity_edge_uses_base_driver_without_any_group(monkeypatch):
     install_service(monkeypatch, client, default_group_id='')
     calls = []
 
-    async def fake_get_by_uuid(driver, uuid):
-        calls.append(driver)
+    async def fake_get_by_uuid(driver, uuid, group_id=None):
+        calls.append((driver, uuid, group_id))
         return SimpleNamespace(uuid=uuid)
 
     monkeypatch.setattr(server.EntityEdge, 'get_by_uuid', staticmethod(fake_get_by_uuid))
@@ -227,7 +236,25 @@ async def test_get_entity_edge_uses_base_driver_without_any_group(monkeypatch):
 
     await server.get_entity_edge('uuid-1')
 
-    assert calls == [client.driver]
+    assert calls == [(client.driver, 'uuid-1', None)]
+
+
+async def test_get_entity_edge_uses_default_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+    calls = []
+
+    async def fake_get_by_uuid(driver, uuid, group_id=None):
+        calls.append((driver, uuid, group_id))
+        return SimpleNamespace(uuid=uuid)
+
+    monkeypatch.setattr(server.EntityEdge, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+    monkeypatch.setattr(server, 'format_fact_result', lambda edge: {'uuid': edge.uuid})
+
+    await server.get_entity_edge('uuid-1')
+
+    assert calls[0][0].database == 'main'
+    assert calls[0][1:] == ('uuid-1', 'main')
 
 
 async def test_delete_entity_edge_uses_cloned_driver_for_explicit_group(monkeypatch):
@@ -239,17 +266,105 @@ async def test_delete_entity_edge_uses_cloned_driver_for_explicit_group(monkeypa
         async def delete(self, driver):
             calls.append(('delete', driver))
 
-    async def fake_get_by_uuid(driver, uuid):
-        calls.append(('get', driver))
+    async def fake_get_by_uuid(driver, uuid, group_id=None):
+        calls.append(('get', driver, uuid, group_id))
         return FakeEdge()
 
     monkeypatch.setattr(server.EntityEdge, 'get_by_uuid', staticmethod(fake_get_by_uuid))
 
     response = await server.delete_entity_edge('uuid-1', group_id='group-y')
 
-    assert calls == [('get', calls[0][1]), ('delete', calls[0][1])]
+    assert calls == [
+        ('get', calls[0][1], 'uuid-1', 'group-y'),
+        ('delete', calls[0][1]),
+    ]
     assert calls[0][1].database == 'group-y'
     assert 'deleted successfully' in response['message']
+
+
+async def test_delete_entity_edge_uses_default_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+    calls = []
+
+    class FakeEdge:
+        async def delete(self, driver):
+            calls.append(('delete', driver))
+
+    async def fake_get_by_uuid(driver, uuid, group_id=None):
+        calls.append(('get', driver, uuid, group_id))
+        return FakeEdge()
+
+    monkeypatch.setattr(server.EntityEdge, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+
+    await server.delete_entity_edge('uuid-1')
+
+    assert calls[0][1].database == 'main'
+    assert calls[0][2:] == ('uuid-1', 'main')
+    assert calls[1] == ('delete', calls[0][1])
+
+
+async def test_delete_entity_edge_uses_unscoped_lookup_without_default_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client, default_group_id='')
+    calls = []
+
+    class FakeEdge:
+        async def delete(self, driver):
+            calls.append(('delete', driver))
+
+    async def fake_get_by_uuid(driver, uuid, group_id=None):
+        calls.append(('get', driver, uuid, group_id))
+        return FakeEdge()
+
+    monkeypatch.setattr(server.EntityEdge, 'get_by_uuid', staticmethod(fake_get_by_uuid))
+
+    await server.delete_entity_edge('uuid-1')
+
+    assert calls[0] == ('get', client.driver, 'uuid-1', None)
+    assert calls[1] == ('delete', client.driver)
+
+
+async def test_summarize_saga_forwards_explicit_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+    lookup_calls = []
+
+    async def get_sagas(driver, group_ids):
+        lookup_calls.append((driver, group_ids))
+        return [SimpleNamespace(uuid='saga-1', name='weekly', summary='')]
+
+    monkeypatch.setattr(server.SagaNode, 'get_by_group_ids', staticmethod(get_sagas))
+
+    response = await server.summarize_saga('weekly', group_id='group-x')
+
+    assert lookup_calls[0][0].database == 'group-x'
+    assert lookup_calls[0][1] == ['group-x']
+    assert client.seen[0][0] is not client
+    assert client.seen[0][0].driver.database == 'group-x'
+    assert client.seen[0][1:] == ('saga-1', 'group-x')
+    assert response.get('summary') == 'summary'
+
+
+async def test_summarize_saga_forwards_default_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+    lookup_calls = []
+
+    async def get_sagas(driver, group_ids):
+        lookup_calls.append((driver, group_ids))
+        return [SimpleNamespace(uuid='saga-1', name='weekly', summary='')]
+
+    monkeypatch.setattr(server.SagaNode, 'get_by_group_ids', staticmethod(get_sagas))
+
+    response = await server.summarize_saga('weekly')
+
+    assert lookup_calls[0][0].database == 'main'
+    assert lookup_calls[0][1] == ['main']
+    assert client.seen[0][0] is not client
+    assert client.seen[0][0].driver.database == 'main'
+    assert client.seen[0][1:] == ('saga-1', 'main')
+    assert response.get('summary') == 'summary'
 
 
 async def test_delete_episode_calls_remove_episode_on_scoped_client(monkeypatch):
@@ -259,6 +374,7 @@ async def test_delete_episode_calls_remove_episode_on_scoped_client(monkeypatch)
     response = await server.delete_episode('uuid-9', group_id='group-z')
 
     assert client.seen[0][1] == 'uuid-9'
+    assert client.seen[0][2] == 'group-z'
     # The call ran on a scoped copy whose driver is the group clone.
     assert client.seen[0][0] is not client
     assert client.seen[0][0].driver.database == 'group-z'
@@ -273,3 +389,32 @@ async def test_delete_episode_uses_base_client_without_any_group(monkeypatch):
     await server.delete_episode('uuid-9')
 
     assert client.seen[0][0] is client
+    assert client.seen[0][2] is None
+
+
+async def test_get_episode_entities_calls_scoped_client_for_explicit_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+
+    response = await server.get_episode_entities(['uuid-1'], group_id='group-z')
+
+    assert client.seen[0][0] is not client
+    assert client.seen[0][0].driver.database == 'group-z'
+    assert client.seen[0][1] == ['uuid-1']
+    assert client.seen[0][2] == 'group-z'
+    assert client.driver.database == 'default_db'
+    assert response['nodes'] == []
+    assert response['edges'] == []
+
+
+async def test_get_episode_entities_uses_base_client_without_any_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client, default_group_id='')
+
+    response = await server.get_episode_entities(['uuid-1'])
+
+    assert client.seen[0][0] is client
+    assert client.seen[0][1] == ['uuid-1']
+    assert client.seen[0][2] is None
+    assert response['nodes'] == []
+    assert response['edges'] == []

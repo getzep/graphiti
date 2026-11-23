@@ -330,7 +330,9 @@ def _episode_uuid(group_id: str, unit_id: str, index: int = 0) -> str:
     return str(uuid5(NAMESPACE_URL, f'graphiti:ingest:{group_id}:{unit_id}:{index}'))
 
 
-async def _written_episodes(driver: Any, episode_uuids: list[str]) -> dict[str, EpisodicNode]:
+async def _written_episodes(
+    driver: Any, episode_uuids: list[str], group_id: str
+) -> dict[str, EpisodicNode]:
     """Return the episode nodes of the `unit_id` that are in the graph.
 
     The read does not use the state store: the store can have no record of a unit that
@@ -339,7 +341,7 @@ async def _written_episodes(driver: Any, episode_uuids: list[str]) -> dict[str, 
     """
     if not episode_uuids:
         return {}
-    episodes = await EpisodicNode.get_by_uuids(driver, episode_uuids)
+    episodes = await EpisodicNode.get_by_uuids(driver, episode_uuids, group_id=group_id)
     return {episode.uuid: episode for episode in episodes}
 
 
@@ -398,13 +400,18 @@ async def admit_episode(
                         driver=driver,
                     )
                     if previous_episode_uuids is None
-                    else await EpisodicNode.get_by_uuids(driver, previous_episode_uuids)
+                    else await EpisodicNode.get_by_uuids(
+                        driver,
+                        previous_episode_uuids,
+                        group_id=group_id,
+                        require_all=True,
+                    )
                 )
                 if uuid is not None:
-                    episode = await EpisodicNode.get_by_uuid(driver, uuid)
+                    episode = await EpisodicNode.get_by_uuid(driver, uuid, group_id=group_id)
                 else:
                     episode_uuid = _episode_uuid(group_id, unit_id)
-                    written = await _written_episodes(driver, [episode_uuid])
+                    written = await _written_episodes(driver, [episode_uuid], group_id)
                     if episode_uuid in written:
                         # The node is in the graph, and the admission does not change it.
                         # The unit keeps the content in memory.
@@ -496,10 +503,15 @@ async def admit_bulk(
                         for index, raw_episode in enumerate(bulk_episodes)
                         if raw_episode.uuid is None
                     ],
+                    group_id,
                 )
                 for index, raw_episode in enumerate(bulk_episodes):
                     if raw_episode.uuid is not None:
-                        episodes.append(await EpisodicNode.get_by_uuid(driver, raw_episode.uuid))
+                        episodes.append(
+                            await EpisodicNode.get_by_uuid(
+                                driver, raw_episode.uuid, group_id=group_id
+                            )
+                        )
                         continue
                     episode_uuid = _episode_uuid(group_id, unit_id, index)
                     if episode_uuid in written:
@@ -1280,6 +1292,9 @@ async def _write_saga_links(
             # The saga is new. Its node is the first saga write. A second apply reads
             # the node that the first apply wrote.
             await asyncio.wait_for(saga_node.save(driver), await write_budget())
+    else:
+        if saga_node.group_id != change_set.group_id:
+            raise NodeNotFoundError(change_set.saga_node.uuid)
     for link in links:
         if link.previous_episode_uuid is not None and link.next_episode_edge_uuid is not None:
             next_episode_edge = NextEpisodeEdge(
@@ -1520,10 +1535,19 @@ async def _build_saga_links(
         saga_node = found or SagaNode(name=saga, group_id=unit.group_id, created_at=saga_created_at)
     else:
         # Serial ingestion uses the object of the caller and saves it after the edges.
+        if saga.group_id != unit.group_id:
+            raise ValueError(f'saga {saga.uuid} does not belong to group {unit.group_id}')
+        try:
+            stored_saga = await SagaNode.get_by_uuid(driver, saga.uuid)
+        except NodeNotFoundError:
+            pass
+        else:
+            if stored_saga.group_id != unit.group_id:
+                raise NodeNotFoundError(saga.uuid)
         saga_node = saga.model_copy()
     if previous_episode_uuid is None and not create_saga:
         previous_episode_uuid = await graphiti._saga_get_previous_episode_uuid(
-            saga_node.uuid, current_episode_uuid, driver=driver
+            saga_node.uuid, current_episode_uuid, unit.group_id, driver=driver
         )
 
     links: list[SagaLink] = []

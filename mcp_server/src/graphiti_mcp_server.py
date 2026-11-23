@@ -700,7 +700,7 @@ async def delete_entity_edge(
 
     Args:
         uuid: UUID of the entity edge to delete
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
@@ -715,7 +715,9 @@ async def delete_entity_edge(
             _driver_for_group(client, effective_group_id) if effective_group_id else client.driver
         )
         # Get the entity edge by UUID
-        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(
+            driver, uuid, group_id=effective_group_id or None
+        )
         # Delete the edge using its delete method
         await entity_edge.delete(driver)
         return SuccessResponse(message=f'Entity edge with UUID {uuid} deleted successfully')
@@ -735,7 +737,7 @@ async def delete_episode(uuid: str, group_id: str | None = None) -> SuccessRespo
 
     Args:
         uuid: UUID of the episode to delete
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
@@ -751,7 +753,7 @@ async def delete_episode(uuid: str, group_id: str | None = None) -> SuccessRespo
         )
         # remove_episode cascades cleanup of episode-created entities/edges,
         # unlike EpisodicNode.delete which would orphan them.
-        await scoped_client.remove_episode(uuid)
+        await scoped_client.remove_episode(uuid, group_id=effective_group_id or None)
         return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
@@ -765,7 +767,7 @@ async def get_entity_edge(uuid: str, group_id: str | None = None) -> dict[str, A
 
     Args:
         uuid: UUID of the entity edge to retrieve
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
@@ -780,7 +782,9 @@ async def get_entity_edge(uuid: str, group_id: str | None = None) -> dict[str, A
             _driver_for_group(client, effective_group_id) if effective_group_id else client.driver
         )
         # Get the entity edge directly using the EntityEdge class method
-        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(
+            driver, uuid, group_id=effective_group_id or None
+        )
 
         # Use the format_fact_result function to serialize the edge
         # Return the Python dict directly - MCP will handle serialization
@@ -912,7 +916,9 @@ async def summarize_saga(
                 error=f"No saga named '{saga_name}' found in group '{effective_group_id}'"
             )
 
-        saga_node = await _client_for_group(client, effective_group_id).summarize_saga(match.uuid)
+        saga_node = await _client_for_group(client, effective_group_id).summarize_saga(
+            match.uuid, group_id=effective_group_id
+        )
 
         return SagaSummaryResponse(
             message=f"Saga '{saga_name}' summarized successfully",
@@ -1001,7 +1007,7 @@ async def add_triplet(
         edge_name: Relationship/edge type name (e.g. "WORKS_FOR")
         fact: Natural-language statement describing the relationship
         target_node_name: Name of the target entity
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
         source_node_uuid: Optional UUID to reuse an existing source entity. A new UUID is
             generated when omitted.
         target_node_uuid: Optional UUID to reuse an existing target entity. A new UUID is
@@ -1068,7 +1074,7 @@ async def get_episode_entities(
 
     Args:
         episode_uuids: List of episode UUIDs to look up provenance for
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
@@ -1085,7 +1091,9 @@ async def get_episode_entities(
         scoped_client = (
             _client_for_group(client, effective_group_id) if effective_group_id else client
         )
-        results = await scoped_client.get_nodes_and_edges_by_episode(episode_uuids)
+        results = await scoped_client.get_nodes_and_edges_by_episode(
+            episode_uuids, group_id=effective_group_id or None
+        )
 
         return EpisodeEntitiesResponse(
             message=f'Retrieved provenance for {len(episode_uuids)} episode(s)',

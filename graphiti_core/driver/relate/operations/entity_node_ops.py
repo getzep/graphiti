@@ -129,6 +129,7 @@ class RelateEntityNodeOperations(EntityNodeOperations):
         attributes: dict[str, Any],
         node_labels: list[str] | None = None,
         limit: int = 100,
+        normalize_strings: bool = False,
     ) -> list[EntityNode]:
         """Retrieve entity nodes of a group whose properties equal all of `attributes`.
 
@@ -137,8 +138,18 @@ class RelateEntityNodeOperations(EntityNodeOperations):
         if not attributes:
             return []
         names = list(attributes)
+        normalized_attributes = {
+            name: ' '.join(value.split()).casefold()
+            for name, value in attributes.items()
+            if normalize_strings and isinstance(value, str)
+        }
         label_query = ''.join(f':{label}' for label in (node_labels or []) if label != 'Entity')
-        conditions = ' '.join(f'AND n.`{name}` = $attribute_{i}' for i, name in enumerate(names))
+        conditions = ' '.join(
+            f'AND n.`{name}` = $attribute_{i}'
+            for i, name in enumerate(names)
+            if name not in normalized_attributes
+        )
+        limit_clause = '' if normalized_attributes else 'LIMIT $limit'
         query = (
             f"""
             MATCH (n:Entity{label_query})
@@ -148,16 +159,32 @@ class RelateEntityNodeOperations(EntityNodeOperations):
             """
             + get_entity_node_return_query(GraphProvider.RELATE)
             + """
-            LIMIT $limit
+            """
+            + limit_clause
+            + """
             """
         )
         params: dict[str, Any] = {
-            f'attribute_{i}': attributes[name] for i, name in enumerate(names)
+            f'attribute_{i}': attributes[name]
+            for i, name in enumerate(names)
+            if name not in normalized_attributes
         }
-        records, _, _ = await executor.execute_query(
-            query, group_id=group_id, limit=limit, **params
-        )
-        return [entity_node_from_record(r) for r in records]
+        params['group_id'] = group_id
+        if not normalized_attributes:
+            params['limit'] = limit
+        records, _, _ = await executor.execute_query(query, **params)
+        nodes = [entity_node_from_record(record) for record in records]
+        if normalized_attributes:
+            nodes = [
+                node
+                for node in nodes
+                if all(
+                    isinstance(value := node.attributes.get(name), str)
+                    and ' '.join(value.split()).casefold() == normalized_value
+                    for name, normalized_value in normalized_attributes.items()
+                )
+            ][:limit]
+        return nodes
 
     async def delete(
         self,

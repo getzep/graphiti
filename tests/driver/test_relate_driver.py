@@ -296,6 +296,11 @@ async def test_node_crud_and_attribute_lookup(driver: RelateDriver):
     )
     assert [n.uuid for n in by_attr] == ['ent-1']
 
+    by_normalized_attr = await EntityNode.get_by_attribute_values(
+        driver, 'grp-1', {'role': '  ENGINEER  '}, labels=['Person'], normalize_strings=True
+    )
+    assert [n.uuid for n in by_normalized_attr] == ['ent-1']
+
     episode = EpisodicNode(
         uuid='ep-1',
         name='Episode 1',

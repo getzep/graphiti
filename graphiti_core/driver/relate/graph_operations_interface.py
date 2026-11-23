@@ -134,9 +134,10 @@ class RelateGraphOperationsInterface(GraphOperationsInterface):
         attributes: dict[str, Any],
         node_labels: list[str] | None = None,
         limit: int = 100,
+        normalize_strings: bool = False,
     ) -> list[Any]:
         return await driver.entity_node_ops.get_by_attribute_values(
-            driver, group_id, attributes, node_labels, limit
+            driver, group_id, attributes, node_labels, limit, normalize_strings
         )
 
     async def node_load_embeddings(self, node: Any, driver: Any) -> None:
