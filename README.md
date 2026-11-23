@@ -102,7 +102,7 @@ Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org
 | **What it is** | The unified context layer for enterprises | An open-source framework for building temporal context graphs |
 | **Scope** | Unifies data from across an enterprise into governed context and serves it to agents | Builds and queries graphs inside your own application |
 | **Context graphs** | Manages millions of context graphs with governance | Builds and queries the graphs you define |
-| **Graph database** | [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, built for millions of context graphs with low-latency retrieval; no third-party graph database required | Bring your own: Neo4j, FalkorDB, or Amazon Neptune |
+| **Graph database** | [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, built for millions of context graphs with low-latency retrieval; no third-party graph database required | Bring your own: Neo4j, FalkorDB, Amazon Neptune, or Relate |
 | **Users, threads, and ingestion** | Built-in users, threads, and ingestion for messages and business data | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
 | **Developer tools** | Dashboard with graph visualization, debug logs, API logs; CLI; SDKs for Python, TypeScript, and Go | Build your own tools |
@@ -162,7 +162,7 @@ particularly suitable for applications requiring real-time interaction and preci
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch
+- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch / Relate (embedded, Python 3.11+, no server)
   Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
@@ -218,6 +218,27 @@ pip install graphiti-core[neptune]
 
 # or with uv
 uv add graphiti-core[neptune]
+```
+
+### Installing with Relate Support
+
+Relate is an embedded graph database that runs inside your Python process, so it needs no
+separate server. It requires Python 3.11 or later. Install the Relate extra:
+
+```bash
+pip install graphiti-core[relate]
+
+# or with uv
+uv add graphiti-core[relate]
+```
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.relate_driver import RelateDriver
+
+# ':memory:' (the default) is ephemeral; pass a file path to persist the graph
+driver = RelateDriver('/path/to/graph.relate')
+graphiti = Graphiti(graph_driver=driver)
 ```
 
 ### You can also install optional LLM providers as extras:

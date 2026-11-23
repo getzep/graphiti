@@ -130,6 +130,14 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 SET n.name_embedding = join([x IN coalesce($entity_data.name_embedding, []) | toString(x) ], ",")
                 RETURN n.uuid AS uuid
             """
+        case GraphProvider.RELATE:
+            return f"""
+                MERGE (n:Entity {{uuid: $entity_data.uuid}})
+                SET n:{labels}
+                SET n = $entity_data
+                SET n.labels = null
+                RETURN n.uuid AS uuid
+            """
         case _:
             save_embedding_query = (
                 'WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)'
@@ -196,6 +204,15 @@ def get_entity_node_save_bulk_query(
                     """
                 )
             return queries
+        case GraphProvider.RELATE:
+            return """
+                UNWIND $nodes AS node
+                MERGE (n:Entity {uuid: node.uuid})
+                SET n:$(node.labels)
+                SET n = node
+                SET n.labels = null
+                RETURN n.uuid AS uuid
+            """
         case _:  # Neo4j
             save_embedding_query = (
                 'WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)'
@@ -266,6 +283,12 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
                 MERGE (n:Community {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
                 SET n.name_embedding = join([x IN coalesce($name_embedding, []) | toString(x) ], ",")
+                RETURN n.uuid AS uuid
+            """
+        case GraphProvider.RELATE:
+            return """
+                MERGE (n:Community {uuid: $uuid})
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: $name_embedding}
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
