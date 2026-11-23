@@ -163,7 +163,7 @@ docker compose -f docker/docker-compose.yml ps
 start-services.sh (PID 1)
 ├── redis-server (FalkorDB daemon)
 ├── node server.js (FalkorDB Browser - background, if BROWSER=1)
-└── uv run main.py (MCP server - foreground)
+└── /app/mcp/.venv/bin/python main.py (MCP server - foreground)
 ```
 
 The startup script launches FalkorDB as a background daemon, waits for it to be ready, optionally starts the FalkorDB Browser (if `BROWSER=1`), then starts the MCP server in the foreground. When the MCP server stops, the container exits.
