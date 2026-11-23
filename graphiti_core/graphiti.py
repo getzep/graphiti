@@ -2418,8 +2418,8 @@ class Graphiti:
             The episode UUIDs.
         group_id : str | None
             If set, episodes must belong to this group or NodeNotFoundError is raised. Only nodes
-            and edges in this group are read. If None, the method does not check the group of the
-            episode UUIDs. Multi-tenant callers must pass group_id.
+            and edges in this group are returned. If None, the method does not check the group of
+            the episode UUIDs. Multi-tenant callers must pass group_id.
 
         Raises
         ------
@@ -2652,7 +2652,7 @@ class Graphiti:
             The episode UUID.
         group_id : str | None
             If set, the episode must belong to this group or NodeNotFoundError is raised. Only nodes
-            and edges in this group are read or changed. If None, the method does not check the
+            and edges in this group are changed or deleted. If None, the method does not check the
             group of the episode UUID. Multi-tenant callers must pass group_id.
 
         Raises
