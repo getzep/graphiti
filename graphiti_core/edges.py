@@ -234,7 +234,11 @@ class EntityEdge(Edge):
         description='list of episode ids that reference these entity edges',
     )
     expired_at: datetime | None = Field(
-        default=None, description='datetime of when the node was invalidated'
+        default=None,
+        description=(
+            'datetime of when Graphiti marked the edge as invalidated (transaction time); '
+            'use invalid_at to find when the fact stopped being true'
+        ),
     )
     valid_at: datetime | None = Field(
         default=None,

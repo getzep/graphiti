@@ -70,6 +70,14 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                 SET e.episodes = join($edge_data.episodes, ",")
                 RETURN $edge_data.uuid AS uuid
             """
+        case GraphProvider.RELATE:
+            return """
+                MATCH (source:Entity {uuid: $edge_data.source_uuid})
+                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
+                SET e = $edge_data
+                RETURN e.uuid AS uuid
+            """
         case _:  # Neo4j
             save_embedding_query = (
                 """WITH e CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", $edge_data.fact_embedding)"""
@@ -116,6 +124,15 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                 SET r.episodes = join(edge.episodes, ",")
                 RETURN edge.uuid AS uuid
             """
+        case GraphProvider.RELATE:
+            return """
+                UNWIND $entity_edges AS edge
+                MATCH (source:Entity {uuid: edge.source_node_uuid})
+                MATCH (target:Entity {uuid: edge.target_node_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
+                SET e = edge
+                RETURN edge.uuid AS uuid
+            """
         case _:
             save_embedding_query = (
                 'WITH e, edge CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", edge.fact_embedding)'
@@ -135,6 +152,19 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                 RETURN edge.uuid AS uuid
             """
             )
+
+
+def get_entity_edge_update_bulk_query(provider: GraphProvider, has_aoss: bool = False) -> str:
+    """Return the bulk save query of the provider, with `MATCH` in the place of `MERGE`.
+
+    The query changes an edge that exists and creates nothing. Concurrent ingestion
+    uses it to update a stored edge, so that an edge that a different writer deleted
+    is not created again.
+    """
+    query = get_entity_edge_save_bulk_query(provider, has_aoss)
+    if query.count('MERGE (source)-[') != 1:
+        raise ValueError(f'no update query for the entity edge save query of {provider}')
+    return query.replace('MERGE (source)-[', 'MATCH (source)-[')
 
 
 def get_entity_edge_return_query(provider: GraphProvider) -> str:

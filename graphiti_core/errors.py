@@ -75,6 +75,14 @@ class EntityTypeValidationError(GraphitiError):
         super().__init__(self.message)
 
 
+class IdentityPropertyValidationError(GraphitiError):
+    """Raised when identity properties do not match the configured entity types."""
+
+    def __init__(self, entity_type: str, reason: str):
+        self.message = f'Invalid identity properties for {entity_type}: {reason}'
+        super().__init__(self.message)
+
+
 class GroupIdValidationError(GraphitiError):
     """Raised when a group_id contains invalid characters."""
 
@@ -92,4 +100,44 @@ class NodeLabelValidationError(GraphitiError, ValueError):
             'node_labels must start with a letter or underscore and contain only '
             f'alphanumeric characters or underscores: {label_list}'
         )
+        super().__init__(self.message)
+
+
+class UnitExpiredError(GraphitiError):
+    """Raised when an ingestion unit calls the state store after its deadline or after it failed."""
+
+    def __init__(self, group_id: str, seq: int):
+        self.message = f'ingestion unit {seq} of group {group_id} is expired or failed'
+        super().__init__(self.message)
+
+
+class UnitInProgressError(GraphitiError):
+    """Raised when an admission names the `unit_id` of an ingestion unit that is in progress.
+
+    The admission writes nothing. The host can try again after the lease time of the unit.
+    """
+
+    def __init__(self, group_id: str, unit_id: str, seq: int):
+        self.group_id = group_id
+        self.unit_id = unit_id
+        self.seq = seq
+        self.message = (
+            f'ingestion unit {seq} of group {group_id} with the unit_id {unit_id} is in progress'
+        )
+        super().__init__(self.message)
+
+
+class StaleCommitError(GraphitiError):
+    """Raised when a commit attempt uses a fence that is not the current fence of the unit."""
+
+    def __init__(self, group_id: str, seq: int):
+        self.message = f'commit attempt for ingestion unit {seq} of group {group_id} is stale'
+        super().__init__(self.message)
+
+
+class ChangeSetRejected(GraphitiError):
+    """Raised by a host hook to reject the change set of an ingestion unit before the write."""
+
+    def __init__(self, reason: str = 'change set rejected'):
+        self.message = reason
         super().__init__(self.message)

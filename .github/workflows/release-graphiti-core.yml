@@ -9,12 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: write
+      contents: read
     environment:
       name: release
-      url: https://pypi.org/p/zep-cloud
+      url: https://pypi.org/p/graphiti-core
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
       - name: Setup Socket Firewall wrapper
         uses: ./.github/actions/setup-socket-firewall
         with:
@@ -27,6 +29,7 @@ jobs:
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
         with:
           version: "latest"
+          enable-cache: false
       # Resolve the project environment explicitly through the sfw wrapper.
       # `uv run` below then uses the already-synced environment.
       - name: Install dependencies
