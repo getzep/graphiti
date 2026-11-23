@@ -483,5 +483,32 @@ class TestGeminiClientGenerateResponse:
             )
 
 
+class TestGeminiSalvageJson:
+    """Tests that JSON salvage honors the dict return contract and ignores trailing prose."""
+
+    def test_salvage_json_never_returns_bare_list(self, gemini_client):
+        """A JSON array must never be returned as a bare list (the return type is dict | None)."""
+        result = gemini_client.salvage_json('[{"a": 1}]')
+        assert result is None or isinstance(result, dict)
+
+    def test_salvage_json_object_with_trailing_prose(self, gemini_client):
+        """Trailing prose after the last brace must not prevent salvaging the object."""
+        assert gemini_client.salvage_json('{"a": 1}\nExplanation here') == {'a': 1}
+
+    def test_salvage_json_plain_object(self, gemini_client):
+        """Control: a normal JSON object is salvaged unchanged."""
+        assert gemini_client.salvage_json('{"a": 1, "b": [2, 3]}') == {'a': 1, 'b': [2, 3]}
+
+    def test_salvage_json_plain_array_is_not_a_list(self, gemini_client):
+        """Control: a normal JSON array is not returned as a list."""
+        result = gemini_client.salvage_json('[1, 2, 3]')
+        assert result is None or isinstance(result, dict)
+
+    def test_salvage_json_invalid_or_empty(self, gemini_client):
+        """Control: input without a closing bracket, and empty input, yield None."""
+        assert gemini_client.salvage_json('not json') is None
+        assert gemini_client.salvage_json('') is None
+
+
 if __name__ == '__main__':
     pytest.main(['-v', 'test_gemini_client.py'])

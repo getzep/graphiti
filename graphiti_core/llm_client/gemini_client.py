@@ -16,7 +16,6 @@ limitations under the License.
 
 import json
 import logging
-import re
 import typing
 from typing import TYPE_CHECKING, ClassVar
 
@@ -209,35 +208,39 @@ class GeminiClient(LLMClient):
 
     def salvage_json(self, raw_output: str) -> dict[str, typing.Any] | None:
         """
-        Attempt to salvage a JSON object if the raw output is truncated.
+        Attempt to salvage a JSON object if the raw output is truncated or
+        followed by additional prose.
 
-        This is accomplished by looking for the last closing bracket for an array or object.
-        If found, it will try to load the JSON object from the raw output.
-        If the JSON object is not valid, it will return None.
+        This is accomplished by slicing the output at its last closing bracket
+        (for an array or object) wherever it occurs, so trailing text does not
+        prevent recovery. Only a JSON object is returned: callers require a
+        dict, so a bare array is never returned. If no valid object can be
+        salvaged, None is returned.
 
         Args:
             raw_output (str): The raw output from the LLM.
 
         Returns:
-            dict[str, typing.Any]: The salvaged JSON object.
-            None: If no salvage is possible.
+            dict[str, typing.Any] | None: The salvaged JSON object, or None if
+            no object can be salvaged.
         """
         if not raw_output:
             return None
-        # Try to salvage a JSON array
-        array_match = re.search(r'\]\s*$', raw_output)
-        if array_match:
+
+        # Search for the LAST closing bracket anywhere in the output rather
+        # than only at the end, so trailing prose does not block salvaging.
+        for closing_bracket in (']', '}'):
+            bracket_index = raw_output.rfind(closing_bracket)
+            if bracket_index == -1:
+                continue
             try:
-                return json.loads(raw_output[: array_match.end()])
-            except Exception:
-                pass
-        # Try to salvage a JSON object
-        obj_match = re.search(r'\}\s*$', raw_output)
-        if obj_match:
-            try:
-                return json.loads(raw_output[: obj_match.end()])
-            except Exception:
-                pass
+                parsed = json.loads(raw_output[: bracket_index + 1])
+            except (ValueError, TypeError):
+                continue
+            # A JSON array parses to a list, which violates the dict contract.
+            if isinstance(parsed, dict):
+                return parsed
+
         return None
 
     async def _generate_response(
