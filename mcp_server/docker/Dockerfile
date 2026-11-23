@@ -27,8 +27,12 @@ RUN set -eux; \
       arm64) SFW_ARCH=arm64 ;; \
       *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    "$(uv python find 3.13)" -c \
-      "import urllib.request; urllib.request.urlretrieve('https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-${SFW_ARCH}', '/usr/local/bin/sfw')"; \
+    sfw_url="https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-${SFW_ARCH}"; \
+    for attempt in 1 2 3; do \
+      "$(uv python find 3.13)" -c "import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" "$sfw_url" /usr/local/bin/sfw && break; \
+      if [ "$attempt" = 3 ]; then echo "sfw download failed" >&2; exit 1; fi; \
+      sleep 5; \
+    done; \
     chmod +x /usr/local/bin/sfw
 
 # Set up MCP server directory
