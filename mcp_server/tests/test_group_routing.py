@@ -50,7 +50,7 @@ class FakeClient:
     """Minimal Graphiti stand-in: driver, a clients holder, and a call log.
 
     copy.copy() shares the seen list between the original and the scoped copy,
-    so remove_episode records which object the call actually ran on.
+    so both methods record which object the call actually ran on.
     """
 
     def __init__(self, driver):
@@ -60,6 +60,10 @@ class FakeClient:
 
     async def remove_episode(self, uuid, group_id=None):
         self.seen.append((self, uuid, group_id))
+
+    async def get_nodes_and_edges_by_episode(self, episode_uuids, group_id=None):
+        self.seen.append((self, list(episode_uuids), group_id))
+        return SimpleNamespace(nodes=[], edges=[])
 
 
 def make_client(driver) -> FakeClient:
@@ -275,3 +279,31 @@ async def test_delete_episode_uses_base_client_without_any_group(monkeypatch):
 
     assert client.seen[0][0] is client
     assert client.seen[0][2] is None
+
+
+async def test_get_episode_entities_calls_scoped_client_for_explicit_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client)
+
+    response = await server.get_episode_entities(['uuid-1'], group_id='group-z')
+
+    assert client.seen[0][0] is not client
+    assert client.seen[0][0].driver.database == 'group-z'
+    assert client.seen[0][1] == ['uuid-1']
+    assert client.seen[0][2] == 'group-z'
+    assert client.driver.database == 'default_db'
+    assert response['nodes'] == []
+    assert response['edges'] == []
+
+
+async def test_get_episode_entities_uses_base_client_without_any_group(monkeypatch):
+    client = make_client(FakeDriver())
+    install_service(monkeypatch, client, default_group_id='')
+
+    response = await server.get_episode_entities(['uuid-1'])
+
+    assert client.seen[0][0] is client
+    assert client.seen[0][1] == ['uuid-1']
+    assert client.seen[0][2] is None
+    assert response['nodes'] == []
+    assert response['edges'] == []
