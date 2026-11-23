@@ -20,12 +20,13 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 import pytest
 
 import graphiti_core.graphiti as graphiti_module
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.edges import EntityEdge
+from graphiti_core.edges import EntityEdge, HasEpisodeEdge
 from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.models.edges.edge_db_queries import (
@@ -33,6 +34,7 @@ from graphiti_core.models.edges.edge_db_queries import (
     NEXT_EPISODE_EDGE_SAVE,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, Node, SagaNode
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 
 def episode_record(uuid: str = 'episode-a', group_id: str = 'group-a') -> dict[str, Any]:
@@ -461,6 +463,101 @@ async def test_summarize_saga_rejects_foreign_group_before_llm_or_write(monkeypa
     summary_fetch.assert_not_awaited()
     llm_call.assert_not_awaited()
     save_call.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.parametrize('graph_driver', [GraphProvider.NEO4J], indirect=True)
+async def test_summarize_saga_excludes_legacy_foreign_group_episode(graph_driver):
+    group_a = f'saga-summary-a-{uuid4()}'
+    group_b = f'saga-summary-b-{uuid4()}'
+    created_at = datetime.now(timezone.utc)
+    saga = SagaNode(
+        uuid=str(uuid4()),
+        name='saga summary group test',
+        group_id=group_a,
+        created_at=created_at,
+    )
+    episode_a = EpisodicNode(
+        uuid=str(uuid4()),
+        name='group A episode',
+        group_id=group_a,
+        source=EpisodeType.text,
+        source_description='test',
+        content='alphamarker group A episode content',
+        valid_at=created_at,
+        created_at=created_at,
+    )
+    episode_b = EpisodicNode(
+        uuid=str(uuid4()),
+        name='group B episode',
+        group_id=group_b,
+        source=EpisodeType.text,
+        source_description='test',
+        content='betamarker group B episode content',
+        valid_at=created_at,
+        created_at=created_at,
+    )
+
+    captured_messages = []
+
+    async def generate_response(messages, **_kwargs):
+        captured_messages.append(messages)
+        return {'summary': 'updated summary'}
+
+    llm_client = Mock()
+    llm_client.generate_response = AsyncMock(side_effect=generate_response)
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = graph_driver
+    graphiti.llm_client = llm_client
+    graphiti._resolve_request_scope = lambda requested_group_id: (  # type: ignore[method-assign]
+        requested_group_id,
+        graph_driver,
+        None,
+    )
+
+    try:
+        await saga.save(graph_driver)
+        await episode_a.save(graph_driver)
+        await episode_b.save(graph_driver)
+        await HasEpisodeEdge(
+            source_node_uuid=saga.uuid,
+            target_node_uuid=episode_a.uuid,
+            group_id=group_a,
+            created_at=created_at,
+        ).save(graph_driver)
+        await graph_driver.execute_query(
+            """
+            MATCH (s:Saga {uuid: $saga_uuid}), (e:Episodic {uuid: $episode_uuid})
+            CREATE (s)-[link:HAS_EPISODE]->(e)
+            SET link.uuid = randomUUID(),
+                link.group_id = s.group_id,
+                link.created_at = datetime()
+            """,
+            saga_uuid=saga.uuid,
+            episode_uuid=episode_b.uuid,
+        )
+
+        await graphiti.summarize_saga(saga.uuid, group_id=group_a)
+        scoped_prompt = '\n'.join(message.content for message in captured_messages[-1])
+        assert 'alphamarker group A episode content' in scoped_prompt
+        assert 'betamarker' not in scoped_prompt
+
+        await graph_driver.execute_query(
+            """
+            MATCH (s:Saga {uuid: $saga_uuid})
+            SET s.last_summarized_at = null,
+                s.last_summarized_episode_valid_at = null,
+                s.summary = ''
+            """,
+            saga_uuid=saga.uuid,
+        )
+        await graphiti.summarize_saga(saga.uuid)
+        unscoped_prompt = '\n'.join(message.content for message in captured_messages[-1])
+        assert 'alphamarker group A episode content' in unscoped_prompt
+        assert 'betamarker' not in unscoped_prompt
+    finally:
+        await clear_data(graph_driver, [group_a, group_b])
 
 
 @pytest.mark.asyncio

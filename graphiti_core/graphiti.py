@@ -749,7 +749,7 @@ class Graphiti:
                 records, _, _ = await driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
-                    WHERE e.created_at IS NOT NULL AND e.created_at > $since
+                    WHERE e.group_id = s.group_id AND e.created_at IS NOT NULL AND e.created_at > $since
                     RETURN e.content AS content, e.valid_at AS valid_at, e.created_at AS created_at
                     ORDER BY e.created_at ASC, e.valid_at ASC
                     LIMIT $limit
@@ -763,7 +763,7 @@ class Graphiti:
                 records, _, _ = await driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
-                    WHERE e.created_at IS NOT NULL
+                    WHERE e.group_id = s.group_id AND e.created_at IS NOT NULL
                     RETURN e.content AS content, e.valid_at AS valid_at, e.created_at AS created_at
                     ORDER BY e.created_at ASC, e.valid_at ASC
                     LIMIT $limit
