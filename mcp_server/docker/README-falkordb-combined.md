@@ -63,12 +63,12 @@ docker compose -f docker/docker-compose-falkordb-combined.yml build
 ### Build with Specific Graphiti Version
 
 ```bash
-GRAPHITI_CORE_VERSION=0.22.0 docker compose -f docker/docker-compose-falkordb-combined.yml build
+GRAPHITI_CORE_VERSION=0.31.3 docker compose -f docker/docker-compose-falkordb-combined.yml build
 ```
 
 ### Build Arguments
 
-- `GRAPHITI_CORE_VERSION`: Version of graphiti-core package (default: 0.22.0)
+- `GRAPHITI_CORE_VERSION`: Version of graphiti-core package (default: 0.31.3)
 - `MCP_SERVER_VERSION`: MCP server version tag (default: 1.0.0rc0)
 - `BUILD_DATE`: Build timestamp
 - `VCS_REF`: Git commit hash
