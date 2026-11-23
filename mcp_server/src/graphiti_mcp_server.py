@@ -715,7 +715,9 @@ async def delete_entity_edge(
             _driver_for_group(client, effective_group_id) if effective_group_id else client.driver
         )
         # Get the entity edge by UUID
-        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(
+            driver, uuid, group_id=effective_group_id or None
+        )
         # Delete the edge using its delete method
         await entity_edge.delete(driver)
         return SuccessResponse(message=f'Entity edge with UUID {uuid} deleted successfully')
@@ -780,7 +782,9 @@ async def get_entity_edge(uuid: str, group_id: str | None = None) -> dict[str, A
             _driver_for_group(client, effective_group_id) if effective_group_id else client.driver
         )
         # Get the entity edge directly using the EntityEdge class method
-        entity_edge = await EntityEdge.get_by_uuid(driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(
+            driver, uuid, group_id=effective_group_id or None
+        )
 
         # Use the format_fact_result function to serialize the edge
         # Return the Python dict directly - MCP will handle serialization
@@ -912,7 +916,9 @@ async def summarize_saga(
                 error=f"No saga named '{saga_name}' found in group '{effective_group_id}'"
             )
 
-        saga_node = await _client_for_group(client, effective_group_id).summarize_saga(match.uuid)
+        saga_node = await _client_for_group(client, effective_group_id).summarize_saga(
+            match.uuid, group_id=effective_group_id
+        )
 
         return SagaSummaryResponse(
             message=f"Saga '{saga_name}' summarized successfully",
