@@ -40,7 +40,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_PREFERENCE=only-managed \
     UV_PYTHON=3.13
 
-# Download the uv-managed CPython build.
+# Download the uv-managed CPython build, not a registry package.
 RUN uv python install 3.13
 
 # Set up MCP server directory
