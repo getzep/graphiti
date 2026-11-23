@@ -1997,6 +1997,21 @@ class Graphiti:
                 # group_ids cannot clobber each other's database target (issue #1676).
                 group_id, driver, clients = self._resolve_request_scope(group_id)
 
+                # `store_raw_episode_content=False` must hold for this write path too.
+                # An object that a test made with no call of `__init__` has no setting.
+                store_raw_content = getattr(self, 'store_raw_episode_content', True)
+
+                def stored_episodes() -> list[EpisodicNode]:
+                    """Return the episode records of a graph write.
+
+                    The bulk path writes the episodes before and after the extraction.
+                    With `store_raw_episode_content=False` neither write may carry the
+                    raw text, while the model calls keep it, as in `_process_episode_data`.
+                    """
+                    if store_raw_content:
+                        return episodes
+                    return [episode.model_copy(update={'content': ''}) for episode in episodes]
+
                 # Create default edge type map
                 edge_type_map_default = (
                     {('Entity', 'Entity'): list(edge_types.keys())}
@@ -2023,7 +2038,7 @@ class Graphiti:
                 # Save all episodes
                 await add_nodes_and_edges_bulk(
                     driver=driver,
-                    episodic_nodes=episodes,
+                    episodic_nodes=stored_episodes(),
                     episodic_edges=[],
                     entity_nodes=[],
                     entity_edges=[],
@@ -2104,12 +2119,17 @@ class Graphiti:
                 # save data to KG
                 await add_nodes_and_edges_bulk(
                     driver,
-                    episodes,
+                    stored_episodes(),
                     resolved_episodic_edges,
                     final_hydrated_nodes,
                     edges_to_save,
                     clients.embedder,
                 )
+
+                if not store_raw_content:
+                    # The returned records match what the graph holds, as in `add_episode`.
+                    for episode in episodes:
+                        episode.content = ''
 
                 # Handle saga association if provided
                 if saga is not None:
