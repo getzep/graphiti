@@ -274,7 +274,7 @@ async def test_node_crud_and_attribute_lookup(driver: RelateDriver):
 
     entity = EntityNode(
         uuid='ent-1',
-        name='Alice',
+        name='Acme Corp',
         group_id='grp-1',
         labels=['Entity', 'Person'],
         created_at=now,
@@ -285,7 +285,7 @@ async def test_node_crud_and_attribute_lookup(driver: RelateDriver):
     await entity.save(driver)
 
     fetched = await EntityNode.get_by_uuid(driver, 'ent-1')
-    assert fetched.name == 'Alice'
+    assert fetched.name == 'Acme Corp'
     assert set(fetched.labels) == {'Entity', 'Person'}
     assert fetched.attributes == {'role': 'engineer', 'level': 3}
     await fetched.load_name_embedding(driver)
@@ -300,6 +300,15 @@ async def test_node_crud_and_attribute_lookup(driver: RelateDriver):
         driver, 'grp-1', {'role': '  ENGINEER  '}, labels=['Person'], normalize_strings=True
     )
     assert [n.uuid for n in by_normalized_attr] == ['ent-1']
+
+    by_normalized_name = await EntityNode.get_by_attribute_values(
+        driver,
+        'grp-1',
+        {'name': '  acme   CORP '},
+        labels=['Person'],
+        normalize_strings=True,
+    )
+    assert [n.uuid for n in by_normalized_name] == ['ent-1']
 
     episode = EpisodicNode(
         uuid='ep-1',

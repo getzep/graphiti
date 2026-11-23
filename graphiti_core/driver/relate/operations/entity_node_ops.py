@@ -22,6 +22,7 @@ from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.driver.record_parsers import entity_node_from_record
 from graphiti_core.errors import NodeNotFoundError
+from graphiti_core.helpers import build_normalized_string_pattern
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_return_query,
     get_entity_node_save_bulk_query,
@@ -138,53 +139,32 @@ class RelateEntityNodeOperations(EntityNodeOperations):
         if not attributes:
             return []
         names = list(attributes)
-        normalized_attributes = {
-            name: ' '.join(value.split()).casefold()
-            for name, value in attributes.items()
-            if normalize_strings and isinstance(value, str)
-        }
         label_query = ''.join(f':{label}' for label in (node_labels or []) if label != 'Entity')
-        conditions = ' '.join(
-            f'AND n.`{name}` = $attribute_{i}'
-            for i, name in enumerate(names)
-            if name not in normalized_attributes
-        )
-        limit_clause = '' if normalized_attributes else 'LIMIT $limit'
+        attribute_conditions = []
+        params: dict[str, Any] = {}
+        for index, name in enumerate(names):
+            value = attributes[name]
+            if normalize_strings and isinstance(value, str):
+                attribute_conditions.append(f'AND n.`{name}` =~ $attribute_{index}')
+                params[f'attribute_{index}'] = build_normalized_string_pattern(value)
+            else:
+                attribute_conditions.append(f'AND n.`{name}` = $attribute_{index}')
+                params[f'attribute_{index}'] = value
         query = (
             f"""
             MATCH (n:Entity{label_query})
             WHERE n.group_id = $group_id
-            {conditions}
+            {' '.join(attribute_conditions)}
             RETURN
             """
             + get_entity_node_return_query(GraphProvider.RELATE)
             + """
-            """
-            + limit_clause
-            + """
+            LIMIT $limit
             """
         )
-        params: dict[str, Any] = {
-            f'attribute_{i}': attributes[name]
-            for i, name in enumerate(names)
-            if name not in normalized_attributes
-        }
-        params['group_id'] = group_id
-        if not normalized_attributes:
-            params['limit'] = limit
+        params.update(group_id=group_id, limit=limit)
         records, _, _ = await executor.execute_query(query, **params)
-        nodes = [entity_node_from_record(record) for record in records]
-        if normalized_attributes:
-            nodes = [
-                node
-                for node in nodes
-                if all(
-                    isinstance(value := node.attributes.get(name), str)
-                    and ' '.join(value.split()).casefold() == normalized_value
-                    for name, normalized_value in normalized_attributes.items()
-                )
-            ][:limit]
-        return nodes
+        return [entity_node_from_record(record) for record in records]
 
     async def delete(
         self,

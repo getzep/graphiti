@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
@@ -38,6 +37,7 @@ from graphiti_core.embedder.canonical_text import (
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import (
     SAFE_CYPHER_IDENTIFIER_PATTERN,
+    build_normalized_string_pattern,
     parse_db_date,
     validate_node_labels,
 )
@@ -720,15 +720,8 @@ class EntityNode(Node):
         for index, property_name in enumerate(property_names):
             value = attributes[property_name]
             if normalize_strings and isinstance(value, str):
-                tokens = re.split(r'\s+', value.strip())
-                if tokens and tokens[0]:
-                    pattern = (
-                        r'(?i)^\s*' + r'\s+'.join(re.escape(token) for token in tokens) + r'\s*$'
-                    )
-                else:
-                    pattern = r'^\s*$'
                 attribute_conditions.append(f'AND n.`{property_name}` =~ $attribute_{index}')
-                parameters[f'attribute_{index}'] = pattern
+                parameters[f'attribute_{index}'] = build_normalized_string_pattern(value)
             else:
                 attribute_conditions.append(f'AND n.`{property_name}` = $attribute_{index}')
                 parameters[f'attribute_{index}'] = value
