@@ -436,7 +436,10 @@ async def add_memory(
                                - 'json': For structured data
                                - 'message': For conversation-style content
         source_description (str, optional): Description of the source
-        uuid (str, optional): Optional UUID for the episode
+        uuid (str, optional): Optional UUID for the episode. If provided and the episode exists
+                              in the graph, it will be reprocessed. If provided but not found, a new
+                              episode will be created with the supplied uuid. If omitted, a new uuid
+                              will be generated.
         reference_time (str, optional): ISO-8601 timestamp for when the described events occurred
                                  (e.g. "2025-01-15T10:30:00Z" or "2025-01-15T10:30:00+00:00"). A
                                  timezone-naive value is interpreted as UTC. Defaults to the
