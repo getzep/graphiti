@@ -700,7 +700,7 @@ async def delete_entity_edge(
 
     Args:
         uuid: UUID of the entity edge to delete
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
@@ -737,7 +737,7 @@ async def delete_episode(uuid: str, group_id: str | None = None) -> SuccessRespo
 
     Args:
         uuid: UUID of the episode to delete
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
@@ -767,7 +767,7 @@ async def get_entity_edge(uuid: str, group_id: str | None = None) -> dict[str, A
 
     Args:
         uuid: UUID of the entity edge to retrieve
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
@@ -1007,7 +1007,7 @@ async def add_triplet(
         edge_name: Relationship/edge type name (e.g. "WORKS_FOR")
         fact: Natural-language statement describing the relationship
         target_node_name: Name of the target entity
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
         source_node_uuid: Optional UUID to reuse an existing source entity. A new UUID is
             generated when omitted.
         target_node_uuid: Optional UUID to reuse an existing target entity. A new UUID is
@@ -1074,7 +1074,7 @@ async def get_episode_entities(
 
     Args:
         episode_uuids: List of episode UUIDs to look up provenance for
-        group_id: Optional group ID. Falls back to the default group when omitted.
+        group_id: Optional group ID. Falls back to the configured group when omitted or empty.
     """
     global graphiti_service
 
