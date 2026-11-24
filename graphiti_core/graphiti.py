@@ -2032,6 +2032,7 @@ class Graphiti:
                 await _validate_saga_scope(saga, concurrent_group_id, concurrent_driver)
                 validate_entity_types(entity_types)
                 validate_identity_properties(identity_properties, entity_types)
+                validate_excluded_entity_types(excluded_entity_types, entity_types)
                 episode_uuids = [
                     episode.uuid for episode in bulk_episodes if episode.uuid is not None
                 ]
@@ -2064,6 +2065,7 @@ class Graphiti:
                 now = utc_now()
                 validate_entity_types(entity_types)
                 validate_identity_properties(identity_properties, entity_types)
+                validate_excluded_entity_types(excluded_entity_types, entity_types)
 
                 # Resolve a request-scoped driver/clients bundle rather than mutating
                 # the shared ``self.driver``, so concurrent calls for different
