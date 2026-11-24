@@ -39,7 +39,7 @@ from graphiti_core.ingestion.phases import (
     enrich_unit,
 )
 from graphiti_core.ingestion.state_store import IngestionStateStore
-from graphiti_core.nodes import EntityNode, EpisodeType, SagaNode
+from graphiti_core.nodes import EntityNode, EpisodeMetadataValue, EpisodeType, SagaNode
 from graphiti_core.utils.bulk_utils import RawEpisode
 
 if TYPE_CHECKING:
@@ -192,6 +192,7 @@ class ConcurrentIngestor:
         saga: str | SagaNode | None,
         saga_previous_episode_uuid: str | None,
         identity_properties: dict[str, list[str]] | None = None,
+        episode_metadata: dict[str, EpisodeMetadataValue] | None = None,
     ) -> 'AddEpisodeResults':
         from graphiti_core.graphiti import AddEpisodeResults
 
@@ -215,6 +216,7 @@ class ConcurrentIngestor:
                             source=source,
                             uuid=uuid,
                             previous_episode_uuids=previous_episode_uuids,
+                            episode_metadata=episode_metadata,
                         )
 
                     async def analyze(unit: AdmittedUnit):

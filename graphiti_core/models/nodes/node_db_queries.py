@@ -31,23 +31,15 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
     match provider:
         case GraphProvider.NEPTUNE:
             return """
-                MERGE (n:Episodic {uuid: $uuid})
-                SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
-                entity_edges: join([x IN coalesce($entity_edges, []) | toString(x) ], '|'), created_at: $created_at, valid_at: $valid_at}
+                MERGE (n:Episodic {uuid: $episode_data.uuid})
+                SET n = removeKeyFromMap($episode_data, "entity_edges")
+                SET n.entity_edges = join([x IN coalesce($episode_data.entity_edges, []) | toString(x) ], '|')
                 RETURN n.uuid AS uuid
             """
-        case GraphProvider.FALKORDB:
+        case _:  # Neo4j, FalkorDB, Relate
             return """
-                MERGE (n:Episodic {uuid: $uuid})
-                SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
-                entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
-                RETURN n.uuid AS uuid
-            """
-        case _:  # Neo4j
-            return """
-                MERGE (n:Episodic {uuid: $uuid})
-                SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
-                entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
+                MERGE (n:Episodic {uuid: $episode_data.uuid})
+                SET n = $episode_data
                 RETURN n.uuid AS uuid
             """
 
@@ -58,25 +50,15 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
-                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description,
-                    source: episode.source, content: episode.content,
-                entity_edges: join([x IN coalesce(episode.entity_edges, []) | toString(x) ], '|'), created_at: episode.created_at, valid_at: episode.valid_at}
+                SET n = removeKeyFromMap(episode, "entity_edges")
+                SET n.entity_edges = join([x IN coalesce(episode.entity_edges, []) | toString(x) ], '|')
                 RETURN n.uuid AS uuid
             """
-        case GraphProvider.FALKORDB:
+        case _:  # Neo4j, FalkorDB, Relate
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
-                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
-                entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
-                RETURN n.uuid AS uuid
-            """
-        case _:  # Neo4j
-            return """
-                UNWIND $episodes AS episode
-                MERGE (n:Episodic {uuid: episode.uuid})
-                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
-                entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
+                SET n = episode
                 RETURN n.uuid AS uuid
             """
 
@@ -90,7 +72,8 @@ EPISODIC_NODE_RETURN = """
     e.source_description AS source_description,
     e.content AS content,
     e.valid_at AS valid_at,
-    e.entity_edges AS entity_edges
+    e.entity_edges AS entity_edges,
+    properties(e) AS properties
 """
 
 EPISODIC_NODE_RETURN_NEPTUNE = """
@@ -102,7 +85,8 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
     e.group_id AS group_id,
     e.source_description AS source_description,
     e.source AS source,
-    split(e.entity_edges, ",") AS entity_edges
+    split(e.entity_edges, ",") AS entity_edges,
+    properties(e) AS properties
 """
 
 

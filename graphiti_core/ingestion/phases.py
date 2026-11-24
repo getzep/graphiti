@@ -55,6 +55,7 @@ from graphiti_core.ingestion.state_store import (
 )
 from graphiti_core.nodes import (
     EntityNode,
+    EpisodeMetadataValue,
     EpisodeType,
     EpisodicNode,
     SagaNode,
@@ -368,6 +369,7 @@ async def admit_episode(
     uuid: str | None = None,
     previous_episode_uuids: list[str] | None = None,
     wait: WaitFn | None = None,
+    episode_metadata: dict[str, EpisodeMetadataValue] | None = None,
 ) -> AdmittedUnit:
     """Admit one episode: get its sequence number and make the episode node visible.
 
@@ -409,6 +411,8 @@ async def admit_episode(
                 )
                 if uuid is not None:
                     episode = await EpisodicNode.get_by_uuid(driver, uuid, group_id=group_id)
+                    if episode_metadata is not None:
+                        episode.episode_metadata = episode_metadata
                 else:
                     episode_uuid = _episode_uuid(group_id, unit_id)
                     written = await _written_episodes(driver, [episode_uuid], group_id)
@@ -429,6 +433,7 @@ async def admit_episode(
                             source_description=source_description,
                             created_at=now,
                             valid_at=reference_time,
+                            episode_metadata=episode_metadata,
                         )
                         await add_nodes_and_edges_bulk(
                             driver,
@@ -530,6 +535,7 @@ async def admit_bulk(
                         group_id=group_id,
                         created_at=now,
                         valid_at=raw_episode.reference_time,
+                        episode_metadata=raw_episode.episode_metadata,
                     )
                     episodes.append(episode)
                     new_episodes.append(episode)

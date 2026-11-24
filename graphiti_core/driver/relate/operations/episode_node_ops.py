@@ -41,21 +41,11 @@ class RelateEpisodeNodeOperations(EpisodeNodeOperations):
         tx: Transaction | None = None,
     ) -> None:
         query = get_episode_node_save_query(GraphProvider.RELATE)
-        params: dict[str, Any] = {
-            'uuid': node.uuid,
-            'name': node.name,
-            'group_id': node.group_id,
-            'source_description': node.source_description,
-            'content': node.content,
-            'entity_edges': node.entity_edges,
-            'created_at': node.created_at,
-            'valid_at': node.valid_at,
-            'source': node.source.value,
-        }
+        episode_data = node.db_properties()
         if tx is not None:
-            await tx.run(query, **params)
+            await tx.run(query, episode_data=episode_data)
         else:
-            await executor.execute_query(query, **params)
+            await executor.execute_query(query, episode_data=episode_data)
 
         logger.debug(f'Saved Episode to Graph: {node.uuid}')
 
@@ -69,15 +59,7 @@ class RelateEpisodeNodeOperations(EpisodeNodeOperations):
         if not nodes:
             return
 
-        episodes = []
-        for node in nodes:
-            ep = dict(node)
-            ep['source'] = str(ep['source'].value)
-            ep.pop('labels', None)
-            ep.pop('episode_metadata', None)
-            episodes.append(ep)
-
-        await self.save_bulk_records(executor, episodes, tx)
+        await self.save_bulk_records(executor, [node.db_properties() for node in nodes], tx)
 
     async def save_bulk_records(
         self,
@@ -85,20 +67,14 @@ class RelateEpisodeNodeOperations(EpisodeNodeOperations):
         records: list[dict[str, Any]],
         tx: Transaction | None = None,
     ) -> None:
-        """Write episode records, with `source` as a string, in a single query."""
+        """Write episode records from `EpisodicNode.db_properties` in a single query."""
         if not records:
             return
-        episodes = []
-        for record in records:
-            episode = dict(record)
-            episode.pop('labels', None)
-            episode.pop('episode_metadata', None)
-            episodes.append(episode)
         query = get_episode_node_save_bulk_query(GraphProvider.RELATE)
         if tx is not None:
-            await tx.run(query, episodes=episodes)
+            await tx.run(query, episodes=records)
         else:
-            await executor.execute_query(query, episodes=episodes)
+            await executor.execute_query(query, episodes=records)
 
     async def delete(
         self,

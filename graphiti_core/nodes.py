@@ -242,6 +242,23 @@ class Node(BaseModel, ABC):
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]): ...
 
 
+EpisodeMetadataValue = str | int | float | bool
+
+EPISODIC_NODE_PROPERTIES = frozenset(
+    {
+        'uuid',
+        'name',
+        'group_id',
+        'source_description',
+        'content',
+        'entity_edges',
+        'created_at',
+        'valid_at',
+        'source',
+    }
+)
+
+
 class EpisodicNode(Node):
     source: EpisodeType = Field(description='source type')
     source_description: str = Field(description='description of the data source')
@@ -253,19 +270,33 @@ class EpisodicNode(Node):
         description='list of entity edges referenced in this episode',
         default_factory=list,
     )
-    episode_metadata: dict[str, Any] | None = Field(
-        description='customer-defined metadata key-value pairs for filtering',
+    episode_metadata: dict[str, EpisodeMetadataValue] | None = Field(
+        description='customer-defined metadata key-value pairs, stored as episode node properties',
         default=None,
     )
 
-    async def save(self, driver: GraphDriver):
-        if driver.graph_operations_interface:
-            try:
-                return await driver.graph_operations_interface.episodic_node_save(self, driver)
-            except NotImplementedError:
-                pass
+    @field_validator('episode_metadata')
+    @classmethod
+    def validate_episode_metadata(
+        cls, metadata: dict[str, EpisodeMetadataValue] | None
+    ) -> dict[str, EpisodeMetadataValue] | None:
+        if not metadata:
+            return None
+        invalid = sorted(key for key in metadata if not SAFE_CYPHER_IDENTIFIER_PATTERN.match(key))
+        if invalid:
+            raise ValueError(
+                f'episode_metadata keys {invalid} must be letters, digits, and underscores, '
+                'and must not start with a digit'
+            )
+        reserved = sorted(EPISODIC_NODE_PROPERTIES.intersection(metadata))
+        if reserved:
+            raise ValueError(f'episode_metadata keys {reserved} are reserved episode properties')
+        return metadata
 
-        episode_args = {
+    def db_properties(self) -> dict[str, Any]:
+        """Return the properties that a save writes to the episode node."""
+        return {
+            **(self.episode_metadata or {}),
             'uuid': self.uuid,
             'name': self.name,
             'group_id': self.group_id,
@@ -277,8 +308,15 @@ class EpisodicNode(Node):
             'source': self.source.value,
         }
 
+    async def save(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.episodic_node_save(self, driver)
+            except NotImplementedError:
+                pass
+
         result = await driver.execute_query(
-            get_episode_node_save_query(driver.provider), **episode_args
+            get_episode_node_save_query(driver.provider), episode_data=self.db_properties()
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -1148,7 +1186,26 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         name=record['name'],
         source_description=record['source_description'],
         entity_edges=record['entity_edges'],
+        episode_metadata=episode_metadata_from_properties(record.get('properties')),
     )
+
+
+def episode_metadata_from_properties(
+    properties: dict[str, Any] | None,
+) -> dict[str, EpisodeMetadataValue] | None:
+    """Return the stored episode properties that are not episode fields.
+
+    Properties that `episode_metadata` cannot hold, such as lists or keys with spaces that
+    were set outside Graphiti, are skipped so that reading the episode does not fail.
+    """
+    metadata = {
+        key: value
+        for key, value in (properties or {}).items()
+        if key not in EPISODIC_NODE_PROPERTIES
+        and SAFE_CYPHER_IDENTIFIER_PATTERN.match(key)
+        and isinstance(value, EpisodeMetadataValue)
+    }
+    return metadata or None
 
 
 def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
