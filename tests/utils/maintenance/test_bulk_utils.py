@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT
 from graphiti_core.utils import bulk_utils
 from graphiti_core.utils.bulk_utils import extract_nodes_and_edges_bulk
 from graphiti_core.utils.datetime_utils import utc_now
@@ -775,3 +777,176 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
 
     for call in extract_combined_calls:
         assert call['custom_extraction_instructions'] == custom_instructions
+
+
+def _work_edge(uuid: str, target: str, valid_at: datetime, episode: EpisodicNode) -> EntityEdge:
+    return EntityEdge(
+        uuid=uuid,
+        name='WORKS_AT',
+        fact=f'Alice works at {target}',
+        group_id='group',
+        source_node_uuid='alice',
+        target_node_uuid=target.lower(),
+        valid_at=valid_at,
+        created_at=valid_at,
+        episodes=[episode.uuid],
+    )
+
+
+async def _set_same_embedding(embedder, edges):
+    for edge in edges:
+        edge.fact_embedding = [1.0, 0.0]
+
+
+@pytest.mark.asyncio
+async def test_dedupe_edges_bulk_ends_fact_that_a_later_batch_episode_contradicts(monkeypatch):
+    """Two episodes of one batch state contradicting facts with different targets.
+
+    `add_episode` on each episode in order ends the older fact. The batch must do the same.
+    The search in `resolve_extracted_edges` cannot find batch edges, which are not saved yet.
+    """
+    clients = _make_clients()
+    monkeypatch.setattr(bulk_utils, 'create_entity_edge_embeddings', _set_same_embedding)
+
+    async def judge(messages, response_model=None, prompt_name=None, **kwargs):
+        assert prompt_name == 'dedupe_edges.resolve_edge'
+        prompt = messages[-1].content
+        contradicted = 'Alice works at Acme' in prompt and 'Alice works at Globex' in prompt
+        # The prompt shows one fact, as an invalidation candidate with idx 0.
+        return {'duplicate_facts': [], 'contradicted_facts': [0] if contradicted else []}
+
+    clients.llm_client.generate_response = AsyncMock(side_effect=judge)
+
+    jan = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    mar = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    episode_one = _make_episode('1')
+    episode_two = _make_episode('2')
+    acme = _work_edge('acme', 'Acme', jan, episode_one)
+    globex = _work_edge('globex', 'Globex', mar, episode_two)
+
+    edges_by_episode = await bulk_utils.dedupe_edges_bulk(
+        clients,
+        [[acme], [globex]],
+        [(episode_one, []), (episode_two, [])],
+        [],
+        {},
+        {},
+    )
+
+    assert clients.llm_client.generate_response.await_count == 2
+    assert edges_by_episode[episode_one.uuid] == [acme]
+    assert edges_by_episode[episode_two.uuid] == [globex]
+    assert acme.invalid_at == mar
+    assert acme.expired_at is not None
+    assert globex.invalid_at is None
+    assert globex.expired_at is None
+
+
+@pytest.mark.asyncio
+async def test_dedupe_edges_bulk_invalidation_candidates_share_an_endpoint(monkeypatch):
+    clients = _make_clients()
+    monkeypatch.setattr(bulk_utils, 'create_entity_edge_embeddings', _set_same_embedding)
+    seen: dict[str, tuple[list[str], list[str]]] = {}
+
+    async def mock_resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+        **kwargs,
+    ):
+        seen[extracted_edge.uuid] = (
+            [edge.uuid for edge in related_edges],
+            [edge.uuid for edge in existing_edges],
+        )
+        return extracted_edge, [], []
+
+    monkeypatch.setattr(bulk_utils, 'resolve_extracted_edge', mock_resolve_extracted_edge)
+
+    jan = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    mar = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    episode_one = _make_episode('1')
+    episode_two = _make_episode('2')
+    acme = _work_edge('acme', 'Acme', jan, episode_one)
+    same_episode = _work_edge('initech', 'Initech', jan, episode_one)
+    globex = _work_edge('globex', 'Globex', mar, episode_two)
+    acme_again = _work_edge('acme-again', 'Acme', mar, episode_two)
+    unrelated = EntityEdge(
+        uuid='unrelated',
+        name='LIVES_IN',
+        fact='Bob lives in Paris',
+        group_id='group',
+        source_node_uuid='bob',
+        target_node_uuid='paris',
+        valid_at=mar,
+        created_at=mar,
+        episodes=[episode_two.uuid],
+    )
+
+    await bulk_utils.dedupe_edges_bulk(
+        clients,
+        [[acme, same_episode], [globex, acme_again, unrelated]],
+        [(episode_one, []), (episode_two, [])],
+        [],
+        {},
+        {},
+    )
+
+    # A duplicate candidate has the same endpoints. An invalidation candidate comes from
+    # another episode, shares an endpoint, and is not a duplicate candidate.
+    assert seen['acme'] == (['acme-again'], ['globex'])
+    assert seen['initech'] == ([], ['globex', 'acme-again'])
+    assert seen['globex'] == ([], ['acme', 'initech'])
+    assert seen['unrelated'] == ([], [])
+
+
+def test_batch_invalidation_candidates_keep_the_most_similar_facts():
+    episode = _make_episode('1')
+    when = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    edge = _work_edge('edge', 'Acme', when, episode)
+    edge.fact_embedding = [1.0, 0.0]
+    others = []
+    count = DEFAULT_SEARCH_LIMIT + 2
+    for index in range(count):
+        other = _work_edge(f'other-{index}', f'Company{index}', when, episode)
+        # A higher index gives a more similar fact.
+        other.fact_embedding = [float(index), float(count - index)]
+        others.append(other)
+
+    candidates = bulk_utils._batch_invalidation_candidates(edge, others, {f'other-{count - 1}'})
+
+    assert [candidate.uuid for candidate in candidates] == [
+        f'other-{index}' for index in range(count - 2, count - 2 - DEFAULT_SEARCH_LIMIT, -1)
+    ]
+
+
+def test_merge_edge_copies_keeps_every_episode_and_the_earliest_end():
+    """Two episodes of one batch changed their own copies of one stored edge."""
+    created = datetime(2025, 12, 1, tzinfo=timezone.utc)
+    jan = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    mar = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    stored = dict(
+        uuid='initech',
+        name='WORKS_AT',
+        fact='Alice works at Initech',
+        group_id='group',
+        source_node_uuid='alice',
+        target_node_uuid='initech',
+        valid_at=created,
+        created_at=created,
+    )
+    restated = EntityEdge(**stored, episodes=['ep0', 'ep1'])
+    ended_in_mar = EntityEdge(**stored, episodes=['ep0'], invalid_at=mar, expired_at=jan)
+    ended_in_jan = EntityEdge(**stored, episodes=['ep0'], invalid_at=jan, expired_at=mar)
+    other = EntityEdge(**{**stored, 'uuid': 'globex'}, episodes=['ep2'])
+
+    merged = bulk_utils.merge_edge_copies([restated, other, ended_in_mar, ended_in_jan, other])
+
+    assert merged == [restated, other]
+    assert restated.episodes == ['ep0', 'ep1']
+    assert restated.invalid_at == jan
+    assert restated.expired_at == jan
+    assert other.episodes == ['ep2']
+    assert other.invalid_at is None

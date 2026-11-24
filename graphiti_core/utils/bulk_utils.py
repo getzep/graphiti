@@ -44,6 +44,8 @@ from graphiti_core.models.nodes.node_db_queries import (
     get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT
+from graphiti_core.utils.datetime_utils import ensure_utc
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupResolutionState,
     _build_candidate_indexes,
@@ -653,6 +655,36 @@ async def dedupe_nodes_bulk(
     return nodes_by_episode, compressed_map
 
 
+def _batch_invalidation_candidates(
+    edge: EntityEdge, other_episode_edges: list[EntityEdge], excluded_uuids: set[str]
+) -> list[EntityEdge]:
+    """Return the edges of the other batch episodes that `edge` can contradict.
+
+    `add_episode` finds invalidation candidates with a search of the stored graph. The
+    edges of the other episodes in a batch are not stored yet, so a search cannot find
+    them. A candidate here shares at least one endpoint with `edge`. The candidates are
+    ranked by fact similarity, and at most `DEFAULT_SEARCH_LIMIT` are returned, as in the
+    search that `add_episode` uses.
+    """
+    endpoints = {edge.source_node_uuid, edge.target_node_uuid}
+    candidates = [
+        other
+        for other in other_episode_edges
+        if other.uuid != edge.uuid
+        and other.uuid not in excluded_uuids
+        and (other.source_node_uuid in endpoints or other.target_node_uuid in endpoints)
+    ]
+    if len(candidates) <= DEFAULT_SEARCH_LIMIT:
+        return candidates
+
+    edge_vector = normalize_l2(edge.fact_embedding or [])
+    candidates.sort(
+        key=lambda other: float(np.dot(edge_vector, normalize_l2(other.fact_embedding or []))),
+        reverse=True,
+    )
+    return candidates[:DEFAULT_SEARCH_LIMIT]
+
+
 async def dedupe_edges_bulk(
     clients: GraphitiClients,
     extracted_edges: list[list[EntityEdge]],
@@ -671,11 +703,14 @@ async def dedupe_edges_bulk(
     )
 
     # Find similar results
-    dedupe_tuples: list[tuple[EpisodicNode, EntityEdge, list[EntityEdge]]] = []
+    dedupe_tuples: list[tuple[EpisodicNode, EntityEdge, list[EntityEdge], list[EntityEdge]]] = []
     for i, edges_i in enumerate(extracted_edges):
         existing_edges: list[EntityEdge] = []
         for edges_j in extracted_edges:
             existing_edges += edges_j
+        other_episode_edges = [
+            edge for j, edges_j in enumerate(extracted_edges) if j != i for edge in edges_j
+        ]
 
         for edge in edges_i:
             candidates: list[EntityEdge] = []
@@ -706,8 +741,13 @@ async def dedupe_edges_bulk(
                 if similarity >= min_score:
                     candidates.append(existing_edge)
 
-            dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
+            invalidation_candidates = _batch_invalidation_candidates(
+                edge, other_episode_edges, {candidate.uuid for candidate in candidates}
+            )
+            dedupe_tuples.append((episode_tuples[i][0], edge, candidates, invalidation_candidates))
 
+    # resolve_extracted_edge also applies the temporal invalidation rules. It changes the
+    # batch edges in place, so the edges that this function returns carry the end dates.
     resolver_kwargs = {'clients': clients} if uses_prompt_routing(clients) else {}
     bulk_edge_resolutions: list[
         tuple[EntityEdge, EntityEdge, list[EntityEdge]]
@@ -717,20 +757,19 @@ async def dedupe_edges_bulk(
                 clients.llm_client,
                 edge,
                 candidates,
-                candidates,
+                invalidation_candidates,
                 episode,
                 edge_types,
                 **resolver_kwargs,
             )
-            for episode, edge, candidates in dedupe_tuples
+            for episode, edge, candidates, invalidation_candidates in dedupe_tuples
         ],
         max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
-    # For now we won't track edge invalidation
     duplicate_pairs: list[tuple[str, str]] = []
     for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
-        episode, edge, candidates = dedupe_tuples[i]
+        _, edge, _, _ = dedupe_tuples[i]
         for duplicate in duplicates:
             duplicate_pairs.append((edge.uuid, duplicate.uuid))
 
@@ -829,3 +868,44 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]) -> list[E]:
         surviving.append(edge)
 
     return surviving
+
+
+def _earliest(first: datetime | None, second: datetime | None) -> datetime | None:
+    first_utc = ensure_utc(first)
+    second_utc = ensure_utc(second)
+    if first_utc is None:
+        return second
+    if second_utc is None:
+        return first
+    return first if first_utc <= second_utc else second
+
+
+def merge_edge_copies(edges: list[EntityEdge]) -> list[EntityEdge]:
+    """Merge the in-memory copies of each edge into one edge per UUID.
+
+    The episodes of a batch resolve their edges one episode at a time, so two episodes can
+    each change their own copy of one stored edge. If all copies are saved, the last one
+    wins. The merged edge gets the changes of all copies, as the episodes would give one
+    after the other:
+
+    - `episodes`: every episode of every copy, in order of first appearance.
+    - `invalid_at` and `expired_at`: the earliest value. A contradiction only moves the
+      end of an edge earlier.
+
+    The first copy of each UUID keeps its other fields. The returned list has one edge per
+    UUID, in order of first appearance.
+    """
+    merged: dict[str, EntityEdge] = {}
+    for edge in edges:
+        kept = merged.get(edge.uuid)
+        if kept is None:
+            merged[edge.uuid] = edge
+            continue
+        if kept is edge:
+            continue
+        for episode_uuid in edge.episodes:
+            if episode_uuid not in kept.episodes:
+                kept.episodes.append(episode_uuid)
+        kept.invalid_at = _earliest(kept.invalid_at, edge.invalid_at)
+        kept.expired_at = _earliest(kept.expired_at, edge.expired_at)
+    return list(merged.values())
