@@ -51,7 +51,11 @@ class LLMCache:
     def set(self, key: str, value: dict[str, typing.Any]) -> None:
         try:
             serialized = json.dumps(value)
-        except TypeError:
+        except (TypeError, ValueError):
+            # TypeError covers objects json does not know, ValueError covers values
+            # it refuses while walking them (a circular reference is the common one).
+            # Both mean the same thing here: this value is not JSON-serializable, so
+            # the cache skips it rather than failing the caller's request.
             logger.warning(f'Non-JSON-serializable cache value for key {key}, skipping')
             return
         self._conn.execute(
