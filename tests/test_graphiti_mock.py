@@ -16,7 +16,6 @@ limitations under the License.
 
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
 
 import numpy as np
 import pytest
@@ -1357,7 +1356,7 @@ async def test_build_communities_empty_group_ids_keeps_communities(
     )
     await graphiti.build_indices_and_constraints()
 
-    group_a, group_b = (f'community-empty-{uuid4()}' for _ in range(2))
+    group_a, group_b = group_id, group_id_2
     community_nodes = []
     for group_name in (group_a, group_b):
         entity_a = EntityNode(
