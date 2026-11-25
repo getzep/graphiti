@@ -44,6 +44,8 @@ from graphiti_core.models.nodes.node_db_queries import (
     get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT
+from graphiti_core.utils.datetime_utils import ensure_utc
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupResolutionState,
     _build_candidate_indexes,
@@ -671,7 +673,10 @@ async def dedupe_edges_bulk(
     )
 
     # Find similar results
-    dedupe_tuples: list[tuple[EpisodicNode, EntityEdge, list[EntityEdge]]] = []
+    episode_index_by_edge_uuid = {
+        edge.uuid: i for i, edges in enumerate(extracted_edges) for edge in edges
+    }
+    dedupe_tuples: list[tuple[EpisodicNode, EntityEdge, list[EntityEdge], list[EntityEdge]]] = []
     for i, edges_i in enumerate(extracted_edges):
         existing_edges: list[EntityEdge] = []
         for edges_j in extracted_edges:
@@ -679,34 +684,62 @@ async def dedupe_edges_bulk(
 
         for edge in edges_i:
             candidates: list[EntityEdge] = []
+            invalidation_candidates: list[EntityEdge] = []
             for existing_edge in existing_edges:
                 # Skip self-comparison
                 if edge.uuid == existing_edge.uuid:
                     continue
-                # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
-                # This approach will cast a wider net than BM25, which is ideal for this use case
-                if (
-                    edge.source_node_uuid != existing_edge.source_node_uuid
-                    or edge.target_node_uuid != existing_edge.target_node_uuid
-                ):
-                    continue
-
-                edge_words = set(edge.fact.lower().split())
-                existing_edge_words = set(existing_edge.fact.lower().split())
-                has_overlap = not edge_words.isdisjoint(existing_edge_words)
-                if has_overlap:
-                    candidates.append(existing_edge)
-                    continue
-
-                # Check for semantic similarity even if there is no overlap
-                similarity = np.dot(
-                    normalize_l2(edge.fact_embedding or []),
-                    normalize_l2(existing_edge.fact_embedding or []),
+                same_pair = (
+                    edge.source_node_uuid == existing_edge.source_node_uuid
+                    and edge.target_node_uuid == existing_edge.target_node_uuid
                 )
-                if similarity >= min_score:
-                    candidates.append(existing_edge)
+                if same_pair:
+                    # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
+                    # This approach will cast a wider net than BM25, which is ideal for this use case
+                    edge_words = set(edge.fact.lower().split())
+                    existing_edge_words = set(existing_edge.fact.lower().split())
+                    has_overlap = not edge_words.isdisjoint(existing_edge_words)
+                    if has_overlap:
+                        candidates.append(existing_edge)
+                        continue
 
-            dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
+                    # Check for semantic similarity even if there is no overlap
+                    similarity = np.dot(
+                        normalize_l2(edge.fact_embedding or []),
+                        normalize_l2(existing_edge.fact_embedding or []),
+                    )
+                    if similarity >= min_score:
+                        candidates.append(existing_edge)
+                        continue
+
+                # Contradictions usually have a different target, so duplicate
+                # candidates alone never expose them. Mirror add_episode: edges
+                # from other episodes of the batch that share at least one
+                # endpoint and are not duplicate candidates become invalidation
+                # candidates for the edge judge.
+                if (
+                    episode_index_by_edge_uuid[existing_edge.uuid] != i
+                    and existing_edge not in candidates
+                    and (
+                        edge.source_node_uuid
+                        in (existing_edge.source_node_uuid, existing_edge.target_node_uuid)
+                        or edge.target_node_uuid
+                        in (existing_edge.source_node_uuid, existing_edge.target_node_uuid)
+                    )
+                ):
+                    invalidation_candidates.append(existing_edge)
+
+            if invalidation_candidates:
+                edge_embedding = normalize_l2(edge.fact_embedding or [])
+                invalidation_candidates.sort(
+                    key=lambda candidate: float(
+                        np.dot(edge_embedding, normalize_l2(candidate.fact_embedding or []))
+                    ),
+                    reverse=True,
+                )
+                invalidation_candidates = invalidation_candidates[:DEFAULT_SEARCH_LIMIT]
+
+            dedupe_tuples.append((episode_tuples[i][0], edge, candidates, invalidation_candidates))
 
     resolver_kwargs = {'clients': clients} if uses_prompt_routing(clients) else {}
     bulk_edge_resolutions: list[
@@ -717,12 +750,12 @@ async def dedupe_edges_bulk(
                 clients.llm_client,
                 edge,
                 candidates,
-                candidates,
+                invalidation_candidates,
                 episode,
                 edge_types,
                 **resolver_kwargs,
             )
-            for episode, edge, candidates in dedupe_tuples
+            for episode, edge, candidates, invalidation_candidates in dedupe_tuples
         ],
         max_coroutines=getattr(clients, 'max_coroutines', None),
     )
@@ -730,7 +763,7 @@ async def dedupe_edges_bulk(
     # For now we won't track edge invalidation
     duplicate_pairs: list[tuple[str, str]] = []
     for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
-        episode, edge, candidates = dedupe_tuples[i]
+        episode, edge, candidates, _ = dedupe_tuples[i]
         for duplicate in duplicates:
             duplicate_pairs.append((edge.uuid, duplicate.uuid))
 
@@ -759,6 +792,58 @@ async def dedupe_edges_bulk(
         ]
 
     return edges_by_episode
+
+
+def _earliest_datetime(a: datetime | None, b: datetime | None) -> datetime | None:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(ensure_utc(a), ensure_utc(b))
+
+
+def merge_bulk_edge_copies(
+    resolved_edges: list[EntityEdge], invalidated_edges: list[EntityEdge]
+) -> tuple[list[EntityEdge], list[EntityEdge]]:
+    """Merge per-episode in-memory copies of the same edge from a bulk batch.
+
+    Each episode of a batch resolves against its own copy of a stored edge, so
+    saving the copies back means the last copy wins: provenance is lost and a
+    later contradiction overwrites an earlier one. Combine the copies the way
+    sequential add_episode calls would: union of episodes, earliest invalid_at
+    and earliest expired_at (a contradiction can only move those dates earlier).
+
+    Returns the merged (resolved_edges, invalidated_edges). An edge that appears
+    in both input lists is returned once, as a resolved edge.
+    """
+    canonical: dict[str, EntityEdge] = {}
+    for edge in [*resolved_edges, *invalidated_edges]:
+        existing = canonical.get(edge.uuid)
+        if existing is None:
+            canonical[edge.uuid] = edge
+            continue
+        for episode_uuid in edge.episodes:
+            if episode_uuid not in existing.episodes:
+                existing.episodes.append(episode_uuid)
+        existing.invalid_at = _earliest_datetime(existing.invalid_at, edge.invalid_at)
+        existing.expired_at = _earliest_datetime(existing.expired_at, edge.expired_at)
+
+    resolved_uuids = {edge.uuid for edge in resolved_edges}
+    merged_resolved: list[EntityEdge] = []
+    merged_invalidated: list[EntityEdge] = []
+    seen: set[str] = set()
+    for edge in resolved_edges:
+        if edge.uuid in seen:
+            continue
+        seen.add(edge.uuid)
+        merged_resolved.append(canonical[edge.uuid])
+    for edge in invalidated_edges:
+        if edge.uuid in resolved_uuids or edge.uuid in seen:
+            continue
+        seen.add(edge.uuid)
+        merged_invalidated.append(canonical[edge.uuid])
+
+    return merged_resolved, merged_invalidated
 
 
 class UnionFind:

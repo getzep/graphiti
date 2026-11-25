@@ -90,6 +90,7 @@ from graphiti_core.utils.bulk_utils import (
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
     extract_nodes_and_edges_bulk,
+    merge_bulk_edge_copies,
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
@@ -1540,6 +1541,13 @@ class Graphiti:
             invalidated_edges.extend(result[1])
             # result[2] is new_edges - not used in bulk flow since attributes
             # are extracted before edge resolution
+
+        # Each episode resolved against its own copy of a stored edge. Merge the
+        # copies so provenance and the earliest invalidation survive the save,
+        # matching what sequential add_episode calls would produce (#2210).
+        resolved_edges, invalidated_edges = merge_bulk_edge_copies(
+            resolved_edges, invalidated_edges
+        )
 
         return final_hydrated_nodes, resolved_edges, invalidated_edges, uuid_map
 

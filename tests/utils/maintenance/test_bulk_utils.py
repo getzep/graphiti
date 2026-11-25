@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -6,7 +7,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils import bulk_utils
-from graphiti_core.utils.bulk_utils import extract_nodes_and_edges_bulk
+from graphiti_core.utils.bulk_utils import extract_nodes_and_edges_bulk, merge_bulk_edge_copies
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance import combined_extraction
 
@@ -484,6 +485,215 @@ async def test_dedupe_edges_bulk_merges_episode_provenance_for_duplicates(monkey
     assert canonical_edge_one is canonical_edge_two
     assert canonical_edge_one.uuid == 'edge-a'
     assert canonical_edge_one.episodes == [episode_one.uuid, episode_two.uuid]
+
+
+def _make_works_at_edge(
+    episode: EpisodicNode, company: str, valid_at, node_uuid: str | None = None
+) -> EntityEdge:
+    return EntityEdge(
+        name='WORKS_AT',
+        fact=f'Alice works at {company}',
+        group_id='group',
+        source_node_uuid='alice',
+        target_node_uuid=node_uuid or company.lower(),
+        created_at=valid_at,
+        valid_at=valid_at,
+        episodes=[episode.uuid],
+    )
+
+
+@pytest.mark.asyncio
+async def test_dedupe_edges_bulk_detects_cross_episode_contradiction(monkeypatch):
+    """Regression test for #2210 symptom 1: a contradiction inside one batch.
+
+    Acme (Jan 10) and Globex (Mar 1) have different targets, so they never show
+    up in each other's duplicate candidates. The Globex edge must still see the
+    Acme edge as an invalidation candidate and end it on Mar 1, exactly as two
+    sequential add_episode calls would.
+    """
+    clients = _make_clients()
+    jan = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    mar = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    episode_one = _make_episode('1')
+    episode_two = _make_episode('2')
+    episode_one.valid_at = jan
+    episode_two.valid_at = mar
+
+    acme = _make_works_at_edge(episode_one, 'Acme', jan)
+    globex = _make_works_at_edge(episode_two, 'Globex', mar)
+
+    async def mock_create_embeddings(embedder, edges):
+        for edge in edges:
+            edge.fact_embedding = [1.0, 0.0]
+
+    seen_invalidation_candidates: dict[str, list[str]] = {}
+
+    async def mock_resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+        **kwargs,
+    ):
+        seen_invalidation_candidates[extracted_edge.uuid] = [e.uuid for e in existing_edges]
+        invalidated = []
+        for candidate in existing_edges:
+            # Same rule as resolve_edge_contradictions: an older candidate is
+            # ended by the newer resolved edge.
+            if candidate.valid_at < extracted_edge.valid_at:
+                candidate.invalid_at = extracted_edge.valid_at
+                candidate.expired_at = utc_now()
+                invalidated.append(candidate)
+        return extracted_edge, invalidated, []
+
+    monkeypatch.setattr(bulk_utils, 'create_entity_edge_embeddings', mock_create_embeddings)
+    monkeypatch.setattr(bulk_utils, 'resolve_extracted_edge', mock_resolve_extracted_edge)
+
+    await bulk_utils.dedupe_edges_bulk(
+        clients,
+        [[acme], [globex]],
+        [(episode_one, []), (episode_two, [episode_one])],
+        [],
+        {},
+        {},
+    )
+
+    assert seen_invalidation_candidates[acme.uuid] == [globex.uuid]
+    assert seen_invalidation_candidates[globex.uuid] == [acme.uuid]
+    assert acme.invalid_at == mar
+    assert globex.invalid_at is None
+
+
+@pytest.mark.asyncio
+async def test_dedupe_edges_bulk_invalidation_candidates_require_other_episode_and_endpoint(
+    monkeypatch,
+):
+    """Invalidation candidates come from other episodes and share an endpoint."""
+    clients = _make_clients()
+    jan = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    mar = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    episode_one = _make_episode('1')
+    episode_two = _make_episode('2')
+
+    acme = _make_works_at_edge(episode_one, 'Acme', jan)
+    same_episode_edge = _make_works_at_edge(episode_one, 'Globex', jan)
+    other_episode_edge = _make_works_at_edge(episode_two, 'Initech', mar)
+    unrelated_edge = EntityEdge(
+        name='WORKS_AT',
+        fact='Bob works at Acme',
+        group_id='group',
+        source_node_uuid='bob',
+        target_node_uuid='acme-corp',
+        created_at=mar,
+        valid_at=mar,
+        episodes=[episode_two.uuid],
+    )
+
+    async def mock_create_embeddings(embedder, edges):
+        for edge in edges:
+            edge.fact_embedding = [1.0, 0.0]
+
+    seen: dict[str, tuple[list[str], list[str]]] = {}
+
+    async def mock_resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+        **kwargs,
+    ):
+        seen[extracted_edge.uuid] = (
+            [e.uuid for e in related_edges],
+            [e.uuid for e in existing_edges],
+        )
+        return extracted_edge, [], []
+
+    monkeypatch.setattr(bulk_utils, 'create_entity_edge_embeddings', mock_create_embeddings)
+    monkeypatch.setattr(bulk_utils, 'resolve_extracted_edge', mock_resolve_extracted_edge)
+
+    await bulk_utils.dedupe_edges_bulk(
+        clients,
+        [[acme, same_episode_edge], [other_episode_edge, unrelated_edge]],
+        [(episode_one, []), (episode_two, [])],
+        [],
+        {},
+        {},
+    )
+
+    _, acme_invalidation = seen[acme.uuid]
+    assert other_episode_edge.uuid in acme_invalidation
+    assert same_episode_edge.uuid not in acme_invalidation
+    assert unrelated_edge.uuid not in acme_invalidation
+
+
+def test_merge_bulk_edge_copies_unions_provenance_and_keeps_earliest_dates():
+    """Regression test for #2210 symptoms 2 and 3.
+
+    Two episodes each resolve their own copy of one stored edge: copy 1 gains
+    provenance, copy 2 gains a later invalidation date while an earlier copy
+    already carries Jan 10. The merged edge must keep every episode and the
+    earliest dates, and be saved only once.
+    """
+    jan = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    mar = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    dec = datetime(2025, 12, 1, tzinfo=timezone.utc)
+
+    def copy(episodes, invalid_at=None, expired_at=None):
+        return EntityEdge(
+            uuid='stored-edge',
+            name='WORKS_AT',
+            fact='Alice works at Initech',
+            group_id='group',
+            source_node_uuid='alice',
+            target_node_uuid='initech',
+            created_at=dec,
+            valid_at=dec,
+            invalid_at=invalid_at,
+            expired_at=expired_at,
+            episodes=episodes,
+        )
+
+    resolved, invalidated = merge_bulk_edge_copies(
+        [copy(['ep0', 'ep1']), copy(['ep0'], invalid_at=jan, expired_at=jan)],
+        [copy(['ep0'], invalid_at=mar, expired_at=mar), copy(['ep0'], invalid_at=mar)],
+    )
+
+    assert len(resolved) == 1
+    assert invalidated == []
+    merged = resolved[0]
+    assert merged.episodes == ['ep0', 'ep1']
+    assert merged.invalid_at == jan
+    assert merged.expired_at == jan
+
+
+def test_merge_bulk_edge_copies_keeps_invalidated_only_edges():
+    dec = datetime(2025, 12, 1, tzinfo=timezone.utc)
+    mar = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    edge = EntityEdge(
+        uuid='stored-edge',
+        name='WORKS_AT',
+        fact='Alice works at Initech',
+        group_id='group',
+        source_node_uuid='alice',
+        target_node_uuid='initech',
+        created_at=dec,
+        valid_at=dec,
+        episodes=['ep0'],
+    )
+    copy = edge.model_copy()
+    copy.invalid_at = mar
+    copy.expired_at = mar
+
+    resolved, invalidated = merge_bulk_edge_copies([], [edge, copy])
+
+    assert resolved == []
+    assert len(invalidated) == 1
+    assert invalidated[0].invalid_at == mar
+    assert invalidated[0].episodes == ['ep0']
 
 
 @pytest.mark.asyncio
