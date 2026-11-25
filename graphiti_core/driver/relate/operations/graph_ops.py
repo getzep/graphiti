@@ -116,7 +116,7 @@ class RelateGraphMaintenanceOperations(GraphMaintenanceOperations):
     ) -> list[Any]:
         community_clusters: list[list[EntityNode]] = []
 
-        if group_ids is None:
+        if not group_ids:
             group_id_values, _, _ = await executor.execute_query(
                 """
                 MATCH (n:Entity)
