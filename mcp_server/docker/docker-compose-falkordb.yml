@@ -12,7 +12,7 @@ services:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
       - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
       # Append-only file: every write is logged, so a hard stop loses at most ~1s.
-      - REDIS_ARGS=${REDIS_ARGS:---appendonly yes}
+      - REDIS_ARGS=${REDIS_ARGS---appendonly yes}
     volumes:
       - falkordb_data:/var/lib/falkordb/data
     healthcheck:
