@@ -53,7 +53,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
-                        client (AsyncOpenAI | AsyncAzureOpenAI | OpenAIClient | AzureOpenAILLMClient | OpenAIGenericClient | None): An optional async client instance to use. A Graphiti LLM client is unwrapped to the async client it holds. If not provided, a new AsyncOpenAI client is created. An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
+            client (AsyncOpenAI | AsyncAzureOpenAI | OpenAIClient | AzureOpenAILLMClient | OpenAIGenericClient | None): An optional async client instance to use. A Graphiti LLM client is unwrapped to the async client it holds. If not provided, a new AsyncOpenAI client is created.
         """
         if config is None:
             config = LLMConfig()
