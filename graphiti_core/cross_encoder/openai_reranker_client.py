@@ -23,6 +23,8 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, OpenAIClient, RateLimitError
+from ..llm_client.azure_openai_client import AzureOpenAILLMClient
+from ..llm_client.openai_generic_client import OpenAIGenericClient
 from ..prompts import Message
 from .client import CrossEncoderClient
 
@@ -36,7 +38,12 @@ class OpenAIRerankerClient(CrossEncoderClient):
     def __init__(
         self,
         config: LLMConfig | None = None,
-        client: AsyncOpenAI | AsyncAzureOpenAI | OpenAIClient | None = None,
+        client: AsyncOpenAI
+        | AsyncAzureOpenAI
+        | OpenAIClient
+        | AzureOpenAILLMClient
+        | OpenAIGenericClient
+        | None = None,
     ):
         """
         Initialize the OpenAIRerankerClient with the provided configuration and client.
@@ -46,7 +53,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
-            client (AsyncOpenAI | AsyncAzureOpenAI | OpenAIClient | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
+                        client (AsyncOpenAI | AsyncAzureOpenAI | OpenAIClient | AzureOpenAILLMClient | OpenAIGenericClient | None): An optional async client instance to use. A Graphiti LLM client is unwrapped to the async client it holds. If not provided, a new AsyncOpenAI client is created. An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
         """
         if config is None:
             config = LLMConfig()
@@ -54,7 +61,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
         self.config = config
         if client is None:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
-        elif isinstance(client, OpenAIClient):
+        elif isinstance(client, (OpenAIClient, AzureOpenAILLMClient, OpenAIGenericClient)):
             self.client = client.client
         else:
             self.client = client
