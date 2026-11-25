@@ -16,6 +16,7 @@ limitations under the License.
 
 import json
 import logging
+import re
 import typing
 from abc import abstractmethod
 from typing import Any, ClassVar
@@ -31,9 +32,11 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4.1-mini'
-DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
-DEFAULT_REASONING = 'minimal'
+DEFAULT_MODEL = 'gpt-6-luna'
+DEFAULT_SMALL_MODEL = 'gpt-6-luna'
+# 'auto' is a sentinel meaning "pick a reasoning effort based on the model"
+# (resolved by _resolve_reasoning_effort); it is never sent to the API.
+DEFAULT_REASONING = 'auto'
 DEFAULT_VERBOSITY = 'low'
 
 
@@ -106,12 +109,54 @@ class BaseOpenAIClient(LLMClient):
                 openai_messages.append({'role': 'system', 'content': m.content})
         return openai_messages
 
-    def _get_model_for_size(self, model_size: ModelSize) -> str:
+    def _get_model_for_size(
+        self,
+        model_size: ModelSize,
+        *,
+        model: str | None = None,
+    ) -> str:
         """Get the appropriate model name based on the requested size."""
+        if model is not None:
+            return model
         if model_size == ModelSize.small:
             return self.small_model or DEFAULT_SMALL_MODEL
         else:
             return self.model or DEFAULT_MODEL
+
+    @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """Return True for o1/o3 models and GPT models with major version 5 or later."""
+        if model.startswith(('o1', 'o3')):
+            return True
+        version = re.match(r'gpt-(\d+)', model)
+        return version is not None and int(version.group(1)) >= 5
+
+    @staticmethod
+    def _prompt_cache_options(model: str) -> dict[str, str] | None:
+        """gpt-6 writes prompts of 1,024+ tokens by default at 1.25x the input rate.
+
+        Explicit mode without a breakpoint writes nothing. Other models reject the
+        prompt_cache_options field.
+        """
+        return {'mode': 'explicit'} if model.startswith('gpt-6') else None
+
+    @staticmethod
+    def _resolve_reasoning_effort(model: str, reasoning: str | None) -> str | None:
+        """Resolve the reasoning effort to send for a reasoning model.
+
+        Auto selects ``'none'`` for GPT 5.1+ and later major versions. It selects
+        ``'minimal'`` otherwise. Explicit values, including ``None``, pass through
+        unchanged.
+        """
+        if reasoning != 'auto':
+            return reasoning
+        version = re.match(r'gpt-(\d+)(?:\.(\d+))?', model)
+        if version is not None:
+            major = int(version.group(1))
+            minor = version.group(2)
+            if major > 5 or (major == 5 and minor is not None and int(minor) >= 1):
+                return 'none'
+        return 'minimal'
 
     def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing and validation.
@@ -158,6 +203,8 @@ class BaseOpenAIClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Generate a response using the appropriate client implementation.
 
@@ -165,12 +212,12 @@ class BaseOpenAIClient(LLMClient):
             tuple: (response_dict, input_tokens, output_tokens)
         """
         openai_messages = self._convert_messages_to_openai_format(messages)
-        model = self._get_model_for_size(model_size)
+        resolved_model = self._get_model_for_size(model_size, model=model)
 
         try:
             if response_model:
                 response = await self._create_structured_completion(
-                    model=model,
+                    model=resolved_model,
                     messages=openai_messages,
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
@@ -181,7 +228,7 @@ class BaseOpenAIClient(LLMClient):
                 return self._handle_structured_response(response)
             else:
                 response = await self._create_completion(
-                    model=model,
+                    model=resolved_model,
                     messages=openai_messages,
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
@@ -216,8 +263,17 @@ class BaseOpenAIClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
-        """Generate a response with retry logic and error handling."""
+        """Generate a response with retry logic and error handling.
+
+        When ``attribute_extraction`` is True, prepend the shared attribute-extraction
+        framing to the system message so the strict "field descriptions are not values"
+        instruction reaches the model on this provider's native-structured-output path.
+        """
+        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
 
@@ -243,7 +299,11 @@ class BaseOpenAIClient(LLMClient):
             while retry_count <= self.MAX_RETRIES:
                 try:
                     response, input_tokens, output_tokens = await self._generate_response(
-                        messages, response_model, max_tokens, model_size
+                        messages,
+                        response_model,
+                        max_tokens,
+                        model_size,
+                        model=model,
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens

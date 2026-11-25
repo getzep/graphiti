@@ -9,7 +9,7 @@ from pathlib import Path
 # Add the current directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from config.schema import GraphitiConfig
+from config.schema import GraphitiConfig, ServerConfig
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 
 
@@ -30,7 +30,7 @@ def test_config_loading():
 
     # Test environment variable override
     os.environ['LLM__PROVIDER'] = 'anthropic'
-    os.environ['LLM__MODEL'] = 'claude-3-opus'
+    os.environ['LLM__MODEL'] = 'claude-opus-5'
     config2 = GraphitiConfig()
 
     print('\n✓ Environment variable overrides work')
@@ -153,8 +153,10 @@ def test_cli_override():
     class Args:
         config = Path('config.yaml')
         transport = 'stdio'
+        host = '127.0.0.1'
+        port = 9999
         llm_provider = 'anthropic'
-        model = 'claude-3-sonnet'
+        model = 'claude-sonnet-5'
         temperature = 0.5
         embedder_provider = 'voyage'
         embedder_model = 'voyage-3'
@@ -165,8 +167,13 @@ def test_cli_override():
     config = GraphitiConfig()
     config.apply_cli_overrides(Args())
 
+    assert config.server.host == '127.0.0.1', f'Expected host 127.0.0.1, got {config.server.host}'
+    assert config.server.port == 9999, f'Expected port 9999, got {config.server.port}'
+
     print('✓ CLI overrides applied successfully')
     print(f'  - Transport: {config.server.transport}')
+    print(f'  - Host: {config.server.host}')
+    print(f'  - Port: {config.server.port}')
     print(f'  - LLM provider: {config.llm.provider}')
     print(f'  - LLM model: {config.llm.model}')
     print(f'  - Temperature: {config.llm.temperature}')
@@ -174,6 +181,32 @@ def test_cli_override():
     print(f'  - Database provider: {config.database.provider}')
     print(f'  - Group ID: {config.graphiti.group_id}')
     print(f'  - User ID: {config.graphiti.user_id}')
+
+    # Test that defaults are preserved when CLI flags are omitted
+    class MinimalArgs:
+        config = Path('config.yaml')
+        transport = None
+        host = None
+        port = None
+        llm_provider = None
+        model = None
+        temperature = None
+        embedder_provider = None
+        embedder_model = None
+        database_provider = None
+        group_id = None
+        user_id = None
+
+    default_config = GraphitiConfig()
+    default_config.apply_cli_overrides(MinimalArgs())
+
+    assert default_config.server.host == '127.0.0.1', 'Default host should be preserved'
+    assert default_config.server.port == 8000, 'Default port should be preserved'
+    print('✓ Defaults preserved when CLI flags are omitted')
+
+
+def test_server_config_default_host():
+    assert ServerConfig().host == '127.0.0.1'
 
 
 async def main():
@@ -205,3 +238,15 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
+
+def test_graphiti_initialization_without_prompt_configuration_uses_defaults():
+    """MCP may keep constructing Graphiti without prompt configuration."""
+    import inspect
+
+    from graphiti_core import Graphiti
+
+    params = inspect.signature(Graphiti.__init__).parameters
+    # Older graphiti-core has no prompt_library param; newer makes it optional.
+    if 'prompt_library' in params:
+        assert params['prompt_library'].default is None

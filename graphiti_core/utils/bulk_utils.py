@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
+import asyncio
 import logging
 import typing
 from datetime import datetime
@@ -28,38 +28,42 @@ from graphiti_core.driver.driver import (
     GraphDriverSession,
     GraphProvider,
 )
+from graphiti_core.driver.graph_operations.graph_operations import GraphOperationsInterface
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, uses_prompt_routing
 from graphiti_core.helpers import normalize_l2, semaphore_gather
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
+    get_entity_edge_update_bulk_query,
     get_episodic_edge_save_bulk_query,
 )
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_save_bulk_query,
+    get_entity_node_update_bulk_query,
     get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupResolutionState,
     _build_candidate_indexes,
     _normalize_string_exact,
     _resolve_with_similarity,
 )
-from graphiti_core.utils.maintenance.edge_operations import (
-    extract_edges,
-    resolve_extracted_edge,
-)
+from graphiti_core.utils.maintenance.edge_operations import extract_edges, resolve_extracted_edge
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
+    _identity_key_for_node,
+    _identity_type_for_node,
     extract_nodes,
     resolve_extracted_nodes,
 )
+
+if typing.TYPE_CHECKING:
+    from graphiti_core.ingestion.change_set import ResolutionTrace
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +112,9 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: GraphDriver, episodes: list[EpisodicNode]
+    driver: GraphDriver,
+    episodes: list[EpisodicNode],
+    max_coroutines: int | None = None,
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -116,7 +122,8 @@ async def retrieve_previous_episodes_bulk(
                 driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN, group_ids=[episode.group_id]
             )
             for episode in episodes
-        ]
+        ],
+        max_coroutines=max_coroutines,
     )
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]] = [
         (episode, previous_episodes_list[i]) for i, episode in enumerate(episodes)
@@ -132,7 +139,27 @@ async def add_nodes_and_edges_bulk(
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
+    write_timeout: float | None = None,
 ):
+    """Write the records in one session.
+
+    `write_timeout` is a time limit in seconds for the write. With the default `None`,
+    the write has no time limit.
+    """
+    if write_timeout is not None:
+        await execute_write_with_timeout(
+            driver,
+            write_timeout,
+            add_nodes_and_edges_bulk_tx,
+            episodic_nodes,
+            episodic_edges,
+            entity_nodes,
+            entity_edges,
+            embedder,
+            driver=driver,
+        )
+        return
+
     session = driver.session()
     try:
         await session.execute_write(
@@ -146,6 +173,149 @@ async def add_nodes_and_edges_bulk(
         )
     finally:
         await session.close()
+
+
+async def execute_write_with_timeout(
+    graph_driver: GraphDriver, timeout: float, func: Any, /, *args: Any, **kwargs: Any
+) -> Any:
+    """Run a write function in a new session with a time limit in seconds.
+
+    On Neo4j, the limit is the transaction timeout, which the server applies. On
+    FalkorDB, each query gets the limit as its query timeout. The server applies it to
+    a write only when its `TIMEOUT_MAX` setting is not zero. On each provider other
+    than Neo4j, the call is also cancelled at the limit. The database can then complete
+    a write that it already started.
+    """
+    session = graph_driver.session()
+    try:
+        if graph_driver.provider == GraphProvider.NEO4J:
+            from neo4j import unit_of_work
+
+            return await session.execute_write(unit_of_work(timeout=timeout)(func), *args, **kwargs)
+        if hasattr(session, 'query_timeout_ms'):
+            session.query_timeout_ms = max(1, int(timeout * 1000))  # type: ignore[attr-defined]
+        return await asyncio.wait_for(session.execute_write(func, *args, **kwargs), timeout)
+    finally:
+        await session.close()
+
+
+async def _entity_node_record(
+    node: EntityNode, embedder: EmbedderClient, driver: GraphDriver
+) -> dict[str, Any]:
+    """Return the query parameters of one entity node for a bulk save or a bulk update."""
+    if node.name_embedding is None:
+        await node.generate_name_embedding(embedder)
+
+    entity_data: dict[str, Any] = {
+        'uuid': node.uuid,
+        'name': node.name,
+        'group_id': node.group_id,
+        'summary': node.summary,
+        'created_at': node.created_at,
+        'name_embedding': node.name_embedding,
+        'labels': list(set(node.labels + ['Entity'])),
+    }
+
+    for k, v in (node.attributes or {}).items():
+        if k not in entity_data:
+            entity_data[k] = v
+
+    return entity_data
+
+
+async def _entity_edge_record(
+    edge: EntityEdge, embedder: EmbedderClient, driver: GraphDriver
+) -> dict[str, Any]:
+    """Return the query parameters of one entity edge for a bulk save or a bulk update."""
+    if edge.fact_embedding is None:
+        await edge.generate_embedding(embedder)
+    edge_data: dict[str, Any] = {
+        'uuid': edge.uuid,
+        'source_node_uuid': edge.source_node_uuid,
+        'target_node_uuid': edge.target_node_uuid,
+        'name': edge.name,
+        'fact': edge.fact,
+        'group_id': edge.group_id,
+        'episodes': edge.episodes,
+        'created_at': edge.created_at,
+        'expired_at': edge.expired_at,
+        'valid_at': edge.valid_at,
+        'invalid_at': edge.invalid_at,
+        'reference_time': edge.reference_time,
+        'fact_embedding': edge.fact_embedding,
+    }
+
+    # Merge attributes without overwriting explicit edge fields.
+    # Attributes may contain stale string versions of typed fields
+    # (e.g. reference_time as ISO string) that would replace the
+    # datetime values set above.
+    for k, v in (edge.attributes or {}).items():
+        if k not in edge_data:
+            edge_data[k] = v
+
+    return edge_data
+
+
+# The operations of `graph_operations_interface` that the commit and the enrichment of
+# concurrent ingestion call. These operations have no Cypher fallback.
+INGESTION_INTERFACE_OPERATIONS = (
+    'episodic_node_save_bulk',
+    'node_save_bulk',
+    'episodic_edge_save_bulk',
+    'edge_save_bulk',
+    'node_update_bulk',
+    'edge_update_bulk',
+)
+
+
+def missing_ingestion_interface_operations(driver: GraphDriver) -> list[str]:
+    """Return the operations of concurrent ingestion that the interface of the driver lacks.
+
+    An operation that the interface class does not override is missing. The result is
+    empty for a driver with no `graph_operations_interface`.
+    """
+    interface = driver.graph_operations_interface
+    if not interface:
+        return []
+    return sorted(
+        name
+        for name in INGESTION_INTERFACE_OPERATIONS
+        if getattr(type(interface), name, None) in (None, getattr(GraphOperationsInterface, name))
+    )
+
+
+async def update_entity_edges_tx(
+    tx: GraphDriverSession,
+    entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
+):
+    """Update entity edges that exist. An edge that does not exist is not created."""
+    if not entity_edges:
+        return
+    edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.edge_update_bulk(None, driver, tx, edges)
+        return
+    query = get_entity_edge_update_bulk_query(driver.provider)
+    await tx.run(query, entity_edges=edges)
+
+
+async def update_entity_nodes_tx(
+    tx: GraphDriverSession,
+    entity_nodes: list[EntityNode],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
+):
+    """Update entity nodes that exist. A node that does not exist is not created."""
+    if not entity_nodes:
+        return
+    nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.node_update_bulk(None, driver, tx, nodes)
+        return
+    query = get_entity_node_update_bulk_query(driver.provider, nodes)
+    await tx.run(query, nodes=nodes)
 
 
 async def add_nodes_and_edges_bulk_tx(
@@ -162,56 +332,8 @@ async def add_nodes_and_edges_bulk_tx(
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
 
-    nodes = []
-
-    for node in entity_nodes:
-        if node.name_embedding is None:
-            await node.generate_name_embedding(embedder)
-
-        entity_data: dict[str, Any] = {
-            'uuid': node.uuid,
-            'name': node.name,
-            'group_id': node.group_id,
-            'summary': node.summary,
-            'created_at': node.created_at,
-            'name_embedding': node.name_embedding,
-            'labels': list(set(node.labels + ['Entity'])),
-        }
-
-        if driver.provider == GraphProvider.KUZU:
-            attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
-            entity_data['attributes'] = json.dumps(attributes)
-        else:
-            entity_data.update(node.attributes or {})
-
-        nodes.append(entity_data)
-
-    edges = []
-    for edge in entity_edges:
-        if edge.fact_embedding is None:
-            await edge.generate_embedding(embedder)
-        edge_data: dict[str, Any] = {
-            'uuid': edge.uuid,
-            'source_node_uuid': edge.source_node_uuid,
-            'target_node_uuid': edge.target_node_uuid,
-            'name': edge.name,
-            'fact': edge.fact,
-            'group_id': edge.group_id,
-            'episodes': edge.episodes,
-            'created_at': edge.created_at,
-            'expired_at': edge.expired_at,
-            'valid_at': edge.valid_at,
-            'invalid_at': edge.invalid_at,
-            'fact_embedding': edge.fact_embedding,
-        }
-
-        if driver.provider == GraphProvider.KUZU:
-            attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
-            edge_data['attributes'] = json.dumps(attributes)
-        else:
-            edge_data.update(edge.attributes or {})
-
-        edges.append(edge_data)
+    nodes = [await _entity_node_record(node, embedder, driver) for node in entity_nodes]
+    edges = [await _entity_edge_record(edge, embedder, driver) for edge in entity_edges]
 
     if driver.graph_operations_interface:
         await driver.graph_operations_interface.episodic_node_save_bulk(None, driver, tx, episodes)
@@ -221,20 +343,6 @@ async def add_nodes_and_edges_bulk_tx(
         )
         await driver.graph_operations_interface.edge_save_bulk(None, driver, tx, edges)
 
-    elif driver.provider == GraphProvider.KUZU:
-        # FIXME: Kuzu's UNWIND does not currently support STRUCT[] type properly, so we insert the data one by one instead for now.
-        episode_query = get_episode_node_save_bulk_query(driver.provider)
-        for episode in episodes:
-            await tx.run(episode_query, **episode)
-        entity_node_query = get_entity_node_save_bulk_query(driver.provider, nodes)
-        for node in nodes:
-            await tx.run(entity_node_query, **node)
-        entity_edge_query = get_entity_edge_save_bulk_query(driver.provider)
-        for edge in edges:
-            await tx.run(entity_edge_query, **edge)
-        episodic_edge_query = get_episodic_edge_save_bulk_query(driver.provider)
-        for edge in episodic_edges:
-            await tx.run(episodic_edge_query, **edge.model_dump())
     else:
         await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
         await tx.run(
@@ -259,8 +367,82 @@ async def extract_nodes_and_edges_bulk(
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
     custom_extraction_instructions: str | None = None,
+    use_combined_extraction: bool = True,
+    strict_edge_types: bool = False,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
-    extracted_nodes_bulk: list[list[EntityNode]] = await semaphore_gather(
+    if use_combined_extraction:
+        return await _extract_nodes_and_edges_bulk_combined(
+            clients,
+            episode_tuples,
+            edge_type_map,
+            entity_types=entity_types,
+            excluded_entity_types=excluded_entity_types,
+            edge_types=edge_types,
+            strict_edge_types=strict_edge_types,
+            custom_extraction_instructions=custom_extraction_instructions,
+        )
+
+    return await _extract_nodes_and_edges_bulk_separate(
+        clients,
+        episode_tuples,
+        edge_type_map,
+        entity_types=entity_types,
+        excluded_entity_types=excluded_entity_types,
+        edge_types=edge_types,
+        strict_edge_types=strict_edge_types,
+        custom_extraction_instructions=custom_extraction_instructions,
+    )
+
+
+async def _extract_nodes_and_edges_bulk_combined(
+    clients: GraphitiClients,
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
+    strict_edge_types: bool = False,
+    custom_extraction_instructions: str | None = None,
+) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
+    """Combined extraction: single LLM call per episode for both nodes and edges."""
+    from graphiti_core.utils.maintenance.combined_extraction import (
+        extract_nodes_and_edges as extract_combined,
+    )
+
+    results = await semaphore_gather(
+        *[
+            extract_combined(
+                clients,
+                episode,
+                previous_episodes,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
+                edge_type_map=edge_type_map,
+                edge_types=edge_types,
+                strict_edge_types=strict_edge_types,
+                custom_extraction_instructions=custom_extraction_instructions,
+            )
+            for episode, previous_episodes in episode_tuples
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
+    )
+
+    nodes_bulk = [nodes for nodes, _, _ in results]
+    edges_bulk = [edges for _, edges, _ in results]
+    return nodes_bulk, edges_bulk
+
+
+async def _extract_nodes_and_edges_bulk_separate(
+    clients: GraphitiClients,
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
+    strict_edge_types: bool = False,
+    custom_extraction_instructions: str | None = None,
+) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
+    extracted_results: list[tuple[list[EntityNode], dict[str, list[int]]]] = await semaphore_gather(
         *[
             extract_nodes(
                 clients,
@@ -271,10 +453,12 @@ async def extract_nodes_and_edges_bulk(
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for episode, previous_episodes in episode_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
+    extracted_nodes_bulk = [nodes for nodes, _ in extracted_results]
 
-    extracted_edges_bulk: list[list[EntityEdge]] = await semaphore_gather(
+    edge_results: list[tuple[list[EntityEdge], list[EntityNode]]] = await semaphore_gather(
         *[
             extract_edges(
                 clients,
@@ -284,11 +468,18 @@ async def extract_nodes_and_edges_bulk(
                 edge_type_map=edge_type_map,
                 group_id=episode.group_id,
                 edge_types=edge_types,
+                strict_edge_types=strict_edge_types,
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for i, (episode, previous_episodes) in enumerate(episode_tuples)
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
+
+    extracted_edges_bulk: list[list[EntityEdge]] = []
+    for i, (edges, materialized_nodes) in enumerate(edge_results):
+        extracted_edges_bulk.append(edges)
+        extracted_nodes_bulk[i].extend(materialized_nodes)
 
     return extracted_nodes_bulk, extracted_edges_bulk
 
@@ -298,6 +489,8 @@ async def dedupe_nodes_bulk(
     extracted_nodes: list[list[EntityNode]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     entity_types: dict[str, type[BaseModel]] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
+    trace: 'ResolutionTrace | None' = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     """Resolve entity duplicates across an in-memory batch using a two-pass strategy.
 
@@ -306,19 +499,47 @@ async def dedupe_nodes_bulk(
     2. Re-run the deterministic similarity heuristics across the union of resolved nodes to catch
        duplicates that only co-occur inside this batch, emitting a canonical UUID map that callers
        can apply to edges and persistence.
+
+    When `trace` is given, the first pass records the candidates that each extracted node
+    saw and the stored nodes that an extracted node resolved to.
     """
+
+    trace_kwargs: dict[str, Any] = {'trace': trace} if trace is not None else {}
+
+    async def resolve_nodes(
+        nodes: list[EntityNode],
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+    ):
+        if identity_properties:
+            return await resolve_extracted_nodes(
+                clients,
+                nodes,
+                episode,
+                previous_episodes,
+                entity_types,
+                identity_properties=identity_properties,
+                **trace_kwargs,
+            )
+        return await resolve_extracted_nodes(
+            clients,
+            nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+            **trace_kwargs,
+        )
 
     first_pass_results = await semaphore_gather(
         *[
-            resolve_extracted_nodes(
-                clients,
+            resolve_nodes(
                 nodes,
                 episode_tuples[i][0],
                 episode_tuples[i][1],
-                entity_types,
             )
             for i, nodes in enumerate(extracted_nodes)
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     episode_resolutions: list[tuple[str, list[EntityNode]]] = []
@@ -345,6 +566,30 @@ async def dedupe_nodes_bulk(
                 continue
 
             existing_candidates = list(canonical_nodes.values())
+            if identity_properties:
+                # Attribute and summary hydration uses all episodes that mention an identity-typed
+                # node; name and similarity matches use the first episode (#2156).
+                identity_type = _identity_type_for_node(node, identity_properties)
+                identity_key = _identity_key_for_node(node, identity_properties)
+                if identity_type is not None and identity_key is not None:
+                    identity_match = next(
+                        (
+                            candidate
+                            for candidate in existing_candidates
+                            if _identity_type_for_node(candidate, identity_properties)
+                            == identity_type
+                            and _identity_key_for_node(candidate, identity_properties)
+                            == identity_key
+                        ),
+                        None,
+                    )
+                    if identity_match is not None:
+                        for key, value in node.attributes.items():
+                            identity_match.attributes.setdefault(key, value)
+                        if identity_match.uuid != node.uuid:
+                            duplicate_pairs.append((node.uuid, identity_match.uuid))
+                        continue
+
             normalized = _normalize_string_exact(node.name)
             exact_match = next(
                 (
@@ -421,7 +666,8 @@ async def dedupe_edges_bulk(
 
     # generate embeddings
     await semaphore_gather(
-        *[create_entity_edge_embeddings(embedder, edges) for edges in extracted_edges]
+        *[create_entity_edge_embeddings(embedder, edges) for edges in extracted_edges],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # Find similar results
@@ -462,6 +708,7 @@ async def dedupe_edges_bulk(
 
             dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
 
+    resolver_kwargs = {'clients': clients} if uses_prompt_routing(clients) else {}
     bulk_edge_resolutions: list[
         tuple[EntityEdge, EntityEdge, list[EntityEdge]]
     ] = await semaphore_gather(
@@ -473,9 +720,11 @@ async def dedupe_edges_bulk(
                 candidates,
                 episode,
                 edge_types,
+                **resolver_kwargs,
             )
             for episode, edge, candidates in dedupe_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # For now we won't track edge invalidation
@@ -491,6 +740,15 @@ async def dedupe_edges_bulk(
     edge_uuid_map: dict[str, EntityEdge] = {
         edge.uuid: edge for edges in extracted_edges for edge in edges
     }
+
+    for edges in extracted_edges:
+        for edge in edges:
+            canonical_uuid = compressed_map.get(edge.uuid, edge.uuid)
+            if canonical_uuid != edge.uuid:
+                canonical_edge = edge_uuid_map[canonical_uuid]
+                for episode_uuid in edge.episodes:
+                    if episode_uuid not in canonical_edge.episodes:
+                        canonical_edge.episodes.append(episode_uuid)
 
     edges_by_episode: dict[str, list[EntityEdge]] = {}
     for i, edges in enumerate(extracted_edges):
@@ -546,11 +804,28 @@ def compress_uuid_map(duplicate_pairs: list[tuple[str, str]]) -> dict[str, str]:
 E = typing.TypeVar('E', bound=Edge)
 
 
-def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
+def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]) -> list[E]:
+    """Repoint edge endpoints through ``uuid_map``, dropping edges that collapse.
+
+    Endpoints are rewritten in place. The returned list omits edges whose two
+    endpoints were distinct before remapping and resolve to the same node —
+    dedup can map an endpoint onto the node that is already the other endpoint.
+    Extracted self-referencing edges (source already equals target) are kept.
+    Use the return value rather than the list passed in.
+    """
+    surviving: list[E] = []
     for edge in edges:
         source_uuid = edge.source_node_uuid
         target_uuid = edge.target_node_uuid
         edge.source_node_uuid = uuid_map.get(source_uuid, source_uuid)
         edge.target_node_uuid = uuid_map.get(target_uuid, target_uuid)
 
-    return edges
+        if source_uuid != target_uuid and edge.source_node_uuid == edge.target_node_uuid:
+            logger.info(
+                'Dropping self-edge for node %s (endpoints resolved to the same node)',
+                edge.source_node_uuid,
+            )
+            continue
+        surviving.append(edge)
+
+    return surviving

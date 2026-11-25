@@ -18,7 +18,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sentence_transformers import CrossEncoder
+    from sentence_transformers import CrossEncoder  # type: ignore[import-not-found]
 else:
     try:
         from sentence_transformers import CrossEncoder

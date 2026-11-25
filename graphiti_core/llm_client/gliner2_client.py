@@ -148,9 +148,7 @@ class GLiNER2Client(LLMClient):
         """
         user_content = messages[-1].content if len(messages) > 1 else messages[0].content
 
-        match = re.search(
-            r'<ENTITY TYPES>\s*(.*?)\s*</ENTITY TYPES>', user_content, re.DOTALL
-        )
+        match = re.search(r'<ENTITY TYPES>\s*(.*?)\s*</ENTITY TYPES>', user_content, re.DOTALL)
         if match:
             try:
                 raw = match.group(1)
@@ -199,16 +197,18 @@ class GLiNER2Client(LLMClient):
         entities_dict = result.get('entities', {})
 
         for entity_type, entity_items in entities_dict.items():
-            entity_type_id = label_to_id.get(entity_type, 0)
+            entity_type_id = label_to_id.get(entity_type, label_to_id.get('Entity', 0))
             for item in entity_items:
                 # GLiNER2 returns strings or dicts (when include_confidence=True)
                 name = item.get('text', '') if isinstance(item, dict) else str(item)
 
                 if name:
-                    extracted_entities.append({
-                        'name': name,
-                        'entity_type_id': entity_type_id,
-                    })
+                    extracted_entities.append(
+                        {
+                            'name': name,
+                            'entity_type_id': entity_type_id,
+                        }
+                    )
 
         return {'extracted_entities': extracted_entities}
 
@@ -226,8 +226,11 @@ class GLiNER2Client(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
-        model = self._get_model_for_size(model_size)
+        # String model ids cannot select a GLiNER2 weight bound at init; ignore them.
+        gliner_model = self._get_model_for_size(model_size)
         text = self._extract_text_from_messages(messages)
 
         if not text:
@@ -236,7 +239,7 @@ class GLiNER2Client(LLMClient):
 
         try:
             t0 = perf_counter()
-            result = await self._handle_entity_extraction(model, text, messages)
+            result = await self._handle_entity_extraction(gliner_model, text, messages)
             latency_ms = (perf_counter() - t0) * 1000
             self.extraction_latencies.append(latency_ms)
             logger.info('GLiNER2 entity extraction: %.1f ms', latency_ms)
@@ -258,9 +261,15 @@ class GLiNER2Client(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
-        # Delegate non-extraction operations to the LLM client
+        # Delegate non-extraction operations to the wrapped LLM client.
         if not self._is_gliner2_operation(response_model):
+            overrides: dict[str, typing.Any] = {}
+            if model is not None:
+                overrides['model'] = model
             return await self.llm_client.generate_response(
                 messages,
                 response_model=response_model,
@@ -268,6 +277,8 @@ class GLiNER2Client(LLMClient):
                 model_size=model_size,
                 group_id=group_id,
                 prompt_name=prompt_name,
+                attribute_extraction=attribute_extraction,
+                **overrides,
             )
 
         if max_tokens is None:
@@ -303,15 +314,10 @@ class GLiNER2Client(LLMClient):
                     messages, response_model, max_tokens, model_size
                 )
 
-                # Approximate token usage (GLiNER2 doesn't report actual tokens)
                 text = self._extract_text_from_messages(messages)
                 input_tokens = len(text) // 4
                 output_tokens = len(json.dumps(response)) // 4
-                self.token_tracker.record(
-                    prompt_name or 'unknown',
-                    input_tokens,
-                    output_tokens,
-                )
+                self.token_tracker.record(prompt_name or 'unknown', input_tokens, output_tokens)
             except Exception as e:
                 span.set_status('error', str(e))
                 span.record_exception(e)

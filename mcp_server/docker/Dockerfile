@@ -1,56 +1,103 @@
 # syntax=docker/dockerfile:1
-# Combined FalkorDB + Graphiti MCP Server Image
-# This extends the official FalkorDB image to include the MCP server
+# The image adds a uv-managed Python and the MCP environment to the FalkorDB image.
+# It does not run apt, because FalkorDB removes perl, which apt package scripts need.
 
-FROM falkordb/falkordb:latest AS falkordb-base
+FROM falkordb/falkordb:latest
 
-# Install Python and system dependencies
-# Note: Debian Bookworm (FalkorDB base) ships with Python 3.11
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-dev \
-    python3-pip \
-    curl \
-    ca-certificates \
-    procps \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install uv for Python package management
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
-
-# Add uv to PATH
-ENV PATH="/root/.local/bin:${PATH}"
+# Copy uv into the image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Configure uv for optimal Docker usage
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=never \
-    MCP_SERVER_HOST="0.0.0.0" \
-    PYTHONUNBUFFERED=1
+    UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_PYTHON_PREFERENCE=only-managed \
+    UV_PYTHON=3.13
+
+# Download the uv-managed CPython build, not a registry package.
+RUN uv python install 3.13
+
+# Install Socket Firewall (sfw) for dependency fetches when SOCKET_API_KEY is
+# provided as a BuildKit secret. Community builds without the secret fall back
+# to direct installs.
+ARG TARGETARCH
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) SFW_ARCH=x86_64 ;; \
+      arm64) SFW_ARCH=arm64 ;; \
+      *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    sfw_url="https://github.com/SocketDev/firewall-release/releases/latest/download/sfw-linux-${SFW_ARCH}"; \
+    for attempt in 1 2 3; do \
+      "$(uv python find 3.13)" -c "import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" "$sfw_url" /usr/local/bin/sfw && break; \
+      if [ "$attempt" = 3 ]; then echo "sfw download failed" >&2; exit 1; fi; \
+      sleep 5; \
+    done; \
+    chmod +x /usr/local/bin/sfw
 
 # Set up MCP server directory
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.28.1
+ARG GRAPHITI_CORE_VERSION=0.32.0
+ARG SOCKET_FIREWALL_ENABLED=false
+# Unique per release run so enforced builds re-resolve and re-download instead
+# of reusing cached layers, which sfw would never see.
+ARG SOCKET_SCAN_ID=
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
 
 # Remove the local path override for graphiti-core in Docker builds
-# and regenerate lock file to match the PyPI version
-RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
+# and regenerate lock file to match the PyPI version.
+# When socket_api_key is mounted (official releases), route through sfw.
+RUN --mount=type=secret,id=socket_api_key \
+    set -eu; \
+    export SFW_TELEMETRY_DISABLED=true; \
+    export SFW_CUSTOM_REGISTRIES="wrap:storage.googleapis.com,wrap:classic.yarnpkg.com,wrap:files.pythonhosted.org"; \
+    if [ "$SOCKET_FIREWALL_ENABLED" = "true" ]; then \
+      if [ ! -s /run/secrets/socket_api_key ]; then \
+        echo "ERROR: SOCKET_FIREWALL_ENABLED=true but socket_api_key is missing" >&2; \
+        exit 1; \
+      fi; \
+      export SOCKET_API_KEY="$(cat /run/secrets/socket_api_key)"; \
+      export UV_NO_CACHE=1; \
+      echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID})"; \
+      UV_CMD="sfw uv"; \
+    else \
+      echo "socket_api_key absent; installing without Socket Firewall"; \
+      UV_CMD="uv"; \
+    fi; \
+    sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml; \
     if [ -n "${GRAPHITI_CORE_VERSION}" ]; then \
       sed -i "s/graphiti-core\[falkordb\][>=]\+[0-9]\+\.[0-9]\+\.[0-9]\+/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
-    fi && \
-    echo "Regenerating lock file for PyPI graphiti-core..." && \
-    rm -f uv.lock && \
-    uv lock
+    fi; \
+    echo "Regenerating lock file for PyPI graphiti-core..."; \
+    rm -f uv.lock; \
+    $UV_CMD lock
 
 # Install Python dependencies (exclude dev dependency group)
+# Include optional provider extras so the image matches the providers
+# advertised by the MCP server configuration and docs.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+    --mount=type=secret,id=socket_api_key \
+    set -eu; \
+    export SFW_TELEMETRY_DISABLED=true; \
+    export SFW_CUSTOM_REGISTRIES="wrap:storage.googleapis.com,wrap:classic.yarnpkg.com,wrap:files.pythonhosted.org"; \
+    if [ "$SOCKET_FIREWALL_ENABLED" = "true" ]; then \
+      if [ ! -s /run/secrets/socket_api_key ]; then \
+        echo "ERROR: SOCKET_FIREWALL_ENABLED=true but socket_api_key is missing" >&2; \
+        exit 1; \
+      fi; \
+      export SOCKET_API_KEY="$(cat /run/secrets/socket_api_key)"; \
+      export UV_NO_CACHE=1; \
+      echo "Socket Firewall enforced (scan id: ${SOCKET_SCAN_ID})"; \
+      UV_CMD="sfw uv"; \
+    else \
+      echo "socket_api_key absent; installing without Socket Firewall"; \
+      UV_CMD="uv"; \
+    fi; \
+    $UV_CMD sync --no-group dev --extra providers --extra azure
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
@@ -62,6 +109,12 @@ COPY config/ ./config/
 
 # Copy FalkorDB combined config (uses localhost since both services in same container)
 COPY config/config-docker-falkordb-combined.yaml /app/mcp/config/config.yaml
+
+ENV PATH="/app/mcp/.venv/bin:${PATH}" \
+    SERVER__HOST="0.0.0.0" \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app/mcp
 
 # Create log and data directories
 RUN mkdir -p /var/log/graphiti /var/lib/falkordb/data
@@ -106,13 +159,14 @@ fi
 # Start MCP server in foreground
 echo "Starting MCP server..."
 cd /app/mcp
-exec /root/.local/bin/uv run --no-sync main.py
+exec /app/mcp/.venv/bin/python main.py
 EOF
 
 RUN chmod +x /start-services.sh
 
 # Add Docker labels with version information
-ARG MCP_SERVER_VERSION=1.0.1
+ARG GRAPHITI_CORE_VERSION=0.32.0
+ARG MCP_SERVER_VERSION=1.1.3
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL org.opencontainers.image.title="FalkorDB + Graphiti MCP Server" \

@@ -28,17 +28,6 @@ EPISODIC_EDGE_SAVE = """
 
 
 def get_episodic_edge_save_bulk_query(provider: GraphProvider) -> str:
-    if provider == GraphProvider.KUZU:
-        return """
-            MATCH (episode:Episodic {uuid: $source_node_uuid})
-            MATCH (node:Entity {uuid: $target_node_uuid})
-            MERGE (episode)-[e:MENTIONS {uuid: $uuid}]->(node)
-            SET
-                e.group_id = $group_id,
-                e.created_at = $created_at
-            RETURN e.uuid AS uuid
-        """
-
     return """
         UNWIND $episodic_edges AS edge
         MATCH (episode:Episodic {uuid: edge.source_node_uuid})
@@ -81,22 +70,12 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                 SET e.episodes = join($edge_data.episodes, ",")
                 RETURN $edge_data.uuid AS uuid
             """
-        case GraphProvider.KUZU:
+        case GraphProvider.RELATE:
             return """
-                MATCH (source:Entity {uuid: $source_uuid})
-                MATCH (target:Entity {uuid: $target_uuid})
-                MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(target)
-                SET
-                    e.group_id = $group_id,
-                    e.created_at = $created_at,
-                    e.name = $name,
-                    e.fact = $fact,
-                    e.fact_embedding = $fact_embedding,
-                    e.episodes = $episodes,
-                    e.expired_at = $expired_at,
-                    e.valid_at = $valid_at,
-                    e.invalid_at = $invalid_at,
-                    e.attributes = $attributes
+                MATCH (source:Entity {uuid: $edge_data.source_uuid})
+                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
+                SET e = $edge_data
                 RETURN e.uuid AS uuid
             """
         case _:  # Neo4j
@@ -145,23 +124,14 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                 SET r.episodes = join(edge.episodes, ",")
                 RETURN edge.uuid AS uuid
             """
-        case GraphProvider.KUZU:
+        case GraphProvider.RELATE:
             return """
-                MATCH (source:Entity {uuid: $source_node_uuid})
-                MATCH (target:Entity {uuid: $target_node_uuid})
-                MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(target)
-                SET
-                    e.group_id = $group_id,
-                    e.created_at = $created_at,
-                    e.name = $name,
-                    e.fact = $fact,
-                    e.fact_embedding = $fact_embedding,
-                    e.episodes = $episodes,
-                    e.expired_at = $expired_at,
-                    e.valid_at = $valid_at,
-                    e.invalid_at = $invalid_at,
-                    e.attributes = $attributes
-                RETURN e.uuid AS uuid
+                UNWIND $entity_edges AS edge
+                MATCH (source:Entity {uuid: edge.source_node_uuid})
+                MATCH (target:Entity {uuid: edge.target_node_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
+                SET e = edge
+                RETURN edge.uuid AS uuid
             """
         case _:
             save_embedding_query = (
@@ -184,14 +154,29 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
             )
 
 
+def get_entity_edge_update_bulk_query(provider: GraphProvider, has_aoss: bool = False) -> str:
+    """Return the bulk save query of the provider, with `MATCH` in the place of `MERGE`.
+
+    The query changes an edge that exists and creates nothing. Concurrent ingestion
+    uses it to update a stored edge, so that an edge that a different writer deleted
+    is not created again.
+    """
+    query = get_entity_edge_save_bulk_query(provider, has_aoss)
+    if query.count('MERGE (source)-[') != 1:
+        raise ValueError(f'no update query for the entity edge save query of {provider}')
+    return query.replace('MERGE (source)-[', 'MATCH (source)-[')
+
+
 def get_entity_edge_return_query(provider: GraphProvider) -> str:
     # `fact_embedding` is not returned by default and must be manually loaded using `load_fact_embedding()`.
-
+    # Direction semantics: NEO4J/FALKORDB/NEPTUNE read source/target from the relationship itself
+    # via Cypher's built-in `startNode(e)`/`endNode(e)`, so the returned direction matches the
+    # stored relationship regardless of whether the surrounding MATCH is directed or undirected.
     if provider == GraphProvider.NEPTUNE:
         return """
         e.uuid AS uuid,
-        n.uuid AS source_node_uuid,
-        m.uuid AS target_node_uuid,
+        startNode(e).uuid AS source_node_uuid,
+        endNode(e).uuid AS target_node_uuid,
         e.group_id AS group_id,
         e.name AS name,
         e.fact AS fact,
@@ -200,13 +185,14 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
+        e.reference_time AS reference_time,
         properties(e) AS attributes
     """
 
     return """
         e.uuid AS uuid,
-        n.uuid AS source_node_uuid,
-        m.uuid AS target_node_uuid,
+        startNode(e).uuid AS source_node_uuid,
+        endNode(e).uuid AS target_node_uuid,
         e.group_id AS group_id,
         e.created_at AS created_at,
         e.name AS name,
@@ -215,11 +201,9 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
-    """ + (
-        'e.attributes AS attributes'
-        if provider == GraphProvider.KUZU
-        else 'properties(e) AS attributes'
-    )
+        e.reference_time AS reference_time,
+        properties(e) AS attributes
+    """
 
 
 def get_community_edge_save_query(provider: GraphProvider) -> str:
@@ -243,24 +227,6 @@ def get_community_edge_save_query(provider: GraphProvider) -> str:
                 SET r.created_at= $created_at
                 RETURN r.uuid AS uuid
             """
-        case GraphProvider.KUZU:
-            return """
-                MATCH (community:Community {uuid: $community_uuid})
-                MATCH (node:Entity {uuid: $entity_uuid})
-                MERGE (community)-[e:HAS_MEMBER {uuid: $uuid}]->(node)
-                SET
-                    e.group_id = $group_id,
-                    e.created_at = $created_at
-                RETURN e.uuid AS uuid
-                UNION
-                MATCH (community:Community {uuid: $community_uuid})
-                MATCH (node:Community {uuid: $entity_uuid})
-                MERGE (community)-[e:HAS_MEMBER {uuid: $uuid}]->(node)
-                SET
-                    e.group_id = $group_id,
-                    e.created_at = $created_at
-                RETURN e.uuid AS uuid
-            """
         case _:  # Neo4j
             return """
                 MATCH (community:Community {uuid: $community_uuid})
@@ -281,8 +247,8 @@ COMMUNITY_EDGE_RETURN = """
 
 
 HAS_EPISODE_EDGE_SAVE = """
-    MATCH (saga:Saga {uuid: $saga_uuid})
-    MATCH (episode:Episodic {uuid: $episode_uuid})
+    MATCH (saga:Saga {uuid: $saga_uuid, group_id: $group_id})
+    MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
     MERGE (saga)-[e:HAS_EPISODE {uuid: $uuid}]->(episode)
     SET
         e.group_id = $group_id,
@@ -300,8 +266,8 @@ HAS_EPISODE_EDGE_RETURN = """
 
 
 NEXT_EPISODE_EDGE_SAVE = """
-    MATCH (source_episode:Episodic {uuid: $source_episode_uuid})
-    MATCH (target_episode:Episodic {uuid: $target_episode_uuid})
+    MATCH (source_episode:Episodic {uuid: $source_episode_uuid, group_id: $group_id})
+    MATCH (target_episode:Episodic {uuid: $target_episode_uuid, group_id: $group_id})
     MERGE (source_episode)-[e:NEXT_EPISODE {uuid: $uuid}]->(target_episode)
     SET
         e.group_id = $group_id,

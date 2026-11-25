@@ -16,13 +16,20 @@ limitations under the License.
 
 # Running tests: pytest -xvs tests/llm_client/test_anthropic_client.py
 
+import logging
 import os
+from typing import get_args
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
-from graphiti_core.llm_client.anthropic_client import AnthropicClient
+from graphiti_core.llm_client.anthropic_client import (
+    ANTHROPIC_MODEL_MAX_TOKENS,
+    DEFAULT_ANTHROPIC_MAX_TOKENS,
+    AnthropicClient,
+    AnthropicModel,
+)
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.errors import RateLimitError, RefusalError
 from graphiti_core.prompts.models import Message
@@ -76,12 +83,19 @@ class TestAnthropicClientInitialization:
         assert client.temperature == 0.5
         assert client.max_tokens == 1000
 
+    @pytest.mark.parametrize(('temperature', 'warns'), [(0.5, True), (1, False), (None, False)])
+    def test_init_warns_when_temperature_is_ignored(self, caplog, temperature, warns):
+        config = LLMConfig(api_key='test_api_key', temperature=temperature)
+        with caplog.at_level(logging.WARNING, logger='graphiti_core.llm_client.anthropic_client'):
+            AnthropicClient(config=config, cache=False)
+        assert ('ignores temperature' in caplog.text) == warns
+
     def test_init_with_default_model(self):
         """Test initialization with default model when none is provided."""
         config = LLMConfig(api_key='test_api_key')
         client = AnthropicClient(config=config, cache=False)
 
-        assert client.model == 'claude-haiku-4-5-latest'
+        assert client.model == 'claude-haiku-5-5'
 
     @patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'env_api_key'})
     def test_init_without_config(self):
@@ -89,7 +103,7 @@ class TestAnthropicClientInitialization:
         client = AnthropicClient(cache=False)
 
         assert client.config.api_key == 'env_api_key'
-        assert client.model == 'claude-haiku-4-5-latest'
+        assert client.model == 'claude-haiku-5-5'
 
     def test_init_with_custom_client(self):
         """Test initialization with a custom AsyncAnthropic client."""
@@ -97,6 +111,16 @@ class TestAnthropicClientInitialization:
         client = AnthropicClient(client=mock_client)
 
         assert client.client == mock_client
+
+    def test_model_limits_match_supported_models(self, anthropic_client):
+        assert set(get_args(AnthropicModel)) == set(ANTHROPIC_MODEL_MAX_TOKENS)
+        assert all('-5' in model for model in get_args(AnthropicModel))
+        for model in get_args(AnthropicModel):
+            assert anthropic_client._get_max_tokens_for_model(model) == 128000
+
+    @pytest.mark.parametrize('model', ['', 'unknown-model'])
+    def test_unknown_model_token_limit(self, anthropic_client, model):
+        assert anthropic_client._get_max_tokens_for_model(model) == DEFAULT_ANTHROPIC_MAX_TOKENS
 
 
 class TestAnthropicClientGenerateResponse:
@@ -127,6 +151,7 @@ class TestAnthropicClientGenerateResponse:
         assert isinstance(result, dict)
         assert result['test_field'] == 'test_value'
         mock_async_anthropic.messages.create.assert_called_once()
+        assert 'temperature' not in mock_async_anthropic.messages.create.call_args.kwargs
 
     @pytest.mark.asyncio
     async def test_generate_response_with_text_response(

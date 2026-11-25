@@ -80,8 +80,9 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
                 'text_format': response_model,  # type: ignore
             }
 
-            if reasoning:
-                request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+            effort = self._resolve_reasoning_effort(model, reasoning)
+            if effort:
+                request_kwargs['reasoning'] = {'effort': effort}  # type: ignore
 
             if verbosity:
                 request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
@@ -163,5 +164,4 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
     @staticmethod
     def _supports_reasoning_features(model: str) -> bool:
         """Return True when the Azure model supports reasoning/verbosity options."""
-        reasoning_prefixes = ('o1', 'o3', 'gpt-5')
-        return model.startswith(reasoning_prefixes)
+        return BaseOpenAIClient._is_reasoning_model(model)

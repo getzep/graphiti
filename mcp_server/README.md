@@ -7,9 +7,14 @@ coherent, queryable graph. The framework supports incremental data updates, effi
 queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI
 applications.
 
+> **Security:** This server is a reference implementation. Do not use the server as a production deployment. The server has no authentication, no authorization, and no prompt-injection protection. These omissions are intentional. Any caller can read, change, or delete all graph data. Do not expose the server to an untrusted network. For production options, see [Reference MCP and REST servers](../README.md#reference-mcp-and-rest-servers). For the security scope, see the [security policy scope](../SECURITY.md#scope).
+
 This is an experimental Model Context Protocol (MCP) server implementation for Graphiti. The MCP server exposes
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
 graph capabilities.
+
+To expose the server on all interfaces, pass `--host 0.0.0.0` or set `server.host`, or change the host-side port
+mapping in Docker Compose; the server has no authentication.
 
 ## Features
 
@@ -107,7 +112,7 @@ The server can be configured using a `config.yaml` file, environment variables, 
 The MCP server comes with sensible defaults:
 - **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
 - **Database**: FalkorDB (combined in single container with MCP server)
-- **LLM**: OpenAI with model gpt-5-mini
+- **LLM**: OpenAI with model gpt-6-luna
 - **Embedder**: OpenAI text-embedding-3-small
 
 ### Database Configuration
@@ -128,7 +133,7 @@ database:
 
 #### Neo4j
 
-For production use or when you need a full-featured graph database, Neo4j is recommended:
+When you need a full-featured graph database, Neo4j is recommended:
 
 ```yaml
 database:
@@ -165,7 +170,9 @@ server:
 
 llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
-  model: "gpt-4.1"  # Default model
+  model: "gpt-6-luna"  # Default model
+  # Optional for OpenAI-compatible providers: "json_schema" (default) or "json_object"
+  structured_output_mode: "json_schema"
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
@@ -181,6 +188,7 @@ llm:
   model: "gpt-oss:120b"  # or your preferred Ollama model
   api_base: "http://localhost:11434/v1"
   api_key: "ollama"  # dummy key required
+  structured_output_mode: "json_object"  # use when json_schema is accepted but not enforced
 
 embedder:
   provider: "sentence_transformers"  # recommended for local setup
@@ -188,6 +196,16 @@ embedder:
 ```
 
 Make sure Ollama is running locally with: `ollama serve`
+
+> [!IMPORTANT]
+> Graphiti relies on structured (JSON) output for entity/edge extraction and deduplication, and reliability varies on
+> small or local models. Prefer the most capable model your hardware can run — very small models frequently emit JSON
+> that doesn't match the expected schema, which surfaces as ingestion failures. For background and the
+> `structured_output_mode` (`json_schema` vs `json_object`) trade-off, see the core README's
+> [Structured output and small models](../README.md#structured-output-and-small-models) section.
+> If an OpenAI-compatible endpoint accepts `json_schema` but returns objects that miss fields such as
+> `extracted_entities`, set `structured_output_mode: "json_object"` so Graphiti injects the schema into the prompt
+> instead of relying on provider-side schema enforcement.
 
 ### Entity Types
 
@@ -200,6 +218,7 @@ Graphiti MCP Server includes built-in entity types for structured knowledge extr
 - **Procedure**: Standard operating procedures and sequential instructions
 - **Location**: Physical or virtual places where activities occur
 - **Event**: Time-bound activities, occurrences, or experiences
+- **Person**: An individual human referenced in the content
 - **Organization**: Companies, institutions, groups, or formal entities
 - **Document**: Information content in various forms (books, articles, reports, videos, etc.)
 - **Topic**: Subject of conversation, interest, or knowledge domain (used as a fallback)
@@ -219,6 +238,8 @@ graphiti:
 
 The MCP server automatically uses these entity types during episode ingestion to extract and structure information from conversations and documents.
 
+> **Upgrade note:** These built-in types are now registered as rich models with typed attributes (e.g. a `description`), so extraction stores those attributes on entities. The shipped default `config.yaml` enables them, so an existing deployment on the default config switches from attribute-free to rich-attribute extraction. To keep the previous behavior, set `graphiti.entity_types` to an empty list (or remove the entries).
+
 ### Environment Variables
 
 The `config.yaml` file supports environment variable expansion using `${VAR_NAME}` or `${VAR_NAME:default}` syntax. Key variables:
@@ -226,6 +247,7 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
+- `NEO4J_DATABASE`: Neo4j database name (default: `neo4j`)
 - `OPENAI_API_KEY`: OpenAI API key (required for OpenAI LLM/embedder)
 - `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
 - `GOOGLE_API_KEY`: Google API key (for Gemini models)
@@ -255,7 +277,7 @@ This starts a single container with:
 - HTTP transport on `http://localhost:8000/mcp/`
 - FalkorDB graph database on `localhost:6379`
 - FalkorDB web UI on `http://localhost:3000`
-- OpenAI LLM with gpt-5-mini model
+- OpenAI LLM with gpt-6-luna model
 
 ### Running with Neo4j
 
@@ -321,7 +343,7 @@ uv run main.py --config config/config-docker-falkordb.yaml
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
 - `--database-provider`: Database provider to use (falkordb, neo4j) - default: falkordb
 - `--model`: Model name to use with the LLM client
-- `--temperature`: Temperature setting for the LLM (0.0-2.0)
+- `--temperature`: Temperature setting for the LLM (0.0-2.0). The Anthropic provider ignores this setting.
 - `--transport`: Choose the transport method (http or stdio, default: http)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "main"
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup
@@ -516,7 +538,7 @@ To use the Graphiti MCP server with other MCP-compatible clients, configure it t
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password",
         "OPENAI_API_KEY": "sk-XXXXXXXX",
-        "MODEL_NAME": "gpt-4.1-mini"
+        "MODEL_NAME": "gpt-6-luna"
       }
     }
   }
@@ -540,15 +562,42 @@ For HTTP transport (default), you can use this configuration:
 
 The Graphiti MCP server exposes the following tools:
 
-- `add_episode`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
-- `search_nodes`: Search the knowledge graph for relevant node summaries
-- `search_facts`: Search the knowledge graph for relevant facts (edges between entities)
-- `delete_entity_edge`: Delete an entity edge from the knowledge graph
-- `delete_episode`: Delete an episode from the knowledge graph
-- `get_entity_edge`: Get an entity edge by its UUID
-- `get_episodes`: Get the most recent episodes for a specific group
-- `clear_graph`: Clear all data from the knowledge graph and rebuild indices
-- `get_status`: Get the status of the Graphiti MCP server and Neo4j connection
+- `add_memory`: Add an episode to the knowledge graph (supports text, JSON, and message formats).
+  Supports the bi-temporal `reference_time`, `excluded_entity_types`, `custom_extraction_instructions`,
+  `previous_episode_uuids`, `update_communities`, and `saga` / `saga_previous_episode_uuid`.
+- `add_triplet`: Add a single fact (source entity -> fact -> target entity) directly, bypassing extraction.
+- `search_nodes`: Search the knowledge graph for relevant entities; supports `entity_types` and `center_node_uuid`.
+- `search_memory_facts`: Search for relevant facts (edges); supports `edge_types`, `center_node_uuid`,
+  and `valid_at` / `invalid_at` date-range filters.
+- `summarize_saga`: Generate or refresh the running summary of a saga's episodes.
+  Accepts an optional `group_id`; defaults to the configured group. The tool returns an error
+  when the saga is not in that group.
+- `build_communities`: Detect entity communities and produce higher-level community summaries.
+- `get_episode_entities`: Trace provenance — the entities and facts created by specific episode UUIDs.
+  Accepts an optional `group_id`; defaults to the configured group. If one of the episode UUIDs is
+  not in that group, the tool returns an error for the whole request. If no group is configured and
+  the caller does not give `group_id`, the tool does not check the group of the episode UUIDs.
+- `delete_entity_edge`: Delete an entity edge from the knowledge graph.
+  Accepts an optional `group_id`; defaults to the configured group. If the edge UUID is not in
+  that group, the tool returns an error and does not delete the edge.
+- `delete_episode`: Delete an episode and cascade-delete the entities/facts it solely created.
+  Accepts an optional `group_id`; defaults to the configured group. If an episode UUID is not in
+  that group, the tool returns an error and does not read or delete data. If no group is configured
+  and the caller does not give `group_id`, the tool does not check the group of the episode UUID.
+- `get_entity_edge`: Get an entity edge by its UUID. Accepts an optional `group_id`; defaults to
+  the configured group. If the edge UUID is not in that group, the tool returns an error and
+  does not return the fact.
+- `get_episodes`: Get the most recent episodes for one or more groups (`group_ids`).
+- `clear_graph`: Clear all data from the knowledge graph for the given group(s).
+- `get_status`: Get the status of the Graphiti MCP server and database connection.
+
+On FalkorDB, each `group_id` is stored in its own graph. Pass the same `group_id` that you used with
+`add_memory` when you read, delete, or clear data for that group. Without a `group_id`, tools use the
+server's configured default group.
+
+Custom entity types and edge (fact) types — including which edge types may connect which entity types —
+can be configured under the `graphiti` section of `config/config.yaml`. See the `entity_types`,
+`edge_types`, and `edge_type_map` keys there.
 
 ## Working with JSON Data
 

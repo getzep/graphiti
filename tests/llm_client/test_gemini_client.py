@@ -147,6 +147,11 @@ class TestGeminiClientGenerateResponse:
         assert result['test_field'] == 'test_value'
         assert result['optional_field'] == 42
         mock_gemini_client.aio.models.generate_content.assert_called_once()
+        config = mock_gemini_client.aio.models.generate_content.call_args.kwargs['config']
+        assert config.response_mime_type == 'application/json'
+        assert config.response_schema is ResponseModel
+        assert 'System message' in config.system_instruction
+        assert 'Output ONLY valid JSON matching this schema' not in config.system_instruction
 
     @pytest.mark.asyncio
     async def test_generate_response_with_system_message(self, gemini_client, mock_gemini_client):

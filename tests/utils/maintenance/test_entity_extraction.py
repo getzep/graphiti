@@ -25,6 +25,8 @@ from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
     _extract_entity_summaries_batch,
+    _filter_entity_types_context,
+    _truncate_type_description,
     extract_nodes,
 )
 
@@ -81,7 +83,7 @@ class TestExtractNodesSmallInput:
         # Small content (below threshold)
         episode = _make_episode(content='Alice talked to Bob.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -115,7 +117,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice works at Acme Corp.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -132,7 +134,7 @@ class TestExtractNodesSmallInput:
 
     @pytest.mark.asyncio
     async def test_excludes_entity_types(self, monkeypatch):
-        """Excluded entity types should not appear in results."""
+        """Excluded entity types should not be included in the extraction prompt."""
         clients, llm_generate = _make_clients()
 
         from pydantic import BaseModel
@@ -144,14 +146,13 @@ class TestExtractNodesSmallInput:
 
         llm_generate.return_value = {
             'extracted_entities': [
-                {'name': 'Alice', 'entity_type_id': 1},  # User (excluded)
                 {'name': 'Project X', 'entity_type_id': 0},  # Entity
             ]
         }
 
         episode = _make_episode(content='Alice created Project X.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -159,9 +160,64 @@ class TestExtractNodesSmallInput:
             excluded_entity_types=['User'],
         )
 
-        # Alice should be excluded
         assert len(nodes) == 1
         assert nodes[0].name == 'Project X'
+        prompt_text = '\n'.join(message.content for message in llm_generate.call_args.args[0])
+        assert "'entity_type_name': 'User'" not in prompt_text
+
+    @pytest.mark.asyncio
+    async def test_excluding_default_entity_remaps_custom_type_to_zero(self, monkeypatch):
+        """Strict ontology should let custom types use id 0 after Entity is removed."""
+        clients, llm_generate = _make_clients()
+
+        from pydantic import BaseModel
+
+        class Company(BaseModel):
+            """A named business or organization."""
+
+            pass
+
+        llm_generate.return_value = {
+            'extracted_entities': [
+                {'name': 'Acme Robotics', 'entity_type_id': 0},
+            ]
+        }
+
+        episode = _make_episode(content='Acme Robotics announced the Atlas launch.')
+
+        nodes, _ = await extract_nodes(
+            clients,
+            episode,
+            previous_episodes=[],
+            entity_types={'Company': Company},
+            excluded_entity_types=['Entity'],
+        )
+
+        assert len(nodes) == 1
+        assert nodes[0].name == 'Acme Robotics'
+        assert set(nodes[0].labels) == {'Entity', 'Company'}
+        prompt_text = '\n'.join(message.content for message in llm_generate.call_args.args[0])
+        assert "'entity_type_name': 'Entity'" not in prompt_text
+        assert "'entity_type_id': 0" in prompt_text
+        assert "'entity_type_name': 'Company'" in prompt_text
+
+    @pytest.mark.asyncio
+    async def test_excluding_all_entity_types_skips_llm(self, monkeypatch):
+        """No allowed entity types means there is nothing to extract."""
+        clients, llm_generate = _make_clients()
+
+        episode = _make_episode(content='Acme Robotics announced the Atlas launch.')
+
+        nodes, node_episode_index_map = await extract_nodes(
+            clients,
+            episode,
+            previous_episodes=[],
+            excluded_entity_types=['Entity'],
+        )
+
+        assert nodes == []
+        assert node_episode_index_map == {}
+        llm_generate.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_filters_empty_names(self, monkeypatch):
@@ -178,7 +234,7 @@ class TestExtractNodesSmallInput:
 
         episode = _make_episode(content='Alice is here.')
 
-        nodes = await extract_nodes(
+        nodes, _ = await extract_nodes(
             clients,
             episode,
             previous_episodes=[],
@@ -186,6 +242,45 @@ class TestExtractNodesSmallInput:
 
         assert len(nodes) == 1
         assert nodes[0].name == 'Alice'
+
+    @pytest.mark.asyncio
+    async def test_collapses_exact_duplicate_names_preferring_specific_type(self, monkeypatch):
+        """Exact same-name duplicates from one message should collapse deterministically."""
+        clients, llm_generate = _make_clients()
+
+        from pydantic import BaseModel
+
+        class Person(BaseModel):
+            """A human person."""
+
+            pass
+
+        llm_generate.return_value = {
+            'extracted_entities': [
+                {'name': 'Caroline', 'entity_type_id': 0},  # Default Entity
+                {'name': 'Caroline', 'entity_type_id': 1},  # Person
+                {'name': 'Melanie', 'entity_type_id': 1},
+            ]
+        }
+
+        episode = _make_episode(
+            content=(
+                'Caroline: Hey Mel! Good to see you! How have you been?\n'
+                'Melanie: Hey Caroline! Good to see you!'
+            ),
+            source=EpisodeType.message,
+        )
+
+        nodes, _ = await extract_nodes(
+            clients,
+            episode,
+            previous_episodes=[],
+            entity_types={'Person': Person},
+        )
+
+        assert [node.name for node in nodes] == ['Caroline', 'Melanie']
+        caroline = next(node for node in nodes if node.name == 'Caroline')
+        assert 'Person' in caroline.labels
 
 
 class TestExtractNodesPromptSelection:
@@ -266,6 +361,37 @@ class TestBuildEntityTypesContext:
         assert context[1]['entity_type_id'] == 1
         assert context[2]['entity_type_name'] == 'Organization'
         assert context[2]['entity_type_id'] == 2
+
+    def test_filter_excluded_entity_types_remaps_ids(self):
+        """Filtered type contexts should expose contiguous IDs to the LLM."""
+        from pydantic import BaseModel
+
+        class Person(BaseModel):
+            """A human person."""
+
+            pass
+
+        class Organization(BaseModel):
+            """A business or organization."""
+
+            pass
+
+        context = _build_entity_types_context(
+            {
+                'Person': Person,
+                'Organization': Organization,
+            }
+        )
+
+        filtered_context = _filter_entity_types_context(context, ['Entity', 'Person'])
+
+        assert filtered_context == [
+            {
+                'entity_type_id': 0,
+                'entity_type_name': 'Organization',
+                'entity_type_description': 'A business or organization.',
+            }
+        ]
 
 
 def _make_entity_node(
@@ -560,3 +686,62 @@ class TestExtractEntitySummariesBatch:
 
         # Should match despite case difference
         assert node.summary == 'Alice summary from LLM.'
+
+
+class TestTruncateTypeDescription:
+    def test_single_sentence_passes_through(self):
+        assert (
+            _truncate_type_description('A human person who interacts with the system.')
+            == 'A human person who interacts with the system.'
+        )
+
+    def test_stops_at_first_blank_line(self):
+        doc = 'A human person.\n\nGOOD: Alice, Bob\nBAD: happiness'
+        assert _truncate_type_description(doc) == 'A human person.'
+
+    def test_caps_at_3_sentences(self):
+        doc = 'First. Second. Third. Fourth should be dropped.'
+        assert _truncate_type_description(doc) == 'First. Second. Third.'
+
+    def test_first_paragraph_with_multiple_sentences(self):
+        doc = 'A specific thing. It has properties. Use it wisely.\n\nGOOD: example'
+        assert (
+            _truncate_type_description(doc) == 'A specific thing. It has properties. Use it wisely.'
+        )
+
+    def test_skips_leading_blank_lines(self):
+        doc = '\n\nA location.\n\nGOOD: New York'
+        assert _truncate_type_description(doc) == 'A location.'
+
+    def test_joins_multiline_first_paragraph(self):
+        doc = 'A specific, named subject\nor knowledge domain.\n\nGOOD: cooking'
+        assert _truncate_type_description(doc) == 'A specific, named subject or knowledge domain.'
+
+    def test_empty_string(self):
+        assert _truncate_type_description('') == ''
+
+    def test_no_sentence_ending_punctuation(self):
+        assert (
+            _truncate_type_description('A human person who interacts with the system')
+            == 'A human person who interacts with the system'
+        )
+
+    def test_realistic_preference_docstring(self):
+        doc = (
+            'A specific thing that a speaker likes, dislikes, wants, '
+            'or has expressed an opinion about.\n\n'
+            'GOOD: "sushi"\nBAD: do not use\n\n'
+            'Trigger patterns: "I love X"'
+        )
+        assert _truncate_type_description(doc) == (
+            'A specific thing that a speaker likes, dislikes, wants, '
+            'or has expressed an opinion about.'
+        )
+
+    def test_preserves_abbreviations(self):
+        doc = "An entity used in e.g. medical contexts. It tracks Dr. Smith's patients."
+        assert _truncate_type_description(doc) == doc
+
+    def test_preserves_decimals(self):
+        doc = 'Requires version 2.0 or higher. Must be certified.'
+        assert _truncate_type_description(doc) == doc

@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 from typing import Any
 
-from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.driver.record_parsers import entity_node_from_record
@@ -180,6 +180,29 @@ class FalkorEntityNodeOperations(EntityNodeOperations):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ) -> list[EntityNode]:
+        # For FalkorDB, route each group_id to its own graph database. The
+        # namespace/ops path receives the base driver (default_db), so a
+        # single-group read must be cloned to the group's graph or it queries
+        # an empty default database and returns nothing.
+        if (
+            isinstance(executor, GraphDriver)
+            and executor.provider == GraphProvider.FALKORDB
+            and group_ids
+        ):
+            if len(group_ids) == 1:
+                executor = executor.clone(database=group_ids[0])
+            else:
+                all_nodes: list[EntityNode] = []
+                for gid in group_ids:
+                    partial = await self.get_by_group_ids(
+                        executor.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_nodes.extend(partial)
+                all_nodes.sort(key=lambda n: n.uuid, reverse=True)
+                if limit is not None:
+                    all_nodes = all_nodes[:limit]
+                return all_nodes
+
         cursor_clause = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
         query = (

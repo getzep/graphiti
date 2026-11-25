@@ -36,20 +36,6 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
                 entity_edges: join([x IN coalesce($entity_edges, []) | toString(x) ], '|'), created_at: $created_at, valid_at: $valid_at}
                 RETURN n.uuid AS uuid
             """
-        case GraphProvider.KUZU:
-            return """
-                MERGE (n:Episodic {uuid: $uuid})
-                SET
-                    n.name = $name,
-                    n.group_id = $group_id,
-                    n.created_at = $created_at,
-                    n.source = $source,
-                    n.source_description = $source_description,
-                    n.content = $content,
-                    n.valid_at = $valid_at,
-                    n.entity_edges = $entity_edges
-                RETURN n.uuid AS uuid
-            """
         case GraphProvider.FALKORDB:
             return """
                 MERGE (n:Episodic {uuid: $uuid})
@@ -75,20 +61,6 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
                 SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description,
                     source: episode.source, content: episode.content,
                 entity_edges: join([x IN coalesce(episode.entity_edges, []) | toString(x) ], '|'), created_at: episode.created_at, valid_at: episode.valid_at}
-                RETURN n.uuid AS uuid
-            """
-        case GraphProvider.KUZU:
-            return """
-                MERGE (n:Episodic {uuid: $uuid})
-                SET
-                    n.name = $name,
-                    n.group_id = $group_id,
-                    n.created_at = $created_at,
-                    n.source = $source,
-                    n.source_description = $source_description,
-                    n.content = $content,
-                    n.valid_at = $valid_at,
-                    n.entity_edges = $entity_edges
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.FALKORDB:
@@ -147,20 +119,6 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 SET n.name_embedding = vecf32($entity_data.name_embedding)
                 RETURN n.uuid AS uuid
             """
-        case GraphProvider.KUZU:
-            return """
-                MERGE (n:Entity {uuid: $uuid})
-                SET
-                    n.name = $name,
-                    n.group_id = $group_id,
-                    n.labels = $labels,
-                    n.created_at = $created_at,
-                    n.name_embedding = $name_embedding,
-                    n.summary = $summary,
-                    n.attributes = $attributes
-                WITH n
-                RETURN n.uuid AS uuid
-            """
         case GraphProvider.NEPTUNE:
             label_subquery = ''
             for label in validated_labels:
@@ -170,6 +128,14 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 {label_subquery}
                 SET n = removeKeyFromMap(removeKeyFromMap($entity_data, "labels"), "name_embedding")
                 SET n.name_embedding = join([x IN coalesce($entity_data.name_embedding, []) | toString(x) ], ",")
+                RETURN n.uuid AS uuid
+            """
+        case GraphProvider.RELATE:
+            return f"""
+                MERGE (n:Entity {{uuid: $entity_data.uuid}})
+                SET n:{labels}
+                SET n = $entity_data
+                SET n.labels = null
                 RETURN n.uuid AS uuid
             """
         case _:
@@ -201,21 +167,25 @@ def get_entity_node_save_bulk_query(
         case GraphProvider.FALKORDB:
             queries = []
             for node in nodes:
-                for label in node['labels']:
-                    queries.append(
-                        (
-                            f"""
-                            UNWIND $nodes AS node
-                            MERGE (n:Entity {{uuid: node.uuid}})
-                            SET n:{label}
-                            SET n = node
-                            WITH n, node
-                            SET n.name_embedding = vecf32(node.name_embedding)
-                            RETURN n.uuid AS uuid
-                            """,
-                            {'nodes': [node]},
-                        )
+                # Exclude the labels list so it is not persisted as a node property
+                # by `SET n = node`.
+                node_data = {k: v for k, v in node.items() if k != 'labels'}
+                # Apply all labels in a single query instead of one query per label.
+                label_expr = ':'.join(node['labels']) if node['labels'] else 'Entity'
+                queries.append(
+                    (
+                        f"""
+                        UNWIND $nodes AS node
+                        MERGE (n:Entity {{uuid: node.uuid}})
+                        SET n:{label_expr}
+                        SET n = node
+                        WITH n, node
+                        SET n.name_embedding = vecf32(node.name_embedding)
+                        RETURN n.uuid AS uuid
+                        """,
+                        {'nodes': [node_data]},
                     )
+                )
             return queries
         case GraphProvider.NEPTUNE:
             queries = []
@@ -234,17 +204,13 @@ def get_entity_node_save_bulk_query(
                     """
                 )
             return queries
-        case GraphProvider.KUZU:
+        case GraphProvider.RELATE:
             return """
-                MERGE (n:Entity {uuid: $uuid})
-                SET
-                    n.name = $name,
-                    n.group_id = $group_id,
-                    n.labels = $labels,
-                    n.created_at = $created_at,
-                    n.name_embedding = $name_embedding,
-                    n.summary = $summary,
-                    n.attributes = $attributes
+                UNWIND $nodes AS node
+                MERGE (n:Entity {uuid: node.uuid})
+                SET n:$(node.labels)
+                SET n = node
+                SET n.labels = null
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
@@ -267,19 +233,32 @@ def get_entity_node_save_bulk_query(
             )
 
 
+def get_entity_node_update_bulk_query(
+    provider: GraphProvider, nodes: list[dict], has_aoss: bool = False
+) -> str | Any:
+    """Return the bulk save query of the provider, with `MATCH` in the place of `MERGE`.
+
+    The query changes a node that exists and creates nothing. Concurrent ingestion
+    uses it to update a stored node, so that a node that a different writer deleted
+    is not created again. The result has the form of `get_entity_node_save_bulk_query`.
+    """
+
+    def to_update(query: str) -> str:
+        if query.count('MERGE (n:Entity {uuid: ') != 1:
+            raise ValueError(f'no update query for the entity node save query of {provider}')
+        return query.replace('MERGE (n:Entity {uuid: ', 'MATCH (n:Entity {uuid: ')
+
+    queries = get_entity_node_save_bulk_query(provider, nodes, has_aoss)
+    if isinstance(queries, str):
+        return to_update(queries)
+    return [
+        (to_update(query[0]), query[1]) if isinstance(query, tuple) else to_update(query)
+        for query in queries
+    ]
+
+
 def get_entity_node_return_query(provider: GraphProvider) -> str:
     # `name_embedding` is not returned by default and must be loaded manually using `load_name_embedding()`.
-    if provider == GraphProvider.KUZU:
-        return """
-            n.uuid AS uuid,
-            n.name AS name,
-            n.group_id AS group_id,
-            n.labels AS labels,
-            n.created_at AS created_at,
-            n.summary AS summary,
-            n.attributes AS attributes
-        """
-
     return """
         n.uuid AS uuid,
         n.name AS name,
@@ -306,15 +285,10 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
                 SET n.name_embedding = join([x IN coalesce($name_embedding, []) | toString(x) ], ",")
                 RETURN n.uuid AS uuid
             """
-        case GraphProvider.KUZU:
+        case GraphProvider.RELATE:
             return """
                 MERGE (n:Community {uuid: $uuid})
-                SET
-                    n.name = $name,
-                    n.group_id = $group_id,
-                    n.created_at = $created_at,
-                    n.name_embedding = $name_embedding,
-                    n.summary = $summary
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: $name_embedding}
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
@@ -347,19 +321,10 @@ COMMUNITY_NODE_RETURN_NEPTUNE = """
 
 def get_saga_node_save_query(provider: GraphProvider) -> str:
     match provider:
-        case GraphProvider.KUZU:
-            return """
-                MERGE (n:Saga {uuid: $uuid})
-                SET
-                    n.name = $name,
-                    n.group_id = $group_id,
-                    n.created_at = $created_at
-                RETURN n.uuid AS uuid
-            """
         case _:  # Neo4j, FalkorDB, Neptune
             return """
                 MERGE (n:Saga {uuid: $uuid})
-                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at}
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at, summary: $summary, first_episode_uuid: $first_episode_uuid, last_episode_uuid: $last_episode_uuid, last_summarized_at: $last_summarized_at, last_summarized_episode_valid_at: $last_summarized_episode_valid_at}
                 RETURN n.uuid AS uuid
             """
 
@@ -368,12 +333,22 @@ SAGA_NODE_RETURN = """
     s.uuid AS uuid,
     s.name AS name,
     s.group_id AS group_id,
-    s.created_at AS created_at
+    s.created_at AS created_at,
+    s.summary AS summary,
+    s.first_episode_uuid AS first_episode_uuid,
+    s.last_episode_uuid AS last_episode_uuid,
+    s.last_summarized_at AS last_summarized_at,
+    s.last_summarized_episode_valid_at AS last_summarized_episode_valid_at
 """
 
 SAGA_NODE_RETURN_NEPTUNE = """
     s.uuid AS uuid,
     s.name AS name,
     s.group_id AS group_id,
-    s.created_at AS created_at
+    s.created_at AS created_at,
+    s.summary AS summary,
+    s.first_episode_uuid AS first_episode_uuid,
+    s.last_episode_uuid AS last_episode_uuid,
+    s.last_summarized_at AS last_summarized_at,
+    s.last_summarized_episode_valid_at AS last_summarized_episode_valid_at
 """

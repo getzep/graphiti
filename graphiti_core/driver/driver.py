@@ -59,8 +59,8 @@ ENTITY_EDGE_INDEX_NAME = os.environ.get('ENTITY_EDGE_INDEX_NAME', 'entity_edges'
 class GraphProvider(Enum):
     NEO4J = 'neo4j'
     FALKORDB = 'falkordb'
-    KUZU = 'kuzu'
     NEPTUNE = 'neptune'
+    RELATE = 'relate'
 
 
 class GraphDriverSession(ABC):
@@ -88,6 +88,7 @@ class GraphDriverSession(ABC):
 
 
 class GraphDriver(QueryExecutor, ABC):
+    RELATE = GraphProvider.RELATE
     provider: GraphProvider
     fulltext_syntax: str = (
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries

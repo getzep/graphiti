@@ -25,7 +25,7 @@ from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
+from .config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
 if TYPE_CHECKING:
@@ -47,53 +47,20 @@ else:
 logger = logging.getLogger(__name__)
 
 AnthropicModel = Literal[
-    'claude-sonnet-4-5-latest',
-    'claude-sonnet-4-5-20250929',
-    'claude-haiku-4-5-latest',
-    'claude-3-7-sonnet-latest',
-    'claude-3-7-sonnet-20250219',
-    'claude-3-5-haiku-latest',
-    'claude-3-5-haiku-20241022',
-    'claude-3-5-sonnet-latest',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-5-sonnet-20240620',
-    'claude-3-opus-latest',
-    'claude-3-opus-20240229',
-    'claude-3-sonnet-20240229',
-    'claude-3-haiku-20240307',
-    'claude-2.1',
-    'claude-2.0',
+    'claude-haiku-5-5',
+    'claude-sonnet-5',
+    'claude-opus-5',
+    'claude-fable-5',
 ]
 
-DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
+DEFAULT_MODEL: AnthropicModel = 'claude-haiku-5-5'
 
-# Maximum output tokens for different Anthropic models
-# Based on official Anthropic documentation (as of 2025)
-# Note: These represent standard limits without beta headers.
-# Some models support higher limits with additional configuration (e.g., Claude 3.7 supports
-# 128K with 'anthropic-beta: output-128k-2025-02-19' header, but this is not currently implemented).
+# Standard output limits without beta headers.
 ANTHROPIC_MODEL_MAX_TOKENS = {
-    # Claude 4.5 models - 64K tokens
-    'claude-sonnet-4-5-latest': 65536,
-    'claude-sonnet-4-5-20250929': 65536,
-    'claude-haiku-4-5-latest': 65536,
-    # Claude 3.7 models - standard 64K tokens
-    'claude-3-7-sonnet-latest': 65536,
-    'claude-3-7-sonnet-20250219': 65536,
-    # Claude 3.5 models
-    'claude-3-5-haiku-latest': 8192,
-    'claude-3-5-haiku-20241022': 8192,
-    'claude-3-5-sonnet-latest': 8192,
-    'claude-3-5-sonnet-20241022': 8192,
-    'claude-3-5-sonnet-20240620': 8192,
-    # Claude 3 models - 4K tokens
-    'claude-3-opus-latest': 4096,
-    'claude-3-opus-20240229': 4096,
-    'claude-3-sonnet-20240229': 4096,
-    'claude-3-haiku-20240307': 4096,
-    # Claude 2 models - 4K tokens
-    'claude-2.1': 4096,
-    'claude-2.0': 4096,
+    'claude-haiku-5-5': 128000,
+    'claude-sonnet-5': 128000,
+    'claude-opus-5': 128000,
+    'claude-fable-5': 128000,
 }
 
 # Default max tokens for models not in the mapping
@@ -137,6 +104,12 @@ class AnthropicClient(LLMClient):
             config.model = DEFAULT_MODEL
 
         super().__init__(config, cache)
+        if self.temperature not in (None, DEFAULT_TEMPERATURE):
+            logger.warning(
+                'AnthropicClient ignores temperature=%s because anthropic SDK 1.0 and later do not '
+                'accept the parameter, and Claude 5, Opus 4.7, and Opus 4.8 models reject it.',
+                self.temperature,
+            )
         # Explicitly set the instance model to the config model to prevent type checking errors
         self.model = typing.cast(AnthropicModel, config.model)
 
@@ -257,6 +230,8 @@ class AnthropicClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        *,
+        model: str | None = None,
     ) -> tuple[dict[str, typing.Any], int, int]:
         """
         Generate a response from the Anthropic LLM using tool-based approach for all requests.
@@ -278,9 +253,11 @@ class AnthropicClient(LLMClient):
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]]
         user_messages_cast = typing.cast(list[MessageParam], user_messages)
 
+        effective_model: str = model or self.model
+
         # Resolve max_tokens dynamically based on the model's capabilities
         # This allows different models to use their full output capacity
-        max_creation_tokens: int = self._resolve_max_tokens(max_tokens, self.model)
+        max_creation_tokens: int = self._resolve_max_tokens(max_tokens, effective_model)
 
         try:
             # Create the appropriate tool based on whether response_model is provided
@@ -288,9 +265,8 @@ class AnthropicClient(LLMClient):
             result = await self.client.messages.create(
                 system=system_message.content,
                 max_tokens=max_creation_tokens,
-                temperature=self.temperature,
                 messages=user_messages_cast,
-                model=self.model,
+                model=effective_model,
                 tools=tools,
                 tool_choice=tool_choice,
             )
@@ -349,6 +325,9 @@ class AnthropicClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
+        model: str | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the LLM.
@@ -357,6 +336,9 @@ class AnthropicClient(LLMClient):
             messages: List of message objects to send to the LLM.
             response_model: Optional Pydantic model to use for structured output.
             max_tokens: Maximum number of tokens to generate.
+            attribute_extraction: When True, prepends the shared attribute-extraction
+                framing to the system message so the strict "field descriptions are not
+                values" instruction reaches the model on Anthropic's native tool-use path.
 
         Returns:
             Dictionary containing the structured response from the LLM.
@@ -366,6 +348,7 @@ class AnthropicClient(LLMClient):
             RefusalError: If the LLM refuses to respond.
             Exception: If an error occurs during the generation process.
         """
+        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
 
@@ -389,7 +372,11 @@ class AnthropicClient(LLMClient):
             while retry_count <= max_retries:
                 try:
                     response, input_tokens, output_tokens = await self._generate_response(
-                        messages, response_model, max_tokens, model_size
+                        messages,
+                        response_model,
+                        max_tokens,
+                        model_size,
+                        model=model,
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens

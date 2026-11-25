@@ -14,10 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import re
+from __future__ import annotations
 
-# Maximum length for entity/node summaries
-MAX_SUMMARY_CHARS = 500
+import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from graphiti_core.nodes import EpisodicNode
+
+# Maximum length for entity/community summaries
+MAX_SUMMARY_CHARS = 1000
+
+# Saga / thread summaries persist at most 4000 characters as a safety cap.
+SAGA_SUMMARY_MAX_CHARS = 4000
+
+
+def truncate_utf8_to_bytes(text: str, max_bytes: int) -> str:
+    """Truncate text to at most max_bytes without splitting a UTF-8 sequence."""
+    if max_bytes <= 0:
+        return ''
+    encoded = text.encode('utf-8')
+    if len(encoded) <= max_bytes:
+        return text
+    return encoded[:max_bytes].decode('utf-8', errors='ignore')
 
 
 def truncate_at_sentence(text: str, max_chars: int) -> str:
@@ -51,3 +70,35 @@ def truncate_at_sentence(text: str, max_chars: int) -> str:
 
     # No sentence boundary found, truncate at max_chars
     return truncated.rstrip()
+
+
+def concatenate_episodes(episodes: list[EpisodicNode]) -> str:
+    """Concatenate episode contents with enumerated headers.
+
+    When given a single episode, returns its content as-is.
+    When given multiple episodes, each is prefixed with an ``[Episode N]``
+    header so the LLM can distinguish where one ends and the next begins.
+    """
+    if len(episodes) == 1:
+        return episodes[0].content
+    parts: list[str] = []
+    for i, ep in enumerate(episodes):
+        timestamp = ep.valid_at.isoformat() if ep.valid_at else 'unknown'
+        parts.append(f'[Episode {i}] (timestamp: {timestamp})\n{ep.content}')
+    return '\n\n'.join(parts)
+
+
+def concatenate_timeline(episodes: list[EpisodicNode], timeline: list[EpisodicNode]) -> str:
+    """Render ``timeline`` in order, numbering the members of ``episodes`` by their index in
+    ``episodes`` and marking every other episode as context only."""
+    index_by_uuid = {ep.uuid: i for i, ep in enumerate(episodes)}
+    parts: list[str] = []
+    for ep in timeline:
+        timestamp = ep.valid_at.isoformat() if ep.valid_at else 'unknown'
+        idx = index_by_uuid.get(ep.uuid)
+        if idx is None:
+            header = f'[CONTEXT EPISODE] (timestamp: {timestamp})'
+        else:
+            header = f'[Episode {idx}] (timestamp: {timestamp})'
+        parts.append(f'{header}\n{ep.content}')
+    return '\n\n'.join(parts)

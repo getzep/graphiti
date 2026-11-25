@@ -17,16 +17,17 @@ limitations under the License.
 import logging
 from collections.abc import Awaitable, Callable
 from time import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.graphiti_types import GraphitiClients
+from graphiti_core.graphiti_types import GraphitiClients, generate_prompt_response
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import (
+    NODE_DEDUP_CANDIDATE_LIMIT,
     EntityNode,
     EpisodeType,
     EpisodicNode,
@@ -39,54 +40,112 @@ from graphiti_core.prompts.extract_nodes import (
     ExtractedEntity,
     SummarizedEntities,
 )
-from graphiti_core.search.search import search
-from graphiti_core.search.search_config import SearchResults
-from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_utils import node_similarity_search
 from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.maintenance.attribute_utils import apply_capped_attributes
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
     DedupResolutionState,
     _build_candidate_indexes,
+    _identity_key_for_node,
+    _identity_type_for_node,
+    _normalize_string_exact,
+    _promote_resolved_node,
+    _resolve_with_identity_properties,
     _resolve_with_similarity,
 )
-from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
+from graphiti_core.utils.text_utils import (
+    MAX_SUMMARY_CHARS,
+    concatenate_episodes,
+    truncate_at_sentence,
+)
+
+if TYPE_CHECKING:
+    from graphiti_core.ingestion.change_set import ResolutionTrace
 
 logger = logging.getLogger(__name__)
 
 # Maximum number of nodes to summarize in a single LLM call
 MAX_NODES = 30
+NODE_DEDUP_COSINE_MIN_SCORE = 0.6
 
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
 
 
 async def extract_nodes(
     clients: GraphitiClients,
-    episode: EpisodicNode,
+    episode: EpisodicNode | list[EpisodicNode],
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
     custom_extraction_instructions: str | None = None,
-) -> list[EntityNode]:
-    """Extract entity nodes from an episode."""
+) -> tuple[list[EntityNode], dict[str, list[int]]]:
+    """Extract entity nodes from one or more episodes.
+
+    Parameters
+    ----------
+    episode : EpisodicNode | list[EpisodicNode]
+        A single episode or a list of episodes to extract entities from.
+        When a list is provided, their contents are concatenated for extraction
+        and the first episode is used for metadata (source type, group_id, etc.).
+
+    Returns
+    -------
+    tuple[list[EntityNode], dict[str, list[int]]]
+        A tuple of (extracted_nodes, node_episode_index_map) where
+        node_episode_index_map maps node UUID to a list of 0-indexed episode
+        positions that the node was extracted from.
+    """
+    episodes = episode if isinstance(episode, list) else [episode]
+    primary_episode = episodes[0]
+
     start = time()
     llm_client = clients.llm_client
 
     # Build entity types context
-    entity_types_context = _build_entity_types_context(entity_types)
+    entity_types_context = _filter_entity_types_context(
+        _build_entity_types_context(entity_types), excluded_entity_types
+    )
+    if not entity_types_context:
+        logger.debug('No entity types available for extraction after exclusions')
+        return [], {}
+
+    # Build episode attribution instructions for multi-episode extraction
+    episode_attribution = ''
+    if len(episodes) > 1:
+        episode_attribution = (
+            '\n7. **Episode Attribution**: The content contains multiple episodes labeled '
+            '[Episode 0], [Episode 1], etc. Each episode header includes a timestamp indicating '
+            'when that episode occurred. For each extracted entity, set `episode_indices` '
+            'to the 0-based list of episode numbers where that entity is mentioned. '
+            'An entity appearing in Episodes 0 and 2 should have `episode_indices: [0, 2]`.'
+        )
 
     # Build base context
     context = {
-        'episode_content': episode.content,
-        'episode_timestamp': episode.valid_at.isoformat(),
-        'previous_episodes': [ep.content for ep in previous_episodes],
-        'custom_extraction_instructions': custom_extraction_instructions or '',
+        'episode_content': concatenate_episodes(episodes),
+        'episode_timestamp': primary_episode.valid_at.isoformat(),
+        'previous_episodes': [
+            {
+                'content': ep.content,
+                'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+            }
+            for ep in previous_episodes
+        ],
+        'custom_extraction_instructions': (custom_extraction_instructions or '')
+        + episode_attribution,
         'entity_types': entity_types_context,
-        'source_description': episode.source_description,
+        'source_description': primary_episode.source_description,
     }
 
     # Extract entities
-    extracted_entities = await _extract_nodes_single(llm_client, episode, context)
+    extracted_entities = await _extract_nodes_single(
+        llm_client,
+        primary_episode,
+        context,
+        clients=clients,
+    )
 
     # Filter empty names
     filtered_entities = [e for e in extracted_entities if e.name.strip()]
@@ -94,13 +153,16 @@ async def extract_nodes(
     end = time()
     logger.debug(f'Extracted {len(filtered_entities)} entities in {(end - start) * 1000:.0f} ms')
 
-    # Convert to EntityNode objects
-    extracted_nodes = _create_entity_nodes(
-        filtered_entities, entity_types_context, excluded_entity_types, episode
+    # Convert to EntityNode objects with episode attribution
+    extracted_nodes, node_episode_index_map = _create_entity_nodes(
+        filtered_entities, entity_types_context, excluded_entity_types, episodes
+    )
+    extracted_nodes = _collapse_exact_duplicate_extracted_nodes(
+        extracted_nodes, node_episode_index_map
     )
 
     logger.debug(f'Extracted nodes: {[n.uuid for n in extracted_nodes]}')
-    return extracted_nodes
+    return extracted_nodes, node_episode_index_map
 
 
 def _build_entity_types_context(
@@ -112,8 +174,12 @@ def _build_entity_types_context(
             'entity_type_id': 0,
             'entity_type_name': 'Entity',
             'entity_type_description': (
-                'Default entity classification. Use this entity type '
-                'if the entity is not one of the other listed types.'
+                'A specific, identifiable entity that does not fit any of the other listed '
+                'types. Must still be a concrete, meaningful thing — specific enough to be '
+                'uniquely identifiable. GOOD: a named entity not covered by the other types. '
+                'BAD: "luck", "ideas", "tomorrow", "things", "them", "everybody", '
+                '"a sense of wonder", "great times". '
+                'When in doubt, do not extract the entity.'
             ),
         }
     ]
@@ -131,13 +197,104 @@ def _build_entity_types_context(
     return entity_types_context
 
 
+def _filter_entity_types_context(
+    entity_types_context: list[dict],
+    excluded_entity_types: list[str] | None,
+) -> list[dict]:
+    """Remove excluded entity types from prompt context and keep IDs contiguous."""
+    if not excluded_entity_types:
+        return entity_types_context
+
+    excluded_type_names = set(excluded_entity_types)
+    filtered_context = [
+        entity_type
+        for entity_type in entity_types_context
+        if entity_type.get('entity_type_name') not in excluded_type_names
+    ]
+
+    return [
+        {
+            **entity_type,
+            'entity_type_id': entity_type_id,
+        }
+        for entity_type_id, entity_type in enumerate(filtered_context)
+    ]
+
+
+def _get_entity_type_description(
+    labels: list[str], entity_types: dict[str, type[BaseModel]] | None
+) -> str:
+    type_name = next(
+        (label for label in labels if entity_types is not None and label in entity_types),
+        None,
+    )
+    type_model = (
+        entity_types.get(type_name) if entity_types is not None and type_name is not None else None
+    )
+    return (type_model.__doc__ if type_model is not None else None) or 'Default Entity Type'
+
+
+def _truncate_type_description(docstring: str) -> str:
+    """Extract a concise type description from a docstring for summary prompts.
+
+    Returns the first paragraph (up to the first blank line), capped at 3
+    sentences.  This strips GOOD/BAD examples, trigger patterns, and other
+    extraction-specific guidance that is irrelevant to summarization.
+    """
+    # Take only the first paragraph.
+    paragraph_lines: list[str] = []
+    for line in docstring.splitlines():
+        if not line.strip():
+            if paragraph_lines:
+                break
+            continue  # skip leading blank lines
+        paragraph_lines.append(line)
+
+    text = ' '.join(line.strip() for line in paragraph_lines)
+
+    # Cap at 3 sentences.
+    sentences: list[str] = []
+    remaining = text
+    for _ in range(3):
+        idx = _find_sentence_end(remaining)
+        if idx == -1:
+            sentences.append(remaining)
+            remaining = ''
+            break
+        sentences.append(remaining[: idx + 1])
+        remaining = remaining[idx + 1 :].lstrip()
+    return ' '.join(sentences).strip()
+
+
+def _find_sentence_end(text: str) -> int:
+    """Return the index of the first sentence boundary.
+
+    A sentence ends at `.`, `!`, or `?` when followed by end-of-string or
+    a space then an uppercase letter.  This avoids splitting on abbreviations
+    like "e.g.", "Dr.", or decimals like "2.0".
+    """
+    n = len(text)
+    for i, ch in enumerate(text):
+        if ch not in '.!?':
+            continue
+        # End of string counts as a sentence boundary.
+        if i + 1 >= n:
+            return i
+        # Space followed by an uppercase letter is a sentence boundary.
+        if text[i + 1] == ' ' and i + 2 < n and text[i + 2].isupper():
+            return i
+    return -1
+
+
 async def _extract_nodes_single(
     llm_client: LLMClient,
     episode: EpisodicNode,
     context: dict,
+    *,
+    clients: GraphitiClients | None = None,
 ) -> list[ExtractedEntity]:
     """Extract entities using a single LLM call."""
-    llm_response = await _call_extraction_llm(llm_client, episode, context)
+    llm_response = await _call_extraction_llm(llm_client, episode, context, clients=clients)
     response_object = ExtractedEntities(**llm_response)
     return response_object.extracted_entities
 
@@ -146,27 +303,32 @@ async def _call_extraction_llm(
     llm_client: LLMClient,
     episode: EpisodicNode,
     context: dict,
+    *,
+    clients: GraphitiClients | None = None,
 ) -> dict:
     """Call the appropriate extraction prompt based on episode type."""
     if episode.source == EpisodeType.message:
-        prompt = prompt_library.extract_nodes.extract_message(context)
+        legacy_prompt = prompt_library.extract_nodes.extract_message
         prompt_name = 'extract_nodes.extract_message'
     elif episode.source == EpisodeType.text:
-        prompt = prompt_library.extract_nodes.extract_text(context)
+        legacy_prompt = prompt_library.extract_nodes.extract_text
         prompt_name = 'extract_nodes.extract_text'
     elif episode.source == EpisodeType.json:
-        prompt = prompt_library.extract_nodes.extract_json(context)
+        legacy_prompt = prompt_library.extract_nodes.extract_json
         prompt_name = 'extract_nodes.extract_json'
     else:
         # Fallback to text extraction
-        prompt = prompt_library.extract_nodes.extract_text(context)
+        legacy_prompt = prompt_library.extract_nodes.extract_text
         prompt_name = 'extract_nodes.extract_text'
 
-    return await llm_client.generate_response(
-        prompt,
+    return await generate_prompt_response(
+        llm_client,
+        prompt_name,
+        legacy_prompt,
+        context,
+        clients=clients,
         response_model=ExtractedEntities,
         group_id=episode.group_id,
-        prompt_name=prompt_name,
     )
 
 
@@ -174,10 +336,19 @@ def _create_entity_nodes(
     extracted_entities: list[ExtractedEntity],
     entity_types_context: list[dict],
     excluded_entity_types: list[str] | None,
-    episode: EpisodicNode,
-) -> list[EntityNode]:
-    """Convert ExtractedEntity objects to EntityNode objects."""
+    episodes: list[EpisodicNode],
+) -> tuple[list[EntityNode], dict[str, list[int]]]:
+    """Convert ExtractedEntity objects to EntityNode objects.
+
+    Returns
+    -------
+    tuple[list[EntityNode], dict[str, list[int]]]
+        A tuple of (nodes, node_episode_index_map) where node_episode_index_map
+        maps each node UUID to 0-indexed episode positions the node was extracted from.
+    """
+    primary_episode = episodes[0]
     extracted_nodes = []
+    node_episode_index_map: dict[str, list[int]] = {}
 
     for extracted_entity in extracted_entities:
         type_id = extracted_entity.entity_type_id
@@ -195,50 +366,312 @@ def _create_entity_nodes(
 
         new_node = EntityNode(
             name=extracted_entity.name,
-            group_id=episode.group_id,
+            group_id=primary_episode.group_id,
             labels=labels,
             summary='',
             created_at=utc_now(),
         )
         extracted_nodes.append(new_node)
+
+        # Map node to 0-indexed episode positions (LLM returns 0-indexed).
+        # Clamp to valid range; fall back to all episodes if empty.
+        indices = [i for i in extracted_entity.episode_indices if 0 <= i < len(episodes)]
+        if not indices:
+            indices = list(range(len(episodes)))
+        node_episode_index_map[new_node.uuid] = indices
+
         logger.debug(f'Created new node: {new_node.uuid}')
 
-    return extracted_nodes
+    return extracted_nodes, node_episode_index_map
 
 
-async def _collect_candidate_nodes(
-    clients: GraphitiClients,
+def _collapse_exact_duplicate_extracted_nodes(
     extracted_nodes: list[EntityNode],
-    existing_nodes_override: list[EntityNode] | None,
+    node_episode_index_map: dict[str, list[int]] | None = None,
 ) -> list[EntityNode]:
-    """Search per extracted name and return unique candidates with overrides honored in order."""
-    search_results: list[SearchResults] = await semaphore_gather(
-        *[
-            search(
-                clients=clients,
-                query=node.name,
-                group_ids=[node.group_id],
-                search_filter=SearchFilters(),
-                config=NODE_HYBRID_SEARCH_RRF,
+    """Collapse same-message duplicates with the same normalized name.
+
+    This is intentionally narrow: it only merges exact normalized-name duplicates that the
+    extraction prompt should already have emitted once. When duplicates disagree on specificity,
+    keep the more specific node (for example, `Person` over bare `Entity`).
+
+    When node_episode_index_map is provided, episode indices from discarded nodes are merged
+    into the canonical node's entry so attribution is preserved.
+    """
+    if len(extracted_nodes) < 2:
+        return extracted_nodes
+
+    canonical_by_name: dict[str, EntityNode] = {}
+    ordered_names: list[str] = []
+
+    for node in extracted_nodes:
+        normalized_name = _normalize_string_exact(node.name)
+        existing = canonical_by_name.get(normalized_name)
+        if existing is None:
+            canonical_by_name[normalized_name] = node
+            ordered_names.append(normalized_name)
+            continue
+
+        existing_specific_labels = {label for label in existing.labels if label != 'Entity'}
+        node_specific_labels = {label for label in node.labels if label != 'Entity'}
+        if len(node_specific_labels) > len(existing_specific_labels) or (
+            len(node_specific_labels) == len(existing_specific_labels)
+            and len(node.name.strip()) > len(existing.name.strip())
+        ):
+            old_canonical = existing
+            canonical_by_name[normalized_name] = node
+            # Merge episode indices: old canonical -> new canonical
+            if node_episode_index_map is not None:
+                old_indices = node_episode_index_map.pop(old_canonical.uuid, [])
+                new_indices = node_episode_index_map.get(node.uuid, [])
+                node_episode_index_map[node.uuid] = sorted(set(new_indices + old_indices))
+        elif node_episode_index_map is not None:
+            # Discard this node; merge its indices into the existing canonical
+            discarded_indices = node_episode_index_map.pop(node.uuid, [])
+            canonical_indices = node_episode_index_map.get(existing.uuid, [])
+            node_episode_index_map[existing.uuid] = sorted(
+                set(canonical_indices + discarded_indices)
             )
-            for node in extracted_nodes
-        ]
-    )
 
-    candidate_nodes: list[EntityNode] = [node for result in search_results for node in result.nodes]
+    return [canonical_by_name[name] for name in ordered_names]
 
+
+def _merge_candidate_nodes(
+    candidate_nodes: list[EntityNode],
+    existing_nodes_override: list[EntityNode] | None = None,
+) -> list[EntityNode]:
+    """Deduplicate candidate nodes while preserving search order and overrides."""
+    merged_candidates = list(candidate_nodes)
     if existing_nodes_override is not None:
-        candidate_nodes.extend(existing_nodes_override)
+        merged_candidates.extend(existing_nodes_override)
 
     seen_candidate_uuids: set[str] = set()
     ordered_candidates: list[EntityNode] = []
-    for candidate in candidate_nodes:
+    for candidate in merged_candidates:
         if candidate.uuid in seen_candidate_uuids:
             continue
         seen_candidate_uuids.add(candidate.uuid)
         ordered_candidates.append(candidate)
 
     return ordered_candidates
+
+
+async def _collect_candidate_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    existing_nodes_override: list[EntityNode] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
+    reuse_name_embeddings: bool = False,
+) -> list[list[EntityNode]]:
+    """Search per extracted name and return ordered candidates for each extracted node.
+
+    With `reuse_name_embeddings`, a node that has a `name_embedding` uses it for the
+    semantic search, and the embedder is called only for the other nodes.
+    """
+    identity_results = await _collect_identity_property_candidate_nodes(
+        clients,
+        extracted_nodes,
+        identity_properties,
+    )
+    exact_name_results = await _collect_exact_name_candidate_nodes(clients, extracted_nodes)
+    search_results = await _semantic_candidate_search(
+        clients, extracted_nodes, reuse_name_embeddings=reuse_name_embeddings
+    )
+
+    candidates_by_node: list[list[EntityNode]] = []
+    for identity_result, exact_results, search_result in zip(
+        identity_results,
+        exact_name_results,
+        search_results,
+        strict=True,
+    ):
+        candidates_by_node.append(
+            _merge_candidate_nodes(
+                identity_result + exact_results + search_result,
+                existing_nodes_override,
+            )
+        )
+    return candidates_by_node
+
+
+async def _collect_identity_property_candidate_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    identity_properties: dict[str, list[str]] | None,
+) -> list[list[EntityNode]]:
+    if not extracted_nodes:
+        return []
+    if not identity_properties:
+        return [[] for _ in extracted_nodes]
+
+    async def _lookup_node(node: EntityNode) -> list[EntityNode]:
+        identity_type = _identity_type_for_node(node, identity_properties)
+        identity_key = _identity_key_for_node(node, identity_properties)
+        if identity_type is None or identity_key is None:
+            return []
+
+        _, identity_values = identity_key
+        try:
+            return await EntityNode.get_by_attribute_values(
+                clients.driver,
+                node.group_id,
+                dict(identity_values),
+                [identity_type],
+                NODE_DEDUP_CANDIDATE_LIMIT,
+            )
+        except NotImplementedError:
+            return []
+        except Exception:
+            logger.warning(
+                'Identity-property node candidate lookup failed; falling back',
+                extra={
+                    'node_uuid': node.uuid,
+                    'group_id': node.group_id,
+                    'identity_type': identity_type,
+                },
+                exc_info=True,
+            )
+            return []
+
+    return list(
+        await semaphore_gather(
+            *[_lookup_node(node) for node in extracted_nodes],
+            max_coroutines=getattr(clients, 'max_coroutines', None),
+        )
+    )
+
+
+async def _collect_exact_name_candidate_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+) -> list[list[EntityNode]]:
+    """Fetch durable exact-name candidates before embedding-based search."""
+    if not extracted_nodes:
+        return []
+
+    names = [node.name for node in extracted_nodes if node.name]
+    group_ids = [node.group_id for node in extracted_nodes if node.group_id]
+    if not names or not group_ids:
+        return [[] for _ in extracted_nodes]
+
+    try:
+        candidate_nodes = await EntityNode.get_by_names(clients.driver, names, group_ids)
+    except Exception:
+        logger.warning(
+            'Exact-name node candidate lookup failed; falling back to semantic search',
+            extra={
+                'extracted_node_count': len(extracted_nodes),
+                'group_count': len(set(group_ids)),
+            },
+            exc_info=True,
+        )
+        return [[] for _ in extracted_nodes]
+
+    candidates_by_group_and_name: dict[tuple[str, str], list[EntityNode]] = {}
+    for candidate in candidate_nodes:
+        name_key = _normalize_string_exact(candidate.name)
+        if not name_key:
+            continue
+        candidates_by_group_and_name.setdefault((candidate.group_id, name_key), []).append(
+            candidate
+        )
+
+    return [
+        list(
+            candidates_by_group_and_name.get(
+                (node.group_id, _normalize_string_exact(node.name)), []
+            )
+        )
+        for node in extracted_nodes
+    ]
+
+
+async def _semantic_candidate_search(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    reuse_name_embeddings: bool = False,
+) -> list[list[EntityNode]]:
+    """Run direct cosine similarity search per extracted node without reranking."""
+    if not extracted_nodes:
+        return []
+
+    query_indices = [
+        index for index, node in enumerate(extracted_nodes) if node.name.replace('\n', ' ').strip()
+    ]
+    queries = [extracted_nodes[index].name.replace('\n', ' ') for index in query_indices]
+    if not queries:
+        return [[] for _ in extracted_nodes]
+
+    if reuse_name_embeddings:
+        query_vectors = await _name_vectors_with_reuse(
+            clients, [extracted_nodes[index] for index in query_indices], queries
+        )
+    else:
+        query_vectors = await _embed_queries(clients, queries)
+
+    search_results = await semaphore_gather(
+        *[
+            node_similarity_search(
+                clients.driver,
+                query_vector,
+                SearchFilters(),
+                [extracted_nodes[index].group_id],
+                NODE_DEDUP_CANDIDATE_LIMIT,
+                NODE_DEDUP_COSINE_MIN_SCORE,
+            )
+            for index, query_vector in zip(query_indices, query_vectors, strict=True)
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
+    )
+    results = [[] for _ in extracted_nodes]
+    for index, search_result in zip(query_indices, search_results, strict=True):
+        results[index] = search_result
+    return results
+
+
+async def _embed_queries(clients: GraphitiClients, queries: list[str]) -> list[list[float]]:
+    try:
+        query_vectors = await clients.embedder.create_batch(queries)
+    except NotImplementedError:
+        query_vectors = list(
+            await semaphore_gather(
+                *[clients.embedder.create(input_data=[query]) for query in queries],
+                max_coroutines=getattr(clients, 'max_coroutines', None),
+            )
+        )
+
+    if len(query_vectors) != len(queries):
+        raise ValueError(
+            f'embedder returned {len(query_vectors)} vectors for {len(queries)} queries'
+        )
+    return query_vectors
+
+
+async def _name_vectors_with_reuse(
+    clients: GraphitiClients, nodes: list[EntityNode], queries: list[str]
+) -> list[list[float]]:
+    """Return the stored name embedding of each node, and embed only the other names."""
+    vectors: list[list[float] | None] = [node.name_embedding for node in nodes]
+    missing = [index for index, vector in enumerate(vectors) if vector is None]
+    if missing:
+        embedded = await _embed_queries(clients, [queries[index] for index in missing])
+        for index, vector in zip(missing, embedded, strict=True):
+            vectors[index] = vector
+    return [vector for vector in vectors if vector is not None]
+
+
+def _commit_resolution(
+    state: DedupResolutionState,
+    resolved_node: EntityNode | None,
+    uuid_map: dict[str, str],
+    duplicate_pairs: list[tuple[EntityNode, EntityNode]],
+    index: int,
+) -> None:
+    """Commit a single-node resolution result into the batch-level state."""
+    if resolved_node is not None:
+        state.resolved_nodes[index] = resolved_node
+    state.uuid_map.update(uuid_map)
+    state.duplicate_pairs.extend(duplicate_pairs)
 
 
 async def _resolve_with_llm(
@@ -249,6 +682,8 @@ async def _resolve_with_llm(
     episode: EpisodicNode | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_types: dict[str, type[BaseModel]] | None,
+    *,
+    clients: GraphitiClients | None = None,
 ) -> None:
     """Escalate unresolved nodes to the dedupe prompt so the LLM can select or reject duplicates.
 
@@ -267,10 +702,7 @@ async def _resolve_with_llm(
             'id': i,
             'name': node.name,
             'entity_type': node.labels,
-            'entity_type_description': entity_types_dict.get(
-                next((item for item in node.labels if item != 'Entity'), '')
-            ).__doc__
-            or 'Default Entity Type',
+            'entity_type_description': _get_entity_type_description(node.labels, entity_types_dict),
         }
         for i, node in enumerate(llm_extracted_nodes)
     ]
@@ -298,18 +730,18 @@ async def _resolve_with_llm(
 
     existing_nodes_context = [
         {
-            **{
-                'name': candidate.name,
-                'entity_types': candidate.labels,
-            },
             **candidate.attributes,
+            'candidate_id': i,
+            'name': candidate.name,
+            'entity_types': candidate.labels,
+            'summary': candidate.summary[:120] if candidate.summary else '',
         }
-        for candidate in indexes.existing_nodes
+        for i, candidate in enumerate(indexes.existing_nodes)
     ]
 
-    # Build name -> node mapping for resolving duplicates by name
-    existing_nodes_by_name: dict[str, EntityNode] = {
-        node.name: node for node in indexes.existing_nodes
+    # Build candidate_id -> node mapping for resolving duplicates by ID
+    candidates_by_id: dict[int, EntityNode] = {
+        i: node for i, node in enumerate(indexes.existing_nodes)
     }
 
     context = {
@@ -317,14 +749,27 @@ async def _resolve_with_llm(
         'existing_nodes': existing_nodes_context,
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': (
-            [ep.content for ep in previous_episodes] if previous_episodes is not None else []
+            [
+                {
+                    'content': ep.content,
+                    'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+                }
+                for ep in previous_episodes
+            ]
+            if previous_episodes is not None
+            else []
         ),
     }
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_nodes.nodes(context),
+    dedupe_nodes_max_tokens = min(llm_client.max_tokens or 16384, 16384)
+    llm_response = await generate_prompt_response(
+        llm_client,
+        'dedupe_nodes.nodes',
+        prompt_library.dedupe_nodes.nodes,
+        context,
+        clients=clients,
         response_model=NodeResolutions,
-        prompt_name='dedupe_nodes.nodes',
+        max_tokens=dedupe_nodes_max_tokens,
     )
 
     node_resolutions: list[NodeDuplicate] = NodeResolutions(**llm_response).entity_resolutions
@@ -356,7 +801,7 @@ async def _resolve_with_llm(
 
     for resolution in node_resolutions:
         relative_id: int = resolution.id
-        duplicate_name: str = resolution.duplicate_name
+        duplicate_candidate_id: int = resolution.duplicate_candidate_id
 
         if relative_id not in valid_relative_range:
             logger.warning(
@@ -376,16 +821,17 @@ async def _resolve_with_llm(
         extracted_node = extracted_nodes[original_index]
 
         resolved_node: EntityNode
-        if not duplicate_name:
+        if duplicate_candidate_id < 0:
             resolved_node = extracted_node
-        elif duplicate_name in existing_nodes_by_name:
-            resolved_node = existing_nodes_by_name[duplicate_name]
+        elif duplicate_candidate_id in candidates_by_id:
+            resolved_node = _promote_resolved_node(
+                extracted_node, candidates_by_id[duplicate_candidate_id]
+            )
         else:
             logger.warning(
-                'Invalid duplicate_name for extracted node %s; treating as no duplicate. '
-                'duplicate_name was: %r',
+                'Invalid duplicate_candidate_id %d for extracted node %s; treating as no duplicate.',
+                duplicate_candidate_id,
                 extracted_node.uuid,
-                duplicate_name[:50] + '...' if len(duplicate_name) > 50 else duplicate_name,
             )
             resolved_node = extracted_node
 
@@ -402,16 +848,53 @@ async def resolve_extracted_nodes(
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
     existing_nodes_override: list[EntityNode] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
+    trace: 'ResolutionTrace | None' = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
-    """Search for existing nodes, resolve deterministic matches, then escalate holdouts to the LLM dedupe prompt."""
-    llm_client = clients.llm_client
-    existing_nodes = await _collect_candidate_nodes(
+    """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup.
+
+    When `trace` is given, it records the candidates that each extracted node saw and
+    one `PatchNode` operation for each extracted node that resolved to a candidate.
+    """
+    candidate_nodes_by_extracted = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
-        existing_nodes_override,
+        existing_nodes_override=existing_nodes_override,
+        identity_properties=identity_properties,
     )
 
-    indexes: DedupCandidateIndexes = _build_candidate_indexes(existing_nodes)
+    # The record is before the resolution, which promotes labels of candidates in memory.
+    if trace is not None:
+        for node, candidates in zip(extracted_nodes, candidate_nodes_by_extracted, strict=True):
+            trace.record_node_candidates(node.uuid, candidates)
+    return await resolve_nodes_with_candidates(
+        clients,
+        extracted_nodes,
+        candidate_nodes_by_extracted,
+        episode,
+        previous_episodes,
+        entity_types,
+        identity_properties,
+        trace=trace,
+    )
+
+
+async def resolve_nodes_with_candidates(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    candidate_nodes_by_extracted: list[list[EntityNode]],
+    episode: EpisodicNode | None = None,
+    previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    identity_properties: dict[str, list[str]] | None = None,
+    *,
+    trace: 'ResolutionTrace | None' = None,
+) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
+    """Resolve nodes against given candidates: identity rule, similarity rule, then LLM.
+
+    `candidate_nodes_by_extracted` has one candidate list for each extracted node.
+    """
+    llm_client = clients.llm_client
 
     state = DedupResolutionState(
         resolved_nodes=[None] * len(extracted_nodes),
@@ -419,17 +902,66 @@ async def resolve_extracted_nodes(
         unresolved_indices=[],
     )
 
-    _resolve_with_similarity(extracted_nodes, indexes, state)
+    for idx, (node, candidates) in enumerate(
+        zip(extracted_nodes, candidate_nodes_by_extracted, strict=True)
+    ):
+        if not candidates:
+            continue
 
-    await _resolve_with_llm(
-        llm_client,
-        extracted_nodes,
-        indexes,
-        state,
-        episode,
-        previous_episodes,
-        entity_types,
-    )
+        indexes = _build_candidate_indexes(candidates)
+        local_state = DedupResolutionState(
+            resolved_nodes=[None], uuid_map={}, unresolved_indices=[]
+        )
+        _resolve_with_identity_properties([node], indexes, local_state, identity_properties)
+        if local_state.resolved_nodes[0] is not None:
+            _commit_resolution(
+                state,
+                local_state.resolved_nodes[0],
+                local_state.uuid_map,
+                local_state.duplicate_pairs,
+                idx,
+            )
+            continue
+
+        _resolve_with_similarity([node], indexes, local_state)
+        if local_state.resolved_nodes[0] is not None:
+            _commit_resolution(
+                state,
+                local_state.resolved_nodes[0],
+                local_state.uuid_map,
+                local_state.duplicate_pairs,
+                idx,
+            )
+            continue
+
+        state.unresolved_indices.append(idx)
+
+    if state.unresolved_indices:
+        llm_candidate_nodes = _merge_candidate_nodes(
+            [
+                candidate
+                for idx in state.unresolved_indices
+                for candidate in candidate_nodes_by_extracted[idx]
+            ]
+        )
+        if trace is not None:
+            # The dedupe prompt shows the merged candidates to each unresolved node.
+            for idx in state.unresolved_indices:
+                trace.record_node_candidates(extracted_nodes[idx].uuid, llm_candidate_nodes)
+            trace.node_llm_calls += 1
+        await _resolve_with_llm(
+            llm_client,
+            extracted_nodes,
+            _build_candidate_indexes(llm_candidate_nodes),
+            state,
+            episode,
+            previous_episodes,
+            entity_types,
+            clients=clients,
+        )
+
+    if not state.unresolved_indices and not any(candidate_nodes_by_extracted):
+        logger.debug('No semantic dedup candidates found; keeping all extracted nodes as new')
 
     for idx, node in enumerate(extracted_nodes):
         if state.resolved_nodes[idx] is None:
@@ -440,6 +972,10 @@ async def resolve_extracted_nodes(
         'Resolved nodes: %s',
         [node.uuid for node in state.resolved_nodes if node is not None],
     )
+
+    if trace is not None:
+        for node in extracted_nodes:
+            trace.record_node_resolution(node, state.uuid_map.get(node.uuid, node.uuid))
 
     return (
         [node for node in state.resolved_nodes if node is not None],
@@ -463,14 +999,76 @@ def _build_edges_by_node(edges: list[EntityEdge] | None) -> dict[str, list[Entit
     return edges_by_node
 
 
+def _entity_type_for_node(
+    node: EntityNode,
+    entity_types: dict[str, type[BaseModel]] | None,
+) -> type[BaseModel] | None:
+    if entity_types is None:
+        return None
+    type_name = next((label for label in node.labels if label in entity_types), None)
+    return entity_types.get(type_name) if type_name is not None else None
+
+
+async def extract_attributes_only_from_nodes(
+    clients: GraphitiClients,
+    nodes: list[EntityNode],
+    episode: EpisodicNode | list[EpisodicNode] | None = None,
+    previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    validate_shape: bool = True,
+) -> list[EntityNode]:
+    if not nodes or not entity_types:
+        return nodes
+
+    extraction_inputs: list[tuple[EntityNode, type[BaseModel]]] = []
+    for node in nodes:
+        entity_type = _entity_type_for_node(node, entity_types)
+        if entity_type is None or len(entity_type.model_fields) == 0:
+            continue
+        extraction_inputs.append((node, entity_type))
+
+    if not extraction_inputs:
+        return nodes
+
+    attribute_results = await semaphore_gather(
+        *[
+            _extract_entity_attributes(
+                clients.llm_client,
+                node,
+                episode,
+                previous_episodes,
+                entity_type,
+                clients=clients,
+                validate_shape=validate_shape,
+            )
+            for node, entity_type in extraction_inputs
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
+    )
+
+    # _extract_entity_attributes returns the already-merged attribute dict
+    # (overlay of prior + cap-kept fields), so direct assignment is the merge.
+    for (node, _entity_type), attributes in zip(
+        extraction_inputs,
+        attribute_results,
+        strict=True,
+    ):
+        node.attributes = attributes
+
+    return nodes
+
+
 async def extract_attributes_from_nodes(
     clients: GraphitiClients,
     nodes: list[EntityNode],
-    episode: EpisodicNode | None = None,
+    episode: EpisodicNode | list[EpisodicNode] | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
     should_summarize_node: NodeSummaryFilter | None = None,
     edges: list[EntityEdge] | None = None,
+    skip_fact_appending: bool = False,
+    include_type_descriptions: bool = False,
+    skip_attribute_extraction: bool = False,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -478,27 +1076,14 @@ async def extract_attributes_from_nodes(
     # Pre-build edges lookup for O(E + N) instead of O(N * E)
     edges_by_node = _build_edges_by_node(edges)
 
-    # Extract attributes in parallel (per-entity calls)
-    attribute_results: list[dict[str, Any]] = await semaphore_gather(
-        *[
-            _extract_entity_attributes(
-                llm_client,
-                node,
-                episode,
-                previous_episodes,
-                (
-                    entity_types.get(next((item for item in node.labels if item != 'Entity'), ''))
-                    if entity_types is not None
-                    else None
-                ),
-            )
-            for node in nodes
-        ]
-    )
-
-    # Apply attributes to nodes
-    for node, attributes in zip(nodes, attribute_results, strict=True):
-        node.attributes.update(attributes)
+    if not skip_attribute_extraction:
+        await extract_attributes_only_from_nodes(
+            clients,
+            nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+        )
 
     # Extract summaries in batch
     await _extract_entity_summaries_batch(
@@ -508,6 +1093,10 @@ async def extract_attributes_from_nodes(
         previous_episodes,
         should_summarize_node,
         edges_by_node,
+        skip_fact_appending=skip_fact_appending,
+        entity_types=entity_types if include_type_descriptions else None,
+        clients=clients,
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     await create_entity_node_embeddings(embedder, nodes)
@@ -518,12 +1107,18 @@ async def extract_attributes_from_nodes(
 async def _extract_entity_attributes(
     llm_client: LLMClient,
     node: EntityNode,
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_type: type[BaseModel] | None,
+    *,
+    clients: GraphitiClients | None = None,
+    validate_shape: bool = True,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
-        return {}
+        # No applicable type means nothing to extract, not "extracted nothing": return the
+        # node's prior attributes so the caller's assignment leaves them untouched. Returning
+        # {} here would clear attributes a previous typed pass stored on a deduplicated node.
+        return dict(node.attributes or {})
 
     attributes_context = _build_episode_context(
         # should not include summary
@@ -536,33 +1131,60 @@ async def _extract_entity_attributes(
         previous_episodes=previous_episodes,
     )
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_attributes(attributes_context),
+    llm_response = await generate_prompt_response(
+        llm_client,
+        'extract_nodes.extract_attributes',
+        prompt_library.extract_nodes.extract_attributes,
+        attributes_context,
+        clients=clients,
         response_model=entity_type,
         model_size=ModelSize.small,
         group_id=node.group_id,
+        attribute_extraction=True,
+    )
+    # Overlay merge: cap-dropped or LLM-omitted fields keep prior values.
+    # See attribute_utils for the merge_mode contract; the edge path uses 'replace'.
+    merged, _ = apply_capped_attributes(
+        llm_response,
+        entity_type,
+        node.attributes,
+        merge_mode='overlay',
         prompt_name='extract_nodes.extract_attributes',
+        entity_uuid=node.uuid,
+        group_id=node.group_id,
     )
 
-    # validate response
-    entity_type(**llm_response)
+    # Shape validation only — we discard the validated instance because returning
+    # `model_dump()` would expand defaults across all fields and clobber prior
+    # values that the merge above just preserved.
+    if validate_shape:
+        entity_type(**merged)
 
-    return llm_response
+    return merged
 
 
 async def _extract_entity_summaries_batch(
     llm_client: LLMClient,
     nodes: list[EntityNode],
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     should_summarize_node: NodeSummaryFilter | None,
     edges_by_node: dict[str, list[EntityEdge]],
+    *,
+    skip_fact_appending: bool = False,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    clients: GraphitiClients | None = None,
+    max_coroutines: int | None = None,
 ) -> None:
     """Extract summaries for multiple entities in batched LLM calls.
 
-    Nodes that don't need LLM summarization (short enough with edge facts appended)
-    are handled directly without an LLM call. Nodes needing summarization are
+    When skip_fact_appending is False (default), nodes with short summaries get edge
+    facts appended directly without an LLM call.  Nodes needing summarization are
     partitioned into flights of MAX_NODES and processed with separate LLM calls.
+
+    When skip_fact_appending is True, the raw fact-append shortcut is bypassed and all
+    nodes are routed through LLM summarization using an episode-based prompt that
+    matches the async graph summary worker.
     """
     # Determine which nodes need LLM summarization vs direct edge fact appending
     nodes_needing_llm: list[EntityNode] = []
@@ -570,6 +1192,12 @@ async def _extract_entity_summaries_batch(
     for node in nodes:
         # Check if node should be summarized at all
         if should_summarize_node is not None and not await should_summarize_node(node):
+            continue
+
+        if skip_fact_appending:
+            # Always route through LLM — no raw fact concatenation.
+            if episode is not None or node.summary:
+                nodes_needing_llm.append(node)
             continue
 
         node_edges = edges_by_node.get(node.uuid, [])
@@ -580,8 +1208,8 @@ async def _extract_entity_summaries_batch(
             edge_facts = '\n'.join(edge.fact for edge in node_edges if edge.fact)
             summary_with_edges = f'{summary_with_edges}\n{edge_facts}'.strip()
 
-        # If summary is short enough, use it directly (append edge facts, no LLM call)
-        if summary_with_edges and len(summary_with_edges) <= MAX_SUMMARY_CHARS * 4:
+        # If summary is close to the persisted limit, use it directly (append edge facts, no LLM call)
+        if summary_with_edges and len(summary_with_edges) <= MAX_SUMMARY_CHARS * 2:
             node.summary = summary_with_edges
             continue
 
@@ -604,19 +1232,40 @@ async def _extract_entity_summaries_batch(
     # Process flights in parallel
     await semaphore_gather(
         *[
-            _process_summary_flight(llm_client, flight, episode, previous_episodes)
+            _process_summary_flight(
+                llm_client,
+                flight,
+                episode,
+                previous_episodes,
+                use_episode_prompt=skip_fact_appending,
+                entity_types=entity_types,
+                clients=clients,
+            )
             for flight in node_flights
-        ]
+        ],
+        max_coroutines=max_coroutines,
     )
 
 
 async def _process_summary_flight(
     llm_client: LLMClient,
     nodes: list[EntityNode],
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
+    *,
+    use_episode_prompt: bool = False,
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    clients: GraphitiClients | None = None,
 ) -> None:
     """Process a single flight of nodes for batch summarization."""
+    # Build entity type descriptions from docstrings, stripping GOOD/BAD
+    # few-shot examples that are intended for extraction prompts only.
+    entity_type_descriptions: dict[str, str] = {}
+    if entity_types is not None:
+        for type_name, type_model in entity_types.items():
+            if type_model.__doc__:
+                entity_type_descriptions[type_name] = _truncate_type_description(type_model.__doc__)
+
     # Build context for batch summarization
     entities_context = [
         {
@@ -628,23 +1277,49 @@ async def _process_summary_flight(
         for node in nodes
     ]
 
-    batch_context = {
+    if episode is None:
+        episode_content = ''
+    elif isinstance(episode, list):
+        episode_content = concatenate_episodes(episode)
+    else:
+        episode_content = episode.content
+
+    batch_context: dict[str, Any] = {
         'entities': entities_context,
-        'episode_content': episode.content if episode is not None else '',
+        'episode_content': episode_content,
         'previous_episodes': (
-            [ep.content for ep in previous_episodes] if previous_episodes is not None else []
+            [
+                {
+                    'content': ep.content,
+                    'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+                }
+                for ep in previous_episodes
+            ]
+            if previous_episodes is not None
+            else []
         ),
+        'entity_type_descriptions': entity_type_descriptions,
     }
 
     # Get group_id from the first node (all nodes in a batch should have same group_id)
     group_id = nodes[0].group_id if nodes else None
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_summaries_batch(batch_context),
+    if use_episode_prompt:
+        legacy_prompt = prompt_library.extract_nodes.extract_entity_summaries_from_episodes
+        prompt_name = 'extract_nodes.extract_entity_summaries_from_episodes'
+    else:
+        legacy_prompt = prompt_library.extract_nodes.extract_summaries_batch
+        prompt_name = 'extract_nodes.extract_summaries_batch'
+
+    llm_response = await generate_prompt_response(
+        llm_client,
+        prompt_name,
+        legacy_prompt,
+        batch_context,
+        clients=clients,
         response_model=SummarizedEntities,
         model_size=ModelSize.small,
         group_id=group_id,
-        prompt_name='extract_nodes.extract_summaries_batch',
     )
 
     # Build case-insensitive name -> nodes mapping (handles duplicates)
@@ -672,13 +1347,27 @@ async def _process_summary_flight(
 
 def _build_episode_context(
     node_data: dict[str, Any],
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
 ) -> dict[str, Any]:
+    if episode is None:
+        episode_content = ''
+    elif isinstance(episode, list):
+        episode_content = concatenate_episodes(episode)
+    else:
+        episode_content = episode.content
     return {
         'node': node_data,
-        'episode_content': episode.content if episode is not None else '',
+        'episode_content': episode_content,
         'previous_episodes': (
-            [ep.content for ep in previous_episodes] if previous_episodes is not None else []
+            [
+                {
+                    'content': ep.content,
+                    'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+                }
+                for ep in previous_episodes
+            ]
+            if previous_episodes is not None
+            else []
         ),
     }

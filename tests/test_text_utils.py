@@ -14,7 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
+from graphiti_core.utils.text_utils import (
+    MAX_SUMMARY_CHARS,
+    SAGA_SUMMARY_MAX_CHARS,
+    truncate_at_sentence,
+    truncate_utf8_to_bytes,
+)
 
 
 def test_truncate_at_sentence_short_text():
@@ -87,7 +92,11 @@ def test_truncate_at_sentence_strips_trailing_whitespace():
 
 def test_max_summary_chars_constant():
     """Test that MAX_SUMMARY_CHARS is set to expected value."""
-    assert MAX_SUMMARY_CHARS == 500
+    assert MAX_SUMMARY_CHARS == 1000
+
+
+def test_saga_summary_char_constants():
+    assert SAGA_SUMMARY_MAX_CHARS == 4000
 
 
 def test_truncate_at_sentence_realistic_summary():
@@ -104,3 +113,16 @@ def test_truncate_at_sentence_realistic_summary():
     assert result.endswith('.')
     # Should include at least the first sentence
     assert 'John is a software engineer' in result
+
+
+def test_truncate_utf8_to_bytes_preserves_runes():
+    text = 'é' * 10
+    result = truncate_utf8_to_bytes(text, 7)
+    encoded = result.encode('utf-8')
+    assert len(encoded) <= 7
+    assert result == 'é' * 3
+
+
+def test_truncate_utf8_to_bytes_empty_on_non_positive_budget():
+    assert truncate_utf8_to_bytes('abc', 0) == ''
+    assert truncate_utf8_to_bytes('abc', -1) == ''

@@ -49,11 +49,28 @@ class GraphMaintenanceOperations(ABC):
         group_ids: list[str] | None = None,
     ) -> list[Any]: ...
 
-    @abstractmethod
     async def remove_communities(
         self,
         executor: QueryExecutor,
-    ) -> None: ...
+        group_ids: list[str] | None = None,
+    ) -> None:
+        """Delete communities, optionally restricted to the provided groups."""
+        if group_ids:
+            await executor.execute_query(
+                """
+                MATCH (c:Community)
+                WHERE c.group_id IN $group_ids
+                DETACH DELETE c
+                """,
+                group_ids=group_ids,
+            )
+        else:
+            await executor.execute_query(
+                """
+                MATCH (c:Community)
+                DETACH DELETE c
+                """
+            )
 
     @abstractmethod
     async def determine_entity_community(

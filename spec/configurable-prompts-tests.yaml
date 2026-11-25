@@ -1,0 +1,618 @@
+# Specification Test Coverage
+# This file tracks which specification sections have test coverage
+#
+# Structure:
+#   specs: List of Specifications
+#     - spec: Specification identifier (e.g., spec-thing)
+#       title: Specification title
+#       sections: List of sections in the specification
+#         - section: Section number (e.g., 3.1)
+#           title: Section title
+#           testable: Whether this section can be tested with tests
+#           tests: List of test files that cover this section (empty list if not tested)
+
+specs:
+  - spec: spec-configurable-prompts
+    title: Configurable Prompt Library
+    category: Graphiti Core
+    sections:
+      - section: "1"
+        title: Overview
+        testable: false
+
+      - section: "2"
+        title: Terminology
+        testable: false
+
+      - section: "2.1"
+        title: Prompt Function
+        testable: false
+
+      - section: "2.2"
+        title: Prompt Group
+        testable: false
+
+      - section: "2.3"
+        title: Prompt Library
+        testable: false
+
+      - section: "2.4"
+        title: Default Prompt Library
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_default_prompt_library_remains_importable
+              - test_create_prompt_library_returns_default_equivalent_when_no_overrides
+
+      - section: "2.5"
+        title: Prompt Overrides
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_applies_single_override
+              - test_create_prompt_library_preserves_unspecified_defaults
+
+      - section: "2.6"
+        title: Inversion of Control
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_clients_include_instance_prompt_library
+              - test_graphiti_instances_isolate_prompt_libraries
+
+      - section: "3"
+        title: Requirements
+        testable: false
+
+      - section: "3.1"
+        title: Instance-Scoped Configuration
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_instances_isolate_prompt_libraries
+
+      - section: "3.2"
+        title: Default Compatibility
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_stores_default_prompt_library_when_unconfigured
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_returns_default_equivalent_when_no_overrides
+
+      - section: "3.3"
+        title: Partial Override Support
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_applies_single_override
+              - test_create_prompt_library_preserves_unspecified_defaults
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_accepts_prompt_library_created_from_overrides
+
+      - section: "3.4"
+        title: Full Library Support
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_accepts_complete_prompt_library
+              - test_graphiti_validates_complete_prompt_library
+
+      - section: "3.5"
+        title: Prompt Message Wrapping
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_system_messages_receive_do_not_escape_unicode_for_overrides
+              - test_user_messages_do_not_receive_do_not_escape_unicode_for_overrides
+
+      - section: "3.6"
+        title: Response Schema Stability
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_extract_nodes_custom_prompt_uses_existing_response_model
+              - test_extract_edges_custom_prompt_uses_existing_response_model
+
+      - section: "3.7"
+        title: Prompt Name Stability
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_extract_nodes_preserves_prompt_name_with_custom_prompt
+              - test_extract_edges_preserves_prompt_name_with_custom_prompt
+              - test_dedupe_edges_preserves_prompt_name_with_custom_prompt
+
+      - section: "3.8"
+        title: Backward-Compatible Imports
+        testable: true
+        tests:
+          - file: tests/prompts/test_prompt_exports.py
+            functions:
+              - test_prompt_library_import_from_prompts_package
+              - test_prompt_library_import_from_prompts_lib
+
+      - section: "3.9"
+        title: No Global Runtime Mutation
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_create_prompt_library_does_not_mutate_default_prompt_library
+              - test_graphiti_instances_isolate_prompt_libraries
+
+      - section: "3.10"
+        title: Public API Documentation
+        testable: false
+
+      - section: "4"
+        title: Public API
+        testable: false
+
+      - section: "4.1"
+        title: Graphiti Constructor
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_accepts_complete_prompt_library
+              - test_graphiti_accepts_prompt_library_created_from_overrides
+              - test_graphiti_clients_include_instance_prompt_library
+
+      - section: "4.2"
+        title: Prompt Library Creation Helper
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_returns_default_equivalent_when_no_overrides
+              - test_create_prompt_library_applies_single_override
+              - test_create_prompt_library_rejects_unknown_group
+              - test_create_prompt_library_rejects_unknown_function
+              - test_create_prompt_library_rejects_non_callable_override
+
+      - section: "4.3"
+        title: Public Exports
+        testable: true
+        tests:
+          - file: tests/prompts/test_prompt_exports.py
+            functions:
+              - test_prompt_customization_exports_available
+
+      - section: "4.4"
+        title: Complete Prompt Library Objects
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_accepts_complete_prompt_library
+              - test_graphiti_rejects_complete_library_missing_group
+              - test_graphiti_rejects_complete_library_missing_function
+              - test_graphiti_rejects_complete_library_non_callable_function
+
+      - section: "4.5"
+        title: Partial Override Shape
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_applies_single_override
+              - test_create_prompt_library_preserves_unspecified_defaults
+
+      - section: "5"
+        title: Prompt Library Model
+        testable: false
+
+      - section: "5.1"
+        title: Default Prompt Groups
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_default_prompt_library_contains_required_groups
+
+      - section: "5.2"
+        title: Prompt Functions By Group
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_default_prompt_library_contains_required_functions
+
+      - section: "5.3"
+        title: Prompt Library Implementation Map
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_default_prompt_library_impl_contains_required_groups
+              - test_default_prompt_library_impl_contains_required_functions
+
+      - section: "5.4"
+        title: Prompt Function Wrapping
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_system_messages_receive_do_not_escape_unicode_for_overrides
+              - test_user_messages_do_not_receive_do_not_escape_unicode_for_overrides
+
+      - section: "5.5"
+        title: Validation
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_rejects_unknown_group
+              - test_create_prompt_library_rejects_unknown_function
+              - test_create_prompt_library_rejects_non_callable_override
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_rejects_complete_library_missing_group
+              - test_graphiti_rejects_complete_library_missing_function
+              - test_graphiti_rejects_complete_library_non_callable_function
+
+      - section: "6"
+        title: Runtime Dependency Flow
+        testable: false
+
+      - section: "6.1"
+        title: Graphiti Client State
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_stores_default_prompt_library_when_unconfigured
+              - test_graphiti_stores_custom_prompt_library
+              - test_graphiti_clients_include_instance_prompt_library
+
+      - section: "6.2"
+        title: GraphitiClients
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_clients_include_instance_prompt_library
+
+      - section: "6.3"
+        title: Runtime Access Rule
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_extract_nodes_uses_clients_prompt_library
+              - test_resolve_nodes_uses_clients_prompt_library
+              - test_extract_edges_uses_clients_prompt_library
+              - test_resolve_edges_uses_injected_prompt_library
+              - test_combined_extraction_uses_clients_prompt_library
+              - test_community_operations_use_configured_prompt_library
+              - test_saga_summary_uses_self_prompt_library
+
+      - section: "7"
+        title: Required Refactoring
+        testable: false
+
+      - section: "7.1"
+        title: Graphiti Constructor
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_accepts_complete_prompt_library
+              - test_graphiti_accepts_prompt_library_created_from_overrides
+              - test_graphiti_clients_include_instance_prompt_library
+
+      - section: "7.2"
+        title: Graphiti Direct Prompt Calls
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_saga_summary_uses_self_prompt_library
+
+      - section: "7.3"
+        title: Node Maintenance Operations
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_extract_nodes_uses_clients_prompt_library
+              - test_resolve_nodes_uses_clients_prompt_library
+              - test_extract_node_attributes_use_clients_prompt_library
+              - test_extract_node_summaries_use_clients_prompt_library
+
+      - section: "7.4"
+        title: Edge Maintenance Operations
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_extract_edges_uses_clients_prompt_library
+              - test_resolve_edges_uses_injected_prompt_library
+              - test_extract_edge_timestamps_use_injected_prompt_library
+              - test_extract_edge_attributes_use_injected_prompt_library
+
+      - section: "7.5"
+        title: Combined Extraction Operations
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_combined_extraction_uses_clients_prompt_library
+              - test_combined_batch_timestamps_use_clients_prompt_library
+
+      - section: "7.6"
+        title: Community Operations
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_community_summarize_pair_uses_configured_prompt_library
+              - test_community_summary_description_uses_configured_prompt_library
+              - test_update_community_uses_configured_prompt_library
+              - test_build_communities_uses_configured_prompt_library
+
+      - section: "7.7"
+        title: Bulk Utilities
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_bulk_node_flow_inherits_clients_prompt_library
+              - test_bulk_edge_flow_inherits_clients_prompt_library
+
+      - section: "7.8"
+        title: MCP Server Adoption
+        testable: true
+        tests:
+          - file: mcp_server/tests/test_configuration.py
+            functions:
+              - test_graphiti_initialization_without_prompt_configuration_uses_defaults
+
+      - section: "7.9"
+        title: Graph Service Adoption
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_subclass_without_prompt_configuration_uses_defaults
+
+      - section: "7.10"
+        title: Eval Prompt Adoption
+        testable: true
+        tests:
+          - file: tests/prompts/test_prompt_exports.py
+            functions:
+              - test_eval_prompts_remain_available_from_default_prompt_library
+
+      - section: "8"
+        title: Error Handling
+        testable: false
+
+      - section: "8.1"
+        title: Unknown Override Group
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_rejects_unknown_group
+
+      - section: "8.2"
+        title: Unknown Override Function
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_rejects_unknown_function
+
+      - section: "8.3"
+        title: Non-Callable Override
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_rejects_non_callable_override
+
+      - section: "8.4"
+        title: Incomplete Complete Library
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_rejects_complete_library_missing_group
+              - test_graphiti_rejects_complete_library_missing_function
+              - test_graphiti_rejects_complete_library_non_callable_function
+
+      - section: "9"
+        title: Compatibility
+        testable: false
+
+      - section: "9.1"
+        title: Existing Constructors
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_existing_constructor_signature_still_works
+
+      - section: "9.2"
+        title: Existing Prompt Imports
+        testable: true
+        tests:
+          - file: tests/prompts/test_prompt_exports.py
+            functions:
+              - test_prompt_library_import_from_prompts_package
+              - test_prompt_library_import_from_prompts_lib
+
+      - section: "9.3"
+        title: Existing Prompt Names
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_extract_nodes_preserves_prompt_name_with_custom_prompt
+              - test_extract_edges_preserves_prompt_name_with_custom_prompt
+              - test_dedupe_edges_preserves_prompt_name_with_custom_prompt
+              - test_saga_summary_preserves_prompt_name_with_custom_prompt
+
+      - section: "9.4"
+        title: Existing Tests
+        testable: false
+
+      - section: "9.5"
+        title: Type Checking
+        testable: true
+        tests:
+          - file: tests/prompts/test_prompt_exports.py
+            functions:
+              - test_prompt_customization_exports_available
+
+      - section: "10"
+        title: Documentation
+        testable: false
+
+      - section: "10.1"
+        title: Constructor Documentation
+        testable: false
+
+      - section: "10.2"
+        title: README Documentation
+        testable: false
+
+      - section: "10.3"
+        title: API Export Documentation
+        testable: false
+
+      - section: "11"
+        title: Implementation Algorithm
+        testable: false
+
+      - section: "11.1"
+        title: Create Prompt Library From Overrides
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_returns_default_equivalent_when_no_overrides
+              - test_create_prompt_library_applies_single_override
+              - test_create_prompt_library_preserves_unspecified_defaults
+              - test_create_prompt_library_rejects_unknown_group
+              - test_create_prompt_library_rejects_unknown_function
+              - test_create_prompt_library_rejects_non_callable_override
+
+      - section: "11.2"
+        title: Resolve Constructor Prompt Library
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_stores_default_prompt_library_when_unconfigured
+              - test_graphiti_stores_custom_prompt_library
+              - test_graphiti_accepts_prompt_library_created_from_overrides
+
+      - section: "11.3"
+        title: Validate Complete Prompt Library
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_validates_complete_prompt_library
+              - test_graphiti_rejects_complete_library_missing_group
+              - test_graphiti_rejects_complete_library_missing_function
+              - test_graphiti_rejects_complete_library_non_callable_function
+
+      - section: "12"
+        title: Acceptance Criteria
+        testable: false
+
+      - section: "12.1"
+        title: Default Behavior Acceptance
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_stores_default_prompt_library_when_unconfigured
+
+      - section: "12.2"
+        title: Partial Override Acceptance
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_accepts_prompt_library_created_from_overrides
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_applies_single_override
+
+      - section: "12.3"
+        title: Complete Library Acceptance
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_accepts_complete_prompt_library
+
+      - section: "12.4"
+        title: Instance Isolation Acceptance
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_instances_isolate_prompt_libraries
+
+      - section: "12.5"
+        title: Runtime Coverage Acceptance
+        testable: true
+        tests:
+          - file: tests/utils/maintenance/test_configurable_prompts.py
+            functions:
+              - test_extract_nodes_uses_clients_prompt_library
+              - test_resolve_nodes_uses_clients_prompt_library
+              - test_extract_edges_uses_clients_prompt_library
+              - test_resolve_edges_uses_injected_prompt_library
+              - test_combined_extraction_uses_clients_prompt_library
+              - test_community_operations_use_configured_prompt_library
+              - test_saga_summary_uses_self_prompt_library
+
+      - section: "12.6"
+        title: Backward Compatibility Acceptance
+        testable: true
+        tests:
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_existing_constructor_signature_still_works
+          - file: tests/prompts/test_prompt_exports.py
+            functions:
+              - test_prompt_library_import_from_prompts_package
+              - test_prompt_library_import_from_prompts_lib
+
+      - section: "12.7"
+        title: Validation Acceptance
+        testable: true
+        tests:
+          - file: tests/prompts/test_configurable_prompt_library.py
+            functions:
+              - test_create_prompt_library_rejects_unknown_group
+              - test_create_prompt_library_rejects_unknown_function
+              - test_create_prompt_library_rejects_non_callable_override
+          - file: tests/test_graphiti_configurable_prompts.py
+            functions:
+              - test_graphiti_rejects_complete_library_missing_group
+              - test_graphiti_rejects_complete_library_missing_function
+              - test_graphiti_rejects_complete_library_non_callable_function
+
+      - section: "12.8"
+        title: Documentation Acceptance
+        testable: false

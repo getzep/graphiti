@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.28.2"
+version = "0.32.1"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -14,10 +14,12 @@ dependencies = [
     "pydantic>=2.11.5",
     "neo4j>=5.26.0",
     "openai>=1.91.0",
+    "httpx>=0.28.1",
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
-    "posthog>=3.0.0"
+    "posthog>=3.0.0",
+    "certifi>=2026.10.19",
 ]
 
 [project.urls]
@@ -28,13 +30,15 @@ Repository = "https://github.com/getzep/graphiti"
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.62.0"]
-kuzu = ["kuzu>=0.11.3"]
 falkordb = ["falkordb>=1.1.2,<2.0.0"]
+# redis<9 pin: redis-py 8.x breaks falkordblite's embedded server startup
+falkordblite = ["falkordblite>=0.5.0; python_version>='3.12'", "redis<9; python_version>='3.12'"]
 voyageai = ["voyageai>=0.2.3"]
 gliner2 = ["gliner2>=1.2.0; python_version>='3.11'"]
 neo4j-opensearch = ["boto3>=1.39.16", "opensearch-py>=3.0.0"]
 sentence-transformers = ["sentence-transformers>=3.2.1"]
 neptune = ["langchain-aws>=0.2.29", "opensearch-py>=3.0.0", "boto3>=1.39.16"]
+relate = ["relate-db==1.0.1; python_version>='3.11'"]
 tracing = ["opentelemetry-api>=1.20.0", "opentelemetry-sdk>=1.20.0"]
 dev = [
     "pyright>=1.1.404",
@@ -42,18 +46,15 @@ dev = [
     "anthropic>=0.49.0",
     "google-genai>=1.8.0",
     "falkordb>=1.1.2,<2.0.0",
-    "kuzu>=0.11.3",
+    "relate-db==1.0.1; python_version>='3.11'",
     "boto3>=1.39.16",
     "opensearch-py>=3.0.0",
     "langchain-aws>=0.2.29",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
-    "langgraph>=0.2.15",
-    "langchain-anthropic>=0.2.4",
+    "langgraph>=1.0.10",
     "langsmith>=0.1.108",
     "langchain-openai>=0.2.6",
-    "sentence-transformers>=3.2.1",
-    "transformers>=4.45.2",
     "voyageai>=0.2.3",
     "pytest>=8.3.3",
     "pytest-asyncio>=0.24.0",
@@ -65,6 +66,11 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# Pillow 13 has the security fixes and needs Python 3.11+. On Python 3.10, uv resolves
+# voyageai 0.2.x, which does not use Pillow.
+constraint-dependencies = ["pillow>=13.0.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -93,12 +99,16 @@ ignore = ["E501"]
 # Required by Pydantic on Python < 3.12
 "typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."
 
+[tool.ruff.lint.per-file-ignores]
+"graphiti_core/driver/relate/_session/*.py" = ["SIM"]
+
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
 
 [tool.pyright]
-include = ["graphiti_core"]
+include = ["graphiti_core", ".github/intake"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
+ignore = ["graphiti_core/driver/relate/_session"]

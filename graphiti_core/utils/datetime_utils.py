@@ -50,6 +50,11 @@ def convert_datetimes_to_strings(obj):
     elif isinstance(obj, tuple):
         return tuple(convert_datetimes_to_strings(item) for item in obj)
     elif isinstance(obj, datetime):
-        return obj.isoformat()
+        # Normalize to UTC before serializing. The resulting ISO strings are
+        # compared lexicographically by drivers that store datetimes as strings
+        # (e.g. FalkorDB), which is only correct when all offsets are identical.
+        utc_dt = ensure_utc(obj)
+        assert utc_dt is not None
+        return utc_dt.isoformat()
     else:
         return obj

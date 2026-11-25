@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Coroutine
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 from neo4j import AsyncGraphDatabase, EagerResult
@@ -88,16 +89,12 @@ class Neo4jDriver(GraphDriver):
         self._search_ops = Neo4jSearchOperations()
         self._graph_ops = Neo4jGraphMaintenanceOperations()
 
+        self._init_task: asyncio.Task | None = None
         # Schedule the indices and constraints to be built
-        import asyncio
-
         try:
-            # Try to get the current event loop
             loop = asyncio.get_running_loop()
-            # Schedule the build_indices_and_constraints to run
-            loop.create_task(self.build_indices_and_constraints())
+            self._init_task = loop.create_task(self.build_indices_and_constraints())
         except RuntimeError:
-            # No event loop running, this will be handled later
             pass
 
         self.aoss_client = None
@@ -161,17 +158,23 @@ class Neo4jDriver(GraphDriver):
                 raise
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
-        # Check if database_ is provided in kwargs.
-        # If not populated, set the value to retain backwards compatibility
         params = kwargs.pop('params', None)
         if params is None:
             params = {}
-        params.setdefault('database_', self._database)
+        # Route via Neo4j's database_ kwarg; an explicit override wins (including None,
+        # which lets the server resolve the home database), else the driver default.
+        database = kwargs.pop('database_') if 'database_' in kwargs else self._database
 
         try:
-            result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
+            result = await self.client.execute_query(
+                cypher_query_, parameters_=params, database_=database, **kwargs
+            )
         except Exception as e:
-            logger.error(f'Error executing Neo4j query: {e}\n{cypher_query_}\n{params}')
+            # Log parameter names only; values may contain sensitive data.
+            logger.error(
+                f'Error executing Neo4j query: {e}\n{cypher_query_}\n'
+                f'parameter keys: {sorted([*params, *kwargs])}'
+            )
             raise
 
         return result
@@ -181,12 +184,18 @@ class Neo4jDriver(GraphDriver):
         return self.client.session(database=_database)  # type: ignore
 
     async def close(self) -> None:
-        return await self.client.close()
+        if self._init_task is not None:
+            if not self._init_task.done():
+                self._init_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._init_task
+            elif not self._init_task.cancelled():
+                # Retrieve any exception so it doesn't go unobserved
+                self._init_task.exception()
+        await self.client.close()
 
     def delete_all_indexes(self) -> Coroutine:
-        return self.client.execute_query(
-            'CALL db.indexes() YIELD name DROP INDEX name',
-        )
+        return self.execute_query('CALL db.indexes() YIELD name DROP INDEX name')
 
     async def _execute_index_query(self, query: LiteralString) -> EagerResult | None:
         """Execute an index creation query, ignoring 'index already exists' errors.

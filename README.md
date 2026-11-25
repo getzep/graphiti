@@ -7,7 +7,7 @@
 <h1 align="center">
 Graphiti
 </h1>
-<h2 align="center">Build Temporal Context Graphs for AI Agents</h2>
+<h2 align="center">A Framework for Building Temporal Knowledge Graphs</h2>
 
 <div align="center">
 
@@ -16,7 +16,6 @@ Graphiti
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/getzep/graphiti)](https://github.com/getzep/graphiti/stargazers)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.com/invite/W8Kw6bsgXQ)
 [![arXiv](https://img.shields.io/badge/arXiv-2501.13956-b31b1b.svg?style=flat)](https://arxiv.org/abs/2501.13956)
 [![Release](https://img.shields.io/github/v/release/getzep/graphiti?style=flat&label=Release&color=limegreen)](https://github.com/getzep/graphiti/releases)
 
@@ -35,10 +34,6 @@ Graphiti
 
 &nbsp;
 
-> [!TIP]
-> Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful
-> context graph-based memory with temporal awareness.
-
 Graphiti is a framework for building and querying temporal context graphs for AI agents. Unlike static knowledge graphs,
 Graphiti's context graphs track how facts change over time, maintain provenance to source data, and support both
 prescribed and learned ontology — making them purpose-built for agents operating on evolving, real-world data.
@@ -50,8 +45,8 @@ recomputation, making it suitable for developing interactive, context-aware AI a
 
 Use Graphiti to:
 
-- Build context graphs that evolve with every interaction — tracking what's true now and what was true before.
-- Give agents rich, structured context instead of flat document chunks or raw chat history.
+- Build temporal knowledge graphs that evolve with every interaction — tracking what's true now and what was true before.
+- Represent rich, structured context instead of flat document chunks or raw event streams.
 - Query across time, meaning, and relationships with hybrid retrieval (semantic + keyword + graph traversal).
 
 &nbsp;
@@ -83,39 +78,44 @@ A context graph contains:
 
 ## Graphiti and Zep
 
-Graphiti is the open-source temporal context graph engine at the core of
-[Zep's](https://www.getzep.com) context infrastructure for AI agents. Zep manages context graphs at scale, providing
-governed, low-latency context retrieval and assembly for production agent deployments.
+Graphiti is an open-source Python framework for building and querying temporal context graphs. You supply the graph
+database, LLM, and embedder, and you build the service around it: ingestion, tenancy, access control, and operations.
 
-Using Graphiti, we've demonstrated Zep is
-the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
+[Zep](https://www.getzep.com) is the unified context layer for enterprises. Zep brings data from across a business into
+governed context graphs and serves that context to agents in production. Graphiti is the graph construction framework
+inside Zep. [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, stores and
+serves millions of context graphs with low-latency retrieval.
 
-Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956).
+Teams use both to give agents memory. Neither is an agent memory product: Graphiti is a framework for building graphs,
+and Zep unifies, governs, and serves an enterprise's context.
 
-We're excited to open-source Graphiti, believing its potential as a context graph engine reaches far beyond memory
-applications.
+Read our paper: [Zep: A Temporal Knowledge Graph Architecture](https://arxiv.org/abs/2501.13956).
 
 <p align="center">
-    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
+    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture" width="700px"></a>
 </p>
 
 ## Zep vs Graphiti
 
 | Aspect | Zep | Graphiti |
 |--------|-----|---------|
-| **What they are** | Managed context graph infrastructure for AI agents | Open-source temporal context graph engine |
-| **Context graphs** | Manages vast numbers of per-user/entity context graphs with governance | Build and query individual context graphs |
-| **User & conversation management** | Built-in users, threads, and message storage | Build your own |
+| **What it is** | The unified context layer for enterprises | An open-source framework for building temporal context graphs |
+| **Scope** | Unifies data from across an enterprise into governed context and serves it to agents | Builds and queries graphs inside your own application |
+| **Context graphs** | Manages millions of context graphs with governance | Builds and queries the graphs you define |
+| **Graph database** | [Konig](https://www.getzep.com/platform/context-graph-engine/), Zep's graph database service, built for millions of context graphs with low-latency retrieval; no third-party graph database required | Bring your own: Neo4j, FalkorDB, Amazon Neptune, or Relate |
+| **Users, threads, and ingestion** | Built-in users, threads, and ingestion for messages and business data | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
-| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
+| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; CLI; SDKs for Python, TypeScript, and Go | Build your own tools |
 | **Enterprise features** | SLAs, support, security guarantees | Self-managed |
-| **Deployment** | Fully managed or in your cloud | Self-hosted only |
+| **Deployment** | Fully managed or in your cloud (BYOC) | Self-hosted only |
 
 ### When to choose which
 
-**Choose Zep** if you want a turnkey, enterprise-grade platform with security, performance, and support baked in.
+**Choose Zep** if you want an enterprise's context unified, governed, and served to agents in production, without
+building and operating that system yourself.
 
-**Choose Graphiti** if you want a flexible OSS core and you're comfortable building/operating the surrounding system.
+**Choose Graphiti** if you are building temporal context graphs into your own system and will operate the graph
+database, retrieval, and surrounding service yourself.
 
 ## Why Graphiti?
 
@@ -143,7 +143,7 @@ frequently changing data. Graphiti addresses these challenges by providing:
 
 | Aspect | GraphRAG | Graphiti |
 |--------|----------|---------|
-| **Primary Use** | Static document summarization | Dynamic, evolving context for agents |
+| **Primary Use** | Static document summarization | Dynamic, evolving temporal knowledge graphs |
 | **Data Handling** | Batch-oriented processing | Continuous, incremental updates |
 | **Knowledge Structure** | Entity clusters & community summaries | Temporal context graph — entities, facts with validity windows, episodes, communities |
 | **Retrieval Method** | Sequential LLM summarization | Hybrid semantic, keyword, and graph-based search |
@@ -162,12 +162,12 @@ particularly suitable for applications requiring real-time interaction and preci
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
-  OpenSearch Serverless collection (serves as the full text search backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch / Relate (embedded, Python 3.11+, no server)
+  Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
-> Graphiti works best with LLM services that support Structured Output (such as OpenAI and Gemini).
+> Graphiti works best with LLM services that support Structured Output (such as OpenAI, Anthropic, and Gemini).
 > Using other services may result in incorrect output schemas and ingestion failures. This is particularly
 > problematic when using smaller models.
 
@@ -202,17 +202,11 @@ pip install graphiti-core[falkordb]
 
 # or with uv
 uv add graphiti-core[falkordb]
-```
 
-### Installing with Kuzu Support
-
-If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
-
-```bash
-pip install graphiti-core[kuzu]
-
+# or embedded version (requires Python 3.12+)
+pip install graphiti-core[falkordblite]
 # or with uv
-uv add graphiti-core[kuzu]
+uv add graphiti-core[falkordblite]
 ```
 
 ### Installing with Amazon Neptune Support
@@ -224,6 +218,27 @@ pip install graphiti-core[neptune]
 
 # or with uv
 uv add graphiti-core[neptune]
+```
+
+### Installing with Relate Support
+
+Relate is an embedded graph database that runs inside your Python process, so it needs no
+separate server. It requires Python 3.11 or later. Install the Relate extra:
+
+```bash
+pip install graphiti-core[relate]
+
+# or with uv
+uv add graphiti-core[relate]
+```
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.relate_driver import RelateDriver
+
+# ':memory:' (the default) is ephemeral; pass a file path to persist the graph
+driver = RelateDriver('/path/to/graph.relate')
+graphiti = Graphiti(graph_driver=driver)
 ```
 
 ### You can also install optional LLM providers as extras:
@@ -265,13 +280,15 @@ performance.
 > [!IMPORTANT]
 > Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your
 > environment.
-> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI
-> compatible APIs.
+> Support for Anthropic, Gemini, and Groq is available, too. Other LLM providers — both hosted OpenAI-compatible APIs
+> (DeepSeek, Together, OpenRouter, …) and local servers (Ollama, vLLM, llama.cpp, LM Studio) — may be used via their
+> OpenAI-compatible endpoints; see
+> [Using Graphiti with OpenAI-compatible providers and local LLMs](#using-graphiti-with-openai-compatible-providers-and-local-llms).
 
 For a complete working example, see the [Quickstart Example](examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
 
-1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
+1. Connecting to a Neo4j, Amazon Neptune, or FalkorDB database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -301,9 +318,36 @@ You can use Docker Compose to quickly start the required services:
 
   This will start the FalkorDB Docker service and related components.
 
-## MCP Server
+## Reference MCP and REST servers
 
-The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server
+The `mcp_server` and `server` directories contain reference implementations of an MCP server and a REST server. These
+servers show how to put Graphiti behind a protocol. These servers are not production deployments.
+
+> [!WARNING]
+> The reference servers have no authentication, no authorization, and no prompt-injection protection. These omissions
+> are intentional. Do not expose the reference servers to an untrusted network.
+
+The reference servers have these limits:
+
+- The servers do not authenticate callers. Any caller can read, change, or delete data in any `group_id`.
+- The servers do not detect or block prompt injection. The servers send episode content and tool input to the
+  configured LLM without a filter.
+- The example Docker Compose files use default database credentials.
+
+Security reports about these limits are out of scope. Pull requests that add authentication, authorization, or
+prompt-injection filters to the reference servers are also out of scope. For more information, see the
+[security policy scope](SECURITY.md#scope).
+
+For a production deployment, use one of these options:
+
+- Use the `graphiti-core` library in your own service. Your service must supply authentication, authorization, tenant
+  isolation, and input controls.
+- Use [Zep](https://www.getzep.com), the unified context layer for enterprises, which is built on Graphiti. Zep is
+  available as a managed service or in your own cloud (BYOC). For a comparison, see [Zep vs Graphiti](#zep-vs-graphiti).
+
+### MCP Server
+
+The `mcp_server` directory contains a reference Model Context Protocol (MCP) server for Graphiti. This server
 allows AI assistants to interact with Graphiti's context graph capabilities through the MCP protocol.
 
 Key features of the MCP server include:
@@ -319,9 +363,9 @@ workflows.
 
 For detailed setup instructions and usage examples, see the [MCP server README](mcp_server/README.md).
 
-## REST Service
+### REST Service
 
-The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+The `server` directory contains a reference REST service for the Graphiti API. The service uses FastAPI.
 
 Please see the [server README](server/README.md) for more information.
 
@@ -374,18 +418,10 @@ driver = FalkorDriver(
     database="my_custom_graph"  # Custom database name
 )
 
-# Pass the driver to Graphiti
-graphiti = Graphiti(graph_driver=driver)
-```
-
-#### Kuzu
-
-```python
-from graphiti_core import Graphiti
-from graphiti_core.driver.kuzu_driver import KuzuDriver
-
-# Create a Kuzu driver
-driver = KuzuDriver(db="/tmp/graphiti.kuzu")
+# Or use embedded FalkorDB Lite (requires Python 3.12+)
+# from redislite.async_falkordb_client import AsyncFalkorDB
+# falkordb_client = AsyncFalkorDB(dbfilename='/path/to/database.db')
+# driver = FalkorDriver(falkor_db=falkordb_client)
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
@@ -518,14 +554,15 @@ The Gemini reranker uses the `gemini-2.5-flash-lite` model by default, which is 
 cost-effective and low-latency classification tasks. It uses the same boolean classification approach as the OpenAI
 reranker, leveraging Gemini's log probabilities feature to rank passage relevance.
 
-## Using Graphiti with Ollama (Local LLM)
+## Using Graphiti with OpenAI-compatible providers and local LLMs
 
-Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal
-for privacy-focused applications or when you want to avoid API costs.
+Graphiti can use any OpenAI-compatible `/v1` endpoint for LLM inference via `OpenAIGenericClient` — both **hosted
+providers** (DeepSeek, Together, OpenRouter, Fireworks, etc.) and **local servers** (Ollama, vLLM, llama.cpp, LM
+Studio). Local servers are ideal for privacy-focused applications or avoiding API costs. The example below uses Ollama;
+for any other provider, point `base_url` at its endpoint and set the appropriate `api_key` and `model`.
 
-**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for Ollama and other OpenAI-compatible providers like LM
-Studio. The `OpenAIGenericClient` is optimized for local models with a higher default max token limit (16K vs 8K) and
-full support for structured outputs.
+**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for these endpoints. It is optimized for local models with a
+higher default max token limit (16K vs 8K) and handles structured outputs across compatible providers.
 
 Install the models:
 
@@ -573,6 +610,238 @@ graphiti = Graphiti(
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
 
+### Structured output and small models
+
+Graphiti depends on structured (JSON) output for entity/edge extraction and deduplication, and works best with models
+and providers that reliably honor it (OpenAI, Anthropic, Gemini). Reliability varies across OpenAI-compatible providers and
+especially on smaller or local models, so `OpenAIGenericClient` exposes a `structured_output_mode`:
+
+- `"json_schema"` (default): requests native structured output via `response_format`. Best on capable models and
+  providers that enforce the schema via constrained decoding.
+- `"json_object"`: requests plain-JSON mode and injects the schema into the prompt instead. Use this for
+  providers/models that don't reliably honor `json_schema` — including some local servers that accept the `json_schema`
+  request but don't actually constrain output to it, where `json_object` can be *more* reliable.
+
+When using smaller or local models:
+
+- Prefer the most capable model you can run. Very small models frequently emit JSON that doesn't match the requested
+  schema, which surfaces as extraction failures.
+- Responses wrapped in Markdown ` ```json ` code fences are stripped automatically.
+- Keep `SEMAPHORE_LIMIT` low (see [above](#default-to-low-concurrency-llm-provider-429-rate-limit-errors)) — local
+  servers and some providers have limited concurrency.
+
+## Identity properties
+
+Use `identity_properties` to match entities by one or more attributes. Each entity type must exist in
+`entity_types`, and each identity property must be a field on that type. Graphiti extracts these fields
+before it resolves nodes. This lookup is supported by Neo4j and FalkorDB.
+
+After you create a `Graphiti` instance, pass the entity model and its identity fields to `add_episode`:
+
+```python
+from datetime import datetime, timezone
+
+from pydantic import BaseModel
+
+from graphiti_core.nodes import EpisodeType
+
+
+class Person(BaseModel):
+    email: str
+
+
+await graphiti.add_episode(
+    name='Conversation',
+    episode_body='Alex uses alex@example.com.',
+    source_description='chat',
+    reference_time=datetime.now(timezone.utc),
+    source=EpisodeType.message,
+    entity_types={'Person': Person},
+    identity_properties={'Person': ['email']},
+)
+```
+
+## Configurable Prompts
+
+Graphiti lets you override LLM prompt builders per client instance. Override callables must return
+``ChatPrompt`` (system + user). Response schemas are fixed and not overridable:
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.prompts import ChatPrompt, SystemMessage, UserMessage, create_prompt_library
+
+def custom_extract_message(context: dict) -> ChatPrompt:
+    return ChatPrompt(
+        system=SystemMessage(content='Extract entities for my domain.'),
+        user=UserMessage(content=str(context.get('episode_content', ''))),
+    )
+
+prompt_library = create_prompt_library({
+    'extract_nodes': {
+        'extract_message': custom_extract_message,
+    },
+})
+
+graphiti = Graphiti(..., prompt_library=prompt_library)
+```
+
+Unspecified prompts keep the built-in defaults. Returning ``list[Message]`` from an override raises
+``TypeError`` — migrate with ``return ChatPrompt(system=..., user=...)``. Unicode handling is applied
+via ``ChatPrompt.as_messages()``.
+
+The package-level ``prompt_library`` keeps the existing ``list[Message]`` API.
+The opt-in prompt customization API uses ``ChatPromptLibrary`` and
+``DefaultChatPromptLibrary``.
+
+For per-prompt routing across providers, pass an opt-in ``llm_runtime``. Create
+one ``LLMTransport`` for each provider client. Each ``LLMModel`` binds a provider
+model ID to one transport. An unrouted prompt uses the default model.
+``llm_runtime`` cannot be combined with ``llm_client`` or ``prompt_library``.
+Response schemas stay fixed. You can configure prompt text and model routes:
+
+```python
+from typing import Literal
+
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.anthropic_client import AnthropicClient
+from graphiti_core.llm_client import (
+    LLMRuntime,
+    LLMTransport,
+    OpenAIClient,
+    PromptRoutes,
+)
+
+OpenAIModels = Literal['gpt-5.1', 'gpt-5-nano']
+openai = LLMTransport[OpenAIModels](
+    OpenAIClient(),
+    models=['gpt-5.1', 'gpt-5-nano'],
+)
+
+AnthropicModels = Literal['claude-sonnet-5', 'claude-haiku-5-5']
+anthropic = LLMTransport[AnthropicModels](
+    AnthropicClient(),
+    models=['claude-sonnet-5', 'claude-haiku-5-5'],
+)
+
+main = openai.model('gpt-5.1')
+nano = openai.model('gpt-5-nano')
+haiku = anthropic.model('claude-haiku-5-5')
+runtime = LLMRuntime(
+    model=main,
+    routes=PromptRoutes(
+        extract_nodes=PromptRoutes.ExtractNodes(extract_attributes=nano),
+        dedupe_edges=PromptRoutes.DedupeEdges(
+            resolve_edge=haiku,
+        ),
+    ),
+)
+
+graphiti = Graphiti(..., llm_runtime=runtime)
+```
+
+``LLMModel`` does not have a ``small_id`` field. The runtime passes
+``model_size`` for legacy compatibility, but this value does not select a
+smaller model. The selected model ID controls provider calls. A routed prompt
+uses that model ID. An unrouted prompt uses the default model ID. Route prompts
+that need a smaller model to that model explicitly. Legacy calls without
+``llm_runtime`` retain ``LLMConfig.small_model`` behavior.
+
+GLiNER2 binds model objects at initialization. It does not support per-prompt
+model routing. See ``spec/llm-runtime.md`` for the runtime API.
+
+### Jev dedupe
+
+JevClient routes node dedupe and edge resolution to TypeSafe Jev. Set
+``JEV_API_KEY`` before you create the client. The duplicate threshold defaults
+to 0.7. The contradiction threshold defaults to 0.8.
+
+Jev is a decision model. It answers typed questions with probabilities. It
+does not generate text. Use a general LLM as the default model. Route only
+``dedupe_nodes.nodes`` and ``dedupe_edges.resolve_edge`` to Jev. Do not use Jev
+for extraction, summaries, or other generation tasks.
+
+TypeSafe hosts the Jev API. Graphiti sends dedupe prompt content to TypeSafe.
+See the [FalkorDB Jev dedupe example](examples/jev/) for a runnable example.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import (
+    JevClient,
+    LLMRuntime,
+    LLMTransport,
+    OpenAIClient,
+    PromptRoutes,
+    jev_prompt_overrides,
+)
+
+openai = LLMTransport(OpenAIClient(), models=['gpt-6-luna'])
+jev = LLMTransport(JevClient(), models=['jev-latest'])
+jev_dedupe = jev.model('jev-latest', prompt_overrides=jev_prompt_overrides())
+
+runtime = LLMRuntime(
+    model=openai.model('gpt-6-luna'),
+    routes=PromptRoutes(
+        dedupe_nodes=PromptRoutes.DedupeNodes(nodes=jev_dedupe),
+        dedupe_edges=PromptRoutes.DedupeEdges(resolve_edge=jev_dedupe),
+    ),
+)
+graphiti = Graphiti(..., llm_runtime=runtime)
+```
+
+### OpenAI Decisions dedupe
+
+``OpenAIDecisionsClient`` routes node dedupe and edge resolution to the OpenAI
+Decisions API. Use a general LLM as the default model. A decision model
+answers typed questions with probabilities and does not generate text. Do not
+use it for extraction, summaries, or other generation tasks.
+
+See the [OpenAI Decisions FalkorDB example](examples/openai_decisions/) for a
+runnable example.
+
+## Concurrent Ingestion for One Graph
+
+By default, Graphiti ingests the episodes of one graph (`group_id`) one at a time, because each episode must see
+the entities and the facts of the episodes before it. Concurrent ingestion is an opt-in mode that runs the
+extraction and the resolution of up to `window` episodes of one graph at the same time. Each episode then commits
+in the order of its `add_episode` call. At the commit, Graphiti compares the result of the episode with the commits
+that the analysis did not see, and repairs only the items that collide.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.ingestion import ConcurrentIngestionConfig
+
+graphiti = Graphiti(
+    graph_driver=driver,
+    concurrent_ingestion=ConcurrentIngestionConfig(window=4),
+)
+
+# Start the calls in the order of the episodes. Each call returns after its commit and its enrichment.
+results = await asyncio.gather(*[graphiti.add_episode(**episode) for episode in episodes])
+```
+
+Notes:
+
+- The mode is off when `concurrent_ingestion` is `None`. Serial ingestion is then the same as before.
+- `enabled_for_group` selects the graphs that use the mode. The other graphs use serial ingestion.
+- `window` is the number of episodes of one graph that are in progress at one time. Each episode also uses up to
+  `SEMAPHORE_LIMIT` concurrent LLM calls, so the mode can send `window x SEMAPHORE_LIMIT` calls at one time.
+  Decrease one of the two values if your LLM provider returns `429` rate limit errors.
+- The default state store is in memory and is for one process. `SQLiteIngestionStateStore` keeps the state in a
+  file, so that more than one process on one machine can ingest into the same graph. A host application can supply
+  its own store with the `IngestionStateStore` interface.
+- `update_communities=True` is not available in this mode. Call `build_communities` after the ingestion.
+- `identity_properties` works in this mode. Give the same value in each call for one graph, because the commit of a
+  recovered unit uses the value of the call that recovers it.
+- The graph of a window larger than 1 can be different from the graph of serial ingestion, because the LLM sees the
+  episodes in a different context. The mode does not guarantee an equal graph.
+- The tests of this mode run on an in-memory graph and on embedded FalkorDB. The mode is not tested on Neo4j or
+  Amazon Neptune.
+
+See the [specification](spec/concurrent-group-ingestion.md) for the design, the phase functions for a host
+application with its own orchestration, the telemetry, and the limits. See the
+[example](examples/concurrent_ingestion/) for a script that ingests a JSONL file with serial or concurrent
+ingestion.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
@@ -593,7 +862,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
+  - Database backend (Neo4j, FalkorDB, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
@@ -667,9 +936,9 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 ## Contributing
 
 We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
-answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
+helping others on GitHub. For detailed guidelines on code contributions, please refer
 to [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
+Open a [GitHub issue](https://github.com/getzep/graphiti/issues) to ask questions, report bugs, or discuss Graphiti.
