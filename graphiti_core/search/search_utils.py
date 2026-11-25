@@ -772,10 +772,13 @@ async def node_bfs_search(
 
     records = []
     for match_query in match_queries:
+        # The MATCH gives one row for each path. A node that two paths reach must be
+        # returned once, so that it takes one place under the LIMIT and one rank in RRF.
         sub_records, _, _ = await driver.execute_query(
             match_query
             + filter_query
             + """
+            WITH DISTINCT n
             RETURN
             """
             + get_entity_node_return_query(driver.provider)

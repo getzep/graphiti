@@ -2017,6 +2017,47 @@ async def test_node_bfs_search(graph_driver, mock_embedder):
 
 
 @pytest.mark.asyncio
+async def test_node_bfs_search_returns_each_node_once(graph_driver, mock_embedder):
+    """Three origins reach `hub`, so the MATCH gives three rows for it."""
+    names = ['origin_1', 'origin_2', 'origin_3', 'origin_4', 'leaf', 'hub', 'other']
+    nodes = {
+        name: EntityNode(name=name, labels=[], created_at=datetime.now(), group_id=group_id)
+        for name in names
+    }
+    # The mock embedder knows a fixed set of texts, so reuse one vector for every record.
+    vector = await mock_embedder.create(input_data=['test_entity_1'])
+    for node in nodes.values():
+        node.name_embedding = vector
+        await node.save(graph_driver)
+    for source, target in [
+        ('origin_1', 'leaf'),
+        ('origin_1', 'hub'),
+        ('origin_2', 'hub'),
+        ('origin_3', 'hub'),
+        ('origin_4', 'other'),
+    ]:
+        edge = EntityEdge(
+            source_node_uuid=nodes[source].uuid,
+            target_node_uuid=nodes[target].uuid,
+            name='RELATES_TO',
+            fact=f'{source} relates to {target}',
+            created_at=datetime.now(),
+            group_id=group_id,
+            fact_embedding=vector,
+        )
+        await edge.save(graph_driver)
+
+    origins = [nodes[name].uuid for name in ['origin_1', 'origin_2', 'origin_3', 'origin_4']]
+    found = await node_bfs_search(
+        graph_driver, origins, SearchFilters(), 1, group_ids=[group_id], limit=3
+    )
+
+    found_names = [node.name for node in found]
+    assert len(found_names) == len(set(found_names))
+    assert set(found_names) == {'leaf', 'hub', 'other'}
+
+
+@pytest.mark.asyncio
 async def test_episode_fulltext_search(
     graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
 ):
