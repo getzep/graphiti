@@ -275,6 +275,55 @@ class TestChunkOverlap:
                 assert len(overlap) > 0
 
 
+class TestExplicitZeroOverlap:
+    """Explicit overlap_tokens=0 must disable overlap (#1951).
+
+    The defaults were resolved with `overlap_tokens or CHUNK_OVERLAP_TOKENS`,
+    so an explicit 0 (falsy) was silently replaced by the default.
+    """
+
+    def test_text_zero_overlap_shares_no_paragraphs(self):
+        paragraphs = [f'Paragraph {i} with some content here.' for i in range(10)]
+        text = '\n\n'.join(paragraphs)
+
+        chunks = chunk_text_content(text, chunk_size_tokens=50, overlap_tokens=0)
+
+        assert len(chunks) > 1
+        seen = []
+        for chunk in chunks:
+            present = [p for p in paragraphs if p in chunk]
+            assert present, 'each chunk must contain whole paragraphs'
+            for p in present:
+                assert p not in seen, f'{p!r} appears in two chunks with overlap=0'
+            seen.extend(present)
+
+    def test_json_zero_overlap_shares_no_elements(self):
+        data = [{'id': i, 'name': f'Entity {i}'} for i in range(10)]
+        content = json.dumps(data)
+
+        chunks = chunk_json_content(content, chunk_size_tokens=40, overlap_tokens=0)
+
+        assert len(chunks) > 1
+        seen_ids = set()
+        for chunk in chunks:
+            ids = {item['id'] for item in json.loads(chunk)}
+            assert not ids & seen_ids, 'elements repeated across chunks with overlap=0'
+            seen_ids |= ids
+
+    def test_message_zero_overlap_shares_no_lines(self):
+        lines = [f'Speaker: message number {i} with content.' for i in range(20)]
+        content = '\n'.join(lines)
+
+        chunks = chunk_message_content(content, chunk_size_tokens=40, overlap_tokens=0)
+
+        assert len(chunks) > 1
+        seen: set[str] = set()
+        for chunk in chunks:
+            present = {line for line in lines if line in chunk}
+            assert not present & seen, 'lines repeated across chunks with overlap=0'
+            seen |= present
+
+
 class TestEdgeCases:
     def test_very_large_single_element(self):
         # Single element larger than chunk size
