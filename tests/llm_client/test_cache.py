@@ -110,3 +110,39 @@ class TestLLMCache:
         c.close()
         # Calling close again via __del__ should not raise
         c.__del__()
+
+
+def test_concurrent_set_and_get(tmp_path):
+    """One sqlite3 connection cannot be used from several threads at once.
+
+    LLMCache sets check_same_thread=False so callers in other threads may use it,
+    so the connection has to be serialised; without it a parallel run raises
+    OperationalError/InterfaceError and loses writes.
+    """
+    import threading
+
+    cache = LLMCache(str(tmp_path / 'concurrent'))
+    threads_count, iterations = 8, 100
+    errors: list[BaseException] = []
+
+    def worker(tid: int) -> None:
+        try:
+            for i in range(iterations):
+                value = {'t': tid, 'i': i}
+                cache.set(f'k-{tid}-{i}', value)
+                if cache.get(f'k-{tid}-{i}') != value:
+                    errors.append(AssertionError(f'mismatch for k-{tid}-{i}'))
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(t,)) for t in range(threads_count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    assert all(
+        cache.get(f'k-{t}-{i}') is not None for t in range(threads_count) for i in range(iterations)
+    )
+    cache.close()
