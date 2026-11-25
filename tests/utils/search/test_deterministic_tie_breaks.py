@@ -1,3 +1,19 @@
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -45,7 +61,7 @@ OperationsSearchCall = Callable[
 
 
 async def _legacy_edge_fulltext(driver: _CapturingExecutor, filters: SearchFilters) -> list:
-    return await edge_fulltext_search(driver, "query", filters)
+    return await edge_fulltext_search(driver, 'query', filters)
 
 
 async def _legacy_edge_similarity(driver: _CapturingExecutor, filters: SearchFilters) -> list:
@@ -53,7 +69,7 @@ async def _legacy_edge_similarity(driver: _CapturingExecutor, filters: SearchFil
 
 
 async def _legacy_node_fulltext(driver: _CapturingExecutor, filters: SearchFilters) -> list:
-    return await node_fulltext_search(driver, "query", filters)
+    return await node_fulltext_search(driver, 'query', filters)
 
 
 async def _legacy_node_similarity(driver: _CapturingExecutor, filters: SearchFilters) -> list:
@@ -61,11 +77,11 @@ async def _legacy_node_similarity(driver: _CapturingExecutor, filters: SearchFil
 
 
 async def _legacy_episode_fulltext(driver: _CapturingExecutor, filters: SearchFilters) -> list:
-    return await episode_fulltext_search(driver, "query", filters)
+    return await episode_fulltext_search(driver, 'query', filters)
 
 
 async def _legacy_community_fulltext(driver: _CapturingExecutor, filters: SearchFilters) -> list:
-    return await community_fulltext_search(driver, "query")
+    return await community_fulltext_search(driver, 'query')
 
 
 async def _legacy_community_similarity(driver: _CapturingExecutor, filters: SearchFilters) -> list:
@@ -75,7 +91,7 @@ async def _legacy_community_similarity(driver: _CapturingExecutor, filters: Sear
 async def _ops_node_fulltext(
     operations: FalkorSearchOperations, executor: _CapturingExecutor, filters: SearchFilters
 ) -> list:
-    return await operations.node_fulltext_search(executor, "query", filters)
+    return await operations.node_fulltext_search(executor, 'query', filters)
 
 
 async def _ops_node_similarity(
@@ -87,7 +103,7 @@ async def _ops_node_similarity(
 async def _ops_edge_fulltext(
     operations: FalkorSearchOperations, executor: _CapturingExecutor, filters: SearchFilters
 ) -> list:
-    return await operations.edge_fulltext_search(executor, "query", filters)
+    return await operations.edge_fulltext_search(executor, 'query', filters)
 
 
 async def _ops_edge_similarity(
@@ -99,13 +115,13 @@ async def _ops_edge_similarity(
 async def _ops_episode_fulltext(
     operations: FalkorSearchOperations, executor: _CapturingExecutor, filters: SearchFilters
 ) -> list:
-    return await operations.episode_fulltext_search(executor, "query", filters)
+    return await operations.episode_fulltext_search(executor, 'query', filters)
 
 
 async def _ops_community_fulltext(
     operations: FalkorSearchOperations, executor: _CapturingExecutor, filters: SearchFilters
 ) -> list:
-    return await operations.community_fulltext_search(executor, "query")
+    return await operations.community_fulltext_search(executor, 'query')
 
 
 async def _ops_community_similarity(
@@ -116,15 +132,15 @@ async def _ops_community_similarity(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("search_call", "expected_order"),
+    ('search_call', 'expected_order'),
     [
-        (_legacy_edge_fulltext, "ORDER BY score DESC, e.uuid ASC"),
-        (_legacy_edge_similarity, "ORDER BY score DESC, e.uuid ASC"),
-        (_legacy_node_fulltext, "ORDER BY score DESC, n.uuid ASC"),
-        (_legacy_node_similarity, "ORDER BY score DESC, n.uuid ASC"),
-        (_legacy_episode_fulltext, "ORDER BY score DESC, e.uuid ASC"),
-        (_legacy_community_fulltext, "ORDER BY score DESC, c.uuid ASC"),
-        (_legacy_community_similarity, "ORDER BY score DESC, c.uuid ASC"),
+        (_legacy_edge_fulltext, 'ORDER BY score DESC, e.uuid ASC'),
+        (_legacy_edge_similarity, 'ORDER BY score DESC, e.uuid ASC'),
+        (_legacy_node_fulltext, 'ORDER BY score DESC, n.uuid ASC'),
+        (_legacy_node_similarity, 'ORDER BY score DESC, n.uuid ASC'),
+        (_legacy_episode_fulltext, 'ORDER BY score DESC, e.uuid ASC'),
+        (_legacy_community_fulltext, 'ORDER BY score DESC, c.uuid ASC'),
+        (_legacy_community_similarity, 'ORDER BY score DESC, c.uuid ASC'),
     ],
 )
 async def test_legacy_falkor_search_orders_equal_scores_by_uuid(
@@ -140,15 +156,15 @@ async def test_legacy_falkor_search_orders_equal_scores_by_uuid(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("search_call", "expected_order"),
+    ('search_call', 'expected_order'),
     [
-        (_ops_node_fulltext, "ORDER BY score DESC, n.uuid ASC"),
-        (_ops_node_similarity, "ORDER BY score DESC, n.uuid ASC"),
-        (_ops_edge_fulltext, "ORDER BY score DESC, e.uuid ASC"),
-        (_ops_edge_similarity, "ORDER BY score DESC, e.uuid ASC"),
-        (_ops_episode_fulltext, "ORDER BY score DESC, e.uuid ASC"),
-        (_ops_community_fulltext, "ORDER BY score DESC, c.uuid ASC"),
-        (_ops_community_similarity, "ORDER BY score DESC, c.uuid ASC"),
+        (_ops_node_fulltext, 'ORDER BY score DESC, n.uuid ASC'),
+        (_ops_node_similarity, 'ORDER BY score DESC, n.uuid ASC'),
+        (_ops_edge_fulltext, 'ORDER BY score DESC, e.uuid ASC'),
+        (_ops_edge_similarity, 'ORDER BY score DESC, e.uuid ASC'),
+        (_ops_episode_fulltext, 'ORDER BY score DESC, e.uuid ASC'),
+        (_ops_community_fulltext, 'ORDER BY score DESC, c.uuid ASC'),
+        (_ops_community_similarity, 'ORDER BY score DESC, c.uuid ASC'),
     ],
 )
 async def test_falkor_search_operations_order_equal_scores_by_uuid(
@@ -164,7 +180,7 @@ async def test_falkor_search_operations_order_equal_scores_by_uuid(
 
 
 def test_rrf_orders_equal_scores_by_uuid() -> None:
-    ranked_uuids, scores = rrf([["uuid-b"], ["uuid-a"]])
+    ranked_uuids, scores = rrf([['uuid-b'], ['uuid-a']])
 
-    assert ranked_uuids == ["uuid-a", "uuid-b"]
+    assert ranked_uuids == ['uuid-a', 'uuid-b']
     assert scores == [1.0, 1.0]
