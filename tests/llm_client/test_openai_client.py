@@ -310,3 +310,71 @@ async def test_create_completion_keeps_temperature_for_non_reasoning_model():
 
     call_args = dummy.chat.completions.create_calls[0]
     assert call_args['temperature'] == 0.4
+
+
+def _openai_status_error(error_class, status_code: int):
+    import httpx
+
+    request = httpx.Request('POST', 'https://api.openai.com/v1/responses')
+    response = httpx.Response(status_code, request=request)
+    return error_class('request rejected', response=response, body=None)
+
+
+class FailingResponses:
+    def __init__(self, error: Exception):
+        self.error = error
+        self.calls: list[list] = []
+
+    async def parse(self, **kwargs):
+        self.calls.append(list(kwargs['input']))
+        raise self.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('error_class', 'status_code'),
+    [
+        ('BadRequestError', 400),
+        ('AuthenticationError', 401),
+        ('PermissionDeniedError', 403),
+        ('NotFoundError', 404),
+    ],
+)
+async def test_client_request_errors_are_not_retried(error_class, status_code):
+    """The same request fails again, so the client must not resend it with more text."""
+    import openai
+
+    from graphiti_core.prompts.models import Message
+
+    error = _openai_status_error(getattr(openai, error_class), status_code)
+    dummy = DummyOpenAIClient()
+    dummy.responses = FailingResponses(error)  # type: ignore[assignment]
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+    messages = [Message(role='system', content='s'), Message(role='user', content='u')]
+
+    with pytest.raises(getattr(openai, error_class)):
+        await client.generate_response(messages, response_model=DummyResponseModel)
+
+    assert len(dummy.responses.calls) == 1
+    assert len(messages) == 2
+
+
+@pytest.mark.asyncio
+async def test_invalid_output_is_still_retried():
+    dummy = DummyOpenAIClient()
+    outputs = iter(['not json', '{"foo": "bar"}'])
+
+    async def parse(**kwargs):
+        return SimpleNamespace(output_text=next(outputs))
+
+    dummy.responses.parse = parse  # type: ignore[method-assign]
+    client = OpenAIClient(config=LLMConfig(), client=dummy)
+
+    from graphiti_core.prompts.models import Message
+
+    result = await client.generate_response(
+        [Message(role='system', content='s'), Message(role='user', content='u')],
+        response_model=DummyResponseModel,
+    )
+
+    assert result == {'foo': 'bar'}

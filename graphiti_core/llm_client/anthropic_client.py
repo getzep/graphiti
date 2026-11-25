@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
-from .client import LLMClient
+from .client import LLMClient, is_client_request_error
 from .config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
@@ -399,6 +399,12 @@ class AnthropicClient(LLMClient):
                     raise
                 except Exception as e:
                     last_error = e
+
+                    if is_client_request_error(e):
+                        # A retry sends the same invalid request again, with more text.
+                        span.set_status('error', str(e))
+                        span.record_exception(e)
+                        raise
 
                     if retry_count >= max_retries:
                         if isinstance(e, ValidationError):

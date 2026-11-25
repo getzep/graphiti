@@ -71,6 +71,26 @@ def is_server_or_retry_error(exception):
     )
 
 
+# 408 and 409 can succeed on a new attempt, and 429 has its own handling.
+_RETRYABLE_CLIENT_STATUS_CODES = frozenset({408, 409, 429})
+
+
+def is_client_request_error(exception: BaseException) -> bool:
+    """Return True for a provider 4xx response that the same request cannot fix.
+
+    Examples are 400 (the prompt is too long), 401 (the API key is wrong), 403, and 404
+    (the model does not exist). The OpenAI and Anthropic SDK errors carry the status in
+    `status_code`. A retry that adds an error message to the prompt cannot fix these
+    errors, and for 400 it makes the prompt longer.
+    """
+    status_code = getattr(exception, 'status_code', None)
+    return (
+        isinstance(status_code, int)
+        and 400 <= status_code < 500
+        and status_code not in _RETRYABLE_CLIENT_STATUS_CODES
+    )
+
+
 class LLMClient(ABC):
     def __init__(self, config: LLMConfig | None, cache: bool = False):
         if config is None:

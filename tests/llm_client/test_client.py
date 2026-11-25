@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from graphiti_core.llm_client.client import LLMClient
+import pytest
+
+from graphiti_core.llm_client.client import LLMClient, is_client_request_error
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.prompts.models import Message
 
@@ -106,3 +108,24 @@ def test_attribute_extraction_preamble_handles_empty_messages():
     messages: list[Message] = []
     client._apply_attribute_extraction_preamble(messages, attribute_extraction=True)
     assert messages == []
+
+
+@pytest.mark.parametrize(
+    ('status_code', 'expected'),
+    [
+        (400, True),
+        (401, True),
+        (403, True),
+        (404, True),
+        (422, True),
+        (408, False),
+        (409, False),
+        (429, False),
+        (500, False),
+        (None, False),
+    ],
+)
+def test_is_client_request_error(status_code, expected):
+    from types import SimpleNamespace
+
+    assert is_client_request_error(SimpleNamespace(status_code=status_code)) is expected  # type: ignore[arg-type]
