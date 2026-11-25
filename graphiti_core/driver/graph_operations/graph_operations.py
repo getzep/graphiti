@@ -821,12 +821,12 @@ class GraphOperationsInterface(BaseModel):
         group_ids: list[str] | None = None,
     ) -> None:
         """
-        Delete all community nodes from the graph.
-
-        This removes all Community-labeled nodes and their relationships.
+        Delete community nodes for the listed groups, all groups when group_ids is None,
+        and no nodes when group_ids is empty.
 
         Args:
             driver: GraphDriver instance
+            group_ids: Groups to delete communities for. If None, delete communities for all groups.
         """
         raise NotImplementedError
 

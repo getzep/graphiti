@@ -306,7 +306,7 @@ async def remove_communities(driver: GraphDriver, group_ids: list[str] | None = 
     if driver.graph_ops:
         return await driver.graph_ops.remove_communities(driver, group_ids=group_ids)
 
-    if group_ids:
+    if group_ids is not None:
         await driver.execute_query(
             """
             MATCH (c:Community)
