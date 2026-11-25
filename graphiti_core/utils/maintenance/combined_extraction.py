@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-from itertools import zip_longest
 from time import time
 
 from pydantic import BaseModel
@@ -324,7 +323,7 @@ async def extract_nodes_and_edges(
                         response_model=BatchEdgeTimestamps,
                         model_size=ModelSize.small,
                     )
-                    return BatchEdgeTimestamps(**ts_response)
+                    batch_result = BatchEdgeTimestamps(**ts_response)
                 except Exception:
                     logger.warning(
                         'Failed to extract batch timestamps for %d facts (attempt %d of %d)',
@@ -333,6 +332,22 @@ async def extract_nodes_and_edges(
                         TIMESTAMP_BATCH_ATTEMPTS,
                         exc_info=True,
                     )
+                    continue
+                # The rows have no fact index, so they can only pair with the facts by
+                # position. With a missing or extra row, every later row would date the
+                # wrong fact.
+                if len(batch_result.timestamps) == len(group):
+                    return batch_result
+                logger.warning(
+                    'Batch timestamp count mismatch: got %d timestamps for %d facts '
+                    '(attempt %d of %d)',
+                    len(batch_result.timestamps),
+                    len(group),
+                    attempt,
+                    TIMESTAMP_BATCH_ATTEMPTS,
+                )
+            # Leave the group undated. Edge resolution dates each undated edge on its own
+            # (_extract_edge_timestamps).
             return None
 
         fact_groups = [
@@ -346,21 +361,13 @@ async def extract_nodes_and_edges(
         for group, batch_result in zip(fact_groups, group_results, strict=True):
             if batch_result is None:
                 continue
-            if len(batch_result.timestamps) != len(group):
-                logger.warning(
-                    'Batch timestamp count mismatch: got %d timestamps for %d facts',
-                    len(batch_result.timestamps),
-                    len(group),
+            for edge, timestamps in zip(group, batch_result.timestamps, strict=True):
+                apply_extracted_timestamps(
+                    edge,
+                    timestamps.valid_at,
+                    timestamps.invalid_at,
+                    edge.reference_time,
                 )
-            batch_rows = batch_result.timestamps[: len(group)]
-            for edge, timestamps in zip_longest(group, batch_rows):
-                if timestamps is not None:
-                    apply_extracted_timestamps(
-                        edge,
-                        timestamps.valid_at,
-                        timestamps.invalid_at,
-                        edge.reference_time,
-                    )
 
     # --- Derive node episode attribution from edges and drop orphans ---
     # Each node inherits the episode indices of every edge it participates in.
