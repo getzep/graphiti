@@ -1,6 +1,9 @@
+import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import httpx
 import openai
 import pytest
 from pydantic import BaseModel
@@ -16,6 +19,7 @@ class DummyChatCompletions:
         self.create_calls: list[dict] = []
         self._content = content
         self._error = error
+        self.usage = None
 
     async def create(self, **kwargs):
         self.create_calls.append(kwargs)
@@ -23,7 +27,7 @@ class DummyChatCompletions:
             raise self._error
         message = SimpleNamespace(content=self._content)
         choice = SimpleNamespace(message=message)
-        return SimpleNamespace(choices=[choice])
+        return SimpleNamespace(choices=[choice], usage=self.usage)
 
 
 class DummyChat:
@@ -168,3 +172,135 @@ async def test_non_retryable_error_is_not_retried():
         await client.generate_response(_messages(), response_model=ResponseModel)
 
     assert len(completions.create_calls) == 1
+
+
+@pytest.mark.parametrize('mode', ['json_schema', 'json_object'])
+@pytest.mark.parametrize(
+    ('usage', 'expected'),
+    [
+        (SimpleNamespace(prompt_tokens=17, completion_tokens=5), (17, 5)),
+        (SimpleNamespace(prompt_tokens=None, completion_tokens=None), (0, 0)),
+        (SimpleNamespace(), (0, 0)),
+        (None, (0, 0)),
+    ],
+)
+async def test_tracks_completion_usage_by_prompt(mode, usage, expected):
+    client, completions = _make_client(structured_output_mode=mode)
+    completions.usage = usage
+
+    result = await client.generate_response(
+        _messages(), response_model=ResponseModel, prompt_name='extract_nodes'
+    )
+
+    assert result == {'foo': 'bar'}
+    recorded = client.token_tracker.get_usage()['extract_nodes']
+    assert recorded.call_count == 1
+    assert (recorded.total_input_tokens, recorded.total_output_tokens) == expected
+
+
+async def test_concurrent_calls_keep_usage_under_their_own_prompt():
+    client, completions = _make_client()
+    both_started = asyncio.Event()
+    started = 0
+
+    async def create(**kwargs):
+        nonlocal started
+        content = kwargs['messages'][-1]['content']
+        started += 1
+        if started == 2:
+            both_started.set()
+        await both_started.wait()
+        tokens = 10 if content == 'first' else 20
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{}'))],
+            usage=SimpleNamespace(prompt_tokens=tokens, completion_tokens=1),
+        )
+
+    completions.create = create
+    await asyncio.wait_for(
+        asyncio.gather(
+            client.generate_response(
+                [Message(role='system', content='system'), Message(role='user', content='first')],
+                prompt_name='first_prompt',
+            ),
+            client.generate_response(
+                [Message(role='system', content='system'), Message(role='user', content='second')],
+                prompt_name='second_prompt',
+            ),
+        ),
+        timeout=5,
+    )
+
+    usage = client.token_tracker.get_usage()
+    assert set(usage) == {'first_prompt', 'second_prompt'}
+    assert usage['first_prompt'].total_input_tokens == 10
+    assert usage['second_prompt'].total_input_tokens == 20
+    assert all(item.call_count == 1 for item in usage.values())
+
+
+@pytest.mark.parametrize('first_response', ['not json', ''])
+async def test_retry_accounts_for_each_completed_provider_response(monkeypatch, first_response):
+    client, completions = _make_client()
+    responses = iter([first_response, '{"foo": "bar"}'])
+
+    async def create(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=next(responses)))],
+            usage=SimpleNamespace(prompt_tokens=11, completion_tokens=3),
+        )
+
+    completions.create = create
+    monkeypatch.setattr(client._generate_response_with_retry.retry, 'sleep', AsyncMock())
+    assert await client.generate_response(_messages(), prompt_name='retry') == {'foo': 'bar'}
+
+    usage = client.token_tracker.get_usage()['retry']
+    assert usage.call_count == 2
+    assert usage.total_input_tokens == 22
+    assert usage.total_output_tokens == 6
+
+
+async def test_failed_call_does_not_leak_prompt_name_to_later_direct_call():
+    client, completions = _make_client(error=ValueError('provider failed'))
+    with pytest.raises(ValueError, match='provider failed'):
+        await client.generate_response(_messages(), prompt_name='failed')
+    assert client.token_tracker.get_usage() == {}
+
+    completions._error = None
+    completions.usage = SimpleNamespace(prompt_tokens=7, completion_tokens=2)
+    await client._generate_response(_messages())
+    usage = client.token_tracker.get_usage()
+    assert set(usage) == {'unknown'}
+    assert usage['unknown'].total_tokens == 9
+
+
+async def test_tracks_usage_returned_by_real_openai_sdk():
+    def handle(request):
+        return httpx.Response(
+            200,
+            json={
+                'id': 'test-completion',
+                'object': 'chat.completion',
+                'created': 0,
+                'model': 'test-model',
+                'choices': [
+                    {
+                        'index': 0,
+                        'message': {'role': 'assistant', 'content': '{}'},
+                        'finish_reason': 'stop',
+                    }
+                ],
+                'usage': {'prompt_tokens': 17, 'completion_tokens': 5, 'total_tokens': 22},
+            },
+        )
+
+    async with openai.AsyncOpenAI(
+        api_key='test',
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+    ) as sdk:
+        client = OpenAIGenericClient(LLMConfig(model='test-model'), client=sdk)
+        assert await client.generate_response(_messages(), prompt_name='sdk') == {}
+
+    usage = client.token_tracker.get_usage()['sdk']
+    assert usage.call_count == 1
+    assert usage.total_input_tokens == 17
+    assert usage.total_output_tokens == 5
