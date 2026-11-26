@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests for retrying transient FalkorDB query failures."""
 
+import inspect
+import logging
 import sys
 from pathlib import Path
 
@@ -11,7 +13,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from services.falkordb_retry import (
     DEFAULT_FALKORDB_RETRY_POLICY,
+    _RedactFalkorDBQueryErrors,
     add_falkordb_transient_retry,
+    build_falkordb_client,
+    falkordb_socket_timeout,
+    install_falkordb_log_redaction,
     is_transient_falkordb_error,
 )
 from services.rate_limit_retry import RateLimitRetryPolicy
@@ -78,7 +84,10 @@ class TestIsTransientFalkorDBError:
         'exc',
         [
             redis_errors.AuthenticationError('invalid password'),
-            redis_errors.AuthorizationError('NOPERM'),
+            redis_errors.AuthorizationError('Client is not authorized'),
+            redis_errors.NoPermissionError(
+                "NOPERM this user has no permissions to run 'GRAPH.QUERY'"
+            ),
             redis_errors.ReadOnlyError("You can't write against a read only replica."),
             redis_errors.ResponseError('Invalid input at end of input'),
             ValueError('boom'),
@@ -86,6 +95,15 @@ class TestIsTransientFalkorDBError:
     )
     def test_not_transient(self, exc):
         assert not is_transient_falkordb_error(exc)
+
+    def test_connection_error_caused_by_auth_failure_is_not_transient(self):
+        try:
+            try:
+                raise redis_errors.AuthenticationError('invalid password')
+            except redis_errors.AuthenticationError as inner:
+                raise redis_errors.ConnectionError('Error connecting') from inner
+        except redis_errors.ConnectionError as outer:
+            assert not is_transient_falkordb_error(outer)
 
     def test_transient_cause_is_found(self):
         try:
@@ -243,3 +261,135 @@ class TestWithRealDriver:
 
         assert sleep.delays == [1.0, 1.0]
         assert {g.name for g in client.graphs if g.calls} >= {'lucy'}
+
+
+@pytest.fixture
+def redaction():
+    """Install the log filter for one test and remove it afterwards (the logger is global)."""
+    install_falkordb_log_redaction()
+    yield
+    driver_logger = logging.getLogger('graphiti_core.driver.falkordb_driver')
+    for f in [f for f in driver_logger.filters if isinstance(f, _RedactFalkorDBQueryErrors)]:
+        driver_logger.removeFilter(f)
+
+
+class TestFalkorDBLogRedaction:
+    """graphiti-core's driver logs query params at ERROR; the MCP server redacts that line."""
+
+    @pytest.mark.parametrize(
+        'message, kind',
+        [
+            # graphiti-core <= the pinned release: error text, query and params.
+            (
+                "Error executing FalkorDB query: CYPHER content='TOP SECRET BODY' MERGE\n"
+                "MERGE (e:Episodic {uuid: $uuid})\n{'content': 'TOP SECRET BODY'}",
+                'error',
+            ),
+            # Newer graphiti-core: exception type and query only.
+            ('Error executing FalkorDB query: ResponseError\nMERGE (e:Episodic)', 'ResponseError'),
+            ('Error executing FalkorDB query: Exception\nMERGE (e:Episodic)', 'Exception'),
+            # Old format with a one-word error message: not mistaken for an exception name.
+            ('Error executing FalkorDB query: TOPSECRET\nMERGE (e)\n{}', 'error'),
+        ],
+    )
+    def test_query_error_line_is_redacted(self, caplog, redaction, message, kind):
+        install_falkordb_log_redaction()  # idempotent
+        driver_logger = logging.getLogger('graphiti_core.driver.falkordb_driver')
+        assert sum(isinstance(f, _RedactFalkorDBQueryErrors) for f in driver_logger.filters) == 1
+
+        with caplog.at_level('ERROR', logger='graphiti_core.driver.falkordb_driver'):
+            driver_logger.error(message)
+            driver_logger.error('Some other driver error')
+
+        logged = [r.getMessage() for r in caplog.records]
+        assert logged[0] == (
+            f'Error executing FalkorDB query: {kind} (query text, params and error message withheld)'
+        )
+        assert logged[1] == 'Some other driver error'
+        assert 'TOP SECRET' not in '\n'.join(logged)
+
+    async def test_real_driver_failure_is_redacted(self, caplog, redaction):
+        falkordb_driver = pytest.importorskip('graphiti_core.driver.falkordb_driver')
+        client = ResultFalkorDB()
+        driver = falkordb_driver.FalkorDriver(falkor_db=client)
+        if driver._init_task is not None:
+            await driver._init_task
+
+        client.errors.append(
+            redis_errors.ResponseError("CYPHER content='TOP SECRET BODY' MERGE (n) ...")
+        )
+        with (
+            caplog.at_level('ERROR', logger='graphiti_core.driver.falkordb_driver'),
+            pytest.raises(redis_errors.ResponseError),
+        ):
+            await driver.execute_query(
+                'MERGE (e:Episodic {uuid: $uuid}) SET e.content = $content',
+                uuid='u1',
+                content='TOP SECRET BODY',
+            )
+
+        log = '\n'.join(r.getMessage() for r in caplog.records)
+        assert 'Error executing FalkorDB query' in log
+        assert 'withheld' in log
+        assert 'TOP SECRET BODY' not in log
+
+
+class TestSocketTimeoutSetting:
+    def test_unset_by_default(self, monkeypatch):
+        monkeypatch.delenv('FALKORDB_SOCKET_TIMEOUT', raising=False)
+        assert falkordb_socket_timeout() is None
+
+    def test_parsed(self, monkeypatch):
+        monkeypatch.setenv('FALKORDB_SOCKET_TIMEOUT', '30')
+        assert falkordb_socket_timeout() == 30.0
+
+    @pytest.mark.parametrize('raw', ['', 'soon', '0', '-5', 'nan', 'inf'])
+    def test_invalid_is_ignored(self, monkeypatch, raw):
+        monkeypatch.setenv('FALKORDB_SOCKET_TIMEOUT', raw)
+        assert falkordb_socket_timeout() is None
+
+
+class TestBuildFalkorDBClient:
+    DB_CONFIG = {'host': 'db', 'port': 6380, 'username': 'u', 'password': 'p', 'database': 'g'}
+
+    def test_none_without_timeout(self, monkeypatch):
+        monkeypatch.delenv('FALKORDB_SOCKET_TIMEOUT', raising=False)
+        assert build_falkordb_client(self.DB_CONFIG) is None
+
+    def test_timeouts_reach_the_client(self, monkeypatch):
+        falkordb_asyncio = pytest.importorskip('falkordb.asyncio')
+        monkeypatch.setenv('FALKORDB_SOCKET_TIMEOUT', '30')
+        created = {}
+
+        class FakeClient:
+            def __init__(self, **kwargs):
+                created.update(kwargs)
+
+        monkeypatch.setattr(falkordb_asyncio, 'FalkorDB', FakeClient)
+        client = build_falkordb_client(self.DB_CONFIG)
+
+        assert isinstance(client, FakeClient)
+        assert created == {
+            'host': 'db',
+            'port': 6380,
+            'username': 'u',
+            'password': 'p',
+            'socket_timeout': 30.0,
+            'socket_connect_timeout': 30.0,
+        }
+
+    def test_kwargs_match_the_real_client_signature(self, monkeypatch):
+        # The real constructor connects, so check the kwargs against its signature instead.
+        falkordb_asyncio = pytest.importorskip('falkordb.asyncio')
+        real = falkordb_asyncio.FalkorDB
+        monkeypatch.setenv('FALKORDB_SOCKET_TIMEOUT', '7')
+        captured = {}
+
+        def fake(**kwargs):
+            inspect.signature(real).bind(**kwargs)  # raises TypeError on a bad kwarg
+            captured.update(kwargs)
+            return object()
+
+        monkeypatch.setattr(falkordb_asyncio, 'FalkorDB', fake)
+        build_falkordb_client(self.DB_CONFIG)
+        assert captured['socket_timeout'] == 7.0

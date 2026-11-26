@@ -249,7 +249,9 @@ class FalkorDriver(GraphDriver):
                 # check if index already exists
                 logger.info(f'Index already exists: {e}')
                 return None
-            logger.error(f'Error executing FalkorDB query: {e}\n{cypher_query_}\n{params}')
+            # Params (and FalkorDB error messages, which can inline them) carry episode
+            # content, entity names and facts, so keep them out of ERROR logs.
+            logger.error(f'Error executing FalkorDB query: {type(e).__name__}\n{cypher_query_}')
             raise
 
         # Convert the result header to a list of strings

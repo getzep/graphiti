@@ -196,6 +196,30 @@ class TestFalkorDriver:
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_execute_query_error_log_omits_params_and_message(self):
+        """Params and error text can carry episode content, so they stay out of ERROR logs."""
+        mock_graph = MagicMock()
+        mock_graph.query = AsyncMock(
+            side_effect=Exception("CYPHER content='TOP SECRET BODY' MERGE (e:Episodic)")
+        )
+        self.mock_client.select_graph.return_value = mock_graph
+
+        with patch('graphiti_core.driver.falkordb_driver.logger') as mock_logger:
+            with pytest.raises(Exception, match='TOP SECRET BODY'):
+                await self.driver.execute_query(
+                    'MERGE (e:Episodic {uuid: $uuid}) SET e.content = $content',
+                    uuid='u1',
+                    content='TOP SECRET BODY',
+                )
+
+            mock_logger.error.assert_called_once()
+            logged = mock_logger.error.call_args.args[0]
+            assert logged.startswith('Error executing FalkorDB query: Exception')
+            assert 'SET e.content = $content' in logged
+            assert 'TOP SECRET BODY' not in logged
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     async def test_execute_query_converts_datetime_parameters(self):
         """Test that datetime objects in kwargs are converted to ISO strings."""
         mock_graph = MagicMock()

@@ -45,7 +45,11 @@ from services.factories import (
     EmbedderFactory,
     LLMClientFactory,
 )
-from services.falkordb_retry import add_falkordb_transient_retry
+from services.falkordb_retry import (
+    add_falkordb_transient_retry,
+    build_falkordb_client,
+    install_falkordb_log_redaction,
+)
 from services.queue_service import QueueService
 from services.rate_limit_retry import (
     RateLimitRetryEmbedder,
@@ -291,17 +295,25 @@ class GraphitiService:
                     # For FalkorDB, create a FalkorDriver instance directly
                     from graphiti_core.driver.falkordb_driver import FalkorDriver
 
+                    # FalkorDriver sets no socket timeout, so a server that stalls without
+                    # closing the connection hangs the query (and that group's queue)
+                    # instead of raising a retryable TimeoutError. FALKORDB_SOCKET_TIMEOUT
+                    # opts in to one; keep it above your slowest legitimate query.
+                    falkor_db = build_falkordb_client(db_config)
                     falkor_driver = FalkorDriver(
                         host=db_config['host'],
                         port=db_config['port'],
                         username=db_config.get('username'),
                         password=db_config['password'],
+                        falkor_db=falkor_db,
                         database=db_config['database'],
                     )
                     # FalkorDriver sends each query once, so a single Redis timeout or
                     # dropped connection would dead-letter the episode. Retry those
                     # connection-level failures; the client is shared by per-group clones.
                     add_falkordb_transient_retry(falkor_driver.client)
+                    # Keep episode content in query params out of the driver's ERROR log.
+                    install_falkordb_log_redaction()
 
                     self.client = Graphiti(
                         graph_driver=falkor_driver,

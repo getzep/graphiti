@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -382,8 +383,8 @@ class TestQueueDeadLetter:
 
         assert not dead_letter.exists()
         log = '\n'.join(r.getMessage() for r in caplog.records)
-        assert "'secret-episode'" in log
-        assert "'g4'" in log
+        assert "uuid='secret-episode'" in log
+        assert "group='g4'" in log
         assert 'TOP SECRET BODY' not in log
         assert 'SECRET INSTRUCTIONS' not in log
         assert 'EPISODE DROPPED' in log
@@ -398,10 +399,83 @@ class TestQueueDeadLetter:
         await queue.initialize(client)
 
         with caplog.at_level('ERROR', logger='services.queue_service'):
-            await self._run_one(queue, 'g5', uuid=None, content='TOP SECRET BODY')
+            await self._run_one(
+                queue, 'g5', uuid=None, name='SECRET NAME', content='TOP SECRET BODY'
+            )
 
         log = '\n'.join(r.getMessage() for r in caplog.records)
-        # The drop line still names the episode; the write-failure line has no payload.
-        assert "episode 'probe' for group g5" in log
-        assert "episode None (group 'g5')" in log
+        # Without a uuid the drop line and the write-failure line share a dead_letter_id,
+        # so they can still be correlated; the episode name is never logged.
+        ids = set(re.findall(r'dead_letter_id=([0-9a-f]{32})', log))
+        assert len(ids) == 1
+        assert f'record {ids.pop()} for episode uuid=None' in log
+        assert "group='g5'" in log
+        assert 'SECRET NAME' not in log
         assert 'TOP SECRET BODY' not in log
+
+    async def test_error_messages_that_echo_the_episode_are_not_logged(self, tmp_path, caplog):
+        # pydantic validation errors, provider 400s and FalkorDB query errors can quote
+        # episode content. Only the error type may reach the logs; the message is kept in
+        # the 0o600 record.
+        dead_letter = tmp_path / 'episodes.jsonl'
+        body = 'TOP SECRET BODY'
+        client = MagicMock()
+        client.add_episode = AsyncMock(
+            side_effect=ValueError(f"validation failed, input_value='{body}'")
+        )
+        queue = QueueService(dead_letter_path=dead_letter)
+        await queue.initialize(client)
+
+        with caplog.at_level('DEBUG'):
+            await self._run_one(
+                queue,
+                'g6',
+                name='SECRET NAME',
+                content=body,
+                source_description='SECRET SOURCE',
+            )
+
+        log = '\n'.join(r.getMessage() for r in caplog.records)
+        assert 'EPISODE DROPPED' in log
+        assert 'ValueError' in log
+        for secret in (body, 'SECRET NAME', 'SECRET SOURCE', 'input_value'):
+            assert secret not in log
+        record = json.loads(dead_letter.read_text())
+        assert body in record['error']
+        assert record['episode_body'] == body
+        assert re.fullmatch(r'[0-9a-f]{32}', record['dead_letter_id'])
+        assert f'dead_letter_id={record["dead_letter_id"]}' in log
+
+    async def test_unbuildable_record_logs_ids_not_payload(self, tmp_path, caplog, monkeypatch):
+        import services.queue_service as queue_service
+
+        def explode(_types):
+            raise RuntimeError('TOP SECRET BODY')
+
+        monkeypatch.setattr(queue_service, '_type_names', explode)
+        dead_letter = tmp_path / 'episodes.jsonl'
+        client = MagicMock()
+        client.add_episode = AsyncMock(side_effect=ValueError('boom'))
+        queue = QueueService(dead_letter_path=dead_letter)
+        await queue.initialize(client)
+
+        with caplog.at_level('ERROR', logger='services.queue_service'):
+            await self._run_one(queue, 'g7', uuid='u7', content='TOP SECRET BODY')
+
+        assert not dead_letter.exists()
+        log = '\n'.join(r.getMessage() for r in caplog.records)
+        assert 'Could not build dead-letter record' in log
+        assert "uuid='u7' group='g7'" in log
+        assert 'TOP SECRET BODY' not in log
+
+    async def test_lone_surrogate_body_is_still_recorded(self, tmp_path):
+        dead_letter = tmp_path / 'episodes.jsonl'
+        client = MagicMock()
+        client.add_episode = AsyncMock(side_effect=ValueError('boom'))
+        queue = QueueService(dead_letter_path=dead_letter)
+        await queue.initialize(client)
+
+        await self._run_one(queue, 'g8', content='half a pair: \ud83d')
+
+        record = json.loads(dead_letter.read_text())
+        assert record['episode_body'] == 'half a pair: \ud83d'

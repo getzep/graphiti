@@ -23,6 +23,9 @@ so a repeated query updates the same node or edge instead of duplicating it.
 
 import functools
 import logging
+import math
+import os
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -37,6 +40,82 @@ _MAX_CAUSE_DEPTH = 10
 DEFAULT_FALKORDB_RETRY_POLICY = RateLimitRetryPolicy(
     max_retries=3, base_delay=1.0, multiplier=3.0, max_delay=30.0
 )
+
+
+def falkordb_socket_timeout() -> float | None:
+    """Return ``FALKORDB_SOCKET_TIMEOUT`` in seconds, or None when unset or invalid.
+
+    Unset by default: without a socket timeout a stalled server hangs a query rather than
+    raising ``TimeoutError``, but too short a timeout would cut off slow legitimate queries.
+    """
+    raw = os.getenv('FALKORDB_SOCKET_TIMEOUT')
+    if raw is None or raw.strip() == '':
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning(f'Ignoring invalid FALKORDB_SOCKET_TIMEOUT={raw!r}')
+        return None
+    if not math.isfinite(value) or value <= 0:
+        logger.warning(f'Ignoring non-positive or non-finite FALKORDB_SOCKET_TIMEOUT={raw!r}')
+        return None
+    return value
+
+
+_FALKORDB_DRIVER_LOGGER = 'graphiti_core.driver.falkordb_driver'
+_QUERY_ERROR_PREFIX = 'Error executing FalkorDB query:'
+_EXCEPTION_NAME = re.compile(r'([A-Z]\w*)?(Error|Exception)')
+
+
+class _RedactFalkorDBQueryErrors(logging.Filter):
+    """Strip error text and params from graphiti-core's FalkorDB query-failure log line.
+
+    graphiti-core releases up to and including the one this server pins log
+    ``Error executing FalkorDB query: {e}\\n{query}\\n{params}`` at ERROR. The params (and
+    FalkorDB error text, which can inline them) carry episode bodies, entity names and
+    facts. The exception itself still propagates, and its message is kept in the 0o600
+    dead-letter record.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if message.startswith(_QUERY_ERROR_PREFIX):
+            first_line = message.split('\n', 1)[0][len(_QUERY_ERROR_PREFIX) :].strip()
+            # Newer graphiti-core logs only the exception type: keep that, drop the rest.
+            kind = first_line if _EXCEPTION_NAME.fullmatch(first_line) else 'error'
+            record.msg = (
+                f'{_QUERY_ERROR_PREFIX} {kind} (query text, params and error message withheld)'
+            )
+            record.args = ()
+        return True
+
+
+def install_falkordb_log_redaction() -> None:
+    """Install the redaction filter on graphiti-core's FalkorDB driver logger (idempotent)."""
+    driver_logger = logging.getLogger(_FALKORDB_DRIVER_LOGGER)
+    if not any(isinstance(f, _RedactFalkorDBQueryErrors) for f in driver_logger.filters):
+        driver_logger.addFilter(_RedactFalkorDBQueryErrors())
+
+
+def build_falkordb_client(db_config: dict[str, Any]) -> Any | None:
+    """Return a ``FalkorDB`` client with socket timeouts, or None to use the driver default.
+
+    Only built when ``FALKORDB_SOCKET_TIMEOUT`` is set; the result is passed to
+    ``FalkorDriver(falkor_db=...)``.
+    """
+    socket_timeout = falkordb_socket_timeout()
+    if socket_timeout is None:
+        return None
+    from falkordb.asyncio import FalkorDB
+
+    return FalkorDB(
+        host=db_config['host'],
+        port=db_config['port'],
+        username=db_config.get('username'),
+        password=db_config['password'],
+        socket_timeout=socket_timeout,
+        socket_connect_timeout=socket_timeout,
+    )
 
 
 def _transient_types() -> tuple[tuple[type[BaseException], ...], tuple[type[BaseException], ...]]:
@@ -65,18 +144,16 @@ def is_transient_falkordb_error(exc: BaseException) -> bool:
     retryable, never = _transient_types()
     if not retryable:
         return False
-    seen: set[int] = set()
+    chain: list[BaseException] = []
     current: BaseException | None = exc
-    depth = 0
-    while current is not None and id(current) not in seen and depth < _MAX_CAUSE_DEPTH:
-        seen.add(id(current))
-        if isinstance(current, never):
-            return False
-        if isinstance(current, retryable):
-            return True
+    while current is not None and current not in chain and len(chain) < _MAX_CAUSE_DEPTH:
+        chain.append(current)
         current = current.__cause__
-        depth += 1
-    return False
+    # An auth failure anywhere in the chain wins, even when it is wrapped in a
+    # ConnectionError: a bad password will not fix itself.
+    if any(isinstance(e, never) for e in chain):
+        return False
+    return any(isinstance(e, retryable) for e in chain)
 
 
 def _wrap_query(

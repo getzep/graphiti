@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from services.rate_limit_retry import is_rate_limit_error
 
@@ -65,7 +66,9 @@ class QueueService:
         """Append one record to the dead-letter file. Returns True on success."""
 
         def _append() -> None:
-            line = json.dumps(record, default=str, ensure_ascii=False) + '\n'
+            # ensure_ascii escapes lone surrogates, which strict UTF-8 encoding would reject
+            # and so lose the episode.
+            line = json.dumps(record, default=str, ensure_ascii=True) + '\n'
             self._dead_letter_path.parent.mkdir(parents=True, exist_ok=True)
             # Records hold full episode bodies, so create the file owner-only (0o600).
             fd = os.open(self._dead_letter_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
@@ -80,8 +83,9 @@ class QueueService:
             # Never log the payload here: it holds the full episode body, and logs are
             # usually less protected than the 0o600 dead-letter file.
             logger.error(
-                f'Could not write dead-letter record for episode {record.get("uuid")!r} '
-                f'(group {record.get("group_id")!r}) to {self._dead_letter_path}: '
+                f'Could not write dead-letter record {record.get("dead_letter_id")} for '
+                f'episode uuid={record.get("uuid")!r} group={record.get("group_id")!r} to '
+                f'{self._dead_letter_path}: '
                 f'{type(e).__name__}: {e}. The episode was not recorded and must be '
                 f're-sent from its source.'
             )
@@ -131,8 +135,10 @@ class QueueService:
                     # Process the episode
                     await process_func()
                 except Exception as e:
+                    # Type only: the message can echo episode content (see add_episode).
                     logger.error(
-                        f'Error processing queued episode for group_id {group_id}: {str(e)}'
+                        f'Error processing queued episode for group_id {group_id}: '
+                        f'{type(e).__name__}'
                     )
                 finally:
                     # Mark the task as done regardless of success/failure
@@ -140,7 +146,9 @@ class QueueService:
         except asyncio.CancelledError:
             logger.info(f'Episode queue worker for group_id {group_id} was cancelled')
         except Exception as e:
-            logger.error(f'Unexpected error in queue worker for group_id {group_id}: {str(e)}')
+            logger.error(
+                f'Unexpected error in queue worker for group_id {group_id}: {type(e).__name__}'
+            )
         finally:
             self._queue_workers[group_id] = False
             logger.info(f'Stopped episode queue worker for group_id: {group_id}')
@@ -248,13 +256,19 @@ class QueueService:
                 # the episode: record its payload so it can be replayed instead of lost.
                 # Log the drop first, so it is reported even if building or writing the
                 # record fails or the task is cancelled while waiting on the write.
+                # Only ids and the error type are logged. The episode name and the error
+                # message stay in the 0o600 record: messages such as pydantic validation
+                # errors, provider 400s or FalkorDB query errors can echo episode content.
+                dead_letter_id = uuid4().hex
                 logger.error(
-                    f'EPISODE DROPPED: failed to process episode {uuid or name!r} for group '
-                    f'{group_id}: {type(e).__name__}: {e}. Writing payload to dead-letter '
-                    f'file {self._dead_letter_path}'
+                    f'EPISODE DROPPED: failed to process episode uuid={uuid!r} '
+                    f'group={group_id!r} dead_letter_id={dead_letter_id}: '
+                    f'{type(e).__name__}. Writing payload to dead-letter file '
+                    f'{self._dead_letter_path}'
                 )
                 try:
                     record = {
+                        'dead_letter_id': dead_letter_id,
                         'failed_at': datetime.now(timezone.utc).isoformat(),
                         'error_type': type(e).__name__,
                         'error': str(e),
@@ -278,9 +292,9 @@ class QueueService:
                     }
                 except Exception as build_error:
                     logger.error(
-                        f'Could not build dead-letter record for episode {uuid!r} (group '
-                        f'{group_id!r}): {type(build_error).__name__}: {build_error}. The '
-                        f'episode was not recorded and must be re-sent from its source.'
+                        f'Could not build dead-letter record {dead_letter_id} for episode '
+                        f'uuid={uuid!r} group={group_id!r}: {type(build_error).__name__}. '
+                        f'The episode was not recorded and must be re-sent from its source.'
                     )
                 else:
                     await self._write_dead_letter(record)

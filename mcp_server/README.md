@@ -257,6 +257,7 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 - `RATE_LIMIT_MAX_RETRIES`, `RATE_LIMIT_RETRY_BASE_DELAY`, `RATE_LIMIT_RETRY_MULTIPLIER`, `RATE_LIMIT_RETRY_MAX_DELAY`: Backoff for rate-limited LLM and embedder calls (defaults `3`, `10`, `3`, `300`: retries after 10s, 30s, 90s)
 - `FALKORDB_MAX_RETRIES`, `FALKORDB_RETRY_BASE_DELAY`, `FALKORDB_RETRY_MULTIPLIER`, `FALKORDB_RETRY_MAX_DELAY`: Backoff for FalkorDB queries that hit a transient connection error (defaults `3`, `1`, `3`, `30`: retries after 1s, 3s, 9s)
+- `FALKORDB_SOCKET_TIMEOUT`: Optional socket and connect timeout in seconds for the FalkorDB connection (unset by default). Set it so a stalled server raises a retryable timeout instead of hanging the queue
 - `EPISODE_DEAD_LETTER_PATH`: JSONL file that records episodes that failed to process (default `episode_dead_letter.jsonl` in the working directory)
 
 You can set these variables in a `.env` file in the project directory.
@@ -405,8 +406,19 @@ with `FALKORDB_MAX_RETRIES`, `FALKORDB_RETRY_BASE_DELAY`, `FALKORDB_RETRY_MULTIP
 `FALKORDB_RETRY_MAX_DELAY` (`FALKORDB_MAX_RETRIES=0` turns it off). Query errors,
 authentication failures and read-only replica errors are not retried. Graphiti's writes
 `MERGE` on `uuid`, so re-sending a write that timed out after the server applied it does not
-create duplicates. The server does not set a socket timeout on the FalkorDB connection, so a
-server that hangs without closing the connection is not detected as a timeout.
+create duplicates. By default no socket timeout is set on the FalkorDB connection, so a
+server that hangs without closing the connection is not detected as a timeout. Set
+`FALKORDB_SOCKET_TIMEOUT` (seconds) to turn such a stall into a retryable timeout; keep it
+above your slowest legitimate query, or that query will be cut off and retried.
+
+The queue's `EPISODE DROPPED`, dead-letter and worker error lines carry ids and error
+types only: the episode `uuid`, `group_id` and a `dead_letter_id` that also appears in the
+dead-letter record. Episode names, bodies and error messages (which can quote episode
+content) stay out of those lines; the error message is stored in the `0600` dead-letter
+record instead (if that record cannot be built or written, only the error type survives).
+With FalkorDB the server also redacts graphiti-core's query-failure log
+line, which includes the query params. Other graphiti-core loggers (for example the Neo4j
+driver and the LLM clients) are not redacted and can log error text.
 
 If an episode still fails, the server logs `EPISODE DROPPED` and appends the episode payload
 (group, name, body, source, reference time, error) as one JSON line to
@@ -418,8 +430,8 @@ point this at a mounted volume so the file survives container restarts.
 
 - The file is created with mode `0600` because records contain full episode bodies.
 - If the file cannot be written (for example a read-only directory), the dead-letter error
-  line names only the episode `uuid` and `group_id`, not the payload, and the episode must be
-  re-sent from its source.
+  line names only the episode `uuid`, `group_id` and `dead_letter_id`, not the payload, and
+  the episode must be re-sent from its source.
 - Entity and edge types are recorded by name only; replay assumes those types are still
   configured on the server.
 - Appends are serialised within one server process. Give each server process its own
