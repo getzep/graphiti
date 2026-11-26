@@ -66,20 +66,24 @@ class RateLimitRetryPolicy:
     max_delay: float = 300.0
 
     @classmethod
-    def from_env(cls) -> 'RateLimitRetryPolicy':
-        """Build a policy from environment variables, falling back to the defaults.
+    def from_env(
+        cls, prefix: str = 'RATE_LIMIT', defaults: 'RateLimitRetryPolicy | None' = None
+    ) -> 'RateLimitRetryPolicy':
+        """Build a policy from environment variables, falling back to ``defaults``.
+
+        With the default ``prefix``:
 
         - ``RATE_LIMIT_MAX_RETRIES`` (default 3; 0 disables retrying)
         - ``RATE_LIMIT_RETRY_BASE_DELAY`` seconds (default 10)
         - ``RATE_LIMIT_RETRY_MULTIPLIER`` (default 3)
         - ``RATE_LIMIT_RETRY_MAX_DELAY`` seconds (default 300)
         """
-        defaults = cls()
+        defaults = defaults or cls()
         return cls(
-            max_retries=_env_number('RATE_LIMIT_MAX_RETRIES', defaults.max_retries, int),
-            base_delay=_env_number('RATE_LIMIT_RETRY_BASE_DELAY', defaults.base_delay),
-            multiplier=_env_number('RATE_LIMIT_RETRY_MULTIPLIER', defaults.multiplier),
-            max_delay=_env_number('RATE_LIMIT_RETRY_MAX_DELAY', defaults.max_delay),
+            max_retries=_env_number(f'{prefix}_MAX_RETRIES', defaults.max_retries, int),
+            base_delay=_env_number(f'{prefix}_RETRY_BASE_DELAY', defaults.base_delay),
+            multiplier=_env_number(f'{prefix}_RETRY_MULTIPLIER', defaults.multiplier),
+            max_delay=_env_number(f'{prefix}_RETRY_MAX_DELAY', defaults.max_delay),
         )
 
     def delays(self) -> list[float]:
@@ -131,6 +135,43 @@ def is_rate_limit_error(exc: BaseException) -> bool:
     return False
 
 
+async def retry_with_backoff(
+    func: Callable[[], Awaitable[T]],
+    *,
+    policy: RateLimitRetryPolicy,
+    operation: str,
+    should_retry: Callable[[BaseException], bool],
+    reason: str,
+    sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
+) -> T:
+    """Await ``func()``, retrying with backoff while ``should_retry(error)`` is true.
+
+    Other errors are re-raised immediately. When the retries are used up the last
+    retryable error is re-raised. ``reason`` names the failure in log lines.
+    """
+    delays = policy.delays()
+    attempt = 0
+    while True:
+        try:
+            return await func()
+        except Exception as e:
+            if not should_retry(e):
+                raise
+            if attempt >= len(delays):
+                logger.error(
+                    f'{operation}: {reason}, giving up after {attempt} '
+                    f'retr{"y" if attempt == 1 else "ies"}: {type(e).__name__}: {e}'
+                )
+                raise
+            delay = delays[attempt]
+            attempt += 1
+            logger.warning(
+                f'{operation}: {reason} ({type(e).__name__}: {e}); '
+                f'retry {attempt}/{len(delays)} in {delay:g}s'
+            )
+            await sleep(delay)
+
+
 async def retry_on_rate_limit(
     func: Callable[[], Awaitable[T]],
     *,
@@ -143,27 +184,14 @@ async def retry_on_rate_limit(
     Non-rate-limit errors are re-raised immediately. When the retries are used up the
     last rate-limit error is re-raised.
     """
-    delays = policy.delays()
-    attempt = 0
-    while True:
-        try:
-            return await func()
-        except Exception as e:
-            if not is_rate_limit_error(e):
-                raise
-            if attempt >= len(delays):
-                logger.error(
-                    f'{operation}: rate limited, giving up after {attempt} '
-                    f'retr{"y" if attempt == 1 else "ies"}: {e}'
-                )
-                raise
-            delay = delays[attempt]
-            attempt += 1
-            logger.warning(
-                f'{operation}: rate limited ({type(e).__name__}: {e}); '
-                f'retry {attempt}/{len(delays)} in {delay:g}s'
-            )
-            await sleep(delay)
+    return await retry_with_backoff(
+        func,
+        policy=policy,
+        operation=operation,
+        should_retry=is_rate_limit_error,
+        reason='rate limited',
+        sleep=sleep,
+    )
 
 
 class RateLimitRetryEmbedder(EmbedderClient):

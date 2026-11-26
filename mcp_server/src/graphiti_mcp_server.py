@@ -45,6 +45,7 @@ from services.factories import (
     EmbedderFactory,
     LLMClientFactory,
 )
+from services.falkordb_retry import add_falkordb_transient_retry
 from services.queue_service import QueueService
 from services.rate_limit_retry import (
     RateLimitRetryEmbedder,
@@ -297,6 +298,10 @@ class GraphitiService:
                         password=db_config['password'],
                         database=db_config['database'],
                     )
+                    # FalkorDriver sends each query once, so a single Redis timeout or
+                    # dropped connection would dead-letter the episode. Retry those
+                    # connection-level failures; the client is shared by per-group clones.
+                    add_falkordb_transient_retry(falkor_driver.client)
 
                     self.client = Graphiti(
                         graph_driver=falkor_driver,

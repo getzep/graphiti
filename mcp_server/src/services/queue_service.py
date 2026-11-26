@@ -63,9 +63,9 @@ class QueueService:
 
     async def _write_dead_letter(self, record: dict[str, Any]) -> bool:
         """Append one record to the dead-letter file. Returns True on success."""
-        line = json.dumps(record, default=str, ensure_ascii=False) + '\n'
 
         def _append() -> None:
+            line = json.dumps(record, default=str, ensure_ascii=False) + '\n'
             self._dead_letter_path.parent.mkdir(parents=True, exist_ok=True)
             # Records hold full episode bodies, so create the file owner-only (0o600).
             fd = os.open(self._dead_letter_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
@@ -77,9 +77,13 @@ class QueueService:
                 await asyncio.to_thread(_append)
             return True
         except Exception as e:
+            # Never log the payload here: it holds the full episode body, and logs are
+            # usually less protected than the 0o600 dead-letter file.
             logger.error(
-                f'Could not write dead-letter record to {self._dead_letter_path}: {e}. '
-                f'Episode payload follows so it is not lost: {line.strip()}'
+                f'Could not write dead-letter record for episode {record.get("uuid")!r} '
+                f'(group {record.get("group_id")!r}) to {self._dead_letter_path}: '
+                f'{type(e).__name__}: {e}. The episode was not recorded and must be '
+                f're-sent from its source.'
             )
             return False
 
@@ -242,13 +246,15 @@ class QueueService:
                 # The provider clients already retried rate-limit errors with backoff (see
                 # services.rate_limit_retry), so this failure is final. Nothing re-queues
                 # the episode: record its payload so it can be replayed instead of lost.
+                # Log the drop first, so it is reported even if building or writing the
+                # record fails or the task is cancelled while waiting on the write.
                 logger.error(
                     f'EPISODE DROPPED: failed to process episode {uuid or name!r} for group '
-                    f'{group_id}: {type(e).__name__}: {e}. Payload written to dead-letter '
+                    f'{group_id}: {type(e).__name__}: {e}. Writing payload to dead-letter '
                     f'file {self._dead_letter_path}'
                 )
-                await self._write_dead_letter(
-                    {
+                try:
+                    record = {
                         'failed_at': datetime.now(timezone.utc).isoformat(),
                         'error_type': type(e).__name__,
                         'error': str(e),
@@ -270,7 +276,14 @@ class QueueService:
                         'edge_types': _type_names(edge_types),
                         'edge_type_map': _edge_type_map_names(edge_type_map),
                     }
-                )
+                except Exception as build_error:
+                    logger.error(
+                        f'Could not build dead-letter record for episode {uuid!r} (group '
+                        f'{group_id!r}): {type(build_error).__name__}: {build_error}. The '
+                        f'episode was not recorded and must be re-sent from its source.'
+                    )
+                else:
+                    await self._write_dead_letter(record)
                 raise
 
         # Use the existing add_episode_task method to queue the processing

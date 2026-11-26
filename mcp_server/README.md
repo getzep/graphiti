@@ -256,6 +256,7 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `USE_AZURE_AD`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 - `RATE_LIMIT_MAX_RETRIES`, `RATE_LIMIT_RETRY_BASE_DELAY`, `RATE_LIMIT_RETRY_MULTIPLIER`, `RATE_LIMIT_RETRY_MAX_DELAY`: Backoff for rate-limited LLM and embedder calls (defaults `3`, `10`, `3`, `300`: retries after 10s, 30s, 90s)
+- `FALKORDB_MAX_RETRIES`, `FALKORDB_RETRY_BASE_DELAY`, `FALKORDB_RETRY_MULTIPLIER`, `FALKORDB_RETRY_MAX_DELAY`: Backoff for FalkorDB queries that hit a transient connection error (defaults `3`, `1`, `3`, `30`: retries after 1s, 3s, 9s)
 - `EPISODE_DEAD_LETTER_PATH`: JSONL file that records episodes that failed to process (default `episode_dead_letter.jsonl` in the working directory)
 
 You can set these variables in a `.env` file in the project directory.
@@ -397,6 +398,16 @@ never the whole episode, so a retry has no side effects on the graph. Tune it wi
 `RATE_LIMIT_MAX_RETRIES`, `RATE_LIMIT_RETRY_BASE_DELAY`, `RATE_LIMIT_RETRY_MULTIPLIER` and
 `RATE_LIMIT_RETRY_MAX_DELAY` (`RATE_LIMIT_MAX_RETRIES=0` turns retrying off).
 
+With FalkorDB, any query (ingestion, search or index setup) that fails with a transient
+connection error (Redis timeout, dropped or refused connection, server still loading,
+`TRYAGAIN`) is re-sent with its own backoff: by default 3 retries after 1s, 3s and 9s, tuned
+with `FALKORDB_MAX_RETRIES`, `FALKORDB_RETRY_BASE_DELAY`, `FALKORDB_RETRY_MULTIPLIER` and
+`FALKORDB_RETRY_MAX_DELAY` (`FALKORDB_MAX_RETRIES=0` turns it off). Query errors,
+authentication failures and read-only replica errors are not retried. Graphiti's writes
+`MERGE` on `uuid`, so re-sending a write that timed out after the server applied it does not
+create duplicates. The server does not set a socket timeout on the FalkorDB connection, so a
+server that hangs without closing the connection is not detected as a timeout.
+
 If an episode still fails, the server logs `EPISODE DROPPED` and appends the episode payload
 (group, name, body, source, reference time, error) as one JSON line to
 `EPISODE_DEAD_LETTER_PATH`, so it can be replayed with `add_memory`. `add_episode` writes the
@@ -406,6 +417,9 @@ extraction or embedding leaves nothing behind and the episode can be replayed as
 point this at a mounted volume so the file survives container restarts.
 
 - The file is created with mode `0600` because records contain full episode bodies.
+- If the file cannot be written (for example a read-only directory), the dead-letter error
+  line names only the episode `uuid` and `group_id`, not the payload, and the episode must be
+  re-sent from its source.
 - Entity and edge types are recorded by name only; replay assumes those types are still
   configured on the server.
 - Appends are serialised within one server process. Give each server process its own

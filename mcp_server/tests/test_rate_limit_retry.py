@@ -360,3 +360,48 @@ class TestQueueDeadLetter:
     def test_dead_letter_path_from_env(self, monkeypatch, tmp_path):
         monkeypatch.setenv('EPISODE_DEAD_LETTER_PATH', str(tmp_path / 'from-env.jsonl'))
         assert QueueService().dead_letter_path == tmp_path / 'from-env.jsonl'
+
+    async def test_unwritable_dead_letter_logs_ids_not_payload(self, tmp_path, caplog):
+        # A regular file where the parent directory should be makes mkdir fail, even as root.
+        blocker = tmp_path / 'not-a-dir'
+        blocker.write_text('')
+        dead_letter = blocker / 'episodes.jsonl'
+        client = MagicMock()
+        client.add_episode = AsyncMock(side_effect=ValueError('boom'))
+        queue = QueueService(dead_letter_path=dead_letter)
+        await queue.initialize(client)
+
+        with caplog.at_level('ERROR', logger='services.queue_service'):
+            await self._run_one(
+                queue,
+                'g4',
+                uuid='secret-episode',
+                content='TOP SECRET BODY',
+                custom_extraction_instructions='SECRET INSTRUCTIONS',
+            )
+
+        assert not dead_letter.exists()
+        log = '\n'.join(r.getMessage() for r in caplog.records)
+        assert "'secret-episode'" in log
+        assert "'g4'" in log
+        assert 'TOP SECRET BODY' not in log
+        assert 'SECRET INSTRUCTIONS' not in log
+        assert 'EPISODE DROPPED' in log
+        assert 'must be re-sent from its source' in log
+
+    async def test_unwritable_dead_letter_without_uuid(self, tmp_path, caplog):
+        blocker = tmp_path / 'not-a-dir'
+        blocker.write_text('')
+        client = MagicMock()
+        client.add_episode = AsyncMock(side_effect=ValueError('boom'))
+        queue = QueueService(dead_letter_path=blocker / 'episodes.jsonl')
+        await queue.initialize(client)
+
+        with caplog.at_level('ERROR', logger='services.queue_service'):
+            await self._run_one(queue, 'g5', uuid=None, content='TOP SECRET BODY')
+
+        log = '\n'.join(r.getMessage() for r in caplog.records)
+        # The drop line still names the episode; the write-failure line has no payload.
+        assert "episode 'probe' for group g5" in log
+        assert "episode None (group 'g5')" in log
+        assert 'TOP SECRET BODY' not in log
