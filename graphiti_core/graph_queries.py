@@ -128,11 +128,18 @@ def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
     return f'vector.similarity.cosine({vec1}, {vec2})'
 
 
-def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> str:
+def get_relationships_query(
+    name: str, limit: int, provider: GraphProvider, *, apply_index_limit: bool = True
+) -> str:
     if provider == GraphProvider.FALKORDB:
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
     if provider == GraphProvider.RELATE:
         return f'CALL db.index.fulltext.queryRelationships("{name}", $query)\n'
+
+    if provider == GraphProvider.NEO4J and not apply_index_limit:
+        # The caller must apply its filters before the final ordered LIMIT. Otherwise
+        # ineligible index hits can exhaust the procedure's limit before filtering.
+        return f'CALL db.index.fulltext.queryRelationships("{name}", $query)'
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
