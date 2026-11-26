@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-redis_errors = pytest.importorskip('redis.exceptions')
-
 # Add the src directory to the path (mirrors the other unit tests)
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
@@ -17,6 +15,8 @@ from services.falkordb_retry import (
     is_transient_falkordb_error,
 )
 from services.rate_limit_retry import RateLimitRetryPolicy
+
+redis_errors = pytest.importorskip('redis.exceptions')
 
 
 class RecordingSleep:
