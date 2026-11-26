@@ -535,6 +535,53 @@ async def test_edge_crud_and_embeddings(driver: RelateDriver):
         await driver.entity_edge_ops.get_by_uuid(driver, 'rel-1')
 
 
+async def test_node_bfs_search_returns_each_node_once(driver: RelateDriver):
+    """Three origins reach `hub`, so the variable-length MATCH gives three rows for it."""
+    now = datetime(2026, 1, 4, 12, 0, tzinfo=timezone.utc)
+    names = ['origin_1', 'origin_2', 'origin_3', 'origin_4', 'leaf', 'hub', 'other']
+    nodes = {
+        name: EntityNode(uuid=f'bfs-{name}', name=name, group_id='g-bfs', created_at=now)
+        for name in names
+    }
+    await driver.entity_node_ops.save_bulk(driver, list(nodes.values()))
+    for source, target in [
+        ('origin_1', 'leaf'),
+        ('origin_1', 'hub'),
+        ('origin_2', 'hub'),
+        ('origin_3', 'hub'),
+        ('origin_4', 'other'),
+    ]:
+        await driver.entity_edge_ops.save(
+            driver,
+            EntityEdge(
+                uuid=f'bfs-edge-{source}-{target}',
+                source_node_uuid=nodes[source].uuid,
+                target_node_uuid=nodes[target].uuid,
+                name='RELATES_TO',
+                fact=f'{source} relates to {target}',
+                group_id='g-bfs',
+                created_at=now,
+                episodes=[],
+            ),
+        )
+
+    origins = [nodes[name].uuid for name in ['origin_1', 'origin_2', 'origin_3', 'origin_4']]
+    filters = SearchFilters()
+
+    found = await driver.search_ops.node_bfs_search(
+        driver, origins, filters, max_depth=1, group_ids=['g-bfs'], limit=3
+    )
+    found_via_utils = await utils_node_bfs_search(
+        driver, origins, filters, 1, group_ids=['g-bfs'], limit=3
+    )
+
+    for result in (found, found_via_utils):
+        names_found = [node.name for node in result]
+        # With three rows for `hub`, the LIMIT would leave `other` out.
+        assert len(names_found) == len(set(names_found))
+        assert set(names_found) == {'leaf', 'hub', 'other'}
+
+
 async def test_search_ops_and_bfs_depth_clamping(driver: RelateDriver):
     await driver.build_indices_and_constraints()
     now = datetime(2026, 1, 4, 12, 0, tzinfo=timezone.utc)

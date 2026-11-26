@@ -208,6 +208,7 @@ class RelateSearchOperations(SearchOperations):
             """
             + filter_query
             + """
+            WITH DISTINCT n
             RETURN
             """
             + get_entity_node_return_query(GraphProvider.RELATE)
