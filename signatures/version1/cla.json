@@ -2095,6 +2095,16 @@
       "created_at": "2026-11-26T11:37:34Z",
       "repoId": 840056306,
       "pullRequestNo": 2233
+    },
+    {
+      "name": "goranai",
+      "email": "gordanis662@gmail.com",
+      "accountType": "personal",
+      "id": 28477490,
+      "comment_id": 7205485072,
+      "created_at": "2026-11-26T23:22:22Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2238
     }
   ]
 }
