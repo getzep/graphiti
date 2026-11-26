@@ -21,9 +21,82 @@ from typing import Any, TypeVar
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.helpers import semaphore_gather
-from graphiti_core.search.search_config import SearchResults
+from graphiti_core.search.search_config import (
+    EdgeReranker,
+    NodeReranker,
+    SearchResults,
+)
 
 F = TypeVar('F', bound=Callable[..., Awaitable[Any]])
+
+
+async def _rerank_cross_group(
+    merged: SearchResults, call_args: dict[str, Any], clients: Any, limit: int
+) -> SearchResults:
+    """
+    Re-rank SearchResults after cross-group merge to ensure global relevance ordering.
+
+    Per-group rerankers (RRF, MMR) produce similar top scores (e.g., 1.0) across groups,
+    making weak #1 results indistinguishable from strong #1 results. This function
+    re-applies cross-encoder reranking globally when available.
+
+    Parameters
+    ----------
+    merged : SearchResults
+        The merged results from all groups
+    call_args : dict
+        The bound function arguments (query, config, etc.)
+    clients : GraphitiClients
+        The clients object with cross_encoder
+    limit : int
+        The final result limit
+
+    Returns
+    -------
+    SearchResults
+        Re-ranked results with globally comparable scores
+    """
+    config = call_args.get('config')
+    query = call_args.get('query')
+
+    if not config or not query:
+        return merged
+
+    cross_encoder = clients.cross_encoder if hasattr(clients, 'cross_encoder') else None
+    if not cross_encoder:
+        return merged
+
+    # Re-rank edges: use cross-encoder for cross_encoder config OR as secondary
+    # reranker for RRF/other configs to distinguish top results with similar scores
+    if config.edge_config and merged.edges:
+        edge_needs_rerank = (
+            config.edge_config.reranker == EdgeReranker.cross_encoder
+            or config.edge_config.reranker == EdgeReranker.rrf
+        )
+        if edge_needs_rerank:
+            edge_facts = [edge.fact for edge in merged.edges[: 2 * limit]]
+            reranked_facts = await cross_encoder.rank(query, edge_facts)
+            fact_to_edge = {edge.fact: edge for edge in merged.edges[: 2 * limit]}
+
+            merged.edges = [fact_to_edge[fact] for fact, _score in reranked_facts[:limit]]
+            merged.edge_reranker_scores = [score for _fact, score in reranked_facts[:limit]]
+
+    # Re-rank nodes: use cross-encoder for cross_encoder config OR as secondary
+    # reranker for RRF/other configs to distinguish top results with similar scores
+    if config.node_config and merged.nodes:
+        node_needs_rerank = (
+            config.node_config.reranker == NodeReranker.cross_encoder
+            or config.node_config.reranker == NodeReranker.rrf
+        )
+        if node_needs_rerank:
+            node_names = [node.name for node in merged.nodes[: 2 * limit]]
+            reranked_names = await cross_encoder.rank(query, node_names)
+            name_to_node = {node.name: node for node in merged.nodes[: 2 * limit]}
+
+            merged.nodes = [name_to_node[name] for name, _score in reranked_names[:limit]]
+            merged.node_reranker_scores = [score for _name, score in reranked_names[:limit]]
+
+    return merged
 
 
 def handle_multiple_group_ids(func: F) -> F:
@@ -100,10 +173,24 @@ def handle_multiple_group_ids(func: F) -> F:
                 merge_limit = None
                 call_bound = inspect.signature(func).bind(self, *args, **kwargs)
                 call_bound.apply_defaults()
+
+                # Extract limit from config (search_) or num_results (search)
                 config = call_bound.arguments.get('config')
                 if config is not None and hasattr(config, 'limit'):
                     merge_limit = config.limit
-                return SearchResults.merge(results, limit=merge_limit)
+                elif 'num_results' in call_bound.arguments:
+                    merge_limit = call_bound.arguments['num_results']
+
+                merged = SearchResults.merge(results, limit=merge_limit)
+
+                # Re-rank across groups after merge to ensure global relevance ordering
+                # when per-group rerankers produce similar top scores (#2014)
+                if merge_limit and len(group_ids) > 1:
+                    merged = await _rerank_cross_group(
+                        merged, call_bound.arguments, self.clients, merge_limit
+                    )
+
+                return merged
             elif isinstance(results[0], list):
                 return [item for result in results for item in result]
             elif isinstance(results[0], tuple):

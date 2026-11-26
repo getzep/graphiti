@@ -1,4 +1,18 @@
-"""SearchResults.merge ranking, limit, and UUID dedupe (#2014)."""
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 
 from graphiti_core.nodes import EntityNode
 from graphiti_core.search.search_config import SearchResults
@@ -47,3 +61,27 @@ def test_merge_without_scores_preserves_order_and_empty_scores():
     merged = SearchResults.merge([res1, res2])
     assert [n.name for n in merged.nodes] == ['a', 'b']
     assert merged.node_reranker_scores == []
+
+
+def test_merge_respects_limit_across_multiple_groups():
+    """
+    When searching across multiple groups with a limit, the decorator merges
+    per-group results and applies the limit globally, not per-group (#2014).
+    """
+    # Simulate per-group results: group A returns 2, group B returns 2
+    nodes_a = [EntityNode(name=f'a{i}', summary='Group A', group_id='gA') for i in range(2)]
+    nodes_b = [EntityNode(name=f'b{i}', summary='Group B', group_id='gB') for i in range(2)]
+
+    # Both groups have scores
+    res_a = SearchResults(nodes=nodes_a, node_reranker_scores=[0.9, 0.7])
+    res_b = SearchResults(nodes=nodes_b, node_reranker_scores=[0.8, 0.6])
+
+    # Merge with limit=2 should return 2 total, not 2 per group
+    merged = SearchResults.merge([res_a, res_b], limit=2)
+
+    assert len(merged.nodes) == 2
+    assert len(merged.node_reranker_scores) == 2
+    # Top 2 scores are 0.9 and 0.8
+    assert merged.node_reranker_scores == [0.9, 0.8]
+    assert merged.nodes[0].name == 'a0'  # score 0.9
+    assert merged.nodes[1].name == 'b0'  # score 0.8
