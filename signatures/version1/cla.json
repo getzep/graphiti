@@ -2105,6 +2105,16 @@
       "created_at": "2026-11-26T23:22:22Z",
       "repoId": 840056306,
       "pullRequestNo": 2238
+    },
+    {
+      "name": "ducduong97hn",
+      "email": "duongduczxzz1997@gmail.com",
+      "accountType": "personal",
+      "id": 329570164,
+      "comment_id": 7220080152,
+      "created_at": "2026-11-27T13:53:56Z",
+      "repoId": 840056306,
+      "pullRequestNo": 2072
     }
   ]
 }
