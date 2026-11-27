@@ -276,5 +276,32 @@ class TestAnthropicClientGenerateResponse:
         assert result['test_field'] == 'correct_value'
 
 
+class TestClientRequestErrors:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('error_class', 'status_code'),
+        [('BadRequestError', 400), ('AuthenticationError', 401), ('NotFoundError', 404)],
+    )
+    async def test_client_request_error_is_not_retried(
+        self, anthropic_client, mock_async_anthropic, error_class, status_code
+    ):
+        """A 400 such as "prompt is too long" must not be resent with more text."""
+        import anthropic
+        import httpx
+
+        request = httpx.Request('POST', 'https://api.anthropic.com/v1/messages')
+        error = getattr(anthropic, error_class)(
+            'request rejected', response=httpx.Response(status_code, request=request), body=None
+        )
+        mock_async_anthropic.messages.create.side_effect = error
+        messages = [Message(role='user', content='Test message')]
+
+        with pytest.raises(getattr(anthropic, error_class)):
+            await anthropic_client.generate_response(messages, response_model=ResponseModel)
+
+        assert mock_async_anthropic.messages.create.call_count == 1
+        assert len(messages) == 1
+
+
 if __name__ == '__main__':
     pytest.main(['-v', 'test_anthropic_client.py'])
