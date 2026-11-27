@@ -11,6 +11,7 @@ from graphiti_core.prompts.extract_nodes_and_edges import (
 )
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.combined_extraction import (
+    TIMESTAMP_BATCH_ATTEMPTS,
     TIMESTAMP_BATCH_SIZE,
     extract_nodes_and_edges,
 )
@@ -666,3 +667,88 @@ async def test_combined_extraction_dates_facts_in_groups():
     assert len(edges) == fact_count
     assert sorted(group_sizes) == sorted([TIMESTAMP_BATCH_SIZE, TIMESTAMP_BATCH_SIZE, 5])
     assert all(edge.valid_at is not None for edge in edges)
+
+
+def _three_fact_extraction() -> dict:
+    facts = [
+        ('Alice', 'Acme', 'Alice joined Acme in January 2020.'),
+        ('Acme', 'Berlin', 'Acme is headquartered in Berlin.'),
+        ('Carol', 'Berlin', 'Carol left Berlin on 2024-05-01.'),
+    ]
+    return {
+        'extracted_entities': [
+            {'name': name, 'entity_type_id': 0} for name in ['Alice', 'Acme', 'Berlin', 'Carol']
+        ],
+        'edges': [
+            {
+                'source_entity_name': source,
+                'target_entity_name': target,
+                'relation_type': 'RELATES_TO',
+                'fact': fact,
+                'episode_indices': [0],
+            }
+            for source, target, fact in facts
+        ],
+    }
+
+
+# The model leaves out the row of the undated middle fact.
+_ROWS_FOR_FACTS_1_AND_3 = {
+    'timestamps': [
+        {'valid_at': '2020-01-01T00:00:00Z', 'invalid_at': None},
+        {'valid_at': None, 'invalid_at': '2024-05-01T00:00:00Z'},
+    ]
+}
+
+
+@pytest.mark.asyncio
+async def test_combined_extraction_does_not_shift_dates_when_a_row_is_missing():
+    """With fewer rows than facts, no row may date a fact that it was not written for."""
+    clients, llm_generate = _make_clients()
+    llm_generate.side_effect = [
+        _three_fact_extraction(),
+        _ROWS_FOR_FACTS_1_AND_3,
+        _ROWS_FOR_FACTS_1_AND_3,
+    ]
+
+    _nodes, edges, _ = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+    )
+
+    by_fact = {edge.fact: edge for edge in edges}
+    headquarters = by_fact['Acme is headquartered in Berlin.']
+    assert headquarters.invalid_at is None
+    assert headquarters.valid_at is None
+    # The group stays undated, so edge resolution dates each edge on its own.
+    assert all(edge.valid_at is None and edge.invalid_at is None for edge in edges)
+    assert llm_generate.call_count == 1 + TIMESTAMP_BATCH_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_combined_extraction_retries_a_batch_with_the_wrong_row_count():
+    clients, llm_generate = _make_clients()
+    llm_generate.side_effect = [
+        _three_fact_extraction(),
+        _ROWS_FOR_FACTS_1_AND_3,
+        {
+            'timestamps': [
+                {'valid_at': '2020-01-01T00:00:00Z', 'invalid_at': None},
+                {'valid_at': None, 'invalid_at': None},
+                {'valid_at': None, 'invalid_at': '2024-05-01T00:00:00Z'},
+            ]
+        },
+    ]
+
+    _nodes, edges, _ = await extract_nodes_and_edges(
+        clients,
+        _make_episode(),
+        previous_episodes=[],
+    )
+
+    by_fact = {edge.fact: edge for edge in edges}
+    assert by_fact['Alice joined Acme in January 2020.'].valid_at is not None
+    assert by_fact['Acme is headquartered in Berlin.'].invalid_at is None
+    assert by_fact['Carol left Berlin on 2024-05-01.'].invalid_at is not None
+    assert llm_generate.call_count == 3
