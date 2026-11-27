@@ -40,8 +40,11 @@ class QueueService:
         # Add the episode processing function to the queue
         await self._episode_queues[group_id].put(process_func)
 
-        # Start a worker for this queue if one isn't already running
+        # Start a worker for this queue if one isn't already running. Set the flag
+        # before the task starts: a call that arrives before the new worker runs
+        # must see it, or the group gets a second worker and loses its order.
         if not self._queue_workers.get(group_id, False):
+            self._queue_workers[group_id] = True
             asyncio.create_task(self._process_episode_queue(group_id))
 
         return self._episode_queues[group_id].qsize()
@@ -53,7 +56,6 @@ class QueueService:
         from the queue one at a time.
         """
         logger.info(f'Starting episode queue worker for group_id: {group_id}')
-        self._queue_workers[group_id] = True
 
         try:
             while True:
