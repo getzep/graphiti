@@ -26,6 +26,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.embedder.canonical_text import canonical_edge_fact_text
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
@@ -261,7 +262,7 @@ class EntityEdge(Edge):
     async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
 
-        text = self.fact.replace('\n', ' ')
+        text = canonical_edge_fact_text(self.fact)
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
@@ -1016,11 +1017,16 @@ def get_next_episode_edge_from_record(record: Any) -> NextEpisodeEdge:
 
 
 async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[EntityEdge]):
-    # filter out falsey values from edges
-    filtered_edges = [edge for edge in edges if edge.fact]
+    filtered_edges = []
+    fact_texts = []
+    for edge in edges:
+        fact_text = canonical_edge_fact_text(edge.fact)
+        if fact_text.strip():
+            filtered_edges.append(edge)
+            fact_texts.append(fact_text)
 
     if len(filtered_edges) == 0:
         return
-    fact_embeddings = await embedder.create_batch([edge.fact for edge in filtered_edges])
+    fact_embeddings = await embedder.create_batch(fact_texts)
     for edge, fact_embedding in zip(filtered_edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding

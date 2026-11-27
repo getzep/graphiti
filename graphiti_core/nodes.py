@@ -30,9 +30,14 @@ from graphiti_core.driver.driver import (
     GraphProvider,
 )
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.embedder.canonical_text import (
+    canonical_entity_node_text,
+    canonical_node_name_text,
+)
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import (
     SAFE_CYPHER_IDENTIFIER_PATTERN,
+    build_normalized_string_pattern,
     parse_db_date,
     validate_node_labels,
 )
@@ -505,11 +510,11 @@ class EntityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = self.name.replace('\n', ' ')
+        text = canonical_entity_node_text(self.uuid, self.group_id, self.name, self.summary)
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(
-            f'embedded entity {self.uuid} name ({len(text)} chars) in {(end - start) * 1000} ms'
+            f'embedded entity {self.uuid} name and summary ({len(text)} chars) in {(end - start) * 1000} ms'
         )
 
         return self.name_embedding
@@ -671,8 +676,13 @@ class EntityNode(Node):
         attributes: dict[str, Any],
         labels: list[str] | None = None,
         limit: int = NODE_DEDUP_CANDIDATE_LIMIT,
+        normalize_strings: bool = False,
     ) -> list['EntityNode']:
-        """Retrieve nodes by attributes. Neptune does not support this lookup."""
+        """Retrieve nodes by attributes. Neptune does not support this lookup.
+
+        With ``normalize_strings``, string values match without regard to case,
+        and with whitespace collapsed to one space and stripped.
+        """
         if not attributes:
             return []
 
@@ -695,6 +705,7 @@ class EntityNode(Node):
                     attributes,
                     node_labels,
                     limit,
+                    normalize_strings=normalize_strings,
                 )
             except NotImplementedError:
                 pass
@@ -704,10 +715,17 @@ class EntityNode(Node):
                 f'Attribute lookup is not supported for {driver.provider.value}'
             )
 
-        attribute_conditions = [
-            f'AND n.`{property_name}` = $attribute_{index}'
-            for index, property_name in enumerate(property_names)
-        ]
+        attribute_conditions = []
+        parameters: dict[str, Any] = {}
+        for index, property_name in enumerate(property_names):
+            value = attributes[property_name]
+            if normalize_strings and isinstance(value, str):
+                attribute_conditions.append(f'AND n.`{property_name}` =~ $attribute_{index}')
+                parameters[f'attribute_{index}'] = build_normalized_string_pattern(value)
+            else:
+                attribute_conditions.append(f'AND n.`{property_name}` = $attribute_{index}')
+                parameters[f'attribute_{index}'] = value
+
         query = (
             f"""
             MATCH (n:Entity{label_query})
@@ -720,10 +738,6 @@ class EntityNode(Node):
             LIMIT $limit
             """
         )
-        parameters = {
-            f'attribute_{index}': attributes[property_name]
-            for index, property_name in enumerate(property_names)
-        }
         parameters.update(group_id=group_id, limit=limit)
         if driver.provider == GraphProvider.NEO4J:
             parameters['routing_'] = 'r'
@@ -816,7 +830,7 @@ class CommunityNode(Node):
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
-        text = self.name.replace('\n', ' ')
+        text = canonical_node_name_text(self.name)
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(
@@ -1212,12 +1226,17 @@ def get_saga_node_from_record(record: Any) -> SagaNode:
 
 
 async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[EntityNode]):
-    # filter out falsey values from nodes
-    filtered_nodes = [node for node in nodes if node.name]
+    filtered_nodes = []
+    name_texts = []
+    for node in nodes:
+        name_text = canonical_entity_node_text(node.uuid, node.group_id, node.name, node.summary)
+        if name_text.strip():
+            filtered_nodes.append(node)
+            name_texts.append(name_text)
 
     if not filtered_nodes:
         return
 
-    name_embeddings = await embedder.create_batch([node.name for node in filtered_nodes])
+    name_embeddings = await embedder.create_batch(name_texts)
     for node, name_embedding in zip(filtered_nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding

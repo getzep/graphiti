@@ -20,6 +20,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from graphiti_core.prompts import prompt_helpers
+from graphiti_core.prompts.haiku import is_haiku_model
 from graphiti_core.prompts.lib import (
     ChatPromptLibrary,
     create_prompt_library,
@@ -30,6 +32,8 @@ from graphiti_core.prompts.lib import (
 )
 from graphiti_core.prompts.models import ChatPromptFunction
 from graphiti_core.prompts.names import PromptName
+from graphiti_core.prompts.variants import prompt_overrides_for_variant
+from graphiti_core.prompts.versions import template_of
 from graphiti_core.tracer import Tracer
 
 from .client import LLMClient
@@ -48,6 +52,10 @@ def _wrap_builder(builder: ChatPromptFunction, prompt_name: str) -> ChatPromptFu
     def _call(context: dict[str, Any]):
         return ensure_chat_prompt(builder(context), prompt_name)
 
+    template = template_of(builder, append_parts=(prompt_helpers.DO_NOT_ESCAPE_UNICODE,))
+    if template is not None:
+        _call.__prompt_template__ = template
+    _call.__wrapped__ = builder
     return _call
 
 
@@ -156,10 +164,16 @@ class LLMRuntime:
         return self.model
 
     def resolve_builder(self, prompt_name: str, model: LLMModel) -> ChatPromptFunction:
-        """Builder resolution: model override → general override → library method."""
+        """Resolve model override → general override → variant → library method."""
         override = model.flat_overrides.get(prompt_name)
         if override is None:
             override = self.prompt_overrides.get(prompt_name)
+        if override is None:
+            variant = model.prompt_variant
+            if variant is None and is_haiku_model(model.id):
+                variant = 'haiku'
+            if variant is not None:
+                override = flatten_overrides(prompt_overrides_for_variant(variant)).get(prompt_name)
         if override is not None:
             return _wrap_builder(override, prompt_name)
         return get_prompt_builder(self.library, prompt_name)
@@ -190,4 +204,5 @@ class LLMRuntime:
             prompt_name=prompt_name,
             attribute_extraction=attribute_extraction,
             model=model.id,
+            prompt_template=template_of(builder),
         )

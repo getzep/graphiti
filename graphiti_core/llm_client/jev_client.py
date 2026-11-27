@@ -23,6 +23,7 @@ import httpx
 from pydantic import BaseModel
 
 from graphiti_core.prompts.models import Message
+from graphiti_core.prompts.versions import PromptTemplate
 
 from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
@@ -141,6 +142,7 @@ class JevClient(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
+        prompt_template: PromptTemplate | None = None,
     ) -> dict[str, Any]:
         node_prompt = 'dedupe_nodes.nodes'
         edge_prompt = 'dedupe_edges.resolve_edge'
@@ -180,6 +182,7 @@ class JevClient(LLMClient):
                     'max_tokens': max_tokens,
                     'cache.enabled': self.cache_enabled,
                     'prompt.name': prompt_name,
+                    'prompt.version': self._prompt_version(prompt_template, ()),
                     'cache.hit': False,
                 }
             )

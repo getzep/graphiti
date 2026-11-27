@@ -664,6 +664,7 @@ async def analyze_episode(
                 previous_episodes,
                 entity_types,
                 identity_properties=identity_properties,
+                require_shared_neighbor_for_name_match=False,
                 trace=trace,
             )
             (
@@ -679,7 +680,7 @@ async def analyze_episode(
                 edge_types,
                 nodes,
                 uuid_map,
-                custom_extraction_instructions=custom_extraction_instructions,
+                knowledge=custom_extraction_instructions,
                 entity_types=entity_types,
                 identity_properties=identity_properties,
                 clients=clients,
@@ -766,7 +767,7 @@ async def analyze_bulk(
                 entity_types,
                 excluded_entity_types,
                 strict_edge_types=strict_edge_types,
-                custom_extraction_instructions=custom_extraction_instructions,
+                knowledge=custom_extraction_instructions,
                 use_combined_extraction=use_combined_extraction,
                 clients=clients,
                 # The first pass also resolves extracted nodes to stored nodes.
@@ -1002,6 +1003,7 @@ async def _repair_nodes(
             previous_episodes,
             entity_types,
             identity_properties,
+            require_shared_neighbor_for_name_match=False,
             trace=trace,
         )
         merged.update({uuid: target for uuid, target in uuid_map.items() if uuid != target})

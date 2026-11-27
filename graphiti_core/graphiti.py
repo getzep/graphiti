@@ -16,6 +16,8 @@ limitations under the License.
 
 import json
 import logging
+import warnings
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from time import time
 from typing import TYPE_CHECKING, Any
@@ -413,9 +415,9 @@ class Graphiti:
             embedder=self.embedder,
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
+            max_coroutines=self.max_coroutines,
             prompt_library=self.prompt_library,
             llm_runtime=self.llm_runtime,
-            max_coroutines=self.max_coroutines,
         )
 
         # Concurrent ingestion is off when there is no configuration. The scheduler
@@ -457,7 +459,7 @@ class Graphiti:
 
         Returns the TokenUsageTracker from the LLM client, which can be used to:
         - Get token usage by prompt type: tracker.get_usage()
-        - Get total usage: tracker.get_total_usage()
+        - Get total token usage: tracker.get_total_usage()
         - Print a formatted summary: tracker.print_summary()
         - Reset tracking: tracker.reset()
         """
@@ -682,8 +684,24 @@ class Graphiti:
         self,
         saga_id: str,
         group_id: str | None = None,
+        rebuild: bool = False,
+        before_publish: Callable[[str], Awaitable[str]] | None = None,
     ) -> SagaNode:
         """Incrementally summarize a saga using only new episodes since the last summary.
+
+        ``before_publish`` runs with the generated summary text immediately
+        before the saga node is saved and returns the text to publish. The
+        caller uses it to check the selected input episodes and to evaluate
+        the text against a content policy; an exception it raises stops the
+        publication and the node is not saved.
+
+        With ``rebuild=True`` the summary is regenerated from scratch: the
+        watermark filter is ignored (all surviving episodes are fetched) and
+        the existing summary is NOT fed back into the prompt. This is the
+        retention rebuild: after an episode the saga summarized is deleted,
+        the incremental path would carry the deleted
+        episode's content forward inside the old summary text, so the text is
+        discarded and rebuilt from the surviving contributors alone.
 
         Two watermarks are maintained on the saga node, with deliberately
         different semantics:
@@ -732,13 +750,16 @@ class Graphiti:
         if group_id is not None and saga.group_id != group_id:
             raise NodeNotFoundError(saga_id)
 
-        # Fetch only episodes added since the last summary. Cap the window to the same episode
+        # Fetch only episodes added since the last summary (or all if never
+        # summarized, or on a rebuild). Cap the window to the same episode
         # count node summaries use so a long thread or document cannot fill
         # the model context window in one pass. Deferred episodes remain
         # eligible because last_summarized_at advances only through this batch.
         max_episodes = MAX_SAGA_EPISODES_FOR_SUMMARY
-        since = saga.last_summarized_at
-        existing_summary = truncate_at_sentence(saga.summary or '', SAGA_SUMMARY_MAX_CHARS)
+        since = None if rebuild else saga.last_summarized_at
+        existing_summary = ''
+        if not rebuild:
+            existing_summary = truncate_at_sentence(saga.summary or '', SAGA_SUMMARY_MAX_CHARS)
 
         # Try IoC interface first, fall back to raw Cypher
         episodes_data = await self._saga_get_episode_contents(
@@ -786,6 +807,21 @@ class Graphiti:
             saga._summary_episodes_selected = 0
             saga._summary_episodes_skipped = 0
             saga._summary_selected_episode_bytes = 0
+            if rebuild:
+                # No surviving episodes: the old text (generated from episodes
+                # that have since been deleted) must not be kept, and an LLM
+                # call over nothing would only invent content. Clear it.
+                # The watermark is cleared, so that an episode that is not
+                # eligible yet (a pending policy state) is read by the next
+                # incremental run.
+                saga.summary = ''
+                saga.last_summarized_at = None
+                saga.last_summarized_episode_valid_at = None
+                if before_publish is not None:
+                    saga.summary = await before_publish(saga.summary)
+                await saga.save(driver)
+                logger.info(f'Rebuilt saga {saga_id} summary to empty: no surviving episodes')
+                return saga
             logger.info(f'No new episodes found for saga {saga_id}, skipping summary')
             return saga
 
@@ -797,7 +833,7 @@ class Graphiti:
         saga._summary_episodes_selected = len(episodes_data)
         saga._summary_episodes_skipped = total_episode_count - len(episodes_data)
         saga._summary_selected_episode_bytes = selected_episode_bytes
-        if not episodes_data:
+        if not episodes_data and not rebuild:
             logger.info(f'No saga episode content fit the summary byte budget for saga {saga_id}')
             return saga
         if episodes_dropped:
@@ -822,6 +858,9 @@ class Graphiti:
             )
             return {
                 'saga_name': saga.name,
+                # A rebuild discards the prior text: it was generated from episodes
+                # that may since have been deleted, and feeding it back would carry
+                # their content into the new summary.
                 'existing_summary': existing_summary,
                 'episodes': [content for content, _, _ in prompt_episodes_data],
             }
@@ -860,37 +899,54 @@ class Graphiti:
         saga._summary_selected_episode_bytes = sum(
             len(content.encode('utf-8')) for content, _, _ in episodes_data
         )
-        if not episodes_data:
+        if not episodes_data and not rebuild:
             logger.info(f'No saga episode content fit the summary byte budget for saga {saga_id}')
             return saga
+        episode_contents = _prompt_context(episodes_data)['episodes'] if episodes_data else []
         valid_ats = [valid_at for _, valid_at, _ in episodes_data if valid_at is not None]
         summarized_created_ats = [created_at for _, _, created_at in episodes_data]
 
         context = _prompt_context(episodes_data)
 
-        llm_response = await generate_prompt_response(
-            self.llm_client,
-            'summarize_sagas.summarize_saga',
-            prompt_library.summarize_sagas.summarize_saga,
-            context,
-            clients=saga_clients,
-            response_model=SagaSummary,
-            max_tokens=SAGA_SUMMARY_MAX_TOKENS,
-        )
+        if rebuild and not episode_contents:
+            # Nothing survives to summarize; an LLM call over an empty episode
+            # list would only invent content. The saga keeps an empty summary
+            # until new episodes arrive.
+            summary = ''
+        else:
+            llm_response = await generate_prompt_response(
+                self.llm_client,
+                'summarize_sagas.summarize_saga',
+                prompt_library.summarize_sagas.summarize_saga,
+                context,
+                clients=saga_clients,
+                response_model=SagaSummary,
+                max_tokens=SAGA_SUMMARY_MAX_TOKENS,
+            )
 
-        summary = llm_response.get('summary', '')
-        if len(summary) > SAGA_SUMMARY_MAX_CHARS:
-            summary = truncate_at_sentence(summary, SAGA_SUMMARY_MAX_CHARS)
+            summary = llm_response.get('summary', '')
+            if len(summary) > SAGA_SUMMARY_MAX_CHARS:
+                summary = truncate_at_sentence(summary, SAGA_SUMMARY_MAX_CHARS)
+
+        if before_publish is not None:
+            summary = await before_publish(summary)
 
         saga.summary = summary
         # Ingestion-time watermark for the next-run filter. Advance only
         # through the episodes that were actually sent to the summary prompt so
-        # byte-budgeted later episodes remain reachable on subsequent runs.
+        # byte-budgeted later episodes remain reachable on subsequent runs. A
+        # rebuild that summarized nothing clears the watermark, so that an
+        # episode that becomes eligible later is read by the next run.
         saga.last_summarized_at = max(summarized_created_ats) if summarized_created_ats else None
         # Episode-time watermark for public/temporal consumers: advance only
         # forward to the latest reference time we just summarized. If no
-        # episode in this batch carried a valid_at, leave the previous value unchanged.
-        if valid_ats:
+        # episode in this batch carried a valid_at, leave the previous value
+        # unchanged so the field never regresses -- except on a rebuild, where
+        # the summary now covers only the surviving episodes and the watermark
+        # must reflect them even if that moves it backward.
+        if rebuild:
+            saga.last_summarized_episode_valid_at = max(valid_ats) if valid_ats else None
+        elif valid_ats:
             new_episode_watermark = max(valid_ats)
             if (
                 saga.last_summarized_episode_valid_at is None
@@ -1070,7 +1126,7 @@ class Graphiti:
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
         strict_edge_types: bool = False,
-        custom_extraction_instructions: str | None = None,
+        knowledge: str | None = None,
         entity_types: dict[str, type[BaseModel]] | None = None,
         identity_properties: dict[str, list[str]] | None = None,
         clients: GraphitiClients | None = None,
@@ -1100,7 +1156,7 @@ class Graphiti:
             group_id,
             edge_types,
             strict_edge_types,
-            custom_extraction_instructions,
+            knowledge,
         )
 
         # Merge only nodes that extract_edges newly materialized — never the full
@@ -1255,9 +1311,10 @@ class Graphiti:
         entity_types: dict[str, type[BaseModel]] | None,
         excluded_entity_types: list[str] | None,
         strict_edge_types: bool = False,
-        custom_extraction_instructions: str | None = None,
-        use_combined_extraction: bool = True,
+        knowledge: str | None = None,
         identity_properties: dict[str, list[str]] | None = None,
+        use_combined_extraction: bool = True,
+        require_shared_neighbor_for_name_match: bool = False,
         clients: GraphitiClients | None = None,
         trace: 'ResolutionTrace | None' = None,
     ) -> tuple[
@@ -1276,7 +1333,7 @@ class Graphiti:
             entity_types=entity_types,
             excluded_entity_types=excluded_entity_types,
             strict_edge_types=strict_edge_types,
-            custom_extraction_instructions=custom_extraction_instructions,
+            knowledge=knowledge,
             use_combined_extraction=use_combined_extraction,
         )
 
@@ -1313,6 +1370,7 @@ class Graphiti:
             episode_context,
             entity_types,
             identity_properties=identity_properties,
+            require_shared_neighbor_for_name_match=require_shared_neighbor_for_name_match,
             **trace_kwargs,
         )
 
@@ -1331,6 +1389,7 @@ class Graphiti:
         clients: GraphitiClients | None = None,
         hydrate: bool = True,
         trace: 'ResolutionTrace | None' = None,
+        require_shared_neighbor_for_name_match: bool = False,
     ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
         """Resolve nodes and edges against the existing graph.
 
@@ -1367,6 +1426,7 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                     identity_properties=identity_properties,
+                    require_shared_neighbor_for_name_match=require_shared_neighbor_for_name_match,
                     **trace_kwargs,
                 )
             return await resolve_extracted_nodes(
@@ -1375,6 +1435,7 @@ class Graphiti:
                 episode,
                 previous_episodes,
                 entity_types,
+                require_shared_neighbor_for_name_match=require_shared_neighbor_for_name_match,
                 **trace_kwargs,
             )
 
@@ -1646,6 +1707,7 @@ class Graphiti:
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
         identity_properties: dict[str, list[str]] | None = None,
+        knowledge: str | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1680,7 +1742,7 @@ class Graphiti:
         previous_episode_uuids : list[str] | None
             Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
             the most recent episodes by created_at date will be used.
-        custom_extraction_instructions : str | None
+        knowledge : str | None
             Optional. Custom extraction instructions string to be included in the extract entities and extract edges prompts.
             This allows for additional instructions or context to guide the extraction process.
         saga : str | SagaNode | None
@@ -1696,6 +1758,8 @@ class Graphiti:
         identity_properties : dict[str, list[str]] | None
             Optional. Map entity type names to attribute names that identify entities.
             Graphiti extracts these attributes before node resolution.
+        custom_extraction_instructions : str | None
+            Deprecated alias for ``knowledge``.
 
         Returns
         -------
@@ -1718,6 +1782,18 @@ class Graphiti:
                 background_tasks.add_task(graphiti.add_episode, **episode_data.dict())
                 return {"message": "Episode processing started"}
         """
+        if custom_extraction_instructions is not None:
+            if knowledge is not None:
+                raise ValueError(
+                    'Pass either knowledge or custom_extraction_instructions, not both.'
+                )
+            warnings.warn(
+                'custom_extraction_instructions is deprecated; use knowledge instead.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            knowledge = custom_extraction_instructions
+
         start = time()
         now = utc_now()
 
@@ -1762,7 +1838,7 @@ class Graphiti:
                 previous_episode_uuids=previous_episode_uuids,
                 edge_types=edge_types,
                 edge_type_map=edge_type_map,
-                custom_extraction_instructions=custom_extraction_instructions,
+                custom_extraction_instructions=knowledge,
                 saga=saga,
                 saga_previous_episode_uuid=saga_previous_episode_uuid,
                 identity_properties=identity_properties,
@@ -1818,7 +1894,7 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                     excluded_entity_types,
-                    custom_extraction_instructions,
+                    knowledge,
                 )
 
                 if identity_properties:
@@ -1862,7 +1938,7 @@ class Graphiti:
                     edge_types,
                     nodes,
                     uuid_map,
-                    custom_extraction_instructions=custom_extraction_instructions,
+                    knowledge=knowledge,
                     entity_types=entity_types,
                     identity_properties=identity_properties,
                     clients=clients,
@@ -1962,6 +2038,7 @@ class Graphiti:
         saga: str | SagaNode | None = None,
         use_combined_extraction: bool = True,
         identity_properties: dict[str, list[str]] | None = None,
+        knowledge: str | None = None,
     ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
@@ -1986,7 +2063,7 @@ class Graphiti:
         strict_edge_types : bool
             Optional. Whether to discard extracted edges that do not use one of the
             provided edge_types.
-        custom_extraction_instructions : str | None
+        knowledge : str | None
             Optional. Custom extraction instructions string to be included in the
             extract entities and extract edges prompts. This allows for additional
             instructions or context to guide the extraction process.
@@ -1995,12 +2072,13 @@ class Graphiti:
             If a string is provided and a saga with this name already exists in the group, the episodes
             will be added to it. Otherwise, a new saga will be created. Sagas are connected to episodes
             via HAS_EPISODE edges, and consecutive episodes are linked via NEXT_EPISODE edges.
-        use_combined_extraction : bool
-            If True, use one combined node-and-edge LLM call per episode. If False, use separate
-            node and edge extraction.
         identity_properties : dict[str, list[str]] | None
             Optional. Map entity type names to attribute names that identify entities.
             Graphiti extracts these attributes before node resolution.
+        custom_extraction_instructions : str | None
+            Deprecated alias for ``knowledge``.
+        use_combined_extraction : bool
+            If True, use combined node-and-edge extraction. Otherwise, use separate extraction.
 
         Returns
         -------
@@ -2026,6 +2104,18 @@ class Graphiti:
         ``resolve_extracted_edges`` just like in ``add_episode``, and any invalidated
         edges are persisted alongside the newly resolved ones.
         """
+        if custom_extraction_instructions is not None:
+            if knowledge is not None:
+                raise ValueError(
+                    'Pass either knowledge or custom_extraction_instructions, not both.'
+                )
+            warnings.warn(
+                'custom_extraction_instructions is deprecated; use knowledge instead.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            knowledge = custom_extraction_instructions
+
         if getattr(self, 'concurrent_ingestion', None) is not None:
             concurrent_group_id, concurrent_driver, _ = self._resolve_request_scope(group_id)
             if self._concurrent_ingestion_enabled(concurrent_group_id):
@@ -2050,7 +2140,7 @@ class Graphiti:
                     edge_types=edge_types,
                     edge_type_map=edge_type_map,
                     strict_edge_types=strict_edge_types,
-                    custom_extraction_instructions=custom_extraction_instructions,
+                    custom_extraction_instructions=knowledge,
                     saga=saga,
                     use_combined_extraction=use_combined_extraction,
                     identity_properties=identity_properties,
@@ -2121,9 +2211,10 @@ class Graphiti:
                     entity_types,
                     excluded_entity_types,
                     strict_edge_types=strict_edge_types,
-                    custom_extraction_instructions=custom_extraction_instructions,
+                    knowledge=knowledge,
                     use_combined_extraction=use_combined_extraction,
                     identity_properties=identity_properties,
+                    require_shared_neighbor_for_name_match=True,
                     clients=clients,
                 )
 
@@ -2162,6 +2253,7 @@ class Graphiti:
                     episodes,
                     identity_properties=identity_properties,
                     clients=clients,
+                    require_shared_neighbor_for_name_match=True,
                 )
 
                 # Resolved pointers for episodic edges
@@ -2292,8 +2384,8 @@ class Graphiti:
             clients.driver,
             clients.llm_client,
             group_ids,
+            max_coroutines=clients.max_coroutines,
             clients=clients,
-            max_coroutines=self.max_coroutines,
         )
 
         await semaphore_gather(

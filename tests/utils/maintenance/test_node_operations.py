@@ -1,10 +1,12 @@
+import asyncio
 import logging
 from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 
+from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
@@ -15,6 +17,7 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _cached_shingles,
     _has_high_entropy,
     _hash_shingle,
+    _identity_key_for_node,
     _identity_type_for_node,
     _jaccard_similarity,
     _lsh_bands,
@@ -26,8 +29,13 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _shingles,
 )
 from graphiti_core.utils.maintenance.node_operations import (
+    DEDUPE_SUMMARY_MAX_CHARS,
+    _build_existing_nodes_context,
+    _build_extracted_nodes_context,
     _collect_candidate_nodes,
     _collect_exact_name_candidate_nodes,
+    _collect_identity_property_candidate_nodes,
+    _entity_type_for_labels,
     _extract_entity_summaries_batch,
     _resolve_with_llm,
     _semantic_candidate_search,
@@ -73,6 +81,43 @@ def _semantic_candidates(candidate_groups: list[list[EntityNode]]):
         return candidate_groups
 
     return fake_search
+
+
+NEIGHBOR_UUID = 'episode-neighbor'
+
+
+def _allow_exact(_node: EntityNode, _candidate: EntityNode) -> bool:
+    return True
+
+
+def _refuse_exact(_node: EntityNode, _candidate: EntityNode) -> bool:
+    return False
+
+
+def _patch_node_edges(monkeypatch, neighbors_by_node: dict[str, list[str]]) -> list[str]:
+    """Make EntityEdge.get_by_node_uuid return one edge to each listed neighbor."""
+    reads: list[str] = []
+
+    async def fake_get_by_node_uuid(_driver, node_uuid):
+        reads.append(node_uuid)
+        return [
+            EntityEdge(
+                group_id='group',
+                source_node_uuid=node_uuid,
+                target_node_uuid=neighbor_uuid,
+                name='RELATES_TO',
+                fact='fact',
+                created_at=utc_now(),
+            )
+            for neighbor_uuid in neighbors_by_node.get(node_uuid, [])
+        ]
+
+    monkeypatch.setattr(EntityEdge, 'get_by_node_uuid', fake_get_by_node_uuid)
+    return reads
+
+
+def _entity_type(name: str) -> type[BaseModel]:
+    return create_model(name)
 
 
 @pytest.mark.asyncio
@@ -126,16 +171,82 @@ async def test_resolve_nodes_exact_match_skips_llm(monkeypatch):
         _semantic_candidates([[candidate]]),
     )
 
+    _patch_node_edges(monkeypatch, {candidate.uuid: [NEIGHBOR_UUID]})
+
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
         [extracted],
         episode=_make_episode(),
         previous_episodes=[],
+        episode_neighbor_uuids={NEIGHBOR_UUID},
     )
 
     assert resolved[0].uuid == candidate.uuid
     assert uuid_map[extracted.uuid] == candidate.uuid
     llm_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_nodes_can_disable_shared_neighbor_name_gate(monkeypatch):
+    clients, llm_generate = _make_clients()
+    candidate = EntityNode(name='Joe Michaels', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='Joe Michaels', group_id='group', labels=['Entity'])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidate]]),
+    )
+
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+        require_shared_neighbor_for_name_match=False,
+    )
+
+    assert resolved[0].uuid == candidate.uuid
+    assert uuid_map[extracted.uuid] == candidate.uuid
+    llm_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_nodes_excludes_self_candidates(monkeypatch):
+    clients, _ = _make_clients()
+    extracted = EntityNode(
+        uuid='same-node',
+        name='Alice',
+        group_id='group',
+        labels=['Entity'],
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._collect_exact_name_candidate_nodes',
+        AsyncMock(return_value=[[]]),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        AsyncMock(return_value=[[]]),
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.resolve_nodes_with_candidates',
+        AsyncMock(return_value=([extracted], {extracted.uuid: extracted.uuid}, [])),
+    )
+    candidates_by_node = {}
+
+    await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        existing_nodes_override=[extracted],
+        candidates_by_node=candidates_by_node,
+        exclude_self_candidates=True,
+    )
+
+    assert candidates_by_node == {extracted.uuid: []}
+
+
+def test_entity_label_uses_a_supplied_entity_schema():
+    custom_entity = create_model('CustomEntity', summary_attribute=(str, ...))
+
+    assert _entity_type_for_labels(['Entity'], {'Entity': custom_entity}) is custom_entity
 
 
 @pytest.mark.asyncio
@@ -149,11 +260,14 @@ async def test_resolve_nodes_exact_match_promotes_generic_candidate_type(monkeyp
         _semantic_candidates([[candidate]]),
     )
 
+    _patch_node_edges(monkeypatch, {candidate.uuid: [NEIGHBOR_UUID]})
+
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
         [extracted],
         episode=_make_episode(),
         previous_episodes=[],
+        episode_neighbor_uuids={NEIGHBOR_UUID},
     )
 
     assert resolved[0].uuid == candidate.uuid
@@ -180,15 +294,11 @@ def test_identity_type_for_node_uses_matching_label_when_other_labels_do_not_mat
 async def test_resolve_nodes_identity_properties_match_before_llm(monkeypatch):
     clients, llm_generate = _make_clients()
 
-    clients.driver.graph_operations_interface = MagicMock()
     candidate = EntityNode(
         name='ACME',
         group_id='group',
         labels=['Entity', 'Company'],
         attributes={'domain': 'acme.example', 'size': 'enterprise'},
-    )
-    clients.driver.graph_operations_interface.node_get_by_attribute_values = AsyncMock(
-        return_value=[candidate]
     )
     extracted = EntityNode(
         name='ACME Incorporated',
@@ -206,6 +316,7 @@ async def test_resolve_nodes_identity_properties_match_before_llm(monkeypatch):
         [extracted],
         episode=_make_episode(),
         previous_episodes=[],
+        existing_nodes_override=[candidate],
         identity_properties={'Company': ['domain']},
     )
 
@@ -218,6 +329,99 @@ async def test_resolve_nodes_identity_properties_match_before_llm(monkeypatch):
     assert uuid_map[extracted.uuid] == candidate.uuid
     assert duplicates == [(extracted, candidate)]
     llm_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_identity_properties_ignore_case_and_whitespace(monkeypatch):
+    clients, llm_generate = _make_clients()
+
+    candidate = EntityNode(
+        name='CITIZENS FINANCIAL GROUP, INC.',
+        group_id='group',
+        labels=['Entity', 'Company'],
+        attributes={'company_name': 'CITIZENS FINANCIAL GROUP, INC.'},
+    )
+    extracted = EntityNode(
+        name='Citizens Financial Group',
+        group_id='group',
+        labels=['Entity', 'Company'],
+        attributes={'company_name': 'Citizens  Financial Group, Inc.'},
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[]]),
+    )
+
+    resolved, uuid_map, duplicates = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+        existing_nodes_override=[candidate],
+        identity_properties={'Company': ['company_name']},
+    )
+
+    assert resolved[0].uuid == candidate.uuid
+    assert resolved[0].attributes['company_name'] == 'CITIZENS FINANCIAL GROUP, INC.'
+    assert candidate.attributes['company_name'] == 'CITIZENS FINANCIAL GROUP, INC.'
+    assert uuid_map[extracted.uuid] == candidate.uuid
+    assert duplicates == [(extracted, candidate)]
+    llm_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_identity_lookup_requests_normalized_string_match():
+    clients, _ = _make_clients()
+    candidate = EntityNode(
+        name='CITIZENS FINANCIAL GROUP, INC.',
+        group_id='group',
+        labels=['Entity', 'Company'],
+        attributes={'company_name': 'CITIZENS FINANCIAL GROUP, INC.'},
+    )
+    extracted = EntityNode(
+        name='Citizens Financial Group',
+        group_id='group',
+        labels=['Entity', 'Company'],
+        attributes={'company_name': ' Citizens  Financial Group, Inc. '},
+    )
+    lookup = AsyncMock(return_value=[candidate])
+    clients.driver.graph_operations_interface = MagicMock(node_get_by_attribute_values=lookup)
+
+    results = await _collect_identity_property_candidate_nodes(
+        clients,
+        [extracted],
+        {'Company': ['company_name']},
+    )
+
+    assert results == [[candidate]]
+    lookup.assert_awaited_once()
+    args, kwargs = lookup.call_args
+    assert args[2:] == (
+        'group',
+        {'company_name': 'Citizens  Financial Group, Inc.'},
+        ['Company'],
+        args[5],
+    )
+    assert kwargs == {'normalize_strings': True}
+
+
+def test_identity_key_keeps_non_string_rules():
+    identity_properties = {'Company': ['company_id']}
+
+    def key(value: object) -> object:
+        node = EntityNode(
+            name='Company',
+            group_id='group',
+            labels=['Entity', 'Company'],
+            attributes={'company_id': value},
+        )
+        return _identity_key_for_node(node, identity_properties)
+
+    assert key(42) != key('42')
+    assert key(42) == key(42.0)
+    assert key(True) != key('true')
+    assert key(float('nan')) is None
+    assert key('   ') is None
 
 
 @pytest.mark.asyncio
@@ -264,11 +468,14 @@ async def test_resolve_nodes_short_name_exact_match_skips_llm(monkeypatch):
         _semantic_candidates([[candidate]]),
     )
 
+    _patch_node_edges(monkeypatch, {candidate.uuid: [NEIGHBOR_UUID]})
+
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
         [extracted],
         episode=_make_episode(),
         previous_episodes=[],
+        episode_neighbor_uuids={NEIGHBOR_UUID},
     )
 
     assert resolved[0].uuid == candidate.uuid
@@ -277,19 +484,21 @@ async def test_resolve_nodes_short_name_exact_match_skips_llm(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_nodes_fuzzy_match(monkeypatch):
+async def test_resolve_nodes_fuzzy_match_with_shared_neighbor_skips_llm(monkeypatch):
     clients, llm_generate = _make_clients()
 
     candidate = EntityNode(name='Joe-Michaels', group_id='group', labels=['Entity'])
     extracted = EntityNode(name='Joe Michaels', group_id='group', labels=['Entity'])
+    employer = EntityNode(name='Acme Corp', group_id='group', labels=['Entity'])
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
-        _semantic_candidates([[candidate]]),
+        _semantic_candidates([[candidate], []]),
     )
+    _patch_node_edges(monkeypatch, {candidate.uuid: [employer.uuid]})
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
-        [extracted],
+        [extracted, employer],
         episode=_make_episode(),
         previous_episodes=[],
     )
@@ -300,34 +509,34 @@ async def test_resolve_nodes_fuzzy_match(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
-async def test_collect_candidate_nodes_prepends_exact_name_candidates(monkeypatch):
-    clients, _ = _make_clients()
-
-    exact_candidate = EntityNode(name='Alice', group_id='group', labels=['Entity'])
-    semantic_candidate = EntityNode(name='Alice Smith', group_id='group', labels=['Entity'])
-    extracted = EntityNode(name='Alice', group_id='group', labels=['Entity'])
-
-    exact_lookup_mock = AsyncMock(return_value=[[exact_candidate]])
-    semantic_search_mock = AsyncMock(return_value=[[semantic_candidate]])
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations._collect_exact_name_candidate_nodes',
-        exact_lookup_mock,
-    )
+async def test_resolve_nodes_generic_fuzzy_name_of_other_company_goes_to_llm(monkeypatch):
+    """A near-same generic name ("consumer's auto loans") needs a shared neighbor too."""
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'entity_resolutions': [
+            {'id': 0, 'name': 'Westlake Services', 'duplicate_candidate_id': 0},
+            {'id': 1, 'name': "consumer's auto loans", 'duplicate_candidate_id': -1},
+        ]
+    }
+    westlake_existing, credit_acceptance, loan_existing, westlake, loan = _cfpb_nodes()
+    loans = loan.model_copy(update={'name': "consumer's auto loans"})
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
-        semantic_search_mock,
+        _semantic_candidates([[westlake_existing], [loan_existing]]),
     )
+    reads = _patch_node_edges(monkeypatch, {loan_existing.uuid: [credit_acceptance.uuid]})
 
-    result = await _collect_candidate_nodes(
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
-        [extracted],
+        [westlake, loans],
+        episode=_make_episode(),
+        previous_episodes=[],
     )
 
-    assert len(result) == 1
-    assert [node.uuid for node in result[0]] == [exact_candidate.uuid, semantic_candidate.uuid]
-    exact_lookup_mock.assert_awaited_once()
-    semantic_search_mock.assert_awaited_once()
+    assert loan_existing.uuid in reads
+    llm_generate.assert_awaited_once()
+    assert uuid_map[loans.uuid] == loans.uuid
+    assert resolved[1].uuid == loans.uuid
 
 
 @pytest.mark.asyncio
@@ -359,6 +568,37 @@ async def test_collect_candidate_nodes_dedupes_and_merges_override(monkeypatch):
     assert len(result[0]) == 1
     assert result[0][0].uuid == candidate.uuid
     semantic_search_mock.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_collect_candidate_nodes_prepends_exact_name_candidates(monkeypatch):
+    clients, _ = _make_clients()
+
+    exact_candidate = EntityNode(name='Alice', group_id='group', labels=['Entity'])
+    semantic_candidate = EntityNode(name='Alice Smith', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='Alice', group_id='group', labels=['Entity'])
+
+    exact_lookup_mock = AsyncMock(return_value=[[exact_candidate]])
+    semantic_search_mock = AsyncMock(return_value=[[semantic_candidate]])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._collect_exact_name_candidate_nodes',
+        exact_lookup_mock,
+    )
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        semantic_search_mock,
+    )
+
+    result = await _collect_candidate_nodes(
+        clients,
+        [extracted],
+        existing_nodes_override=None,
+    )
+
+    assert len(result) == 1
+    assert [node.uuid for node in result[0]] == [exact_candidate.uuid, semantic_candidate.uuid]
+    exact_lookup_mock.assert_awaited_once()
+    semantic_search_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -399,17 +639,24 @@ async def test_resolve_nodes_exact_name_lookup_handles_semantic_miss(monkeypatch
         'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
         _semantic_candidates([[]]),
     )
+    candidates_by_node = {}
+
+    _patch_node_edges(monkeypatch, {candidate.uuid: [NEIGHBOR_UUID]})
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
         [extracted],
         episode=_make_episode(),
         previous_episodes=[],
+        episode_neighbor_uuids={NEIGHBOR_UUID},
+        candidates_by_node=candidates_by_node,
     )
 
     assert resolved[0].uuid == candidate.uuid
     assert set(candidate.labels) == {'Entity', 'Person'}
     assert uuid_map[extracted.uuid] == candidate.uuid
+    assert candidates_by_node[extracted.uuid][0].uuid == candidate.uuid
+    assert candidates_by_node[extracted.uuid][0].labels == ['Entity']
     llm_generate.assert_not_awaited()
 
 
@@ -574,7 +821,7 @@ def test_resolve_with_similarity_exact_match_updates_state():
     indexes = _build_candidate_indexes([candidate])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
 
-    _resolve_with_similarity([extracted], indexes, state)
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_allow_exact)
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
     assert state.uuid_map[extracted.uuid] == candidate.uuid
@@ -590,7 +837,7 @@ def test_resolve_with_similarity_short_name_exact_match_resolves_deterministical
     indexes = _build_candidate_indexes([candidate])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
 
-    _resolve_with_similarity([extracted], indexes, state)
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_allow_exact)
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
     assert state.uuid_map[extracted.uuid] == candidate.uuid
@@ -605,7 +852,7 @@ def test_resolve_with_similarity_short_name_no_candidate_defers_to_llm():
     indexes = _build_candidate_indexes([])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
 
-    _resolve_with_similarity([extracted], indexes, state)
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_allow_exact)
 
     assert state.resolved_nodes[0] is None
     assert state.uuid_map == {}
@@ -622,7 +869,7 @@ def test_resolve_with_similarity_short_name_multiple_candidates_defers_to_llm():
     indexes = _build_candidate_indexes([candidate1, candidate2])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
 
-    _resolve_with_similarity([extracted], indexes, state)
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_allow_exact)
 
     assert state.resolved_nodes[0] is None
     assert state.uuid_map == {}
@@ -641,7 +888,7 @@ def test_resolve_with_similarity_low_entropy_defers_resolution():
     )
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
 
-    _resolve_with_similarity([extracted], indexes, state)
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_allow_exact)
 
     assert state.resolved_nodes[0] is None
     assert state.unresolved_indices == [0]
@@ -656,11 +903,189 @@ def test_resolve_with_similarity_multiple_exact_matches_defers_to_llm():
     indexes = _build_candidate_indexes([candidate1, candidate2])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
 
-    _resolve_with_similarity([extracted], indexes, state)
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_allow_exact)
 
     assert state.resolved_nodes[0] is None
     assert state.unresolved_indices == [0]
     assert state.duplicate_pairs == []
+
+
+def test_resolve_with_similarity_refused_exact_match_defers_to_llm():
+    candidate = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+    extracted = EntityNode(name="consumer's auto loan", group_id='group', labels=['Entity'])
+
+    indexes = _build_candidate_indexes([candidate])
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_refuse_exact)
+
+    assert state.resolved_nodes[0] is None
+    assert state.uuid_map == {}
+    assert state.unresolved_indices == [0]
+    assert state.duplicate_pairs == []
+
+
+def test_resolve_with_similarity_same_uuid_exact_match_skips_gate():
+    """A node that already has the candidate UUID (for example the user node) needs no neighbor."""
+    candidate = EntityNode(name='Jane Doe', group_id='group', labels=['Entity'])
+    extracted = candidate.model_copy()
+
+    indexes = _build_candidate_indexes([candidate])
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+
+    _resolve_with_similarity([extracted], indexes, state, name_match_gate=_refuse_exact)
+
+    assert state.resolved_nodes[0].uuid == candidate.uuid
+    assert state.unresolved_indices == []
+    assert state.duplicate_pairs == []
+
+
+def _cfpb_nodes():
+    westlake_existing = EntityNode(name='Westlake Services', group_id='group', labels=['Company'])
+    credit_acceptance = EntityNode(name='Credit Acceptance', group_id='group', labels=['Company'])
+    loan_existing = EntityNode(
+        name="consumer's auto loan", group_id='group', labels=['FinancialAccount']
+    )
+    westlake = EntityNode(name='Westlake Services', group_id='group', labels=['Company'])
+    loan = EntityNode(name="consumer's auto loan", group_id='group', labels=['FinancialAccount'])
+    return westlake_existing, credit_acceptance, loan_existing, westlake, loan
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_generic_exact_name_of_other_company_goes_to_llm(monkeypatch):
+    """The Westlake loan has the same name as a Credit Acceptance loan but no shared neighbor."""
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'entity_resolutions': [
+            {'id': 0, 'name': 'Westlake Services', 'duplicate_candidate_id': 0},
+            {'id': 1, 'name': "consumer's auto loan", 'duplicate_candidate_id': -1},
+        ]
+    }
+    westlake_existing, credit_acceptance, loan_existing, westlake, loan = _cfpb_nodes()
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[westlake_existing], [loan_existing]]),
+    )
+    _patch_node_edges(monkeypatch, {loan_existing.uuid: [credit_acceptance.uuid]})
+
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [westlake, loan],
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    llm_generate.assert_awaited_once()
+    user_prompt = llm_generate.await_args.args[0][1].content
+    assert user_prompt.count("consumer's auto loan") >= 2
+    assert uuid_map[loan.uuid] == loan.uuid
+    assert resolved[1].uuid == loan.uuid
+    assert uuid_map[westlake.uuid] == westlake_existing.uuid
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_exact_name_with_shared_neighbor_skips_llm(monkeypatch):
+    clients, llm_generate = _make_clients()
+    westlake_existing, _, loan_existing, westlake, loan = _cfpb_nodes()
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[westlake_existing], [loan_existing]]),
+    )
+    _patch_node_edges(
+        monkeypatch,
+        {
+            loan_existing.uuid: [westlake_existing.uuid],
+            westlake_existing.uuid: [loan_existing.uuid],
+        },
+    )
+
+    resolved, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [westlake, loan],
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    llm_generate.assert_not_awaited()
+    assert uuid_map[loan.uuid] == loan_existing.uuid
+    assert uuid_map[westlake.uuid] == westlake_existing.uuid
+    assert [node.uuid for node in resolved] == [westlake_existing.uuid, loan_existing.uuid]
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_identity_resolved_neighbor_ignores_its_exact_name_candidate(
+    monkeypatch,
+):
+    """An episode entity that identity matching resolved elsewhere is not its name twin."""
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'entity_resolutions': [
+            {'id': 1, 'name': "consumer's auto loan", 'duplicate_candidate_id': -1}
+        ]
+    }
+    westlake_by_domain = EntityNode(
+        name='Westlake Financial',
+        group_id='group',
+        labels=['Company'],
+        attributes={'domain': 'w.example'},
+    )
+    westlake_by_name = EntityNode(name='Westlake Services', group_id='group', labels=['Company'])
+    loan_existing = EntityNode(
+        name="consumer's auto loan", group_id='group', labels=['FinancialAccount']
+    )
+    westlake = EntityNode(
+        name='Westlake Services',
+        group_id='group',
+        labels=['Company'],
+        attributes={'domain': 'w.example'},
+    )
+    loan = EntityNode(name="consumer's auto loan", group_id='group', labels=['FinancialAccount'])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[westlake_by_domain, westlake_by_name], [loan_existing]]),
+    )
+    _patch_node_edges(monkeypatch, {loan_existing.uuid: [westlake_by_name.uuid]})
+
+    _, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [westlake, loan],
+        episode=_make_episode(),
+        previous_episodes=[],
+        entity_types={'Company': _entity_type('Company')},
+        identity_properties={'Company': ['domain']},
+    )
+
+    assert uuid_map[westlake.uuid] == westlake_by_domain.uuid
+    llm_generate.assert_awaited_once()
+    assert uuid_map[loan.uuid] == loan.uuid
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_exact_name_edge_read_failure_goes_to_llm(monkeypatch):
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'entity_resolutions': [{'id': 0, 'name': 'Joe Michaels', 'duplicate_candidate_id': 0}]
+    }
+    candidate = EntityNode(name='Joe Michaels', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='Joe Michaels', group_id='group', labels=['Entity'])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidate]]),
+    )
+    monkeypatch.setattr(
+        EntityEdge, 'get_by_node_uuid', AsyncMock(side_effect=RuntimeError('graph down'))
+    )
+
+    _, uuid_map, _ = await resolve_extracted_nodes(
+        clients,
+        [extracted],
+        episode=_make_episode(),
+        previous_episodes=[],
+        episode_neighbor_uuids={NEIGHBOR_UUID},
+    )
+
+    llm_generate.assert_awaited_once()
+    assert uuid_map[extracted.uuid] == candidate.uuid
 
 
 @pytest.mark.asyncio
@@ -1255,3 +1680,287 @@ async def test_extract_attributes_preserves_prior_attributes_when_label_not_in_e
     )
 
     assert results[0].attributes == {'age': 30, 'city': 'New York'}
+
+
+def test_build_existing_nodes_context_sends_full_summary():
+    short = EntityNode(name='Short', group_id='group', labels=['Entity'], summary='A ' * 200)
+    long_summary = 'word ' * 150
+    long = EntityNode(name='Long', group_id='group', labels=['Entity'], summary=long_summary)
+    long.attributes = {'account_kind': 'auto loan'}
+
+    context = _build_existing_nodes_context([short, long])
+
+    assert context[0]['summary'] == short.summary
+    assert len(context[1]['summary']) <= DEDUPE_SUMMARY_MAX_CHARS
+    assert long_summary.startswith(context[1]['summary'])
+    assert context[1]['summary'].endswith('word')
+    assert context[1]['account_kind'] == 'auto loan'
+    assert context[1]['candidate_id'] == 1
+
+
+def test_build_extracted_nodes_context_sends_attributes():
+    node = EntityNode(name="consumer's auto loan", group_id='group', labels=['FinancialAccount'])
+    node.attributes = {'account_kind': 'auto loan', 'id': 99}
+
+    context = _build_extracted_nodes_context([node], {})
+
+    assert context[0]['account_kind'] == 'auto loan'
+    assert context[0]['id'] == 0
+    assert context[0]['name'] == "consumer's auto loan"
+
+
+CANDIDATE_SUMMARY = (
+    "Credit Acceptance placed the consumer's auto loan on payment arrangements. " * 3
+).strip()
+
+
+async def _captured_dedupe_contexts(monkeypatch, *, bulk: bool) -> dict:
+    clients, llm_generate = _make_clients()
+    llm_generate.return_value = {
+        'entity_resolutions': [
+            {'id': 0, 'name': "consumer's auto loan account", 'duplicate_candidate_id': -1}
+        ]
+    }
+    candidate = EntityNode(
+        name="consumer's auto loan",
+        group_id='group',
+        labels=['FinancialAccount'],
+        summary=CANDIDATE_SUMMARY,
+    )
+    extracted = EntityNode(
+        name="consumer's auto loan account", group_id='group', labels=['FinancialAccount']
+    )
+    extracted.attributes = {'account_kind': 'auto loan'}
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidate]]),
+    )
+
+    captured: dict = {}
+
+    def fake_prompt_nodes(context):
+        captured.update(context)
+        return ['prompt']
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
+        fake_prompt_nodes,
+    )
+
+    if bulk:
+        resolved, _, _ = await resolve_extracted_nodes(
+            clients, [extracted], _make_episode(), None, None, candidates_by_node={}
+        )
+    else:
+        resolved, _, _ = await resolve_extracted_nodes(
+            clients, [extracted], episode=_make_episode(), previous_episodes=[_make_episode()]
+        )
+
+    assert resolved[0].uuid == extracted.uuid
+    return captured
+
+
+@pytest.mark.asyncio
+async def test_resolve_with_llm_sends_summary_and_extracted_attributes(monkeypatch):
+    context = await _captured_dedupe_contexts(monkeypatch, bulk=False)
+
+    assert 'related_facts' not in context['existing_nodes'][0]
+    assert context['existing_nodes'][0]['summary'] == CANDIDATE_SUMMARY
+    assert context['extracted_nodes'][0]['account_kind'] == 'auto loan'
+
+
+@pytest.mark.asyncio
+async def test_batch_path_builds_same_dedupe_context_shape(monkeypatch):
+    single = await _captured_dedupe_contexts(monkeypatch, bulk=False)
+    batch = await _captured_dedupe_contexts(monkeypatch, bulk=True)
+
+    assert batch['previous_episodes'] == []
+    assert set(batch) == set(single)
+    assert set(batch['existing_nodes'][0]) == set(single['existing_nodes'][0])
+    assert set(batch['extracted_nodes'][0]) == set(single['extracted_nodes'][0])
+
+
+def _capture_dedupe_contexts(monkeypatch) -> list[dict]:
+    contexts: list[dict] = []
+
+    def fake_prompt_nodes(context):
+        contexts.append(context)
+        return ['prompt']
+
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.prompt_library.dedupe_nodes.nodes',
+        fake_prompt_nodes,
+    )
+    return contexts
+
+
+def _two_nodes_with_disjoint_candidates():
+    extracted = [
+        EntityNode(name='Kestrel Analytics', group_id='group', labels=['Entity']),
+        EntityNode(name='Juniper Ridge', group_id='group', labels=['Entity']),
+    ]
+    candidates = [
+        EntityNode(name='Northwind Holdings', group_id='group', labels=['Entity']),
+        EntityNode(name='Blue Harbor Trust', group_id='group', labels=['Entity']),
+    ]
+    return extracted, candidates
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_per_entity_client_sends_only_own_candidates(monkeypatch):
+    clients, llm_generate = _make_clients()
+    clients.llm_client.dedupe_nodes_per_entity = True
+    extracted, candidates = _two_nodes_with_disjoint_candidates()
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidates[0]], [candidates[1]]]),
+    )
+    contexts = _capture_dedupe_contexts(monkeypatch)
+    # Each response also resolves the sibling; only the focus resolution is applied.
+    llm_generate.return_value = {
+        'entity_resolutions': [
+            {'id': 0, 'name': 'match', 'duplicate_candidate_id': 0},
+            {'id': 1, 'name': 'match', 'duplicate_candidate_id': 0},
+        ]
+    }
+
+    resolved, uuid_map, duplicates = await resolve_extracted_nodes(
+        clients,
+        extracted,
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    assert llm_generate.await_count == 2
+    sent = sorted(
+        (
+            context['focus_entity_id'],
+            [node['name'] for node in context['extracted_nodes']],
+            [node['name'] for node in context['existing_nodes']],
+        )
+        for context in contexts
+    )
+    assert sent == [
+        (0, ['Kestrel Analytics', 'Juniper Ridge'], ['Northwind Holdings']),
+        (1, ['Kestrel Analytics', 'Juniper Ridge'], ['Blue Harbor Trust']),
+    ]
+    assert [node.uuid for node in resolved] == [candidate.uuid for candidate in candidates]
+    assert uuid_map == {
+        extracted[0].uuid: candidates[0].uuid,
+        extracted[1].uuid: candidates[1].uuid,
+    }
+    assert duplicates == [(extracted[0], candidates[0]), (extracted[1], candidates[1])]
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_per_entity_applies_in_node_order(monkeypatch):
+    clients, llm_generate = _make_clients()
+    clients.llm_client.dedupe_nodes_per_entity = True
+    extracted = [
+        EntityNode(
+            name='Kestrel Analytics', group_id='group', labels=['Entity'], attributes={'hq': 'Oslo'}
+        ),
+        EntityNode(
+            name='Kestrel', group_id='group', labels=['Entity'], attributes={'hq': 'Bergen'}
+        ),
+    ]
+    candidate = EntityNode(name='Kestrel Analytics AS', group_id='group', labels=['Entity'])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidate], [candidate]]),
+    )
+    _capture_dedupe_contexts(monkeypatch)
+    calls = 0
+
+    async def respond_first_call_last(*_, **__):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await asyncio.sleep(0.01)
+        return {
+            'entity_resolutions': [
+                {'id': 0, 'name': 'match', 'duplicate_candidate_id': 0},
+                {'id': 1, 'name': 'match', 'duplicate_candidate_id': 0},
+            ]
+        }
+
+    llm_generate.side_effect = respond_first_call_last
+
+    resolved, _, duplicates = await resolve_extracted_nodes(
+        clients,
+        extracted,
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    assert [node.uuid for node in resolved] == [candidate.uuid, candidate.uuid]
+    assert candidate.attributes == {'hq': 'Bergen'}
+    assert duplicates == [(extracted[0], candidate), (extracted[1], candidate)]
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_per_entity_obeys_max_coroutines(monkeypatch):
+    clients, llm_generate = _make_clients()
+    clients.llm_client.dedupe_nodes_per_entity = True
+    clients.max_coroutines = 1
+    extracted, candidates = _two_nodes_with_disjoint_candidates()
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidates[0]], [candidates[1]]]),
+    )
+    _capture_dedupe_contexts(monkeypatch)
+    in_flight = 0
+    max_in_flight = 0
+
+    async def track_concurrency(*_, **__):
+        nonlocal in_flight, max_in_flight
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0)
+        in_flight -= 1
+        return {'entity_resolutions': [{'id': 0, 'name': 'match', 'duplicate_candidate_id': -1}]}
+
+    llm_generate.side_effect = track_concurrency
+
+    await resolve_extracted_nodes(
+        clients,
+        extracted,
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    assert llm_generate.await_count == 2
+    assert max_in_flight == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_nodes_default_client_sends_candidate_union(monkeypatch):
+    clients, llm_generate = _make_clients()
+    extracted, candidates = _two_nodes_with_disjoint_candidates()
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations._semantic_candidate_search',
+        _semantic_candidates([[candidates[0]], [candidates[1]]]),
+    )
+    contexts = _capture_dedupe_contexts(monkeypatch)
+    llm_generate.return_value = {
+        'entity_resolutions': [
+            {'id': 0, 'name': 'match', 'duplicate_candidate_id': 0},
+            {'id': 1, 'name': 'match', 'duplicate_candidate_id': -1},
+        ]
+    }
+
+    resolved, _, duplicates = await resolve_extracted_nodes(
+        clients,
+        extracted,
+        episode=_make_episode(),
+        previous_episodes=[],
+    )
+
+    assert llm_generate.await_count == 1
+    assert [node['name'] for node in contexts[0]['existing_nodes']] == [
+        'Northwind Holdings',
+        'Blue Harbor Trust',
+    ]
+    assert resolved[0].uuid == candidates[0].uuid
+    assert resolved[1].uuid == extracted[1].uuid
+    assert duplicates == [(extracted[0], candidates[0])]

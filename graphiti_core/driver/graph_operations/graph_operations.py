@@ -132,8 +132,13 @@ class GraphOperationsInterface(BaseModel):
         attributes: dict[str, Any],
         node_labels: list[str] | None = None,
         limit: int = 100,
+        normalize_strings: bool = False,
     ) -> list[Any]:
-        """Retrieve nodes matching all provided attributes within a group."""
+        """Retrieve nodes matching all provided attributes within a group.
+
+        With ``normalize_strings``, a string value matches without regard to case,
+        and with whitespace collapsed to one space and stripped.
+        """
         raise NotImplementedError
 
     # --------------------------

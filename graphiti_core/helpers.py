@@ -34,6 +34,14 @@ load_dotenv()
 
 SAFE_CYPHER_IDENTIFIER_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
+
+def build_normalized_string_pattern(value: str) -> str:
+    tokens = re.split(r'\s+', value.strip())
+    if tokens and tokens[0]:
+        return r'(?i)^\s*' + r'\s+'.join(re.escape(token) for token in tokens) + r'\s*$'
+    return r'^\s*$'
+
+
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 
 # Default cap on the number of coroutines that can run concurrently inside

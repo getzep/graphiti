@@ -501,7 +501,7 @@ async def test_runtime_routes_only_dedupe_prompts_to_jev(client_factory):
         {
             'episode_content': 'Alice works at Acme.',
             'previous_episodes': [],
-            'custom_extraction_instructions': '',
+            'knowledge': '',
             'entity_types': [],
             'source_description': 'test',
         },

@@ -16,12 +16,19 @@ limitations under the License.
 
 import logging
 import sys
+from collections.abc import Iterable
 from datetime import datetime
 
 import numpy as np
 import pytest
 
-from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
+from graphiti_core.edges import (
+    CommunityEdge,
+    EntityEdge,
+    EpisodicEdge,
+    create_entity_edge_embeddings,
+)
+from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from tests.helpers_test import assert_datetimes_equal, get_edge_count, get_node_count, group_id
 
@@ -404,3 +411,45 @@ async def test_community_edge(graph_driver, mock_embedder):
     assert node_count == 0
 
     await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_create_entity_edge_embeddings_skips_whitespace_only_facts():
+    class WhitespaceDroppingEmbedder(EmbedderClient):
+        def __init__(self):
+            self.received_texts: list[str] = []
+
+        async def create(
+            self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
+        ) -> list[float]:
+            raise NotImplementedError
+
+        async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+            self.received_texts.extend(input_data_list)
+            return [[0.1, 0.2] for text in input_data_list if text and text.strip()]
+
+    now = datetime.now()
+    embedder = WhitespaceDroppingEmbedder()
+    whitespace_edge = EntityEdge(
+        source_node_uuid='source',
+        target_node_uuid='target',
+        name='RELATES_TO',
+        fact=' ',
+        group_id='group',
+        created_at=now,
+        fact_embedding=[0.9],
+    )
+    normal_edge = EntityEdge(
+        source_node_uuid='source',
+        target_node_uuid='target',
+        name='RELATES_TO',
+        fact='Bob knows Alice',
+        group_id='group',
+        created_at=now,
+    )
+
+    await create_entity_edge_embeddings(embedder, [whitespace_edge, normal_edge])
+
+    assert embedder.received_texts == ['Bob knows Alice']
+    assert normal_edge.fact_embedding == [0.1, 0.2]
+    assert whitespace_edge.fact_embedding == [0.9]

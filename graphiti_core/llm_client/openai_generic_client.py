@@ -26,7 +26,8 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import LLMClient, get_extraction_language_instruction
+from ..prompts.versions import PromptTemplate
+from .client import LLMClient, current_prompt_name, current_prompt_version
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import EmptyResponseError, RateLimitError
 
@@ -186,25 +187,25 @@ class OpenAIGenericClient(LLMClient):
         *,
         attribute_extraction: bool = False,
         model: str | None = None,
+        prompt_template: PromptTemplate | None = None,
     ) -> dict[str, typing.Any]:
-        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
+        add_response_format = (
+            response_model is not None and self.structured_output_mode == 'json_object'
+        )
+        shared_parts = self._apply_shared_prompt_parts(
+            messages,
+            response_model,
+            attribute_extraction,
+            group_id,
+            add_response_format=add_response_format,
+        )
+        prompt_version = self._prompt_version(prompt_template, shared_parts)
         if max_tokens is None:
             max_tokens = self.max_tokens
 
         # In json_object fallback mode the API does not enforce the schema, so embed it in
         # the prompt to guide the model. In json_schema mode the schema is enforced via
         # response_format, so no prompt injection is needed.
-        if response_model is not None and self.structured_output_mode == 'json_object':
-            serialized_model = json.dumps(response_model.model_json_schema())
-            messages[
-                -1
-            ].content += (
-                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
-            )
-
-        # Add multilingual extraction instructions
-        messages[0].content += get_extraction_language_instruction(group_id)
-
         # Wrap entire operation in tracing span
         with self.tracer.start_span('llm.generate') as span:
             attributes = {
@@ -214,6 +215,7 @@ class OpenAIGenericClient(LLMClient):
             }
             if prompt_name:
                 attributes['prompt.name'] = prompt_name
+            attributes['prompt.version'] = prompt_version
             span.add_attributes(attributes)
 
             try:
@@ -222,13 +224,19 @@ class OpenAIGenericClient(LLMClient):
                 # json_object fallback path for less-reliable providers. This is the clean
                 # retry mechanism (same pattern as Gliner2Client); the old hand-rolled
                 # re-prompt loop is intentionally not reinstated.
-                return await self._generate_response_with_retry(
-                    messages,
-                    response_model,
-                    max_tokens=max_tokens,
-                    model_size=model_size,
-                    model=model,
-                )
+                name_token = current_prompt_name.set(prompt_name)
+                version_token = current_prompt_version.set(prompt_version)
+                try:
+                    return await self._generate_response_with_retry(
+                        messages,
+                        response_model,
+                        max_tokens=max_tokens,
+                        model_size=model_size,
+                        model=model,
+                    )
+                finally:
+                    current_prompt_name.reset(name_token)
+                    current_prompt_version.reset(version_token)
             except Exception as e:
                 span.set_status('error', str(e))
                 span.record_exception(e)

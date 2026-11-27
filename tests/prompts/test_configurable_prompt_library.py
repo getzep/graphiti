@@ -14,7 +14,7 @@ def _default_extract_context() -> dict:
     return {
         'episode_content': 'hi',
         'previous_episodes': [],
-        'custom_extraction_instructions': '',
+        'knowledge': '',
         'entity_types': [],
         'source_description': 'test',
     }

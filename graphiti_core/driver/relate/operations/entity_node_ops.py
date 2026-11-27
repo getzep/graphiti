@@ -22,6 +22,7 @@ from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
 from graphiti_core.driver.record_parsers import entity_node_from_record
 from graphiti_core.errors import NodeNotFoundError
+from graphiti_core.helpers import build_normalized_string_pattern
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_return_query,
     get_entity_node_save_bulk_query,
@@ -129,6 +130,7 @@ class RelateEntityNodeOperations(EntityNodeOperations):
         attributes: dict[str, Any],
         node_labels: list[str] | None = None,
         limit: int = 100,
+        normalize_strings: bool = False,
     ) -> list[EntityNode]:
         """Retrieve entity nodes of a group whose properties equal all of `attributes`.
 
@@ -138,12 +140,21 @@ class RelateEntityNodeOperations(EntityNodeOperations):
             return []
         names = list(attributes)
         label_query = ''.join(f':{label}' for label in (node_labels or []) if label != 'Entity')
-        conditions = ' '.join(f'AND n.`{name}` = $attribute_{i}' for i, name in enumerate(names))
+        attribute_conditions = []
+        params: dict[str, Any] = {}
+        for index, name in enumerate(names):
+            value = attributes[name]
+            if normalize_strings and isinstance(value, str):
+                attribute_conditions.append(f'AND n.`{name}` =~ $attribute_{index}')
+                params[f'attribute_{index}'] = build_normalized_string_pattern(value)
+            else:
+                attribute_conditions.append(f'AND n.`{name}` = $attribute_{index}')
+                params[f'attribute_{index}'] = value
         query = (
             f"""
             MATCH (n:Entity{label_query})
             WHERE n.group_id = $group_id
-            {conditions}
+            {' '.join(attribute_conditions)}
             RETURN
             """
             + get_entity_node_return_query(GraphProvider.RELATE)
@@ -151,13 +162,9 @@ class RelateEntityNodeOperations(EntityNodeOperations):
             LIMIT $limit
             """
         )
-        params: dict[str, Any] = {
-            f'attribute_{i}': attributes[name] for i, name in enumerate(names)
-        }
-        records, _, _ = await executor.execute_query(
-            query, group_id=group_id, limit=limit, **params
-        )
-        return [entity_node_from_record(r) for r in records]
+        params.update(group_id=group_id, limit=limit)
+        records, _, _ = await executor.execute_query(query, **params)
+        return [entity_node_from_record(record) for record in records]
 
     async def delete(
         self,

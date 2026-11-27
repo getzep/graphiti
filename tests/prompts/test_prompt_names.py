@@ -33,6 +33,7 @@ def test_nested_route_and_override_fields_match_prompt_groups():
             PromptRoutes.ExtractNodesAndEdges,
             LLMPromptOverrides.ExtractNodesAndEdges,
         ),
+        'ingestion_rules': (PromptRoutes.IngestionRules, LLMPromptOverrides.IngestionRules),
         'dedupe_edges': (PromptRoutes.DedupeEdges, LLMPromptOverrides.DedupeEdges),
         'summarize_nodes': (PromptRoutes.SummarizeNodes, LLMPromptOverrides.SummarizeNodes),
         'summarize_sagas': (PromptRoutes.SummarizeSagas, LLMPromptOverrides.SummarizeSagas),
