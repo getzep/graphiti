@@ -157,7 +157,9 @@ class Neo4jDriver(GraphDriver):
                 await tx.rollback()
                 raise
 
-    async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
+    async def execute_query(
+        self, cypher_query_: LiteralString, *, auto_commit_: bool = False, **kwargs: Any
+    ) -> EagerResult:
         params = kwargs.pop('params', None)
         if params is None:
             params = {}
@@ -166,9 +168,17 @@ class Neo4jDriver(GraphDriver):
         database = kwargs.pop('database_') if 'database_' in kwargs else self._database
 
         try:
-            result = await self.client.execute_query(
-                cypher_query_, parameters_=params, database_=database, **kwargs
-            )
+            if auto_commit_:
+                async with self.client.session(
+                    database=database,
+                    bookmark_manager=self.client.execute_query_bookmark_manager,
+                ) as session:
+                    cursor = await session.run(cypher_query_, parameters=params, **kwargs)
+                    result = await cursor.to_eager_result()
+            else:
+                result = await self.client.execute_query(
+                    cypher_query_, parameters_=params, database_=database, **kwargs
+                )
         except Exception as e:
             # Log parameter names only; values may contain sensitive data.
             logger.error(
