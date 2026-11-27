@@ -186,16 +186,24 @@ To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint
 llm:
   provider: "openai"
   model: "gpt-oss:120b"  # or your preferred Ollama model
-  api_base: "http://localhost:11434/v1"
-  api_key: "ollama"  # dummy key required
   structured_output_mode: "json_object"  # use when json_schema is accepted but not enforced
+  providers:
+    openai:
+      api_url: "http://localhost:11434/v1"
+      api_key: "ollama"  # placeholder for the OpenAI client
 
 embedder:
-  provider: "sentence_transformers"  # recommended for local setup
-  model: "all-MiniLM-L6-v2"
+  provider: "openai"
+  model: "nomic-embed-text"
+  dimensions: 768
+  providers:
+    openai:
+      api_url: "http://localhost:11434/v1"
+      api_key: "ollama"
 ```
 
-Make sure Ollama is running locally with: `ollama serve`
+Run Ollama locally with `ollama serve`. Pull the models named in your configuration with
+`ollama pull <model>` before starting the MCP server.
 
 > [!IMPORTANT]
 > Graphiti relies on structured (JSON) output for entity/edge extraction and deduplication, and reliability varies on
