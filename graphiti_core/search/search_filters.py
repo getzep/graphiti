@@ -153,128 +153,36 @@ def edge_search_filter_query_constructor(
         node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels
         filter_queries.append(node_label_filter)
 
-    if filters.valid_at is not None:
-        valid_at_filter = '('
-        for i, or_list in enumerate(filters.valid_at):
+    for field_name, date_filters in (
+        ('valid_at', filters.valid_at),
+        ('invalid_at', filters.invalid_at),
+        ('created_at', filters.created_at),
+        ('expired_at', filters.expired_at),
+    ):
+        if date_filters is None:
+            continue
+
+        non_empty_groups = [or_list for or_list in date_filters if or_list]
+        if not non_empty_groups:
+            continue
+
+        group_queries: list[str] = []
+        for or_list in non_empty_groups:
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
                     ComparisonOperator.is_null,
                     ComparisonOperator.is_not_null,
                 ]:
-                    filter_params['valid_at_' + str(j)] = date_filter.date
+                    filter_params[f'{field_name}_{j}'] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
-                    'e.valid_at', f'$valid_at_{j}', date_filter.comparison_operator
+                    f'e.{field_name}', f'${field_name}_{j}', date_filter.comparison_operator
                 )
                 for j, date_filter in enumerate(or_list)
             ]
-            and_filter_query = ''
-            for j, and_filter in enumerate(and_filters):
-                and_filter_query += and_filter
-                if j != len(and_filters) - 1:
-                    and_filter_query += ' AND '
+            group_queries.append(' AND '.join(and_filters))
 
-            valid_at_filter += and_filter_query
-
-            if i == len(filters.valid_at) - 1:
-                valid_at_filter += ')'
-            else:
-                valid_at_filter += ' OR '
-
-        filter_queries.append(valid_at_filter)
-
-    if filters.invalid_at is not None:
-        invalid_at_filter = '('
-        for i, or_list in enumerate(filters.invalid_at):
-            for j, date_filter in enumerate(or_list):
-                if date_filter.comparison_operator not in [
-                    ComparisonOperator.is_null,
-                    ComparisonOperator.is_not_null,
-                ]:
-                    filter_params['invalid_at_' + str(j)] = date_filter.date
-
-            and_filters = [
-                date_filter_query_constructor(
-                    'e.invalid_at', f'$invalid_at_{j}', date_filter.comparison_operator
-                )
-                for j, date_filter in enumerate(or_list)
-            ]
-            and_filter_query = ''
-            for j, and_filter in enumerate(and_filters):
-                and_filter_query += and_filter
-                if j != len(and_filters) - 1:
-                    and_filter_query += ' AND '
-
-            invalid_at_filter += and_filter_query
-
-            if i == len(filters.invalid_at) - 1:
-                invalid_at_filter += ')'
-            else:
-                invalid_at_filter += ' OR '
-
-        filter_queries.append(invalid_at_filter)
-
-    if filters.created_at is not None:
-        created_at_filter = '('
-        for i, or_list in enumerate(filters.created_at):
-            for j, date_filter in enumerate(or_list):
-                if date_filter.comparison_operator not in [
-                    ComparisonOperator.is_null,
-                    ComparisonOperator.is_not_null,
-                ]:
-                    filter_params['created_at_' + str(j)] = date_filter.date
-
-            and_filters = [
-                date_filter_query_constructor(
-                    'e.created_at', f'$created_at_{j}', date_filter.comparison_operator
-                )
-                for j, date_filter in enumerate(or_list)
-            ]
-            and_filter_query = ''
-            for j, and_filter in enumerate(and_filters):
-                and_filter_query += and_filter
-                if j != len(and_filters) - 1:
-                    and_filter_query += ' AND '
-
-            created_at_filter += and_filter_query
-
-            if i == len(filters.created_at) - 1:
-                created_at_filter += ')'
-            else:
-                created_at_filter += ' OR '
-
-        filter_queries.append(created_at_filter)
-
-    if filters.expired_at is not None:
-        expired_at_filter = '('
-        for i, or_list in enumerate(filters.expired_at):
-            for j, date_filter in enumerate(or_list):
-                if date_filter.comparison_operator not in [
-                    ComparisonOperator.is_null,
-                    ComparisonOperator.is_not_null,
-                ]:
-                    filter_params['expired_at_' + str(j)] = date_filter.date
-
-            and_filters = [
-                date_filter_query_constructor(
-                    'e.expired_at', f'$expired_at_{j}', date_filter.comparison_operator
-                )
-                for j, date_filter in enumerate(or_list)
-            ]
-            and_filter_query = ''
-            for j, and_filter in enumerate(and_filters):
-                and_filter_query += and_filter
-                if j != len(and_filters) - 1:
-                    and_filter_query += ' AND '
-
-            expired_at_filter += and_filter_query
-
-            if i == len(filters.expired_at) - 1:
-                expired_at_filter += ')'
-            else:
-                expired_at_filter += ' OR '
-
-        filter_queries.append(expired_at_filter)
+        filter_queries.append('(' + ' OR '.join(group_queries) + ')')
 
     return filter_queries, filter_params
