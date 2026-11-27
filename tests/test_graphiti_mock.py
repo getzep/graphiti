@@ -1345,6 +1345,86 @@ async def test_get_community_clusters(graph_driver, mock_embedder):
 
 
 @pytest.mark.asyncio
+async def test_build_communities_empty_group_ids_keeps_communities(
+    graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    group_a, group_b = group_id, group_id_2
+    community_nodes = []
+    for group_name in (group_a, group_b):
+        entity_a = EntityNode(
+            name='test_entity_1',
+            labels=[],
+            created_at=datetime.now(),
+            group_id=group_name,
+        )
+        entity_b = EntityNode(
+            name='test_entity_2',
+            labels=[],
+            created_at=datetime.now(),
+            group_id=group_name,
+        )
+        await entity_a.generate_name_embedding(mock_embedder)
+        await entity_b.generate_name_embedding(mock_embedder)
+        edge = EntityEdge(
+            source_node_uuid=entity_a.uuid,
+            target_node_uuid=entity_b.uuid,
+            name='RELATES_TO',
+            fact='test_entity_1 relates to test_entity_2',
+            created_at=datetime.now(),
+            group_id=group_name,
+        )
+        await edge.generate_embedding(mock_embedder)
+        community = CommunityNode(
+            name='test_community_1',
+            labels=[],
+            created_at=datetime.now(),
+            group_id=group_name,
+        )
+        await community.generate_name_embedding(mock_embedder)
+
+        await entity_a.save(graph_driver)
+        await entity_b.save(graph_driver)
+        await edge.save(graph_driver)
+        await community.save(graph_driver)
+        community_nodes.append(community)
+
+    community_uuids = [node.uuid for node in community_nodes]
+    saved_communities = await CommunityNode.get_by_uuids(graph_driver, community_uuids)
+    assert {(node.group_id, node.uuid) for node in saved_communities} == {
+        (node.group_id, node.uuid) for node in community_nodes
+    }
+
+    built_nodes, built_edges = await graphiti.build_communities(group_ids=[])
+
+    assert built_nodes == []
+    assert built_edges == []
+    saved_communities = await CommunityNode.get_by_uuids(graph_driver, community_uuids)
+    assert {(node.group_id, node.uuid) for node in saved_communities} == {
+        (node.group_id, node.uuid) for node in community_nodes
+    }
+
+    await remove_communities(graph_driver, group_ids=[])
+    saved_communities = await CommunityNode.get_by_uuids(graph_driver, community_uuids)
+    assert {(node.group_id, node.uuid) for node in saved_communities} == {
+        (node.group_id, node.uuid) for node in community_nodes
+    }
+
+    await remove_communities(graph_driver, group_ids=[group_a])
+    saved_communities = await CommunityNode.get_by_uuids(graph_driver, community_uuids)
+    assert {(node.group_id, node.uuid) for node in saved_communities} == {
+        (group_b, community_nodes[1].uuid)
+    }
+
+
+@pytest.mark.asyncio
 async def test_get_mentioned_nodes(graph_driver, mock_embedder):
     # Create episodic nodes
     episodic_node_1 = EpisodicNode(

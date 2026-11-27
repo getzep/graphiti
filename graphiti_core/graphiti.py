@@ -2275,7 +2275,8 @@ class Graphiti:
         the content of these communities.
         ----------
         group_ids : list[str] | None
-            Optional. Create communities only for the listed group_ids. If blank the entire graph will be used.
+            Optional. Create communities only for the listed group_ids. If None, the entire graph is used. An empty
+            list selects no group, so the call deletes and builds no community.
         """
         if driver is None:
             driver = self.clients.driver

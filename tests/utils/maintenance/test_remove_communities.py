@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from graphiti_core.driver.neo4j.operations.graph_ops import Neo4jGraphMaintenanceOperations
 from graphiti_core.utils.maintenance.community_operations import remove_communities
 
 
@@ -57,16 +58,33 @@ async def test_remove_communities_scoped_deletes_only_selected_groups():
 
 
 @pytest.mark.asyncio
-async def test_remove_communities_empty_group_ids_deletes_all():
-    # group_ids=[] means "no scoping requested" (matches build_communities'
-    # None/blank semantics), not "delete nothing".
+async def test_remove_communities_empty_group_ids_deletes_nothing():
     driver = _mock_driver()
 
     await remove_communities(driver, group_ids=[])
 
     driver.execute_query.assert_awaited_once()
     query = driver.execute_query.await_args.args[0]
-    assert 'WHERE' not in query
+    kwargs = driver.execute_query.await_args.kwargs
+    assert 'WHERE c.group_id IN $group_ids' in query
+    assert kwargs['group_ids'] == []
+
+
+@pytest.mark.asyncio
+async def test_remove_communities_base_graph_ops_scopes_empty_group_ids():
+    executor = MagicMock()
+    executor.execute_query = AsyncMock()
+    graph_ops = Neo4jGraphMaintenanceOperations()
+
+    await graph_ops.remove_communities(executor, group_ids=[])
+    await graph_ops.remove_communities(executor, group_ids=None)
+
+    assert executor.execute_query.await_count == 2
+    empty_group_query = executor.execute_query.await_args_list[0]
+    assert 'WHERE c.group_id IN $group_ids' in empty_group_query.args[0]
+    assert empty_group_query.kwargs['group_ids'] == []
+    unscoped_query = executor.execute_query.await_args_list[1]
+    assert 'WHERE' not in unscoped_query.args[0]
 
 
 @pytest.mark.asyncio

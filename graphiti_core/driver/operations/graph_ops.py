@@ -55,7 +55,7 @@ class GraphMaintenanceOperations(ABC):
         group_ids: list[str] | None = None,
     ) -> None:
         """Delete communities, optionally restricted to the provided groups."""
-        if group_ids:
+        if group_ids is not None:
             await executor.execute_query(
                 """
                 MATCH (c:Community)
