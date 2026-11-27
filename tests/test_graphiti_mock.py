@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock
 
 import numpy as np
@@ -1422,6 +1422,77 @@ async def test_get_communities_by_nodes(graph_driver, mock_embedder):
     communities = await get_communities_by_nodes(graph_driver, [entity_node_1])
     assert len(communities) == 1
     assert communities[0].name == community_node_1.name
+
+
+@pytest.mark.asyncio
+async def test_search_returns_fact_valid_at_requested_time(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
+    if graph_driver.provider != GraphProvider.NEO4J:
+        pytest.skip('This point-in-time search example uses Neo4j')
+
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+    await graph_driver.execute_query('CALL db.awaitIndexes(30)')
+
+    first_start = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    move = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    embedding = [1.0, 0.0, 0.0]
+    mock_embedder.create.side_effect = None
+    mock_embedder.create.return_value = embedding
+
+    alice, tokyo, berlin = [
+        EntityNode(name=name, group_id=group_id, created_at=first_start, name_embedding=embedding)
+        for name in ('Alice', 'Tokyo', 'Berlin')
+    ]
+    for node in (alice, tokyo, berlin):
+        await node.save(graph_driver)
+
+    old_fact, new_fact = [
+        EntityEdge(
+            source_node_uuid=alice.uuid,
+            target_node_uuid=city.uuid,
+            name='LIVES_IN',
+            fact=f'Alice lives in {city.name}',
+            group_id=group_id,
+            created_at=start,
+            valid_at=start,
+            invalid_at=end,
+            expired_at=end,
+            fact_embedding=embedding,
+        )
+        for city, start, end in ((tokyo, first_start, move), (berlin, move, None))
+    ]
+    for edge in (old_fact, new_fact):
+        await edge.save(graph_driver)
+
+    query = 'Where did Alice live?'
+    unfiltered = await graphiti.search(query, group_ids=[group_id])
+    assert {edge.uuid for edge in unfiltered} == {old_fact.uuid, new_fact.uuid}
+
+    for as_of, expected in (
+        (first_start - timedelta(days=1), set()),
+        (first_start, {old_fact.uuid}),
+        (move - timedelta(seconds=1), {old_fact.uuid}),
+        (move, {new_fact.uuid}),
+        (move + timedelta(days=1), {new_fact.uuid}),
+    ):
+        search_filter = SearchFilters(
+            valid_at=[
+                [DateFilter(date=as_of, comparison_operator=ComparisonOperator.less_than_equal)]
+            ],
+            invalid_at=[
+                [DateFilter(date=as_of, comparison_operator=ComparisonOperator.greater_than)],
+                [DateFilter(comparison_operator=ComparisonOperator.is_null)],
+            ],
+        )
+        results = await graphiti.search(query, group_ids=[group_id], search_filter=search_filter)
+        assert {edge.uuid for edge in results} == expected, as_of
 
 
 @pytest.mark.asyncio
