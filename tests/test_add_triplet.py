@@ -46,6 +46,7 @@ def mock_llm_client():
     # Mock the public method that's actually called
     mock_llm.generate_response = AsyncMock()
     mock_llm.generate_response.return_value = {
+        'entity_resolutions': [],
         'duplicate_facts': [],
         'invalidate_facts': [],
     }
@@ -282,8 +283,8 @@ async def test_add_triplet_updates_labels(
 
         # Verify labels were updated
         retrieved_source = await EntityNode.get_by_uuid(graph_driver, existing_source.uuid)
-        # Labels should be set to user-provided labels (not merged)
-        assert set(retrieved_source.labels) == {'Person', 'Employee', 'Manager'}
+        # 'Entity' is the base label added on save; user labels are merged into it
+        assert set(retrieved_source.labels) == {'Entity', 'Person', 'Employee', 'Manager'}
 
 
 @pytest.mark.asyncio
@@ -507,10 +508,10 @@ async def test_add_triplet_empty_attributes_preserved(
 
 
 @pytest.mark.asyncio
-async def test_add_triplet_invalid_source_uuid(
+async def test_add_triplet_unknown_source_uuid_creates_node(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
 ):
-    """Test that ValueError is raised when source_node has a UUID that doesn't exist."""
+    """A source UUID that is not stored yet is resolved into a new node."""
     from uuid import uuid4
 
     graphiti = Graphiti(
@@ -554,16 +555,19 @@ async def test_add_triplet_invalid_source_uuid(
         created_at=now,
     )
 
-    # Should raise ValueError for invalid source UUID
-    with pytest.raises(ValueError, match=f'Node with UUID {invalid_uuid} not found'):
-        await graphiti.add_triplet(user_source, edge, user_target)
+    result = await graphiti.add_triplet(user_source, edge, user_target)
+
+    created_source = await EntityNode.get_by_uuid(graph_driver, invalid_uuid)
+    assert created_source.name == 'Alice'
+    assert created_source.attributes == {'age': 30}
+    assert {node.uuid for node in result.nodes} == {invalid_uuid, user_target.uuid}
 
 
 @pytest.mark.asyncio
-async def test_add_triplet_invalid_target_uuid(
+async def test_add_triplet_unknown_target_uuid_creates_node(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
 ):
-    """Test that ValueError is raised when target_node has a UUID that doesn't exist."""
+    """A target UUID that is not stored yet is resolved into a new node."""
     from uuid import uuid4
 
     graphiti = Graphiti(
@@ -620,16 +624,19 @@ async def test_add_triplet_invalid_target_uuid(
         created_at=now,
     )
 
-    # Should raise ValueError for invalid target UUID
-    with pytest.raises(ValueError, match=f'Node with UUID {invalid_uuid} not found'):
-        await graphiti.add_triplet(user_source, edge, user_target)
+    result = await graphiti.add_triplet(user_source, edge, user_target)
+
+    created_target = await EntityNode.get_by_uuid(graph_driver, invalid_uuid)
+    assert created_target.name == 'Bob'
+    assert created_target.attributes == {'age': 25}
+    assert {node.uuid for node in result.nodes} == {existing_source.uuid, invalid_uuid}
 
 
 @pytest.mark.asyncio
-async def test_add_triplet_invalid_both_uuids(
+async def test_add_triplet_unknown_both_uuids_creates_nodes(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
 ):
-    """Test that ValueError is raised for source_node first when both UUIDs are invalid."""
+    """Two unknown UUIDs are both resolved into new nodes."""
     from uuid import uuid4
 
     graphiti = Graphiti(
@@ -676,9 +683,13 @@ async def test_add_triplet_invalid_both_uuids(
         created_at=now,
     )
 
-    # Should raise ValueError for source UUID first (source is checked before target)
-    with pytest.raises(ValueError, match=f'Node with UUID {invalid_source_uuid} not found'):
-        await graphiti.add_triplet(user_source, edge, user_target)
+    result = await graphiti.add_triplet(user_source, edge, user_target)
+
+    assert {node.uuid for node in result.nodes} == {invalid_source_uuid, invalid_target_uuid}
+    created_source = await EntityNode.get_by_uuid(graph_driver, invalid_source_uuid)
+    created_target = await EntityNode.get_by_uuid(graph_driver, invalid_target_uuid)
+    assert created_source.name == 'Alice'
+    assert created_target.name == 'Bob'
 
 
 @pytest.mark.asyncio
