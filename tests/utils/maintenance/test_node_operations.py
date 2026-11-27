@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.maintenance import dedup_helpers
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
     DedupResolutionState,
@@ -1255,3 +1256,33 @@ async def test_extract_attributes_preserves_prior_attributes_when_label_not_in_e
     )
 
     assert results[0].attributes == {'age': 30, 'city': 'New York'}
+
+
+def test_resolve_with_similarity_ties_resolve_deterministically(monkeypatch):
+    """The lower UUID wins a fuzzy score tie even when visited last."""
+    low_uuid = 'aaaaaaaa-0000-0000-0000-000000000001'
+    high_uuid = 'bbbbbbbb-0000-0000-0000-000000000002'
+
+    # A set may yield candidates in descending order. Force that order locally
+    # rather than depending on this interpreter's string hashes or hash seed.
+    class DescendingSet(set):
+        def __iter__(self):
+            return iter(sorted(super().__iter__(), reverse=True))
+
+    # These names have the same fuzzy shingles as the extracted name, but
+    # distinct exact keys, so neither candidate bypasses fuzzy scoring.
+    candidates = [
+        EntityNode(name='alpha-bravo', uuid=low_uuid, group_id='group', labels=['Entity']),
+        EntityNode(name='alpha/bravo', uuid=high_uuid, group_id='group', labels=['Entity']),
+    ]
+    indexes = _build_candidate_indexes(candidates)
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+    extracted = EntityNode(name='alpha bravo', group_id='group', labels=['Entity'])
+    monkeypatch.setattr(dedup_helpers, 'set', DescendingSet, raising=False)
+
+    _resolve_with_similarity([extracted], indexes, state)
+
+    assert state.uuid_map[extracted.uuid] == low_uuid
+    assert state.resolved_nodes[0] is not None
+    assert state.resolved_nodes[0].uuid == low_uuid
+    assert state.unresolved_indices == []
