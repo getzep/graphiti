@@ -68,10 +68,13 @@ def build_falkor_fulltext_query(
         escaped_group_ids = [f'"{_escape_fulltext_group_id(group_id)}"' for group_id in group_ids]
         group_filter = f'(@group_id:{"|".join(escaped_group_ids)})'
 
+    # RediSearch rejects a term that contains no letter or digit (e.g. a lone
+    # '_' or '–'), which makes the whole query fail with a syntax error, so
+    # symbol-only tokens are dropped before the terms are joined.
     filtered_words = [
         word
         for word in sanitize_falkor_fulltext_query(query).split()
-        if word.lower() not in STOPWORDS
+        if word.lower() not in STOPWORDS and any(char.isalnum() for char in word)
     ]
     if not filtered_words:
         return ''
