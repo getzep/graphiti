@@ -52,6 +52,7 @@ class Neo4jEntityEdgeOperations(EntityEdgeOperations):
             'expired_at': edge.expired_at,
             'valid_at': edge.valid_at,
             'invalid_at': edge.invalid_at,
+            'reference_time': edge.reference_time,
         }
         edge_data.update(edge.attributes or {})
 
@@ -85,6 +86,7 @@ class Neo4jEntityEdgeOperations(EntityEdgeOperations):
                 'expired_at': edge.expired_at,
                 'valid_at': edge.valid_at,
                 'invalid_at': edge.invalid_at,
+                'reference_time': edge.reference_time,
             }
             edge_data.update(edge.attributes or {})
             prepared.append(edge_data)
