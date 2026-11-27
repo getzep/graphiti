@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from graphiti_core.utils.maintenance import community_operations
 from graphiti_core.utils.maintenance.community_operations import remove_communities
 
 
@@ -96,3 +97,29 @@ async def test_remove_communities_scoped_via_graph_ops():
 
     driver.graph_ops.remove_communities.assert_awaited_once_with(driver, group_ids=['group_a'])
     driver.execute_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('group_ids', [None, []])
+async def test_get_community_clusters_without_groups_reads_every_group(monkeypatch, group_ids):
+    """`[]` must select every group, as `None` does.
+
+    build_communities first calls remove_communities, which deletes the communities of
+    every group for `[]`. If get_community_clusters then read no group, the call would
+    delete every community and build none.
+    """
+    driver = _mock_driver()
+    driver.execute_query = AsyncMock(return_value=([{'group_ids': ['group_a']}], None, None))
+    seen_groups: list[list[str]] = []
+
+    async def fake_get_by_group_ids(driver, group_ids, *args, **kwargs):
+        seen_groups.append(group_ids)
+        return []
+
+    monkeypatch.setattr(community_operations.EntityNode, 'get_by_group_ids', fake_get_by_group_ids)
+
+    clusters = await community_operations.get_community_clusters(driver, group_ids)
+
+    assert 'collect(DISTINCT n.group_id)' in driver.execute_query.await_args.args[0]
+    assert seen_groups == [['group_a']]
+    assert clusters == []
