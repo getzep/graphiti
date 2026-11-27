@@ -74,3 +74,47 @@ async def test_get_or_create_saga_creates_when_absent():
     assert saga.first_episode_uuid is None
     assert saga.last_episode_uuid is None
     assert saga.save is not None
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_saga_refetch_preserves_summary_and_watermarks():
+    """Re-fetching an existing saga must round-trip the summary and both watermarks.
+
+    The re-fetch used to select only the identity fields, so the returned node kept
+    the model defaults ``summary=''``, ``last_summarized_at=None`` and
+    ``last_summarized_episode_valid_at=None``. Callers save that node right after
+    adding an episode, and ``SagaNode.save()`` writes every saga field, so the
+    stored summary was wiped and the next ``summarize_saga()`` run re-summarized
+    episodes it had already covered.
+    """
+    driver = AsyncMock()
+    driver.execute_query.return_value = (
+        [
+            {
+                'uuid': 'saga-1',
+                'name': 'my-saga',
+                'group_id': 'g1',
+                'created_at': '2026-08-13T00:00:00+00:00',
+                'summary': 'Alice works at Acme since 2020.',
+                'first_episode_uuid': 'ep-1',
+                'last_episode_uuid': 'ep-2',
+                'last_summarized_at': '2026-08-15T00:00:00+00:00',
+                'last_summarized_episode_valid_at': '2026-08-14T00:00:00+00:00',
+            }
+        ],
+        None,
+        None,
+    )
+
+    graphiti = Graphiti.__new__(Graphiti)
+    graphiti.driver = driver
+
+    saga = await graphiti._get_or_create_saga('my-saga', 'g1', datetime(2026, 8, 13))
+
+    assert saga.summary == 'Alice works at Acme since 2020.'
+    assert saga.last_summarized_at == datetime.fromisoformat('2026-08-15T00:00:00+00:00')
+    assert saga.last_summarized_episode_valid_at == datetime.fromisoformat(
+        '2026-08-14T00:00:00+00:00'
+    )
+    # Still no write-back on the existing-saga branch.
+    driver.execute_query.assert_awaited_once()
