@@ -147,10 +147,12 @@ class GeminiEmbedder(EmbedderClient):
                     raise Exception('No embeddings returned')
 
                 # Process embeddings from this batch
+                batch_embeddings = []
                 for embedding in result.embeddings:
                     if not embedding.values:
                         raise ValueError('Empty embedding values returned')
-                    all_embeddings.append(embedding.values)
+                    batch_embeddings.append(embedding.values)
+                all_embeddings.extend(batch_embeddings)
 
             except Exception as e:
                 # If batch processing fails, fall back to individual processing
