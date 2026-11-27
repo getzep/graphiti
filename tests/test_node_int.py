@@ -25,6 +25,8 @@ from graphiti_core.nodes import (
     EpisodeType,
     EpisodicNode,
 )
+from graphiti_core.utils.bulk_utils import add_nodes_and_edges_bulk
+from graphiti_core.utils.maintenance.graph_data_operations import retrieve_episodes
 from tests.helpers_test import (
     assert_community_node_equals,
     assert_entity_node_equals,
@@ -69,6 +71,37 @@ def sample_episodic_node():
         valid_at=valid_at,
         entity_edges=[],
     )
+
+
+EPISODE_METADATA = {'agent': 'planner', 'step': 3, 'score': 0.5, 'approved': True}
+
+
+def episodic_node_with_metadata() -> EpisodicNode:
+    return EpisodicNode(
+        uuid=str(uuid4()),
+        name='Episode with metadata',
+        group_id=group_id,
+        created_at=created_at,
+        source=EpisodeType.text,
+        source_description='Test source',
+        content='Some content here',
+        valid_at=valid_at,
+        entity_edges=[],
+        episode_metadata=EPISODE_METADATA,
+    )
+
+
+async def assert_reads_metadata(graph_driver, uuid: str, expected: dict | None):
+    reads = [
+        await EpisodicNode.get_by_uuid(graph_driver, uuid),
+        (await EpisodicNode.get_by_uuids(graph_driver, [uuid]))[0],
+        (await EpisodicNode.get_by_group_ids(graph_driver, [group_id], limit=1))[0],
+        (await retrieve_episodes(graph_driver, datetime.now() + timedelta(days=2), 1, [group_id]))[
+            0
+        ],
+        await graph_driver.episode_node_ops.get_by_uuid(graph_driver, uuid),
+    ]
+    assert [episode.episode_metadata for episode in reads] == [expected] * len(reads)
 
 
 @pytest.fixture
@@ -225,5 +258,47 @@ async def test_episodic_node(sample_episodic_node, graph_driver):
     await sample_episodic_node.delete_by_group_id(graph_driver, group_id)
     node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
+
+    await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_episodic_node_metadata_round_trip(graph_driver):
+    episode = episodic_node_with_metadata()
+
+    await episode.save(graph_driver)
+    await assert_reads_metadata(graph_driver, episode.uuid, EPISODE_METADATA)
+
+    reloaded = await EpisodicNode.get_by_uuid(graph_driver, episode.uuid)
+    await reloaded.save(graph_driver)
+    await assert_reads_metadata(graph_driver, episode.uuid, EPISODE_METADATA)
+
+    await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_episodic_node_metadata_driver_ops_round_trip(graph_driver):
+    episode = episodic_node_with_metadata()
+
+    await graph_driver.episode_node_ops.save(graph_driver, episode)
+    await assert_reads_metadata(graph_driver, episode.uuid, EPISODE_METADATA)
+
+    await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_episodic_node_metadata_bulk_round_trip(graph_driver, mock_embedder):
+    episode = episodic_node_with_metadata()
+
+    await add_nodes_and_edges_bulk(graph_driver, [episode], [], [], [], mock_embedder)
+    await assert_reads_metadata(graph_driver, episode.uuid, EPISODE_METADATA)
+
+    await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_episodic_node_without_metadata_reads_none(sample_episodic_node, graph_driver):
+    await sample_episodic_node.save(graph_driver)
+    await assert_reads_metadata(graph_driver, sample_episodic_node.uuid, None)
 
     await graph_driver.close()

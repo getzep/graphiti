@@ -842,7 +842,8 @@ async def episode_fulltext_search(
                     e.group_id AS group_id,
                     e.source_description AS source_description,
                     e.source AS source,
-                    e.entity_edges AS entity_edges
+                    e.entity_edges AS entity_edges,
+                    properties(e) AS properties
                 ORDER BY i.score DESC
                 LIMIT $limit
                 """

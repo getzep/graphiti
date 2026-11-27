@@ -57,6 +57,7 @@ from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
+    EpisodeMetadataValue,
     EpisodeType,
     EpisodicNode,
     Node,
@@ -1646,6 +1647,7 @@ class Graphiti:
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
         identity_properties: dict[str, list[str]] | None = None,
+        episode_metadata: dict[str, EpisodeMetadataValue] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1696,6 +1698,10 @@ class Graphiti:
         identity_properties : dict[str, list[str]] | None
             Optional. Map entity type names to attribute names that identify entities.
             Graphiti extracts these attributes before node resolution.
+        episode_metadata : dict[str, str | int | float | bool] | None
+            Optional. Key-value pairs that Graphiti stores as properties of the episode node.
+            Keys must not be episode fields such as `name` or `content`. When `uuid` names an
+            existing episode, these pairs replace its stored metadata.
 
         Returns
         -------
@@ -1766,6 +1772,7 @@ class Graphiti:
                 saga=saga,
                 saga_previous_episode_uuid=saga_previous_episode_uuid,
                 identity_properties=identity_properties,
+                episode_metadata=episode_metadata,
             )
 
         with self.tracer.start_span('add_episode') as span:
@@ -1803,6 +1810,8 @@ class Graphiti:
                         valid_at=reference_time,
                     )
                 )
+                if episode_metadata is not None:
+                    episode.episode_metadata = episode_metadata
 
                 # Create default edge type map
                 edge_type_map_default = (
@@ -2090,6 +2099,7 @@ class Graphiti:
                         group_id=group_id,
                         created_at=now,
                         valid_at=episode.reference_time,
+                        episode_metadata=episode.episode_metadata,
                     )
                     for episode in bulk_episodes
                 ]
