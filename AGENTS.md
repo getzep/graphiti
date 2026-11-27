@@ -35,7 +35,7 @@ Docker has no systemd here — start the daemon manually once per VM: `sudo dock
 
 ### Tests (non-obvious)
 - `make test` does NOT set `DISABLE_NEO4J`, so the `graph_driver` fixture stays parametrized on Neo4j and the suite REQUIRES a reachable Neo4j at `bolt://localhost:7687`. With no Neo4j, those tests hang on the driver's connection retry (not an env bug). Run it as `NEO4J_PASSWORD=testpass make test`.
-- `tests/test_add_triplet.py` has pre-existing failures (its mock embedder doesn't stub `create_batch`, so `zip(strict=True)` raises). CI never runs this file, so ignore those 11 failures — they are unrelated to environment setup.
+- `tests/test_add_triplet.py` and `tests/test_identity_properties_int.py` need a reachable Neo4j and run in the `database-integration-tests` job (`Run Neo4j-only database tests`). To run them locally, set `DISABLE_FALKORDB=1 DISABLE_NEPTUNE=1` and point `NEO4J_URI`, `NEO4J_USER`, and `NEO4J_PASSWORD` at that instance.
 - The authoritative, fully-green no-DB unit gate is the CI command in `.github/workflows/unit_tests.yml` (`DISABLE_NEO4J=1 DISABLE_FALKORDB=1 DISABLE_NEPTUNE=1` plus the `--ignore` list). The DB-backed unit tests are the `database-integration-tests` job in the same file (needs Neo4j + FalkorDB, uses mock LLMs, no API key).
 - `server/` and `mcp_server/` test suites are live end-to-end tests marked `integration`; they self-skip with exit code 5 when `OPENAI_API_KEY` is unset. This skip is expected, not a failure.
 
