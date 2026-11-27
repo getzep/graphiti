@@ -90,6 +90,7 @@ from graphiti_core.utils.bulk_utils import (
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
     extract_nodes_and_edges_bulk,
+    merge_edge_copies,
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
@@ -2167,7 +2168,9 @@ class Graphiti:
                 # Resolved pointers for episodic edges
                 resolved_episodic_edges = resolve_edge_pointers(episodic_edges, final_uuid_map)
 
-                edges_to_save = resolved_edges + invalidated_edges
+                # Each episode resolved against its own copy of a stored edge. Merge the
+                # copies, because the last saved copy would otherwise replace the others.
+                edges_to_save = merge_edge_copies(resolved_edges + invalidated_edges)
                 for episode in episodes:
                     episode.entity_edges = list(
                         dict.fromkeys(
@@ -2245,7 +2248,7 @@ class Graphiti:
                     {
                         'group_id': group_id,
                         'node.count': len(final_hydrated_nodes),
-                        'edge.count': len(resolved_edges + invalidated_edges),
+                        'edge.count': len(edges_to_save),
                         'duration_ms': (end - start) * 1000,
                     }
                 )
@@ -2256,7 +2259,7 @@ class Graphiti:
                     episodes=episodes,
                     episodic_edges=resolved_episodic_edges,
                     nodes=final_hydrated_nodes,
-                    edges=resolved_edges + invalidated_edges,
+                    edges=edges_to_save,
                     communities=[],
                     community_edges=[],
                 )
