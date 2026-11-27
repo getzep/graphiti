@@ -71,7 +71,7 @@ def build_falkor_fulltext_query(
     filtered_words = [
         word
         for word in sanitize_falkor_fulltext_query(query).split()
-        if word.lower() not in STOPWORDS
+        if word.lower() not in STOPWORDS and word.strip('_') and word.strip('_')
     ]
     if not filtered_words:
         return ''
