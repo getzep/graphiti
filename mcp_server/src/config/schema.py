@@ -66,7 +66,7 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
         if not self.config_path.exists():
             return {}
 
-        with open(self.config_path) as f:
+        with open(self.config_path, encoding='utf-8') as f:
             raw_config = yaml.safe_load(f) or {}
 
         # Expand environment variables
