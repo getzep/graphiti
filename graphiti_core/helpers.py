@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import asyncio
+import logging
 import os
 import re
 from collections.abc import Coroutine
@@ -32,7 +33,43 @@ from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationErro
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 SAFE_CYPHER_IDENTIFIER_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _env_int(name: str, default: int) -> int:
+    """Return the integer value of an environment variable, or `default`.
+
+    An empty value means that the variable is unset, which is the form that
+    `.env.example` uses for a setting that keeps its default. A value that is not an
+    integer keeps the default too: a tuning setting must not stop the import.
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning(
+            'Ignoring invalid %s=%r; expected an integer. Using default=%d.', name, raw, default
+        )
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Return the float value of an environment variable, or `default`. See `_env_int`."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            'Ignoring invalid %s=%r; expected a number. Using default=%s.', name, raw, default
+        )
+        return default
+
 
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 
@@ -44,24 +81,24 @@ USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 # still respected for backwards compatibility, but is no longer the primary way
 # to configure concurrency.
 DEFAULT_SEMAPHORE_LIMIT = 20
-SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', DEFAULT_SEMAPHORE_LIMIT))
+SEMAPHORE_LIMIT = _env_int('SEMAPHORE_LIMIT', DEFAULT_SEMAPHORE_LIMIT)
 DEFAULT_PAGE_LIMIT = 20
 
 # Content chunking configuration for entity extraction
 # Density-based chunking: only chunk high-density content (many entities per token)
 # This targets the failure case (large entity-dense inputs) while preserving
 # context for prose/narrative content
-CHUNK_TOKEN_SIZE = int(os.getenv('CHUNK_TOKEN_SIZE', 3000))
-CHUNK_OVERLAP_TOKENS = int(os.getenv('CHUNK_OVERLAP_TOKENS', 200))
+CHUNK_TOKEN_SIZE = _env_int('CHUNK_TOKEN_SIZE', 3000)
+CHUNK_OVERLAP_TOKENS = _env_int('CHUNK_OVERLAP_TOKENS', 200)
 # Minimum tokens before considering chunking - short content processes fine regardless of density
-CHUNK_MIN_TOKENS = int(os.getenv('CHUNK_MIN_TOKENS', 1000))
+CHUNK_MIN_TOKENS = _env_int('CHUNK_MIN_TOKENS', 1000)
 # Entity density threshold: chunk if estimated density > this value
 # For JSON: elements per 1000 tokens > threshold * 1000 (e.g., 0.15 = 150 elements/1000 tokens)
 # For Text: capitalized words per 1000 tokens > threshold * 500 (e.g., 0.15 = 75 caps/1000 tokens)
 # Higher values = more conservative (less chunking), targets P95+ density cases
 # Examples that trigger chunking at 0.15: AWS cost data (12mo), bulk data imports, entity-dense JSON
 # Examples that DON'T chunk at 0.15: meeting transcripts, news articles, documentation
-CHUNK_DENSITY_THRESHOLD = float(os.getenv('CHUNK_DENSITY_THRESHOLD', 0.15))
+CHUNK_DENSITY_THRESHOLD = _env_float('CHUNK_DENSITY_THRESHOLD', 0.15)
 
 
 def parse_db_date(input_date: neo4j_time.DateTime | str | None) -> datetime | None:
