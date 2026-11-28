@@ -41,7 +41,7 @@ from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'llama-3.1-70b-versatile'
+DEFAULT_MODEL = 'openai/gpt-oss-120b'
 DEFAULT_MAX_TOKENS = 2048
 
 
