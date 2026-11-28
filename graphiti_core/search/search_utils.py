@@ -818,8 +818,6 @@ async def episode_fulltext_search(
         filter_params['group_ids'] = group_ids
 
     yield_query = 'YIELD node AS e, score'
-    if driver.provider == GraphProvider.KUZU:
-        yield_query = 'WITH node AS e, score'
 
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('episode_content', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue

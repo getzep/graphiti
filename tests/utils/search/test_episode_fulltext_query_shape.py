@@ -1,7 +1,7 @@
 """Query-shape regression tests for episode_fulltext_search (no live database).
 
 Covers #1819 on the generic path in ``graphiti_core/search/search_utils.py``,
-which is what executes today for Neo4j, FalkorDB and Kuzu
+which is what executes today for Neo4j and FalkorDB
 (``driver.search_interface`` is never assigned, so the driver-level operations
 modules are not reached at runtime).
 
@@ -19,18 +19,13 @@ every row is expensive; the reporter measured searches that stopped completing
 within a 30s timeout on a 2,163-episode graph.
 
 The yielded node *is* the target, and ``episode_content`` is only ever indexed
-over ``Episodic`` (``CREATE FULLTEXT INDEX episode_content FOR (e:Episodic)`` on
-Neo4j/FalkorDB, ``CREATE_FTS_INDEX('Episodic', 'episode_content', ...)`` on
-Kuzu), so the re-MATCH is redundant. The sibling fulltext searches in the same
-module already consume the yielded node directly::
+over ``Episodic`` (``CREATE FULLTEXT INDEX episode_content FOR (e:Episodic)``),
+so the re-MATCH is redundant. The sibling fulltext searches in the same module
+already consume the yielded node directly::
 
     YIELD node AS n, score          # node_fulltext_search / community_fulltext_search
     WITH n, score
     WHERE n.group_id IN $group_ids
-
-Kuzu does not accept a ``YIELD`` clause after ``CALL QUERY_FTS_INDEX``; both
-siblings swap it for ``WITH node AS <alias>, score``. ``episode_fulltext_search``
-hardcoded ``YIELD``, so it needs the same provider-aware clause.
 
 Mirrors the RecordingDriver approach of tests/utils/search/test_edge_bfs_query_shape.py
 (#1500): a recording driver captures the emitted Cypher, so no database
@@ -103,25 +98,6 @@ async def test_episode_fulltext_search_without_group_ids_has_no_dangling_where()
     assert 'MATCH (e:Episodic)' not in driver.cypher_query
     assert 'episode.uuid' not in driver.cypher_query
     assert 'group_ids' not in driver.params
-
-
-@pytest.mark.asyncio
-async def test_episode_fulltext_search_kuzu_uses_with_not_yield():
-    """Kuzu's QUERY_FTS_INDEX is a table function; a YIELD clause is not valid."""
-    driver = RecordingDriver(GraphProvider.KUZU)
-
-    await episode_fulltext_search(
-        driver,  # type: ignore[arg-type]
-        'alpha beta',
-        SearchFilters(),
-        group_ids=['group-a'],
-    )
-
-    assert 'WITH node AS e, score' in driver.cypher_query
-    assert 'YIELD' not in driver.cypher_query
-    assert 'MATCH (e:Episodic)' not in driver.cypher_query
-    assert 'episode.uuid' not in driver.cypher_query
-    assert 'WHERE e.group_id IN $group_ids' in driver.cypher_query
 
 
 @pytest.mark.asyncio
