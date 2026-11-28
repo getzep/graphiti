@@ -300,6 +300,119 @@ async def test_resolve_extracted_edge_clears_attributes_when_schema_omits_type(
     assert resolved_edge.attributes == {}
 
 
+class WorksAsEdge(BaseModel):
+    """A person works at an organization in a role."""
+
+
+def _stored_duplicate_edge() -> EntityEdge:
+    return EntityEdge(
+        uuid='stored_edge_uuid',
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='WORKS_AS',
+        group_id='group_1',
+        fact='Alice works as the CTO at Acme',
+        episodes=['episode_0'],
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+        valid_at=datetime.now(timezone.utc) - timedelta(days=1),
+        invalid_at=None,
+        attributes={'role': 'CTO'},
+    )
+
+
+async def _resolve_duplicate_against_stored_edge(
+    monkeypatch,
+    stored_edge: EntityEdge,
+    edge_types: dict[str, type[BaseModel]] | None,
+) -> list[EntityEdge]:
+    """Resolve one extracted edge that the dedupe judge reports as a duplicate."""
+    monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
+
+    async def fake_search(clients, query, group_ids, config, search_filter, **kwargs):
+        # The duplicate search carries the endpoint filter; the contradiction search
+        # has none.
+        if search_filter.edge_source_node_uuids is not None:
+            return SearchResults(edges=[stored_edge])
+        return SearchResults()
+
+    monkeypatch.setattr(edge_ops, 'search', AsyncMock(side_effect=fake_search))
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'duplicate_facts': [0], 'contradicted_facts': []}
+    )
+    clients = SimpleNamespace(
+        driver=MagicMock(),
+        llm_client=llm_client,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+        max_coroutines=None,
+    )
+
+    source_node = EntityNode(
+        uuid='source_uuid', name='Alice', group_id='group_1', labels=['Entity']
+    )
+    target_node = EntityNode(uuid='target_uuid', name='Acme', group_id='group_1', labels=['Entity'])
+    extracted_edge = EntityEdge(
+        source_node_uuid=source_node.uuid,
+        target_node_uuid=target_node.uuid,
+        name='WORKS_AS',
+        group_id='group_1',
+        fact='Alice is the CTO of Acme',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=datetime.now(timezone.utc),
+        invalid_at=None,
+    )
+    episode = EpisodicNode(
+        uuid='episode_1',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice is the CTO of Acme',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    resolved_edges, _, _ = await resolve_extracted_edges(
+        clients,
+        [extracted_edge],
+        episode,
+        [source_node, target_node],
+        edge_types,
+        {('Entity', 'Entity'): []},
+    )
+    return resolved_edges
+
+
+@pytest.mark.asyncio
+async def test_duplicate_merge_keeps_stored_attributes_without_edge_types(monkeypatch):
+    """An empty ``edge_types`` map means no schema exists, so nothing is omitted.
+
+    A merged duplicate is written back with ``SET e = $edge_data``, so clearing its
+    attributes in memory erases the attributes that the stored edge already has.
+    """
+    resolved_edges = await _resolve_duplicate_against_stored_edge(
+        monkeypatch, _stored_duplicate_edge(), {}
+    )
+
+    assert [edge.uuid for edge in resolved_edges] == ['stored_edge_uuid']
+    assert resolved_edges[0].attributes == {'role': 'CTO'}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_merge_clears_stored_attributes_when_schema_omits_the_type(
+    monkeypatch,
+):
+    """A configured schema that omits the relation still clears prior-schema attributes."""
+    resolved_edges = await _resolve_duplicate_against_stored_edge(
+        monkeypatch, _stored_duplicate_edge(), {'WORKS_AS': WorksAsEdge}
+    )
+
+    assert [edge.uuid for edge in resolved_edges] == ['stored_edge_uuid']
+    assert resolved_edges[0].attributes == {}
+
+
 class OccurredAtEdge(BaseModel):
     """Edge model stub for OCCURRED_AT."""
 
