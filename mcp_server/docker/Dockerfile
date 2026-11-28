@@ -124,6 +124,20 @@ RUN cat > /start-services.sh <<'EOF'
 #!/bin/bash
 set -e
 
+DATA_DIR=/var/lib/falkordb/data
+
+# Append-only file (AOF): every write is logged, so a hard stop loses at most ~1s.
+# A volume from an older image holds only dump.rdb. Starting such a volume with
+# --appendonly yes would skip the RDB and come up empty, so start it without AOF
+# and turn AOF on at runtime, which writes the loaded data into the new AOF.
+MIGRATE_RDB_TO_AOF=0
+if [ -d "$DATA_DIR/appendonlydir" ] || [ ! -f "$DATA_DIR/dump.rdb" ]; then
+  APPENDONLY=yes
+else
+  APPENDONLY=no
+  MIGRATE_RDB_TO_AOF=1
+fi
+
 # Start FalkorDB in background using the correct module path
 echo "Starting FalkorDB..."
 redis-server \
@@ -131,16 +145,29 @@ redis-server \
   --protected-mode no \
   --bind 0.0.0.0 \
   --port 6379 \
-  --dir /var/lib/falkordb/data \
+  --dir "$DATA_DIR" \
+  --appendonly "$APPENDONLY" \
   --daemonize yes
 
-# Wait for FalkorDB to be ready
+# Wait for FalkorDB to be ready (PING returns LOADING while the dataset loads)
 echo "Waiting for FalkorDB to be ready..."
-until redis-cli -h localhost -p 6379 ping > /dev/null 2>&1; do
+until [ "$(redis-cli -h localhost -p 6379 ping 2>/dev/null)" = "PONG" ]; do
   echo "FalkorDB not ready yet, waiting..."
   sleep 1
 done
 echo "FalkorDB is ready!"
+
+if [ "$MIGRATE_RDB_TO_AOF" = "1" ]; then
+  echo "Found dump.rdb without an AOF, enabling AOF from the loaded data..."
+  redis-cli -h localhost -p 6379 config set appendonly yes > /dev/null
+  # Done once the rewrite has finished and written the AOF manifest
+  until [ -z "$(redis-cli -h localhost -p 6379 info persistence | tr -d '\r' \
+      | grep -E '^aof_rewrite_(in_progress|scheduled):1$')" ] \
+    && ls "$DATA_DIR"/appendonlydir/*.manifest > /dev/null 2>&1; do
+    sleep 1
+  done
+  echo "AOF enabled."
+fi
 
 # Start FalkorDB Browser if enabled (default: enabled)
 if [ "${BROWSER:-1}" = "1" ]; then

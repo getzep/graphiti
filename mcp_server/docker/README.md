@@ -71,9 +71,30 @@ docker volume rm mcp_server_falkordb_data
 docker-compose up
 ```
 
+**Persistence (AOF):**
+
+FalkorDB runs with the Redis append-only file (AOF) enabled, so a hard stop
+(crash, `docker kill`, host reboot) loses at most about one second of writes.
+
+- Combined image: a volume created by an older image holds only `dump.rdb`. On
+  first start the image loads that RDB without AOF, then enables AOF at runtime,
+  so the existing data carries over. Nothing to do.
+- Two containers (`docker-compose-falkordb.yml`) and the repo-root
+  `docker-compose.yml`: these use the stock `falkordb/falkordb` image, which
+  ignores `dump.rdb` when it starts with AOF on and comes up empty. The next
+  stop then overwrites `dump.rdb`, so the data is lost. Before upgrading a
+  volume that already has data, enable AOF on the running old server and wait
+  for the rewrite to finish (add `-a <password>` if `FALKORDB_PASSWORD` is set):
+  ```bash
+  docker compose -f docker-compose-falkordb.yml exec falkordb redis-cli config set appendonly yes
+  docker compose -f docker-compose-falkordb.yml exec falkordb redis-cli info persistence | grep aof_rewrite_in_progress
+  # wait for aof_rewrite_in_progress:0, then pull and recreate
+  ```
+- To turn AOF off in those two layouts, run Compose with `REDIS_ARGS=` (set but empty).
+
 #### Gotchas
 - Both FalkorDB and MCP server run in the same container
-- FalkorDB uses Redis persistence mechanisms (AOF/RDB)
+- FalkorDB uses Redis persistence: AOF, plus RDB snapshots (see Persistence above)
 - Default configuration has no password - add one for production
 - Health check only monitors FalkorDB; MCP server startup visible in logs
 
