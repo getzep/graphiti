@@ -40,7 +40,6 @@ from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_return_query,
     get_entity_edge_save_query,
 )
-from graphiti_core.nodes import Node
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +96,7 @@ class Edge(BaseModel, ABC):
         return hash(self.uuid)
 
     def __eq__(self, other):
-        if isinstance(other, Node):
+        if isinstance(other, Edge):
             return self.uuid == other.uuid
         return False
 
