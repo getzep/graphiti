@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import os
 import unittest
 from datetime import datetime, timezone
@@ -233,6 +234,39 @@ class TestFalkorDriver:
         call_args = mock_graph.query.call_args[0]
         assert call_args[1]['content'] == 'Seamless Recruiting  Onboarding'
         assert call_args[1]['nested'] == {'values': ['ok', 'clean']}
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_execute_query_waits_for_background_initialization(self, monkeypatch):
+        """execute_query must not race the background index-construction task.
+
+        Regression for #1643: the task scheduled in __init__ was fire-and-forget,
+        so a query could run before indexes were built and its failures were never
+        observed. The first query must await that task.
+        """
+        init_finished = asyncio.Event()
+
+        async def fake_build(self):
+            # Yield once so the awaiting side can suspend on this task.
+            await asyncio.sleep(0)
+            init_finished.set()
+
+        monkeypatch.setattr(FalkorDriver, 'build_indices_and_constraints', fake_build)
+
+        driver = FalkorDriver(falkor_db=MagicMock())
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+        mock_result.header = []
+        mock_result.result_set = []
+        mock_graph.query = AsyncMock(return_value=mock_result)
+        driver.client.select_graph.return_value = mock_graph
+
+        await driver.execute_query('RETURN 1')
+
+        assert init_finished.is_set()
+        assert driver._init_task.done()
+        assert driver._init_task.exception() is None
+        mock_graph.query.assert_called_once_with('RETURN 1', {})
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_session_creation(self):
