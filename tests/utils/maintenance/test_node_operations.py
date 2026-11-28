@@ -385,6 +385,45 @@ async def test_collect_exact_name_candidate_nodes_scopes_by_group(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_collect_exact_name_candidate_nodes_keeps_the_default_group(monkeypatch):
+    """The default partition id is '', so it must not be filtered out as falsey.
+
+    Dropping it made `_collect_exact_name_candidate_nodes` short-circuit to no
+    candidates (and `EntityNode.get_by_names` return [] without querying) for
+    every `add_episode()` call that does not pass an explicit group_id.
+    """
+    clients, _ = _make_clients()
+
+    candidate = EntityNode(name='Alice', group_id='', labels=['Entity'])
+    extracted = EntityNode(name='Alice', group_id='', labels=['Entity'])
+
+    get_by_names_mock = AsyncMock(return_value=[candidate])
+    monkeypatch.setattr(
+        'graphiti_core.utils.maintenance.node_operations.EntityNode.get_by_names',
+        get_by_names_mock,
+    )
+
+    result = await _collect_exact_name_candidate_nodes(clients, [extracted])
+
+    assert result == [[candidate]]
+    get_by_names_mock.assert_awaited_once_with(clients.driver, ['Alice'], [''])
+
+
+@pytest.mark.asyncio
+async def test_get_by_names_queries_the_default_group():
+    """`EntityNode.get_by_names` must keep '' in the group filter it sends."""
+    driver = MagicMock()
+    driver.graph_operations_interface = None
+    driver.provider = None
+    driver.execute_query = AsyncMock(return_value=([], None, None))
+
+    await EntityNode.get_by_names(driver, ['Alice'], [''])
+
+    driver.execute_query.assert_awaited_once()
+    assert driver.execute_query.await_args.kwargs['group_ids'] == ['']
+
+
+@pytest.mark.asyncio
 async def test_resolve_nodes_exact_name_lookup_handles_semantic_miss(monkeypatch):
     clients, llm_generate = _make_clients()
 

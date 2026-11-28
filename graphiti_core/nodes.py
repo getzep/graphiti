@@ -642,7 +642,10 @@ class EntityNode(Node):
                 pass
 
         unique_names = sorted({name for name in names if name})
-        unique_group_ids = sorted({group_id for group_id in group_ids if group_id})
+        # `''` is the default partition for most providers, so it must survive the
+        # de-duplication: filtering it out makes `group_ids=['']` return no rows
+        # without querying, and the default group is where most graphs live.
+        unique_group_ids = sorted({group_id for group_id in group_ids if group_id is not None})
         if not unique_names or not unique_group_ids:
             return []
 
