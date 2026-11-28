@@ -201,3 +201,28 @@ async def test_invalid_identity_properties_fail_before_concurrent_writes(monkeyp
 
     begin_admit.assert_not_awaited()
     graph_write.assert_not_awaited()
+
+
+async def test_invalid_excluded_entity_types_fail_before_concurrent_bulk_writes(monkeypatch):
+    store = InMemoryIngestionStateStore()
+    begin_admit = AsyncMock(wraps=store.begin_admit)
+    monkeypatch.setattr(store, 'begin_admit', begin_admit)
+    harness = Harness(monkeypatch)
+    harness.config.state_store = store
+    graphiti = make_graphiti(harness)
+
+    async def admit(graphiti, store, config, *, unit_id, group_id, **kwargs):
+        await store.begin_admit(group_id, unit_id, config.lease_seconds)
+        raise RuntimeError('concurrent admission reached')
+
+    monkeypatch.setattr(scheduler, 'admit_bulk', admit)
+
+    with pytest.raises(ValueError, match='Invalid excluded entity types'):
+        await graphiti.add_episode_bulk(
+            bulk_episodes=[],
+            group_id=GROUP,
+            entity_types={'Person': PersonProperties},
+            excluded_entity_types=['Persn'],
+        )
+
+    begin_admit.assert_not_awaited()
