@@ -96,14 +96,27 @@ async def retrieve_episodes(
 
     # If saga is provided, retrieve episodes from that saga only
     if saga is not None:
-        group_id = group_ids[0] if group_ids else None
-        source_filter = 'AND e.source = $source' if source is not None else ''
+        saga_params: dict = {
+            'saga_name': saga,
+            'reference_time': reference_time,
+            'num_episodes': last_n,
+        }
+        saga_filter = ''
+        # Scope by every requested group. A saga name is not unique across groups, and
+        # a node-pattern property equal to null matches no saga at all, so neither the
+        # first group id nor an absent one may stand in for the caller's scope.
+        if group_ids:
+            saga_filter += '\nAND s.group_id IN $group_ids'
+            saga_params['group_ids'] = group_ids
+        if source is not None:
+            saga_filter += '\nAND e.source = $source'
+            saga_params['source'] = source.name
 
         records, _, _ = await driver.execute_query(
             f"""
-            MATCH (s:Saga {{name: $saga_name, group_id: $group_id}})-[:HAS_EPISODE]->(e:Episodic)
+            MATCH (s:Saga {{name: $saga_name}})-[:HAS_EPISODE]->(e:Episodic)
             WHERE e.valid_at <= $reference_time
-            {source_filter}
+            {saga_filter}
             RETURN
             """
             + (
@@ -115,11 +128,7 @@ async def retrieve_episodes(
             ORDER BY e.valid_at DESC, e.created_at DESC
             LIMIT $num_episodes
             """,
-            saga_name=saga,
-            group_id=group_id,
-            reference_time=reference_time,
-            source=source.name if source else None,
-            num_episodes=last_n,
+            **saga_params,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
