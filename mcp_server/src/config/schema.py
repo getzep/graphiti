@@ -160,6 +160,13 @@ class LLMConfig(BaseModel):
             'OpenAI-compatible providers that do not reliably honor json_schema.'
         ),
     )
+    api_base: str | None = Field(
+        default=None,
+        description=(
+            'Base URL for OpenAI-compatible LLM endpoints (e.g. an Ollama server). '
+            'Documented in the README; takes precedence over providers.openai.api_url.'
+        ),
+    )
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)
 
 
@@ -178,6 +185,13 @@ class EmbedderConfig(BaseModel):
     provider: str = Field(default='openai', description='Embedder provider')
     model: str = Field(default='text-embedding-3-small', description='Model name')
     dimensions: int = Field(default=1536, description='Embedding dimensions')
+    api_base: str | None = Field(
+        default=None,
+        description=(
+            'Base URL for OpenAI-compatible embedding endpoints. Documented in the '
+            'README; takes precedence over providers.openai.api_url.'
+        ),
+    )
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
 
 
