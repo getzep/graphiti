@@ -19,6 +19,7 @@ limitations under the License.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.genai import types
 
 from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
 from graphiti_core.llm_client import LLMConfig, RateLimitError
@@ -80,6 +81,33 @@ class TestGeminiRerankerClientInitialization:
 
 class TestGeminiRerankerClientRanking:
     """Tests for GeminiRerankerClient rank method."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'score_text, expected_score',
+        [('-90', 0.0), ('1000', 1.0), ('80.9', 0.809)],
+    )
+    async def test_rank_preserves_numeric_value_before_clamping(
+        self, gemini_reranker_client, mock_gemini_client, score_text, expected_score
+    ):
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            types.GenerateContentResponse(
+                candidates=[
+                    types.Candidate(
+                        content=types.Content(role='model', parts=[types.Part(text=text)])
+                    )
+                ]
+            )
+            for text in (score_text, '80')
+        ]
+
+        result = await gemini_reranker_client.rank('query', ['candidate', 'control'])
+
+        assert dict(result)['candidate'] == pytest.approx(expected_score)
+        assert dict(result)['control'] == pytest.approx(0.8)
+        assert [passage for passage, _ in result] == (
+            ['candidate', 'control'] if expected_score > 0.8 else ['control', 'candidate']
+        )
 
     @pytest.mark.asyncio
     async def test_rank_basic_functionality(self, gemini_reranker_client, mock_gemini_client):
@@ -194,7 +222,6 @@ class TestGeminiRerankerClientRanking:
     async def test_rank_score_clamping(self, gemini_reranker_client, mock_gemini_client):
         """Test that scores are properly clamped to [0, 1] range."""
         # Setup mock responses with extreme scores
-        # Note: regex only matches 1-3 digits, so negative numbers won't match
         mock_responses = [
             create_mock_response('999'),  # Above 100 but within regex range
             create_mock_response('invalid'),  # Invalid response becomes 0.0
