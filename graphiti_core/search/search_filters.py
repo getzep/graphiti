@@ -96,7 +96,7 @@ def node_search_filter_query_constructor(
     filter_queries: list[str] = []
     filter_params: dict[str, Any] = {}
 
-    if filters.node_labels is not None:
+    if filters.node_labels:
         # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
         node_labels = '|'.join(filters.node_labels)
@@ -146,7 +146,7 @@ def edge_search_filter_query_constructor(
         filter_queries.append('m.uuid IN $edge_target_node_uuids')
         filter_params['edge_target_node_uuids'] = filters.edge_target_node_uuids
 
-    if filters.node_labels is not None:
+    if filters.node_labels:
         # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
         node_labels = '|'.join(filters.node_labels)
