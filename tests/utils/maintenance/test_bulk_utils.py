@@ -775,3 +775,92 @@ async def test_extract_nodes_and_edges_bulk_custom_instructions_multiple_episode
 
     for call in extract_combined_calls:
         assert call['custom_extraction_instructions'] == custom_instructions
+
+
+@pytest.mark.asyncio
+async def test_extract_nodes_and_edges_bulk_separate_skips_edges_when_all_types_excluded(
+    monkeypatch,
+):
+    """Test that the separate extraction path skips edge extraction when all entity types are excluded."""
+    from pydantic import BaseModel
+
+    class Person(BaseModel):
+        """A person mentioned in the episode."""
+
+    clients = _make_clients()
+    episode = _make_episode('1')
+
+    extract_nodes_calls = []
+    extract_edges_calls = []
+
+    async def mock_extract_nodes(*args, **kwargs):
+        extract_nodes_calls.append(kwargs)
+        return [], {}
+
+    async def mock_extract_edges(*args, **kwargs):
+        extract_edges_calls.append(kwargs)
+        return [], []
+
+    monkeypatch.setattr(bulk_utils, 'extract_nodes', mock_extract_nodes)
+    monkeypatch.setattr(bulk_utils, 'extract_edges', mock_extract_edges)
+
+    entity_types = {'Person': Person}
+    excluded_entity_types = ['Entity', 'Person']
+
+    await extract_nodes_and_edges_bulk(
+        clients,
+        [(episode, [])],
+        edge_type_map={},
+        entity_types=entity_types,
+        excluded_entity_types=excluded_entity_types,
+        use_combined_extraction=False,
+    )
+
+    assert len(extract_nodes_calls) == 1
+    assert extract_nodes_calls[0]['entity_types'] == entity_types
+    assert extract_nodes_calls[0]['excluded_entity_types'] == excluded_entity_types
+
+    # Edge extraction should be skipped when all types are excluded
+    assert len(extract_edges_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_extract_nodes_and_edges_bulk_separate_extracts_edges_when_types_remain(monkeypatch):
+    """Test that the separate extraction path still extracts edges when entity types remain."""
+    from pydantic import BaseModel
+
+    class Person(BaseModel):
+        """A person mentioned in the episode."""
+
+    clients = _make_clients()
+    episode = _make_episode('1')
+
+    extract_nodes_calls = []
+    extract_edges_calls = []
+
+    async def mock_extract_nodes(*args, **kwargs):
+        extract_nodes_calls.append(kwargs)
+        return [], {}
+
+    async def mock_extract_edges(*args, **kwargs):
+        extract_edges_calls.append(kwargs)
+        return [], []
+
+    monkeypatch.setattr(bulk_utils, 'extract_nodes', mock_extract_nodes)
+    monkeypatch.setattr(bulk_utils, 'extract_edges', mock_extract_edges)
+
+    entity_types = {'Person': Person}
+    excluded_entity_types = ['Entity']  # Person type remains
+
+    await extract_nodes_and_edges_bulk(
+        clients,
+        [(episode, [])],
+        edge_type_map={},
+        entity_types=entity_types,
+        excluded_entity_types=excluded_entity_types,
+        use_combined_extraction=False,
+    )
+
+    assert len(extract_nodes_calls) == 1
+    # Edge extraction should proceed when types remain
+    assert len(extract_edges_calls) == 1

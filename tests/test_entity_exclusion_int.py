@@ -336,6 +336,78 @@ async def test_excluded_types_parameter_validation_in_add_episode(driver):
         await graphiti.close()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+)
+async def test_exclude_all_types_bulk(driver):
+    """Test add_episode_bulk with all entity types excluded."""
+    from graphiti_core.nodes import EpisodeType
+    from graphiti_core.utils.bulk_utils import RawEpisode
+
+    graphiti = Graphiti(graph_driver=get_driver(driver))
+
+    try:
+        await graphiti.build_indices_and_constraints()
+
+        entity_types = {
+            'Person': Person,
+            'Organization': Organization,
+        }
+
+        # Create multiple episodes
+        episodes = [
+            RawEpisode(
+                name='Episode 1',
+                content='Alice works at Acme Corp.',
+                source_description='Test 1',
+                reference_time=datetime.now(timezone.utc),
+                source=EpisodeType.message,
+            ),
+            RawEpisode(
+                name='Episode 2',
+                content='Bob joined TechCorp as an engineer.',
+                source_description='Test 2',
+                reference_time=datetime.now(timezone.utc),
+                source=EpisodeType.message,
+            ),
+        ]
+
+        # Exclude all types
+        result = await graphiti.add_episode_bulk(
+            bulk_episodes=episodes,
+            group_id='test_exclude_all_bulk',
+            entity_types=entity_types,
+            excluded_entity_types=['Entity', 'Person', 'Organization'],
+        )
+
+        assert result is not None
+        assert len(result.episodes) == 2
+
+        # Search for nodes - should find none
+        search_results = await graphiti.search_(
+            query='Alice Bob Acme TechCorp', group_ids=['test_exclude_all_bulk']
+        )
+
+        found_nodes = search_results.nodes
+        assert len(found_nodes) == 0, (
+            f'Expected no entities, but found: {[n.name for n in found_nodes]}'
+        )
+
+        # Also check edges - should be none
+        found_edges = search_results.edges
+        assert len(found_edges) == 0, (
+            f'Expected no edges, but found: {[e.fact for e in found_edges]}'
+        )
+
+        # Clean up
+        await _cleanup_test_nodes(graphiti, 'test_exclude_all_bulk')
+
+    finally:
+        await graphiti.close()
+
+
 async def _cleanup_test_nodes(graphiti: Graphiti, group_id: str):
     """Helper function to clean up test nodes."""
     try:

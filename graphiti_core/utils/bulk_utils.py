@@ -59,6 +59,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     _identity_key_for_node,
     _identity_type_for_node,
     extract_nodes,
+    has_extractable_entity_types,
     resolve_extracted_nodes,
 )
 
@@ -458,28 +459,35 @@ async def _extract_nodes_and_edges_bulk_separate(
     )
     extracted_nodes_bulk = [nodes for nodes, _ in extracted_results]
 
-    edge_results: list[tuple[list[EntityEdge], list[EntityNode]]] = await semaphore_gather(
-        *[
-            extract_edges(
-                clients,
-                episode,
-                extracted_nodes_bulk[i],
-                previous_episodes,
-                edge_type_map=edge_type_map,
-                group_id=episode.group_id,
-                edge_types=edge_types,
-                strict_edge_types=strict_edge_types,
-                custom_extraction_instructions=custom_extraction_instructions,
-            )
-            for i, (episode, previous_episodes) in enumerate(episode_tuples)
-        ],
-        max_coroutines=getattr(clients, 'max_coroutines', None),
-    )
-
+    # When every entity type is excluded, extract_nodes skips the model and returns
+    # empty lists, so edge extraction would only materialize plain Entity endpoints
+    # that the exclusions are meant to keep out. Skip it as well.
     extracted_edges_bulk: list[list[EntityEdge]] = []
-    for i, (edges, materialized_nodes) in enumerate(edge_results):
-        extracted_edges_bulk.append(edges)
-        extracted_nodes_bulk[i].extend(materialized_nodes)
+    if has_extractable_entity_types(entity_types, excluded_entity_types):
+        edge_results: list[tuple[list[EntityEdge], list[EntityNode]]] = await semaphore_gather(
+            *[
+                extract_edges(
+                    clients,
+                    episode,
+                    extracted_nodes_bulk[i],
+                    previous_episodes,
+                    edge_type_map=edge_type_map,
+                    group_id=episode.group_id,
+                    edge_types=edge_types,
+                    strict_edge_types=strict_edge_types,
+                    custom_extraction_instructions=custom_extraction_instructions,
+                )
+                for i, (episode, previous_episodes) in enumerate(episode_tuples)
+            ],
+            max_coroutines=getattr(clients, 'max_coroutines', None),
+        )
+
+        for i, (edges, materialized_nodes) in enumerate(edge_results):
+            extracted_edges_bulk.append(edges)
+            extracted_nodes_bulk[i].extend(materialized_nodes)
+    else:
+        # Initialize with empty lists for each episode
+        extracted_edges_bulk = [[] for _ in episode_tuples]
 
     return extracted_nodes_bulk, extracted_edges_bulk
 
